@@ -53,7 +53,13 @@ remaining pieces are wired to real slots rather than mocked.
 - Inspector for layers, selections, fills, placed images and boundaries
 - Option-drag a fill or an image to copy it. A copied image references the
   same PSD, which the inspector says so you know editing one edits both —
-  and Remove Reference gives it a copy of its own
+  and Remove Reference gives it a copy of its own. Option-shift-drag skips
+  the step: the copy comes out independent
+- The selected PSD's own layer stack, in the inspector: drag by the grip to
+  reorder it, rename in place, then Apply to rewrite the file and re-run the
+  pipeline. Renaming is how a sprite becomes a tileset, so it is worth having
+  without a trip to Photoshop. A PSD with groups, masks or clipping is listed
+  read-only, because a rewrite would flatten them
 - Convert a fill to a PSD, the same way a sketch converts
 - Delete removes whatever is selected
 - Export a selection as a transparent PNG (save or copy)
@@ -63,7 +69,7 @@ remaining pieces are wired to real slots rather than mocked.
 - Play mode: a character, a following camera, tap-to-walk over A*
 - Code modal: the project's real file tree in CodeMirror 6, full-screen or
   pinned above the console. New file and folder, rename, duplicate, delete,
-  and drag files between folders
+  and drag files between folders, in a column with a divider of its own
 - Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
   by psd-to-json's own progress
 - Publish: a zipped project carrying both runtimes

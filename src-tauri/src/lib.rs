@@ -3,6 +3,7 @@
 
 mod file_server;
 mod project;
+mod psd_layers;
 mod psd_marks;
 mod psd_pipeline;
 mod psd_write;
@@ -308,6 +309,24 @@ fn read_psd_bytes(id: String, key: String) -> Result<String, String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
 }
 
+/// A PSD's real layer stack, for the inspector's layer editor.
+#[tauri::command]
+fn read_psd_layers(id: String, key: String) -> Result<psd_layers::PsdLayerList, String> {
+    psd_layers::read(&id, &key)
+}
+
+/// Rewrite that stack in the order and under the names the user gave it,
+/// then run the file back through psd-to-json. Returns the fresh manifest.
+#[tauri::command]
+fn write_psd_layers(
+    app: tauri::AppHandle,
+    id: String,
+    key: String,
+    layers: Vec<psd_layers::LayerEdit>,
+) -> Result<String, String> {
+    psd_layers::write(&id, &key, &layers, logger(&app))
+}
+
 #[tauri::command]
 fn read_psd_manifest(id: String, key: String) -> Result<String, String> {
     psd_pipeline::read_manifest(&id, &key)
@@ -430,6 +449,8 @@ pub fn run() {
             duplicate_psd,
             open_psd,
             read_psd_bytes,
+            read_psd_layers,
+            write_psd_layers,
             read_psd_manifest,
             is_psd_processed,
             list_psd_outputs,

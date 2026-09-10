@@ -562,3 +562,100 @@ fn the_game_tree_can_be_managed_without_losing_files() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// Reading and rewriting a PSD's layer stack from the inspector.
+///
+/// The order round trip is the load-bearing part: `layers()` reads top-first
+/// and `add_layer` stacks bottom-up, so a rewrite that forgot to reverse
+/// would silently invert every file it touched.
+#[test]
+fn psd_layers_can_be_reordered_and_renamed() {
+    use crate::psd_layers::{self, LayerEdit};
+    use crate::psd_write::{AnchorMarks, MarkPoint};
+
+    let meta = store::create_project("Layers", Projection::Orthogonal, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let at = |x: f32, y: f32| MarkPoint { x, y };
+        let marks = AnchorMarks {
+            outline: vec![at(0.0, 0.0), at(32.0, 0.0), at(32.0, 32.0), at(0.0, 32.0)],
+            lines: vec![],
+            art: None,
+            cols: 1,
+            rows: 1,
+        };
+        let bytes = psd_write::psd_from_rgba_marked(
+            "hut",
+            32,
+            32,
+            swatch(32, 32, [9, 9, 9, 255]),
+            Some(&marks),
+        )
+        .expect("marked PSD should be written");
+        std::fs::write(store::psd_dir(id).expect("psd dir").join("hut.psd"), &bytes)
+            .expect("PSD should save");
+
+        // Read: top-first, as Photoshop shows it, with the pipe convention
+        // spelled out so the inspector can say what each layer becomes.
+        let before = psd_layers::read(id, "hut").expect("layers should read");
+        assert!(before.writable, "a flat PSD should be writable");
+        assert_eq!(before.blocked_by, None);
+        let names: Vec<&str> = before.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["P | anchor", "Z | grid", "S | hut"]);
+        let categories: Vec<&str> =
+            before.layers.iter().map(|l| l.category.as_str()).collect();
+        assert_eq!(categories, ["point", "zone", "sprite"]);
+
+        // Write: put the sprite on top and rename it, leaving the rest alone.
+        let edits = vec![
+            LayerEdit { index: 2, name: "T | hut".into() },
+            LayerEdit { index: 0, name: "P | anchor".into() },
+            LayerEdit { index: 1, name: "Z | grid".into() },
+        ];
+        let manifest = psd_layers::write(id, "hut", &edits, |_| {})
+            .expect("rewrite should succeed");
+
+        let after = psd_layers::read(id, "hut").expect("layers should read back");
+        let names: Vec<&str> = after.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["T | hut", "P | anchor", "Z | grid"],
+            "the order asked for is the order stored"
+        );
+
+        // The canvas and each layer's geometry survive the rebuild.
+        assert_eq!((after.width, after.height), (before.width, before.height));
+        let sprite = &after.layers[0];
+        let was = &before.layers[2];
+        assert_eq!((sprite.x, sprite.y), (was.x, was.y));
+        assert_eq!((sprite.width, sprite.height), (was.width, was.height));
+
+        // And the rename reached psd-to-json: a tileset now, not a sprite.
+        let parsed: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should be JSON");
+        let layers = parsed["layers"].as_array().expect("layers array");
+        let hut = layers
+            .iter()
+            .find(|l| l["name"] == "hut")
+            .expect("the renamed layer should be in the manifest");
+        assert_eq!(hut["category"], "tileset");
+
+        // An empty stack is refused rather than writing a file with nothing
+        // in it, and an unknown index is an error rather than a silent skip.
+        assert!(psd_layers::write(id, "hut", &[], |_| {}).is_err());
+        assert!(psd_layers::write(
+            id,
+            "hut",
+            &[LayerEdit { index: 99, name: "S | x".into() }],
+            |_| {},
+        )
+        .is_err());
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}

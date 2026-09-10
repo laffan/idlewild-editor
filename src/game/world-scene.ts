@@ -40,6 +40,11 @@ export interface WorldSceneConfig {
    * only when there is something to tell.
    */
   onViewport?: (view: Viewport) => void;
+  /**
+   * An option-shift drag has just made a copy that should not reference the
+   * original's PSD. The editor owns the duplication because it owns the IPC.
+   */
+  onDetachCopy?: (layerId: string, placementId: string, key: string) => void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -93,6 +98,8 @@ export class WorldScene extends Phaser.Scene {
       getSelection: () => this.selection,
       setSelection: (selection) => this.setSelection(selection),
       render: (layerId, placement) => this.placeOne(layerId, placement),
+      detachCopy: (layerId, placementId, key) =>
+        this.config.onDetachCopy?.(layerId, placementId, key),
       onDragStateChange: (dragging) => this.config.onDragStateChange(dragging),
     });
 
@@ -111,7 +118,8 @@ export class WorldScene extends Phaser.Scene {
 
     this.rig = new CameraRig(this.game.canvas, {
       onTap: (x, y) => this.handleTap(x, y),
-      onDragStart: (x, y, alt) => this.mode !== "play" && this.drag.begin(x, y, alt),
+      onDragStart: (x, y, modifiers) =>
+        this.mode !== "play" && this.drag.begin(x, y, modifiers),
       onDragMove: (x, y) => this.drag.move(x, y),
       onDragEnd: () => this.drag.end(),
       onMarqueeStart: (x, y) => this.beginMarquee(x, y),
@@ -402,13 +410,22 @@ export class WorldScene extends Phaser.Scene {
    * the placements pointing at the key are brought in line with the new
    * manifest before anything is drawn, so an edit lands where the old
    * artwork was standing.
+   *
+   * `renames` is for the one edit that changes a layer's name rather than
+   * its pixels: the inspector's layer list. It says which paths moved, so a
+   * renamed layer is recognised rather than mourned.
    */
-  async reloadPsd(key: string, manifestJson: string): Promise<void> {
+  async reloadPsd(
+    key: string,
+    manifestJson: string,
+    renames?: ReadonlyMap<string, string>,
+  ): Promise<void> {
     reconcilePlacements(
       this.store,
       this.grid,
       key,
       parseManifest(manifestJson),
+      renames,
     );
 
     this.docRenderer.detachKey(key);

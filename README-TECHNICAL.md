@@ -167,15 +167,15 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 | Projects | `list_projects`, `create_project`, `rename_project`, `delete_project`, `duplicate_project`, `read_project_meta` |
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
 | Game tree | `list_game_files`, `read_game_file`, `write_game_file`, `create_game_file`, `create_game_dir`, `move_game_path`, `copy_game_path`, `delete_game_path` |
-| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+| Publish | `publish_zip`, `save_bytes` |
+| Server | `get_server_port`, `platform` |
 
 `import_image`, `import_image_bytes` and `create_psd_from_rgba` take an
 optional `marks` describing the grid selection behind them, as an
 anchor-relative polygon plus the divisions inside it.
 The editor computes it because the editor owns the projection; Rust only ever
 sees a polygon. See **The marks an import writes** below.
-| Publish | `publish_zip`, `save_bytes` |
-| Server | `get_server_port`, `platform` |
 
 `psd-log-line` is emitted as an event during processing so the console drawer
 can stream psd-to-json's layer tree as it appears.
@@ -218,6 +218,62 @@ to* what the manifest exported, so a deliberately shrunk image stays shrunk
 against new artwork. A placement whose layer is gone from the new file is
 removed — there is nothing left to draw, and a placement that can never
 render is worse than an honest gap.
+
+---
+
+## Editing a PSD's layer stack without leaving
+
+Two things about a PSD layer reach the game, and the inspector edits both:
+order is draw order, and the name carries the pipe convention, so renaming
+`S | tower` to `T | tower` is what turns a sprite into a tileset. Neither is
+worth a round trip out to Photoshop and back.
+
+`src-tauri/src/psd_layers.rs` reads the stack and rewrites it;
+`src/editor/psd-layers.ts` is the list.
+
+**A rename is a full rebuild.** The `psd` fork has no way to edit a layer
+record in place — it writes a file by rebuilding it from RGBA — so a rewrite
+preserves only what `LayerBuilder` can express: pixels, position, name,
+opacity, visibility, blend mode. Groups, layer masks and clipping masks are
+none of those, and a file using them would come back flattened, having
+quietly lost work someone did in Photoshop. `read` reports such a file
+`writable: false` with a sentence saying which layer and why, and the list
+is shown read-only. Every PSD this editor generates is flat, which is the
+case the feature is mostly for.
+
+Three details in that rebuild are silent when wrong, and each cost a test:
+
+- `layer.rgba()` returns the layer composited onto the **whole canvas**, not
+  its own rect. `crop` reads a window out of it, and anything hanging off
+  the canvas edge was never in the buffer to begin with.
+- `layer_right()` and `layer_bottom()` are **inclusive** in this crate
+  (`width() == right - left + 1`), so a 32×32 layer measured from them comes
+  out 31×31. Sizes come from `width()`/`height()`, and every edge below
+  those is exclusive.
+- `is_clipping_mask()` is named for the wrong half. Its backing field is
+  `clipping_base` and the parser sets it from `byte == 0`, which the PSD
+  spec defines as *base* — meaning **not** clipped. A layer clipped to the
+  one below therefore reports `false`, which is why the guard reads
+  `if !layer.is_clipping_mask()`. Our own flat PSDs were being called
+  unwritable until this was read properly.
+
+`layers()` reads top-first and `add_layer` stacks bottom-up, so the edited
+order goes back in reversed; the round trip is pinned by a test.
+
+**Edits are held until Apply.** A write rebuilds the file and runs the whole
+psd-to-json pipeline over it, which is far too much to hang off a keypress.
+Reordering is the layer panel's drag, followed on `window` for the same
+reason (see *Reordering layers*), and the Apply row appears only once
+something has actually moved or been retyped.
+
+**Renames travel with the manifest.** A placement points at its layer by the
+name psd-to-json exported, which is the *second* pipe segment — `S | tower`
+is exported as `tower`. Change that segment and the path moves under the
+placement's feet, and `reconcilePlacements` would read a layer that had gone
+and remove the placement, for a change of one character. So the editor hands
+`reloadPsd` a map of the paths that moved, old to new, and reconciliation
+resolves through it before looking the layer up. Retyping only the *prefix*
+produces no entry, because the exported name did not change.
 
 ---
 
@@ -524,6 +580,12 @@ expanded under it, so a reorder moves the layer and its contents as a unit.
 Re-rendering is held for the length of the drag: the panel rebuilds on every
 document change, and rebuilding under the drag would drop the element being
 held.
+
+The inspector's PSD layer list is the same gesture over a different list, and
+the code modal's file column is the same again with one difference: a file
+tree has one legal drop per row — into that folder, or beside it at that
+folder's level — rather than a position in a list, so the row under the
+pointer is highlighted instead of the dragged row being moved through the DOM.
 
 ## Selection
 

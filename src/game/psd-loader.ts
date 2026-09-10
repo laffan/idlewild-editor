@@ -117,12 +117,17 @@ export function reconcilePlacements(
   grid: Grid,
   key: string,
   manifest: Manifest,
+  renames?: ReadonlyMap<string, string>,
 ): void {
   for (const layer of store.layers) {
     for (const placement of [...layer.placements]) {
       if (placement.psdKey !== key) continue;
 
-      const entry = manifest.all.find((l) => l.path === placement.layerPath);
+      // A layer renamed in the inspector is the same layer under a new path.
+      // Without the map it looks exactly like one that has gone, and the
+      // placement would be dropped for a change of one character.
+      const path = renames?.get(placement.layerPath) ?? placement.layerPath;
+      const entry = manifest.all.find((l) => l.path === path);
       if (!entry) {
         log.warn(
           `${key}.psd no longer has "${placement.layerPath}" — removing that placement`,
@@ -139,6 +144,7 @@ export function reconcilePlacements(
       const world = grid.cellToWorld(placement.anchor);
       const at = placedPosition(world, manifest, entry, scaleX, scaleY);
       store.updatePlacement(layer.id, placement.id, {
+        layerPath: path,
         x: at.x,
         y: at.y,
         width: width * scaleX,

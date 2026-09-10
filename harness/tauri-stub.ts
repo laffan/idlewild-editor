@@ -11,7 +11,7 @@ const DOC = {
     {
       id: "layer-1", name: "Foreground", locked: false, visible: true,
       fills: [{ id: "fill-1", cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }], kind: "color", color: "#ec3013", walkable: true }],
-      placements: [{ id: "place-1", psdKey: "tower", layerPath: "S | tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 } }],
+      placements: [{ id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 } }],
       zones: [], strokes: [],
     },
     { id: "layer-2", name: "Ground", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
@@ -28,6 +28,37 @@ const TREE: Array<{ path: string; isDir: boolean }> = [
   { path: "js/WorldScene.js", isDir: false },
   { path: "js/main.js", isDir: false },
 ];
+
+/**
+ * A mock PSD stack for the inspector's layer editor, mutable so a reorder or
+ * a rename can be driven end to end and read back.
+ */
+const PSD_LAYERS: Array<{ name: string; x: number; y: number; width: number; height: number }> = [
+  { name: "P | anchor", x: 58, y: 90, width: 12, height: 12 },
+  { name: "Z | grid", x: 32, y: 80, width: 64, height: 32 },
+  { name: "S | tower", x: 0, y: 0, width: 128, height: 192 },
+];
+
+const CATEGORIES: Record<string, string> = {
+  S: "sprite", T: "tileset", G: "group", P: "point", Z: "zone",
+};
+
+function categoryOf(name: string): string {
+  const parts = name.split("|").map((p) => p.trim());
+  if (parts.length < 2 || parts.length > 4) return "ignored";
+  return CATEGORIES[parts[0].toUpperCase()] ?? "ignored";
+}
+
+function psdManifest(): string {
+  return JSON.stringify({
+    name: "tower", width: 128, height: 192,
+    layers: PSD_LAYERS.filter((l) => categoryOf(l.name) !== "ignored").map((l) => ({
+      name: l.name.split("|")[1].trim(),
+      category: categoryOf(l.name),
+      x: l.x, y: l.y, width: l.width, height: l.height,
+    })),
+  });
+}
 
 export async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   (window as any).__calls = [...((window as any).__calls ?? []), { cmd, args }];
@@ -119,12 +150,31 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         height: a.height,
         manifest: JSON.stringify({
           name: a.name, width: a.width, height: a.height,
-          layers: [{ name: `S | ${a.name}`, category: "sprite", x: 0, y: 0,
+          layers: [{ name: String(a.name), category: "sprite", x: 0, y: 0,
             width: a.width, height: a.height }],
         }),
       };
     }
     case "read_psd_bytes": return "AAAA";
+    case "read_psd_layers":
+      return {
+        key: String((args as any).key), width: 128, height: 192,
+        writable: (window as any).__psdWritable ?? true,
+        blockedBy: (window as any).__psdWritable === false
+          ? "This PSD uses layer groups, which a rewrite would flatten."
+          : null,
+        layers: PSD_LAYERS.map((l, index) => ({
+          index, name: l.name, visible: true, opacity: 255,
+          width: l.width, height: l.height, x: l.x, y: l.y,
+          category: categoryOf(l.name),
+        })),
+      };
+    case "write_psd_layers": {
+      const edits = (args as any).layers as Array<{ index: number; name: string }>;
+      const next = edits.map((e) => ({ ...PSD_LAYERS[e.index], name: e.name }));
+      PSD_LAYERS.splice(0, PSD_LAYERS.length, ...next);
+      return psdManifest();
+    }
     case "reprocess_psd":
       // Stands in for the artist having edited hut.psd in place: the canvas
       // grew by 80px on the left and 40 on top, the artwork moved with it,
@@ -144,7 +194,7 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         height: 192,
         manifest:
           (window as any).__manifest ??
-          '{"name":"tower","width":128,"height":192,"layers":[{"name":"S | tower","category":"sprite","x":0,"y":0,"width":128,"height":192}]}',
+          '{"name":"tower","width":128,"height":192,"layers":[{"name":"tower","category":"sprite","x":0,"y":0,"width":128,"height":192}]}',
       };
     default: return undefined;
   }

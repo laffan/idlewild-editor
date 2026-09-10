@@ -326,3 +326,79 @@
   color: var(--color-accent-300);
 }
 .inspect-note .panel-btn { text-transform: none; letter-spacing: 0; }
+
+/* The selected PSD's own layer stack — see editor/psd-layers.ts. Denser than
+   the document's layer list on purpose: this is a property of the selection,
+   not the panel's subject. */
+.psd-layers { padding-bottom: 14px; }
+.psd-layers-status {
+  font-size: 10px;
+  color: var(--chrome-dim);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.psd-layers-status[hidden] { display: none; }
+.psd-layers-status.blocked { color: var(--color-accent-300); }
+
+.psd-layer-list { border: 1px solid var(--color-neutral-700); }
+.psd-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 0;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: transparent;
+}
+.psd-layer-row:last-child { border-bottom: 0; }
+
+/* `touch-action: none` is what makes a drag on the iPad a reorder rather
+   than a scroll of the inspector behind it. */
+.psd-layer-grip {
+  flex: none;
+  width: 22px;
+  align-self: stretch;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--color-neutral-500);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+.psd-layer-grip:hover { color: var(--chrome-text); background: var(--chrome-rule); }
+.psd-layer-grip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+.psd-layer-main { flex: 1; min-width: 0; }
+.psd-layer-name {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  font: 500 12px var(--font-body);
+  padding: 0;
+  min-height: 18px;
+  margin-bottom: 2px;
+}
+/* Offset by nothing: the rows are tight enough that a ring outside the field
+   struck through the line of type under it. */
+.psd-layer-name:focus { outline: 1px solid var(--color-accent); outline-offset: 0; }
+.psd-layer-name[readonly] { color: var(--chrome-dim); }
+.psd-layer-meta { font-size: 10px; color: var(--color-neutral-600); }
+
+/* A layer psd-to-json will not export reads as an aside; the two orienting
+   marks are the app's own and say so in the accent. */
+.psd-layer-row.ignored .psd-layer-name { color: var(--chrome-dim); }
+.psd-layer-row.point .psd-layer-meta,
+.psd-layer-row.zone .psd-layer-meta { color: var(--color-accent-300); }
+
+.psd-layer-list.reordering { cursor: grabbing; }
+.psd-layer-list.reordering .psd-layer-grip { cursor: grabbing; }
+.psd-layer-list.reordering .psd-layer-main { pointer-events: none; }
+.psd-layer-row.dragging {
+  background: var(--chrome-rule);
+  box-shadow: var(--shadow-md);
+}
+.psd-layers-foot:not(:empty) { margin-top: 4px; }

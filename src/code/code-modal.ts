@@ -26,6 +26,7 @@ import { h, ICONS, icon } from "../lib/dom";
 import { gameFiles } from "../lib/ipc";
 import * as log from "../lib/log";
 import { FileTree } from "./file-tree";
+import { createResizer, type Resizer } from "../editor/resizer";
 
 const languageCompartment = new Compartment();
 
@@ -42,6 +43,7 @@ export class CodeModal {
   private pinned = false;
   private readonly pinButton: HTMLButtonElement;
   private readonly onPinChange: (pinned: boolean) => void;
+  private readonly filesResizer: Resizer;
 
   constructor(
     projectId: string,
@@ -65,6 +67,17 @@ export class CodeModal {
         this.closeFile();
       },
     });
+    // The file column takes a divider like the editor's other sidebars, and
+    // remembers its width the same way.
+    this.filesResizer = createResizer({
+      target: this.tree.root,
+      axis: "width",
+      edge: "end",
+      min: 150,
+      max: 560,
+      storageKey: "codeFilesWidth",
+    });
+
     this.filename = h("div", { class: "code-filename m", text: "No file open" });
     this.dirtyFlag = h("div", { class: "code-dirty m" });
     this.editorHost = h("div", { class: "code-editor" });
@@ -104,6 +117,7 @@ export class CodeModal {
         "div",
         { class: "code-body" },
         this.tree.root,
+        this.filesResizer.handle,
         h(
           "div",
           { class: "code-main" },
@@ -124,6 +138,7 @@ export class CodeModal {
     );
 
     this.root = h("div", { class: "code-backdrop" }, panel);
+    this.filesResizer.restore();
     void this.reloadFiles();
   }
 
@@ -237,6 +252,7 @@ export class CodeModal {
   }
 
   destroy(): void {
+    this.filesResizer.destroy();
     this.tree.destroy();
     this.view?.destroy();
     this.root.remove();

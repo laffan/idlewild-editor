@@ -9,6 +9,12 @@
 
 export type RigPhase = "idle" | "pan" | "pinch" | "marquee" | "drag";
 
+/** What was held when the drag began. */
+export interface DragModifiers {
+  alt: boolean;
+  shift: boolean;
+}
+
 export interface RigEvents {
   /** A tap that did not turn into a pan, hold or pinch. */
   onTap: (screenX: number, screenY: number) => void;
@@ -17,11 +23,16 @@ export interface RigEvents {
    * that should move instead of the camera? Returning true routes the gesture
    * to onDragMove / onDragEnd.
    *
-   * `alt` rides along because the answer depends on it — holding it turns a
-   * drag into a drag of a fresh copy — and only the scene knows what a copy
-   * of the current selection is.
+   * The modifiers ride along because the answer depends on them — option
+   * turns a drag into a drag of a fresh copy, and adding shift makes that
+   * copy independent — and only the scene knows what a copy of the current
+   * selection is.
    */
-  onDragStart: (screenX: number, screenY: number, alt: boolean) => boolean;
+  onDragStart: (
+    screenX: number,
+    screenY: number,
+    modifiers: DragModifiers,
+  ) => boolean;
   onDragMove: (screenX: number, screenY: number) => void;
   onDragEnd: () => void;
   onMarqueeStart: (screenX: number, screenY: number) => void;
@@ -121,7 +132,12 @@ export class CameraRig {
 
     // Dragging a selected object wins over both panning and the hold: the
     // finger is already on something the user picked.
-    if (this.events.onDragStart(event.clientX, event.clientY, event.altKey)) {
+    if (
+      this.events.onDragStart(event.clientX, event.clientY, {
+        alt: event.altKey,
+        shift: event.shiftKey,
+      })
+    ) {
       this.phase = "drag";
       return;
     }

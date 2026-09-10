@@ -11,6 +11,7 @@ import { clear, h } from "../lib/dom";
 import { BRUSHES, strokesBox, type DrawingTool, type StrokeStyle } from "../drawing";
 import { count } from "./layers-panel";
 import { refreshPsdLabel } from "./psd-actions";
+import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, rangeSize } from "../lib/grid";
@@ -32,6 +33,12 @@ export interface InspectorCallbacks {
   onFillToPsd: () => void;
   /** Give a referencing placement its own copy of the PSD. */
   onRemoveReference: (key: string) => void;
+  /**
+   * The selected PSD's own layer stack, as an editor that loads itself. Built
+   * by the shell rather than here, because it needs the project id and a way
+   * back to the scene once it has rewritten the file.
+   */
+  createPsdLayers: (key: string) => PsdLayerEditor;
   /** The pencil's brush, size and colour changed. */
   onStrokeStyle: (patch: Partial<StrokeStyle>) => void;
 }
@@ -52,6 +59,13 @@ export class Inspector {
   /** Carried between selections so the picker reopens where it was left. */
   private lastColor = "#ec3013";
   private suspended = false;
+  /**
+   * The layer list for the PSD currently being inspected, kept across
+   * re-renders. It holds half-typed names and a pending reorder, and the
+   * panel is rebuilt on every document change — including the ones its own
+   * Apply causes.
+   */
+  private psdLayers: PsdLayerEditor | null = null;
 
   constructor(
     store: DocStore,
@@ -84,6 +98,12 @@ export class Inspector {
 
   setCollapsed(collapsed: boolean): void {
     this.root.classList.toggle("collapsed", collapsed);
+  }
+
+  /** Leaving mid-drag would otherwise strand the layer list's listeners. */
+  destroy(): void {
+    this.psdLayers?.destroy();
+    this.psdLayers = null;
   }
 
   /**
@@ -447,6 +467,18 @@ export class Inspector {
         sizeControls(placement, (patch) => {
           this.store.updatePlacement(layerId, placementId, patch);
         }),
+      ),
+    );
+
+    // The stack inside the file, between what the placement is and what can
+    // be done to it: reordering and renaming are edits to the PSD, not to
+    // this placement of it.
+    this.body.appendChild(this.psdLayerSection(placement.psdKey));
+
+    this.body.appendChild(
+      h(
+        "div",
+        { class: "inspect-section" },
         h("button", {
           class: "panel-btn",
           text: "Remove from layer",
@@ -454,6 +486,18 @@ export class Inspector {
         }),
       ),
     );
+  }
+
+  /**
+   * The layer list for one PSD, made once and kept until the selection moves
+   * to a different file.
+   */
+  private psdLayerSection(key: string): HTMLElement {
+    if (this.psdLayers?.key !== key) {
+      this.psdLayers?.destroy();
+      this.psdLayers = this.callbacks.createPsdLayers(key);
+    }
+    return this.psdLayers.root;
   }
 
   /**

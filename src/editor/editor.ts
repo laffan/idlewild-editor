@@ -21,6 +21,7 @@ import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
 import { createResizer } from "./resizer";
 import { openPsdExternally, refreshPsd } from "./psd-actions";
+import { PsdLayerEditor } from "./psd-layers";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd } from "./fill-actions";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
@@ -92,6 +93,13 @@ export async function mountEditor(
     onStrokesToZone: () => strokesToZone(),
     onFillToPsd: () => void fillToPsd(),
     onRemoveReference: (key) => void removeReference(key),
+    // Renaming a layer changes the path a placement reads, so the rename map
+    // travels with the manifest — see reconcilePlacements.
+    createPsdLayers: (key) =>
+      new PsdLayerEditor(meta.id, key, {
+        onWritten: (manifest, renames) =>
+          void handle?.scene.reloadPsd(key, manifest, renames),
+      }),
     onStrokeStyle: (patch) => {
       if (!drawing) return;
       drawing.style = { ...drawing.style, ...patch };
@@ -257,6 +265,8 @@ export async function mountEditor(
       layers.setSuspended(dragging);
     },
     onViewport: (view) => drawing?.sync(view),
+    onDetachCopy: (layerId, placementId, key) =>
+      void detach(layerId, placementId, key),
   });
   handle.scene.activeLayerId = activeLayerId;
 
@@ -420,9 +430,26 @@ export async function mountEditor(
   async function removeReference(key: string): Promise<void> {
     const selection = handle?.scene.getSelection();
     if (selection?.kind !== "placement") return;
+    await detach(selection.layerId, selection.placementId, key);
+  }
+
+  /**
+   * The same, named by id rather than by what is selected — which is what an
+   * option-shift drag needs, since the copy it hands over is only *usually*
+   * still the selection by the time the file has finished copying.
+   */
+  async function detach(
+    layerId: string,
+    placementId: string,
+    key: string,
+  ): Promise<void> {
     try {
       const copy = await psd.duplicate(meta.id, key);
-      await handle?.scene.repointPlacement(selection, copy.key, copy.manifest);
+      await handle?.scene.repointPlacement(
+        { kind: "placement", layerId, placementId },
+        copy.key,
+        copy.manifest,
+      );
       log.info(`${key}.psd → ${copy.key}.psd — this placement is now its own`);
     } catch (err) {
       log.error(`Could not break the reference to ${key}:`, err);
@@ -526,6 +553,7 @@ export async function mountEditor(
     await store.flush();
     header.destroy();
     layers.destroy();
+    inspector.destroy();
     drawing?.destroy();
     drawing = null;
     closeCode();

@@ -16,6 +16,7 @@
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import type { Cell, FillPatch, Placement, Point, Selection } from "../lib/types";
+import type { DragModifiers } from "./camera-rig";
 import {
   boxToPlacement,
   handleAt,
@@ -65,6 +66,13 @@ export interface DragHost {
   setSelection(selection: Selection): void;
   /** Draw a placement the controller has just added to the document. */
   render(layerId: string, placement: Placement): void;
+  /**
+   * Give a just-copied placement its own PSD, breaking the reference the
+   * copy would otherwise be. Fire-and-forget: copying the file and running
+   * it through psd-to-json takes long enough that the drag must not wait,
+   * and the placement is patched by id when it lands.
+   */
+  detachCopy(layerId: string, placementId: string, key: string): void;
   /** Brackets the gesture, so the panels can hold their re-renders. */
   onDragStateChange(dragging: boolean): void;
 }
@@ -88,18 +96,27 @@ export class DragController {
    * starts and becomes the selection, so the original stays where it was and
    * the thing under the finger is the new one — which is what makes the
    * gesture read as "pull one out of this".
+   *
+   * Option and shift together makes that copy independent: it gets its own
+   * PSD rather than referencing the original's, which is the same thing the
+   * inspector's `Remove Reference` does, asked for up front.
    */
-  begin(screenX: number, screenY: number, alt = false): boolean {
+  begin(
+    screenX: number,
+    screenY: number,
+    modifiers: DragModifiers = { alt: false, shift: false },
+  ): boolean {
     // Copy to a local so TypeScript narrows the union past the closure.
     const selection = this.host.getSelection();
     const world = this.host.worldAt(screenX, screenY);
     const grabCell = this.host.grid.worldToCell(world);
 
     if (selection.kind === "placement") {
-      return this.beginPlacement(selection, world, grabCell, alt);
+      return this.beginPlacement(selection, world, grabCell, modifiers);
     }
     if (selection.kind === "fill") {
-      return this.beginFill(selection, grabCell, alt);
+      // A fill has no file behind it, so shift has nothing to detach.
+      return this.beginFill(selection, grabCell, modifiers.alt);
     }
     return false;
   }
@@ -167,7 +184,7 @@ export class DragController {
     selection: Extract<Selection, { kind: "placement" }>,
     world: Point,
     grabCell: Cell,
-    alt: boolean,
+    modifiers: DragModifiers,
   ): boolean {
     const layer = this.host.store.layer(selection.layerId);
     if (!layer || layer.locked) return false;
@@ -200,8 +217,14 @@ export class DragController {
 
     // A copied placement keeps the same `psdKey`, so both read the same file:
     // the copy is a *reference*, and editing the PSD edits both. The
-    // inspector says so, and offers to break it.
-    const dragged = alt ? this.copyPlacement(layer.id, placement) : placement;
+    // inspector says so, and offers to break it — or shift asks for it broken
+    // straight away, which is the same thing without the round trip.
+    const dragged = modifiers.alt
+      ? this.copyPlacement(layer.id, placement)
+      : placement;
+    if (modifiers.alt && modifiers.shift) {
+      this.host.detachCopy(layer.id, dragged.id, dragged.psdKey);
+    }
     const anchorWorld = this.host.grid.cellToWorld(dragged.anchor);
     this.start({
       kind: "placement",

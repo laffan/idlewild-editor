@@ -40,6 +40,44 @@ export interface AnchorMarks {
   rows: number;
 }
 
+/**
+ * One layer of a PSD as it really is on disk, top-first — what the inspector
+ * lists so the stack can be reordered and renamed without leaving the app.
+ */
+export interface PsdLayerInfo {
+  /** Its position in the *current* file, which is how an edit names it. */
+  index: number;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  /** What psd-to-json will make of it, read from the pipe prefix. */
+  category: "sprite" | "tileset" | "group" | "point" | "zone" | "ignored";
+}
+
+export interface PsdLayerList {
+  key: string;
+  width: number;
+  height: number;
+  layers: PsdLayerInfo[];
+  /**
+   * False when a rewrite would lose something the fork cannot express —
+   * groups, masks, clipping. The list is then read-only and `blockedBy` says
+   * why. See src-tauri/src/psd_layers.rs.
+   */
+  writable: boolean;
+  blockedBy: string | null;
+}
+
+/** A layer in the order and under the name it should end up with. */
+export interface PsdLayerEdit {
+  index: number;
+  name: string;
+}
+
 export interface ImportResult {
   key: string;
   width: number;
@@ -140,6 +178,15 @@ export const psd = {
       rgbaBase64,
       marks,
     }),
+  /** The PSD's real layer stack, top-first, and whether it can be rewritten. */
+  readLayers: (id: string, key: string) =>
+    invoke<PsdLayerList>("read_psd_layers", { id, key }),
+  /**
+   * Rewrite the stack in the given order and under the given names, then run
+   * psd-to-json over it again. Returns the fresh manifest.
+   */
+  writeLayers: (id: string, key: string, layers: PsdLayerEdit[]) =>
+    invoke<string>("write_psd_layers", { id, key, layers }),
   reprocess: (id: string, key: string, options?: Record<string, unknown>) =>
     invoke<string>("reprocess_psd", { id, key, options }),
   /** Overwrite `<key>.psd` with another file and run the pipeline again. */
