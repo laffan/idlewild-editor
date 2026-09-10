@@ -241,3 +241,70 @@ fn a_new_project_scaffolds_a_runnable_game() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// PSD keys reach the pipeline from the document — a file on disk — and now
+/// name a path the shell is asked to hand to another application, so a key
+/// that could climb out of the project must never resolve to a path.
+#[test]
+fn psd_keys_cannot_escape_the_project() {
+    assert!(psd_pipeline::safe_key("tower-01_a").is_ok());
+    for bad in ["../../etc/passwd", "a/b", "with space", "", "dot.dot"] {
+        assert!(
+            psd_pipeline::safe_key(bad).is_err(),
+            "{bad:?} should have been rejected"
+        );
+    }
+}
+
+/// The other half of the PSD round trip: the file is edited outside the app
+/// and comes back over the old one. The key has to survive, because every
+/// placement in the document points at it.
+#[test]
+fn reimporting_replaces_the_file_behind_a_key() {
+    let meta = store::create_project("Re-import", Projection::Orthogonal, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
+        let original = psd_write::psd_from_rgba("hut", 16, 16, swatch(16, 16, [10, 20, 30, 255]))
+            .expect("PSD should be written");
+        std::fs::write(psd_dir.join("hut.psd"), original).expect("PSD should save");
+        psd_pipeline::process(&meta.id, "hut", &psd_pipeline::ProcessOptions::default(), |_| {})
+            .expect("the first parse should succeed");
+
+        // The edited file, standing in for whatever came back from Photoshop:
+        // a different size, dropped into a differently named temporary file.
+        let edited = psd_write::psd_from_rgba("hut", 48, 24, swatch(48, 24, [1, 2, 3, 255]))
+            .expect("edited PSD should be written");
+        let inbox = psd_dir.join("whatever-the-editor-called-it.psd");
+        std::fs::write(&inbox, edited).expect("edited PSD should save");
+
+        let imported = psd_pipeline::reimport_and_process(&meta.id, "hut", &inbox, |_| {})
+            .expect("re-import should succeed");
+
+        assert_eq!(imported.key, "hut", "the key must not change");
+        assert_eq!((imported.width, imported.height), (48, 24));
+
+        // The store holds the new file under the old name, and no second one.
+        let stored = std::fs::read(psd_dir.join("hut.psd")).expect("hut.psd should still exist");
+        let parsed = psd::Psd::from_bytes(&stored).expect("stored PSD should parse");
+        assert_eq!((parsed.width(), parsed.height()), (48, 24));
+
+        let manifest: serde_json::Value =
+            serde_json::from_str(&imported.manifest).expect("manifest should be JSON");
+        assert_eq!(manifest["width"], 48);
+        assert_eq!(manifest["height"], 24);
+
+        // A key with no PSD behind it is a re-import of nothing, not a new
+        // import that quietly invents one.
+        assert!(
+            psd_pipeline::reimport_and_process(&meta.id, "absent", &inbox, |_| {}).is_err(),
+            "re-importing an unknown key should fail"
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}

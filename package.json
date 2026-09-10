@@ -6,6 +6,7 @@
   "description": "A Tauri + Phaser game editor and publisher for iPad and macOS, built around PSD-to-Phaser.",
   "scripts": {
     "dev": "vite",
+    "harness": "vite --config harness/vite.config.ts",
     "build": "npm run check && vite build",
     "check": "npm run check:types && npm run check:lines && npm run test",
     "test": "vitest run",

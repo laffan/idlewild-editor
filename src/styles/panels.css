@@ -41,7 +41,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 8px 8px 2px;
+  padding: 8px 8px 8px 6px;
   min-height: 64px;
   border-bottom: var(--rule-chrome);
   background: transparent;
@@ -49,25 +49,43 @@
 .layer-row.active { background: var(--chrome-rule); }
 .layer-row.locked .layer-name { color: var(--chrome-dim); }
 
-.layer-order {
-  display: flex;
-  flex-direction: column;
+/* One element per layer, holding its row and whatever is listed under it, so
+   a reorder moves the whole thing. */
+.layer-group { display: block; }
+
+/* The drag handle. `touch-action: none` is what makes a drag on the iPad a
+   reorder rather than a scroll of the panel behind it. */
+.layer-grip {
   flex: none;
-  width: 24px;
-}
-.layer-order button {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  min-height: 40px;
   border: 0;
   background: transparent;
   color: var(--color-neutral-500);
   padding: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  cursor: grab;
+  touch-action: none;
 }
-.layer-order button:hover { background: var(--chrome-rule); }
-.layer-order button[disabled] { opacity: 0.25; cursor: default; }
+.layer-grip:hover { color: var(--chrome-text); background: var(--chrome-rule); }
+.layer-grip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+.panel-body.reordering { cursor: grabbing; }
+.panel-body.reordering .layer-grip { cursor: grabbing; }
+/* Everything else stops responding to the pointer for the length of a drag,
+   so passing over a lock or an eye does not toggle it on release. */
+.panel-body.reordering .layer-row > *:not(.layer-grip),
+.panel-body.reordering .layer-item { pointer-events: none; }
+
+.layer-group.dragging {
+  opacity: 0.9;
+  background: var(--chrome-rule);
+  box-shadow: var(--shadow-md);
+}
+.layer-group.dragging .layer-row { border-bottom-color: var(--color-accent); }
 
 .layer-disclose {
   flex: none;
@@ -94,9 +112,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Indented to sit under the layer's name, past the order and disclosure
+  /* Indented to sit under the layer's name, past the grip and disclosure
      controls. */
-  padding: 0 10px 0 50px;
+  padding: 0 10px 0 52px;
   border: 0;
   border-bottom: var(--rule-chrome);
   background: transparent;

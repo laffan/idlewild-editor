@@ -16,7 +16,10 @@ import type { FillPatch, Placement, Selection } from "../lib/types";
 export interface InspectorCallbacks {
   onFillColor: (color: string) => void;
   onToggleWalkable: (walkable: boolean) => void;
-  onReparsePsd: (key: string) => void;
+  /** Hand the PSD to the OS: a desktop editor, or an iPadOS share sheet. */
+  onOpenPsd: (key: string) => void;
+  /** Pick a file to replace the PSD with, then run the pipeline over it. */
+  onReimportPsd: (key: string) => void;
   onDeleteSelection: () => void;
   onUsePatternImage: () => void;
 }
@@ -236,14 +239,23 @@ export class Inspector {
     this.row("Size", `${Math.round(placement.width)} × ${Math.round(placement.height)}`);
     this.row("Anchor cell", `${placement.anchor.cx}, ${placement.anchor.cy}`);
 
+    // Editing a PSD is a round trip out of the app and back: open it where
+    // it can be edited, then bring the edited file in over the old one.
+    // Re-parsing alone had nothing to re-parse, because nothing between the
+    // two steps could ever change the file.
     this.body.appendChild(
       h(
         "div",
         { class: "inspect-section" },
         h("button", {
           class: "panel-btn",
-          text: "Re-parse PSD",
-          onClick: () => this.callbacks.onReparsePsd(placement.psdKey),
+          text: "Open PSD",
+          onClick: () => this.callbacks.onOpenPsd(placement.psdKey),
+        }),
+        h("button", {
+          class: "panel-btn",
+          text: "Re-import PSD…",
+          onClick: () => this.callbacks.onReimportPsd(placement.psdKey),
         }),
         sizeControls(placement, (patch) => {
           this.store.updatePlacement(layerId, placementId, patch);

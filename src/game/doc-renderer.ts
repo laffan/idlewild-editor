@@ -160,6 +160,19 @@ export class DocRenderer {
     this.syncPlacements();
   }
 
+  /**
+   * Drop the rendered objects for one PSD key, leaving the placements in the
+   * document. A re-import replaces the textures behind a key, so what is on
+   * screen has to go before the new file is loaded and placed again.
+   */
+  detachKey(psdKey: string): void {
+    for (const [id, view] of this.placements) {
+      if (view.placement.psdKey !== psdKey) continue;
+      destroyPlaced(view.object);
+      this.placements.delete(id);
+    }
+  }
+
   /** Hit-test placements front to back. See `pickPlacement`. */
   pick(worldX: number, worldY: number): PickResult | undefined {
     return pickPlacement(this.store.layers, worldX, worldY);

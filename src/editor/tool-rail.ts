@@ -4,6 +4,10 @@
  * Pencil, eraser and boundary belong to the drawing layer, which is the Hush
  * notebook engine port. They are present and wired to the same selection
  * model, but disabled until that port lands rather than pretending to work.
+ *
+ * There is no Fill tool. Filling is an action on a selection, not a mode you
+ * enter — it is the first button on the bar that appears over a selected run
+ * of spaces — so a rail slot for it only ever did nothing.
  */
 
 import { h, ICONS, icon } from "../lib/dom";
@@ -20,7 +24,6 @@ interface ToolSpec {
 export const TOOLS: ToolSpec[] = [
   { id: "select", name: "Select", path: ICONS.select },
   { id: "pan", name: "Pan", path: ICONS.hand },
-  { id: "fill", name: "Fill", path: ICONS.fill },
   { id: "pencil", name: "Pencil", path: ICONS.pencil, pending: true },
   { id: "eraser", name: "Eraser", path: ICONS.eraser, pending: true },
   { id: "boundary", name: "Boundary", path: ICONS.boundary, pending: true },

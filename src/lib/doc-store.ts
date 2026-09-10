@@ -123,10 +123,21 @@ export class DocStore extends EventTarget {
 
   /** Move a layer by `delta` places in the top-first list. */
   moveLayer(layerId: string, delta: number): void {
+    const from = this.state.layers.findIndex((l) => l.id === layerId);
+    if (from < 0) return;
+    this.reorderLayer(layerId, from + delta);
+  }
+
+  /**
+   * Move a layer to an absolute position in the top-first list — what a
+   * drag releases against. Out-of-range indices are clamped rather than
+   * refused, so a drag that overshoots the end of the list still lands.
+   */
+  reorderLayer(layerId: string, toIndex: number): void {
     const layers = [...this.state.layers];
     const from = layers.findIndex((l) => l.id === layerId);
     if (from < 0) return;
-    const to = Math.max(0, Math.min(layers.length - 1, from + delta));
+    const to = Math.max(0, Math.min(layers.length - 1, toIndex));
     if (to === from) return;
     const [moved] = layers.splice(from, 1);
     layers.splice(to, 0, moved);

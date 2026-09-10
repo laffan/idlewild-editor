@@ -17,6 +17,7 @@ import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { PlayController } from "./play-controller";
+import { evictPsd, loadPsd, reconcilePlacements } from "./psd-loader";
 import {
   boxToPlacement,
   handleAt,
@@ -68,8 +69,6 @@ type DragState =
     };
 
 const MIN_ZOOM = 0.1;
-/** How long to wait on psd-to-phaser before placing anyway. */
-const LOAD_TIMEOUT_MS = 15_000;
 const MAX_ZOOM = 4;
 
 export class WorldScene extends Phaser.Scene {
@@ -497,54 +496,35 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Swap in a re-imported PSD under the key it already had.
+   *
+   * Every cache holding the old file is dropped first — see `evictPsd` — and
+   * the placements pointing at the key are brought in line with the new
+   * manifest before anything is drawn, so an edit lands where the old
+   * artwork was standing.
+   */
+  async reloadPsd(key: string, manifestJson: string): Promise<void> {
+    reconcilePlacements(this.store, key, parseManifest(manifestJson));
+
+    this.docRenderer.detachKey(key);
+    evictPsd(this, this.plugin(), key);
+    await this.loadPsd(key);
+
+    for (const layer of this.store.layers) {
+      for (const placement of layer.placements) {
+        if (placement.psdKey === key) this.placeOne(layer.id, placement);
+      }
+    }
+    this.docRenderer.render();
+  }
+
   private plugin(): PsdToPhaser | undefined {
     return (this as unknown as Record<string, PsdToPhaser | undefined>).P2P;
   }
 
-  /**
-   * Ask psd-to-phaser to load a key, resolving when its textures are in.
-   *
-   * The signal is the plugin's own `psdLoadComplete`, not the Phaser loader's
-   * COMPLETE: P2P loads `data.json` first and only queues the sprites once it
-   * has parsed that, so the loader can complete a whole pass before any image
-   * has been asked for. `psdLoadComplete` carries no key, so loads are run
-   * one at a time.
-   */
   private loadPsd(key: string): Promise<void> {
-    const p2p = this.plugin();
-    if (!p2p) {
-      log.error("psd-to-phaser is not registered on this scene");
-      return Promise.resolve();
-    }
-    if (p2p.getData(key)) return Promise.resolve();
-
-    return new Promise((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        this.events.off("psdLoadComplete", finish);
-        this.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
-        window.clearTimeout(timer);
-        resolve();
-      };
-      const onError = (file: Phaser.Loader.File) => {
-        log.error(`Could not load ${file.key} for ${key}: ${file.url}`);
-        finish();
-      };
-
-      // A PSD whose layers all lazy-load never emits the event, so never
-      // block the editor on it indefinitely.
-      const timer = window.setTimeout(() => {
-        if (!settled) log.warn(`${key} did not finish loading; placing anyway`);
-        finish();
-      }, LOAD_TIMEOUT_MS);
-
-      this.events.once("psdLoadComplete", finish);
-      this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
-      // P2P starts the loader itself when it is not already running.
-      p2p.load.load(this, key, `${this.config.assetBase}/assets/${key}`);
-    });
+    return loadPsd(this, this.plugin(), key, this.config.assetBase);
   }
 
   private placeOne(layerId: string, placement: Placement): void {

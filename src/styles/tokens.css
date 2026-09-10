@@ -63,6 +63,11 @@
   /* Touch targets. Everything the finger hits is at least this tall. */
   --hit: 44px;
 
+  /* The height of the two bars that bracket the canvas: the editor header at
+     the top and the console toggle at the bottom. One token, because the
+     point of the pair is that they match. */
+  --bar-h: 44px;
+
   /* Borders. The system is flat and zero-radius, but its rules are drawn in
      neutral tones rather than near-black — the ink-heavy version read as
      wireframe rather than interface. */

@@ -10,7 +10,8 @@ use crate::store;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-/// Processing knobs, surfaced in the inspector's "Re-parse PSD" controls.
+/// Processing knobs. Import and re-import both run with the defaults; the
+/// struct is the seam for surfacing them once there is a UI for it.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct ProcessOptions {
     #[serde(rename = "tileSliceSize")]
@@ -29,12 +30,30 @@ pub struct ProcessOptions {
     pub metadata_only: Option<bool>,
 }
 
+/// Reject anything that would not survive being a file name.
+///
+/// Keys are produced by `psd_write::sanitise_stem` on import, but they reach
+/// these functions from the document — a JSON file on disk — and now also
+/// name a path the system is asked to open, so they are checked again here
+/// rather than trusted the second time around.
+pub fn safe_key(key: &str) -> Result<&str, String> {
+    let ok = !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    if ok {
+        Ok(key)
+    } else {
+        Err(format!("Invalid PSD key: {key}"))
+    }
+}
+
 pub fn psd_path(project_id: &str, key: &str) -> Result<PathBuf, String> {
-    Ok(store::psd_dir(project_id)?.join(format!("{key}.psd")))
+    Ok(store::psd_dir(project_id)?.join(format!("{}.psd", safe_key(key)?)))
 }
 
 pub fn output_dir(project_id: &str, key: &str) -> Result<PathBuf, String> {
-    Ok(store::assets_dir(project_id)?.join(key))
+    Ok(store::assets_dir(project_id)?.join(safe_key(key)?))
 }
 
 pub fn manifest_path(project_id: &str, key: &str) -> Result<PathBuf, String> {
@@ -126,6 +145,38 @@ pub fn import_and_process(
 
     Ok(ImportResult {
         key,
+        width,
+        height,
+        manifest,
+    })
+}
+
+/// Replace the PSD behind an existing key, then run the pipeline over it.
+///
+/// The key does not change, so every placement already pointing at it keeps
+/// pointing at it — that is what makes this a re-import rather than a second
+/// import that happens to look similar. `process` clears the previous output
+/// directory first, so nothing from the old file outlives the new one.
+pub fn reimport_and_process(
+    project_id: &str,
+    key: &str,
+    source: &Path,
+    emit_log: impl Fn(&str),
+) -> Result<ImportResult, String> {
+    let key = safe_key(key)?;
+    if !psd_path(project_id, key)?.exists() {
+        return Err(format!("No PSD named {key} in this project"));
+    }
+
+    let psd_dir = store::psd_dir(project_id)?;
+    // Forcing the stem to the existing key is what overwrites `<key>.psd`
+    // instead of adding a second file named after whatever was picked.
+    let dest = crate::psd_write::import_file_as_psd(source, &psd_dir, Some(key))?;
+    let (width, height) = psd_dimensions(&dest)?;
+    let manifest = process(project_id, key, &ProcessOptions::default(), emit_log)?;
+
+    Ok(ImportResult {
+        key: key.to_string(),
         width,
         height,
         manifest,

@@ -127,4 +127,17 @@ export const ICONS = {
   code: ["m9 8-5 4 5 4", "m15 8 5 4-5 4"],
   publish: ["M12 19V5", "M5 12l7-7 7 7"],
   menu: ["M4 7h16", "M4 12h16", "M4 17h16"],
+  /* Sliders — Project Options, which is settings rather than navigation. */
+  sliders: ["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 5v4", "M9 15v4"],
+  /* A drag handle. Round line caps turn each zero-length segment into a dot,
+     which is how a six-dot grip is drawn without leaving the stroked-path
+     vocabulary the rest of this set uses. */
+  grip: [
+    "M9 5h.01",
+    "M9 12h.01",
+    "M9 19h.01",
+    "M15 5h.01",
+    "M15 12h.01",
+    "M15 19h.01",
+  ],
 } as const;

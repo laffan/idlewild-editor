@@ -6,19 +6,20 @@
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { Grid, rangeSize } from "../lib/grid";
-import { assetBase, projects, psd } from "../lib/ipc";
+import { assetBase, platform, projects, psd } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
 import { CodeModal } from "../code/code-modal";
 import { Inspector } from "./inspector";
-import { Topbar } from "./topbar";
+import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
 import { createResizer } from "./resizer";
+import { openPsdExternally, pickReimportSource } from "./psd-actions";
 import {
   openAddImage,
   openExportSelection,
@@ -78,7 +79,8 @@ export async function mountEditor(
       if (selection?.kind !== "fill") return;
       store.updateFill(selection.layerId, selection.fillId, { walkable });
     },
-    onReparsePsd: (key) => void reparse(key),
+    onOpenPsd: (key) => void openPsd(key),
+    onReimportPsd: (key) => void reimportPsd(key),
     onDeleteSelection: () => deleteSelection(),
     onUsePatternImage: () =>
       openAddImage(meta.id, (result) => {
@@ -140,22 +142,21 @@ export async function mountEditor(
     icon(ICONS.chevronRight, 14),
   );
 
-  const topbar = new Topbar(meta.name, `${meta.gridSize} px · ${meta.projection}`, {
-    onBack: () => void leave(),
-    onMode: (next) => setMode(next),
-    onCode: () => toggleCode(),
-    onPublish: () => openPublish(meta.id, meta.name),
-    onOptions: () => openProjectOptions(meta, store.layers.length),
-  });
-
-  canvasWrap.append(
-    topbar.root,
-    rail.root,
-    rail.label,
-    actions.root,
-    leftToggle,
-    rightToggle,
+  const header = new EditorHeader(
+    meta.name,
+    `${meta.gridSize} px · ${meta.projection}`,
+    {
+      onBack: () => void leave(),
+      onMode: (next) => setMode(next),
+      onCode: () => toggleCode(),
+      onPublish: () => openPublish(meta.id, meta.name),
+      onOptions: () => openProjectOptions(meta, store.layers.length),
+    },
   );
+
+  // The header is a row of the shell, not chrome floating over the canvas, so
+  // only the tools and the selection bar are inside the canvas wrapper.
+  canvasWrap.append(rail.root, rail.label, actions.root, leftToggle, rightToggle);
 
   // Draggable dividers on both sidebars and the console drawer. Sizes are a
   // per-viewer convenience, so they live in localStorage rather than the doc.
@@ -188,6 +189,7 @@ export async function mountEditor(
   const shell = h(
     "div",
     { class: "editor" },
+    header.root,
     h(
       "div",
       { class: "editor-main" },
@@ -222,7 +224,7 @@ export async function mountEditor(
   });
   handle.scene.activeLayerId = activeLayerId;
   if (import.meta.env.DEV) {
-    // Handle for the browser harness in scratchpad/; dev builds only.
+    // Handle for the browser harness in harness/; dev builds only.
     (window as unknown as Record<string, unknown>).__idlewildScene = handle.scene;
   }
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
@@ -278,12 +280,29 @@ export async function mountEditor(
     handle?.scene.setSelection({ kind: "none" });
   }
 
-  async function reparse(key: string): Promise<void> {
+  /**
+   * Hand the PSD to the OS. On macOS that is the editor registered for PSDs;
+   * on iPadOS, where an app cannot open another app's document in place, it
+   * is the share sheet.
+   */
+  async function openPsd(key: string): Promise<void> {
     try {
-      await psd.reprocess(meta.id, key);
-      log.info(`Re-parsed ${key}.psd`);
+      await openPsdExternally(meta.id, key, await platform());
     } catch (err) {
-      log.error(`Could not re-parse ${key}:`, err);
+      log.error(`Could not open ${key}.psd:`, err);
+    }
+  }
+
+  /** Replace the file behind a PSD key, then reload what is on the canvas. */
+  async function reimportPsd(key: string): Promise<void> {
+    try {
+      const source = await pickReimportSource(key);
+      if (!source) return;
+      const result = await psd.reimport(meta.id, key, source);
+      await handle?.scene.reloadPsd(key, result.manifest);
+      log.info(`Re-imported ${key}.psd (${result.width}×${result.height})`);
+    } catch (err) {
+      log.error(`Could not re-import ${key}:`, err);
     }
   }
 
@@ -297,7 +316,7 @@ export async function mountEditor(
 
   function setMode(next: EditorMode): void {
     mode = next;
-    topbar.setMode(next);
+    header.setMode(next);
     shell.classList.toggle("play-mode", next === "play");
     handle?.scene.setMode(next);
     if (next === "play") {
@@ -337,6 +356,8 @@ export async function mountEditor(
     if (mode === "play") setMode("edit");
     await saveThumbnail();
     await store.flush();
+    header.destroy();
+    layers.destroy();
     codeModal?.destroy();
     terminal.destroy();
     leftResizer.destroy();

@@ -15,6 +15,7 @@ mod tests;
 use project::{GameFile, ImportResult, OutputFile, ProjectMeta, Projection};
 use psd_pipeline::ProcessOptions;
 use tauri::{Emitter, Manager};
+use tauri_plugin_opener::OpenerExt;
 
 /// The port the asset server bound to, so the frontend can build P2P base URLs.
 struct ServerPort(u16);
@@ -22,6 +23,13 @@ struct ServerPort(u16);
 #[tauri::command]
 fn get_server_port(state: tauri::State<'_, ServerPort>) -> u16 {
     state.0
+}
+
+/// Which platform the shell is running on, so the frontend can pick between
+/// handing a file to a desktop editor and handing it to a share sheet.
+#[tauri::command]
+fn platform() -> &'static str {
+    std::env::consts::OS
 }
 
 // ── projects ────────────────────────────────────────────────────────────────
@@ -211,6 +219,51 @@ fn reprocess_psd(
     psd_pipeline::process(&id, &key, &options, logger(&app))
 }
 
+/// Replace `<project>/psd/<key>.psd` with the file the user picked and run it
+/// through psd-to-json again, keeping the key so existing placements survive.
+#[tauri::command]
+fn reimport_psd(
+    app: tauri::AppHandle,
+    id: String,
+    key: String,
+    source_path: String,
+) -> Result<ImportResult, String> {
+    psd_pipeline::reimport_and_process(
+        &id,
+        &key,
+        std::path::Path::new(&source_path),
+        logger(&app),
+    )
+}
+
+/// Hand a project's PSD to whatever the OS opens PSDs with — Photoshop or
+/// Affinity on macOS, the document provider on iPadOS.
+///
+/// This runs through the plugin's Rust API rather than the frontend one so
+/// the webview never needs a filesystem scope covering the whole store: the
+/// only path it can ask for is one built from a project id and a PSD key it
+/// already owns.
+#[tauri::command]
+fn open_psd(app: tauri::AppHandle, id: String, key: String) -> Result<(), String> {
+    let path = psd_pipeline::psd_path(&id, &key)?;
+    if !path.exists() {
+        return Err(format!("No PSD named {key} in this project"));
+    }
+    app.opener()
+        .open_path(path.display().to_string(), None::<&str>)
+        .map_err(|e| format!("Cannot open {key}.psd: {e}"))
+}
+
+/// A project's PSD as base64, for the iPadOS share sheet — which shares a
+/// `File` the webview holds rather than a path it can reach.
+#[tauri::command]
+fn read_psd_bytes(id: String, key: String) -> Result<String, String> {
+    let path = psd_pipeline::psd_path(&id, &key)?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
 #[tauri::command]
 fn read_psd_manifest(id: String, key: String) -> Result<String, String> {
     psd_pipeline::read_manifest(&id, &key)
@@ -306,6 +359,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_server_port,
+            platform,
             list_projects,
             create_project,
             rename_project,
@@ -323,6 +377,9 @@ pub fn run() {
             import_image_bytes,
             create_psd_from_rgba,
             reprocess_psd,
+            reimport_psd,
+            open_psd,
+            read_psd_bytes,
             read_psd_manifest,
             is_psd_processed,
             list_psd_outputs,

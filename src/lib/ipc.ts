@@ -29,6 +29,14 @@ export interface ImportResult {
  */
 export const getServerPort = () => invoke<number>("get_server_port");
 
+/**
+ * The OS the shell is running on — `std::env::consts::OS`, so "macos",
+ * "ios", "windows" or "linux". Handing a PSD to a desktop editor and handing
+ * it to a share sheet are different gestures, and only the shell knows which
+ * one it is.
+ */
+export const platform = () => invoke<string>("platform");
+
 /** The base URL for a project's processed assets. */
 export async function assetBase(projectId: string): Promise<string> {
   const port = await getServerPort();
@@ -87,6 +95,15 @@ export const psd = {
     }),
   reprocess: (id: string, key: string, options?: Record<string, unknown>) =>
     invoke<string>("reprocess_psd", { id, key, options }),
+  /** Overwrite `<key>.psd` with another file and run the pipeline again. */
+  reimport: (id: string, key: string, sourcePath: string) =>
+    invoke<ImportResult>("reimport_psd", { id, key, sourcePath }),
+  /** Hand the PSD to whatever the OS opens PSDs with. */
+  openExternally: (id: string, key: string) =>
+    invoke<void>("open_psd", { id, key }),
+  /** The PSD's own bytes, base64 — what the iPadOS share sheet needs. */
+  bytes: (id: string, key: string) =>
+    invoke<string>("read_psd_bytes", { id, key }),
   manifest: (id: string, key: string) =>
     invoke<string>("read_psd_manifest", { id, key }),
   isProcessed: (id: string, key: string) =>

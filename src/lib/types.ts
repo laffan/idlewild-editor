@@ -126,13 +126,7 @@ export type Selection =
 
 export type EditorMode = "edit" | "play";
 
-export type ToolId =
-  | "select"
-  | "pencil"
-  | "eraser"
-  | "fill"
-  | "boundary"
-  | "pan";
+export type ToolId = "select" | "pencil" | "eraser" | "boundary" | "pan";
 
 export interface PsdManifestEntry {
   key: string;

@@ -20,7 +20,8 @@ Extension of [README.md](README.md).
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                       Tauri window                            │
-│                                                               │
+│  ┌──────────────────────── header ─────────────────────────┐  │
+│  └─────────────────────────────────────────────────────────┘  │
 │  ┌─────────┐  ┌─────────────────────────────┐  ┌───────────┐  │
 │  │ Layers  │  │      Phaser 4 canvas        │  │ Inspector │  │
 │  │ panel   │  │   ┌─────────────────────┐   │  │           │  │
@@ -164,12 +165,47 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 | Projects | `list_projects`, `create_project`, `rename_project`, `delete_project`, `duplicate_project`, `read_project_meta` |
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
 | Game tree | `list_game_files`, `read_game_file`, `write_game_file` |
-| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `read_psd_manifest`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
 | Publish | `publish_zip`, `save_bytes` |
-| Server | `get_server_port` |
+| Server | `get_server_port`, `platform` |
 
 `psd-log-line` is emitted as an event during processing so the console drawer
 can stream psd-to-json's layer tree as it appears.
+
+## Editing a PSD, and getting it back
+
+A PSD lives inside the project's own store, so there was nothing for a
+re-parse to find that was not already parsed. The round trip is two commands
+instead.
+
+`open_psd` goes out through the opener plugin's *Rust* API rather than the
+frontend one, so the webview never needs a filesystem scope over the store —
+the only path it can ask for is one built from a project id and a PSD key it
+already holds. On macOS that opens the registered editor and the user saves
+over the file in place; on iPadOS an app cannot hand another app its document
+and get the edits back, so `platform` steers the frontend to the share sheet
+(`navigator.share` with the bytes from `read_psd_bytes`), and a copy saved
+through the document picker is the fallback where the sheet refuses files.
+
+`reimport_psd` writes the picked file over `<project>/psd/<key>.psd` — the
+stem is forced to the existing key, which is what makes it an overwrite
+rather than a second import — and re-runs psd-to-json, which clears the old
+`assets/<key>/` first.
+
+Three caches then hold the *old* PSD and all three have to go, or the reload
+quietly shows the previous artwork: psd-to-phaser's parsed manifest, Phaser's
+JSON cache entry for `data.json`, and every texture the plugin built. The
+plugin exposes no `removeData`, so its entry is overwritten with nothing —
+`loadPsd`'s `getData` check is what reads it back. Textures are namespaced
+`<psdKey>_<layerName>`, which is what makes them findable from the key alone.
+`game/psd-loader.ts` holds all of this. The asset server already answers
+`Cache-Control: no-store`, so the browser is not the fourth cache.
+
+Placements survive the swap: each keeps its position and its size *relative
+to* what the manifest exported, so a deliberately shrunk image stays shrunk
+against new artwork. A placement whose layer is gone from the new file is
+removed — there is nothing left to draw, and a placement that can never
+render is worse than an honest gap.
 
 ---
 
@@ -253,8 +289,17 @@ pages, flowchart, markdown, text and image shapes, handwriting recognition.
 manifest → zip, plus the path-traversal guards and the project scaffold. It
 runs against the real store and cleans up after itself, including on failure.
 
-The frontend's check is `tsc --noEmit` plus `vite build`. There is no
-headless harness for the Phaser scene yet; the canvas needs a device.
+The frontend's check is `tsc --noEmit` plus `vite build`.
+
+`npm run harness` serves the editor shell in a plain browser: `harness/` is
+the app's own entry with the Tauri modules aliased to stubs, so the layout,
+the panels and the sheets can be opened, driven and screenshotted without a
+Mac or an iPad. It boots a fixture document with three layers and one
+placement, and reads `window.__platform`, `window.__pick` and
+`window.__manifest` so the platform split and the re-import path can be
+exercised from a script. What it cannot stand in for is the pipeline: there
+is no asset server behind it, so placements log a load failure and draw
+nothing. The Phaser scene itself still wants a device.
 
 ---
 
@@ -266,6 +311,25 @@ nothing for anything else, because `GameObject.destroy(fromScene)` reads its
 first argument completely differently. The plugin's `attachMethods` grafts
 `setPosition`, `setScale` and the rest onto the Group, forwarding them to its
 children.
+
+## Reordering layers
+
+The grip in each layer row drags; the arrow keys do the same without a
+pointer. Pointer events rather than HTML5 drag-and-drop, because the iPad is
+a first-class target and `dragstart` never fires for touch.
+
+The gesture is followed on `window`, not through `setPointerCapture` on the
+grip. Capture is released the moment the capturing element leaves the
+document, and the row is moved through the list as the finger passes each
+neighbour — so the pointer-up that commits the drop landed on whatever was
+under the finger instead, and the drop was never written. The list looked
+right and the document did not change.
+
+Each layer renders into one `.layer-group` holding its row and whatever is
+expanded under it, so a reorder moves the layer and its contents as a unit.
+Re-rendering is held for the length of the drag: the panel rebuilds on every
+document change, and rebuilding under the drag would drop the element being
+held.
 
 ## Selection
 
@@ -326,6 +390,8 @@ on chrome never highlights it.
   get their own selection model with the drawing engine port.
 - The code modal edits and saves the project's real files but does not yet
   drive the canvas, and has none of phaser-bench's Phaser-aware completions.
+- Re-import replaces a whole PSD. There is no diff against the previous
+  parse, so a placement is matched to the new file only by its layer path.
 - Play mode's character is a placeholder rectangle, not a sprite from the
   template.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both

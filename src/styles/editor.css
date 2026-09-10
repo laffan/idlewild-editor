@@ -1,4 +1,5 @@
-/* Editor — the dark half. Chrome floats over a full-bleed game canvas. */
+/* Editor — the dark half. A header and a console bar bracket the canvas;
+   the tools and the selection bar are the only chrome that floats over it. */
 
 .editor {
   height: 100%;
@@ -11,6 +12,9 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  /* The containing block for the narrow-window sidebars, which overlay this
+     row rather than the whole window — the header is above it. */
+  position: relative;
 }
 
 .editor-canvas-wrap {
@@ -26,43 +30,46 @@
   touch-action: none;
 }
 
-/* Top bar floats; only its controls take pointer events. */
-.editor-topbar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  min-height: 76px;
+/* The header. A row of the shell rather than a floating toolbar, spanning
+   the window and standing the same height as the console bar at the bottom,
+   so the canvas sits between two rules instead of under a hovering bar. */
+.editor-header {
+  flex: none;
+  height: var(--bar-h);
   display: flex;
-  align-items: center;
-  padding: 14px 16px;
-  gap: 12px;
-  pointer-events: none;
-  flex-wrap: wrap;
-}
-.editor-topbar > * { pointer-events: auto; }
-
-.topbar-group {
-  display: flex;
-  align-items: center;
+  align-items: stretch;
   background: var(--chrome-bg);
-  border: 0;
-  min-height: 48px;
+  border-bottom: var(--rule-chrome);
+  /* At the bar's height there is nothing to wrap onto a second line, and a
+     long project name must not push the mode toggle off the end. */
+  overflow: hidden;
 }
 
-.topbar-project { padding-right: 14px; gap: 6px; }
-.topbar-name { font: 600 15px var(--font-heading); color: var(--chrome-text); }
-.topbar-grid {
+.header-name {
+  display: flex;
+  align-items: center;
+  font: 600 14px var(--font-heading);
+  color: var(--chrome-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.header-grid {
+  display: flex;
+  align-items: center;
+  flex: none;
   font-size: 10px;
   color: var(--chrome-dim);
   border-left: var(--rule-chrome);
-  padding-left: 12px;
-  margin-left: 6px;
+  padding: 0 12px;
+  margin-left: 12px;
 }
+/* Takes the slack, so everything after it is pinned to the right edge. */
+.header-spacer { flex: 1; min-width: 8px; }
 
 .icon-btn {
-  width: 44px;
-  height: 44px;
+  width: var(--bar-h);
   border: 0;
   background: transparent;
   color: var(--chrome-text);
@@ -70,45 +77,73 @@
   align-items: center;
   justify-content: center;
   flex: none;
+  padding: 0;
 }
 .icon-btn:hover { background: var(--chrome-rule); }
 
-.mode-toggle { display: flex; }
+.mode-toggle { display: flex; flex: none; }
 .mode-btn {
-  min-height: 44px;
-  min-width: 88px;
-  padding: 0 20px;
+  min-width: 76px;
+  padding: 0 16px;
   border: 0;
   border-left: var(--rule-chrome);
   background: transparent;
   color: var(--chrome-dim);
-  font: 600 15px var(--font-heading);
-  text-align: left;
+  font: 600 13px var(--font-heading);
+  text-align: center;
 }
-.mode-btn:first-child { border-left: 0; }
 .mode-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .mode-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
 
-.chrome-btn {
-  min-height: 48px;
-  padding: 0 18px;
+.header-menu {
+  width: var(--bar-h);
+  flex: none;
   border: 0;
-  background: var(--chrome-bg);
+  border-left: var(--rule-chrome);
+  background: transparent;
   color: var(--chrome-text);
-  font: 600 15px var(--font-heading);
-  text-align: left;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  padding: 0;
 }
-.chrome-btn:hover { background: var(--chrome-rule); }
-.chrome-btn-icon { width: 48px; padding: 0; justify-content: center; }
+.header-menu:hover,
+.header-menu[aria-expanded="true"] { background: var(--chrome-rule); }
+
+/* The header's menu: Code, Publish and Project Options. */
+.menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 208px;
+  background: var(--chrome-bg);
+  border: var(--rule-chrome);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+.menu-item {
+  min-height: var(--hit);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border: 0;
+  border-top: var(--rule-chrome);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 14px var(--font-heading);
+  text-align: left;
+}
+.menu-item:first-child { border-top: 0; }
+.menu-item:hover { background: var(--chrome-rule); }
+.menu-item svg { flex: none; color: var(--chrome-dim); }
+.menu-item:hover svg { color: var(--chrome-text); }
 
 /* Tool rail */
 .tool-rail {
   position: absolute;
   left: 16px;
-  top: 100px;
+  top: 16px;
   border: 0;
   background: var(--chrome-bg);
   display: flex;
@@ -134,7 +169,7 @@
 .tool-name {
   position: absolute;
   left: 84px;
-  top: 112px;
+  top: 28px;
   font-size: 10px;
   color: var(--color-neutral-700);
   z-index: 5;
@@ -176,11 +211,12 @@
 }
 
 /* Edge toggles.
-   Anchored below the tool rail rather than at dead centre: the rail is six
-   items tall and a centred toggle collided with its last button. */
+   Anchored below the tool rail rather than at dead centre: the rail is five
+   56px items starting 16px down, so a centred toggle collided with its last
+   button on anything short. */
 .edge-toggle {
   position: absolute;
-  top: max(50%, 480px);
+  top: max(50%, 340px);
   transform: translateY(-50%);
   width: 26px;
   height: 88px;
@@ -204,7 +240,7 @@
 }
 .terminal-toggle {
   width: 100%;
-  min-height: 44px;
+  height: var(--bar-h);
   border: 0;
   background: transparent;
   display: flex;
