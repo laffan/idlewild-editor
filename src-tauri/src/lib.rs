@@ -193,6 +193,7 @@ fn create_psd_from_rgba(
     width: u32,
     height: u32,
     rgba_base64: String,
+    marks: Option<AnchorMarks>,
 ) -> Result<ImportResult, String> {
     use base64::Engine;
     let rgba = base64::engine::general_purpose::STANDARD
@@ -200,7 +201,7 @@ fn create_psd_from_rgba(
         .map_err(|e| format!("Bad pixel data: {e}"))?;
 
     let key = psd_write::sanitise_stem(&name);
-    let psd_bytes = psd_write::psd_from_rgba(&key, width, height, rgba)?;
+    let psd_bytes = psd_write::psd_from_rgba_marked(&key, width, height, rgba, marks.as_ref())?;
     let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
     std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
 
@@ -222,6 +223,17 @@ fn reprocess_psd(
 ) -> Result<String, String> {
     let options = options.unwrap_or_default();
     psd_pipeline::process(&id, &key, &options, logger(&app))
+}
+
+/// Copy a PSD to a key of its own and process it.
+///
+/// This is what breaks a reference. Two placements of the same key share one
+/// file, so editing it edits both; giving one of them its own copy is what
+/// lets it be changed alone. The bytes are copied rather than re-derived, so
+/// the copy starts identical — anchor mark and all.
+#[tauri::command]
+fn duplicate_psd(app: tauri::AppHandle, id: String, key: String) -> Result<ImportResult, String> {
+    psd_pipeline::duplicate_and_process(&id, &key, logger(&app))
 }
 
 /// Replace `<project>/psd/<key>.psd` with the file the user picked and run it
@@ -383,6 +395,7 @@ pub fn run() {
             create_psd_from_rgba,
             reprocess_psd,
             reimport_psd,
+            duplicate_psd,
             open_psd,
             read_psd_bytes,
             read_psd_manifest,

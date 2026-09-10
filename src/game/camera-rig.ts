@@ -16,8 +16,12 @@ export interface RigEvents {
    * Asked once per pointer-down: is there a selected object under the finger
    * that should move instead of the camera? Returning true routes the gesture
    * to onDragMove / onDragEnd.
+   *
+   * `alt` rides along because the answer depends on it — holding it turns a
+   * drag into a drag of a fresh copy — and only the scene knows what a copy
+   * of the current selection is.
    */
-  onDragStart: (screenX: number, screenY: number) => boolean;
+  onDragStart: (screenX: number, screenY: number, alt: boolean) => boolean;
   onDragMove: (screenX: number, screenY: number) => void;
   onDragEnd: () => void;
   onMarqueeStart: (screenX: number, screenY: number) => void;
@@ -117,7 +121,7 @@ export class CameraRig {
 
     // Dragging a selected object wins over both panning and the hold: the
     // finger is already on something the user picked.
-    if (this.events.onDragStart(event.clientX, event.clientY)) {
+    if (this.events.onDragStart(event.clientX, event.clientY, event.altKey)) {
       this.phase = "drag";
       return;
     }

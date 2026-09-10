@@ -188,6 +188,51 @@ pub fn reimport_and_process(
     })
 }
 
+/// Copy a PSD to the next free key beside it and process that.
+///
+/// The new key is the old one plus `-copy`, then `-copy-2` and so on — a
+/// name someone reading the project directory can follow back to what it
+/// came from.
+pub fn duplicate_and_process(
+    project_id: &str,
+    key: &str,
+    emit_log: impl Fn(&str),
+) -> Result<ImportResult, String> {
+    let key = safe_key(key)?;
+    let source = psd_path(project_id, key)?;
+    if !source.exists() {
+        return Err(format!("No PSD named {key} in this project"));
+    }
+
+    let copy = next_free_key(project_id, key)?;
+    std::fs::copy(&source, psd_path(project_id, &copy)?)
+        .map_err(|e| format!("Cannot copy {key}.psd: {e}"))?;
+
+    let (width, height) = psd_dimensions(&source)?;
+    let manifest = process(project_id, &copy, &ProcessOptions::default(), emit_log)?;
+    Ok(ImportResult {
+        key: copy,
+        width,
+        height,
+        manifest,
+    })
+}
+
+fn next_free_key(project_id: &str, key: &str) -> Result<String, String> {
+    let base = format!("{key}-copy");
+    for n in 1..1000 {
+        let candidate = if n == 1 {
+            base.clone()
+        } else {
+            format!("{base}-{n}")
+        };
+        if !psd_path(project_id, &candidate)?.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(format!("Too many copies of {key}"))
+}
+
 fn psd_dimensions(path: &Path) -> Result<(u32, u32), String> {
     let bytes = std::fs::read(path).map_err(|e| format!("Cannot read PSD: {e}"))?;
     let doc = psd::Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse PSD: {e}"))?;

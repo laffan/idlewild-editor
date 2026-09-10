@@ -173,6 +173,14 @@ export class DocRenderer {
     }
   }
 
+  /** Drop one placement's rendered object, leaving its record alone. */
+  detachOne(placementId: string): void {
+    const view = this.placements.get(placementId);
+    if (!view) return;
+    destroyPlaced(view.object);
+    this.placements.delete(placementId);
+  }
+
   /** Hit-test placements front to back. See `pickPlacement`. */
   pick(worldX: number, worldY: number): PickResult | undefined {
     return pickPlacement(this.store.layers, worldX, worldY);

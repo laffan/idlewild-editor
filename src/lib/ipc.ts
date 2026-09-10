@@ -24,6 +24,18 @@ export interface OutputFile {
 export interface AnchorMarks {
   /** The selection's outline in world pixels, relative to the anchor cell. */
   outline: Array<{ x: number; y: number }>;
+  /** The divisions between the spaces it covers, same frame of reference. */
+  lines: Array<{
+    a: { x: number; y: number };
+    b: { x: number; y: number };
+  }>;
+  /**
+   * Where the artwork's top-left goes relative to the anchor. Omitted by an
+   * image import, which has no opinion and gets centred; sent by anything
+   * converted from what is already on the grid, which knows exactly which
+   * pixels belong over which spaces.
+   */
+  art?: { x: number; y: number };
   cols: number;
   rows: number;
 }
@@ -106,6 +118,7 @@ export const psd = {
     width: number,
     height: number,
     rgbaBase64: string,
+    marks?: AnchorMarks,
   ) =>
     invoke<ImportResult>("create_psd_from_rgba", {
       id,
@@ -113,12 +126,19 @@ export const psd = {
       width,
       height,
       rgbaBase64,
+      marks,
     }),
   reprocess: (id: string, key: string, options?: Record<string, unknown>) =>
     invoke<string>("reprocess_psd", { id, key, options }),
   /** Overwrite `<key>.psd` with another file and run the pipeline again. */
   reimport: (id: string, key: string, sourcePath: string) =>
     invoke<ImportResult>("reimport_psd", { id, key, sourcePath }),
+  /**
+   * Copy a PSD to a key of its own and process it — what breaks a reference,
+   * so one of two placements sharing a file can be changed alone.
+   */
+  duplicate: (id: string, key: string) =>
+    invoke<ImportResult>("duplicate_psd", { id, key }),
   /** Hand the PSD to whatever the OS opens PSDs with. */
   openExternally: (id: string, key: string) =>
     invoke<void>("open_psd", { id, key }),

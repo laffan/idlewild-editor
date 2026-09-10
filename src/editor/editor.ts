@@ -6,7 +6,7 @@
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { Grid, rangeSize } from "../lib/grid";
-import { assetBase, platform, projects } from "../lib/ipc";
+import { assetBase, platform, projects, psd } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
@@ -22,6 +22,7 @@ import { exportSelectionPng } from "./export-selection";
 import { createResizer } from "./resizer";
 import { openPsdExternally, refreshPsd } from "./psd-actions";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
+import { convertFillToPsd } from "./fill-actions";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import {
   openAddImage,
@@ -89,6 +90,8 @@ export async function mountEditor(
     onRefreshPsd: (key) => void refresh(key),
     onStrokesToPsd: () => void strokesToPsd(),
     onStrokesToZone: () => strokesToZone(),
+    onFillToPsd: () => void fillToPsd(),
+    onRemoveReference: (key) => void removeReference(key),
     onStrokeStyle: (patch) => {
       if (!drawing) return;
       drawing.style = { ...drawing.style, ...patch };
@@ -235,6 +238,7 @@ export async function mountEditor(
 
   clear(container);
   container.appendChild(shell);
+  document.addEventListener("keydown", onKeyDown);
   leftResizer.restore();
   rightResizer.restore();
   consoleResizer.restore();
@@ -322,6 +326,36 @@ export async function mountEditor(
     }
   }
 
+  /**
+   * Delete removes whatever is selected — the same thing the inspector's
+   * last button does.
+   *
+   * Ignored while the caret is in a field, which is every layer name, every
+   * numeric input, the colour picker's hex box and the whole code editor:
+   * there, backspace means backspace. `isContentEditable` is what catches
+   * CodeMirror, which is a div rather than a textarea.
+   */
+  function onKeyDown(event: KeyboardEvent): void {
+    if (event.key !== "Delete" && event.key !== "Backspace") return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    const target = event.target;
+    if (
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      (target instanceof HTMLElement && target.isContentEditable)
+    ) {
+      return;
+    }
+
+    const selection = handle?.scene.getSelection();
+    if (!selection || selection.kind === "none" || selection.kind === "layer") {
+      return;
+    }
+    event.preventDefault();
+    deleteSelection();
+  }
+
   function deleteSelection(): void {
     const selection = handle?.scene.getSelection();
     if (!selection) return;
@@ -367,6 +401,32 @@ export async function mountEditor(
     const selection = handle?.scene.getSelection();
     if (selection?.kind !== "strokes" || !drawing || !handle) return;
     await convertStrokesToPsd(meta.id, grid, drawing, handle.scene, selection);
+  }
+
+  /** Hand a filled run of grid spaces to its layer as a placed PSD. */
+  async function fillToPsd(): Promise<void> {
+    const selection = handle?.scene.getSelection();
+    if (selection?.kind !== "fill" || !handle) return;
+    await convertFillToPsd(meta.id, store, grid, handle.scene, selection);
+  }
+
+  /**
+   * Give a referencing placement its own copy of the PSD.
+   *
+   * The selected placement is the one that moves off the shared file, so
+   * whichever of the two you were looking at is the one that becomes
+   * independent — and everything else pointing at the original stays put.
+   */
+  async function removeReference(key: string): Promise<void> {
+    const selection = handle?.scene.getSelection();
+    if (selection?.kind !== "placement") return;
+    try {
+      const copy = await psd.duplicate(meta.id, key);
+      await handle?.scene.repointPlacement(selection, copy.key, copy.manifest);
+      log.info(`${key}.psd → ${copy.key}.psd — this placement is now its own`);
+    } catch (err) {
+      log.error(`Could not break the reference to ${key}:`, err);
+    }
   }
 
   /** Hand a stroke selection to a layer as a boundary zone. */
@@ -460,6 +520,7 @@ export async function mountEditor(
   }
 
   async function teardown(): Promise<void> {
+    document.removeEventListener("keydown", onKeyDown);
     if (mode === "play") setMode("edit");
     await saveThumbnail();
     await store.flush();

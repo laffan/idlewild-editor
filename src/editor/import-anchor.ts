@@ -7,10 +7,19 @@
  * displayed at once it gets there.
  */
 
-import type { Grid } from "../lib/grid";
+import { Grid } from "../lib/grid";
 import type { AnchorMarks } from "../lib/ipc";
 import type { Cell } from "../lib/types";
-import { rangeSize } from "../lib/grid";
+import { cellsInRange, rangeSize } from "../lib/grid";
+
+/**
+ * A ceiling on the internal lines a footprint draws.
+ *
+ * A selection of a few hundred spaces would otherwise ship thousands of
+ * segments into a PSD layer nobody can read at that density anyway. Past
+ * this the footprint keeps its outline and drops the divisions.
+ */
+const MAX_LINES = 600;
 
 /**
  * How big an imported image is displayed against its own pixels.
@@ -44,13 +53,50 @@ export function marksForSelection(
   const anchor = grid.cellToWorld(anchorCell(from, to));
   const { w, h } = rangeSize(from, to);
 
+  const relative = (p: { x: number; y: number }) => ({
+    x: p.x - anchor.x,
+    y: p.y - anchor.y,
+  });
+
   return {
-    outline: grid
-      .rangePolygon(from, to)
-      .map((p) => ({ x: p.x - anchor.x, y: p.y - anchor.y })),
+    outline: grid.rangePolygon(from, to).map(relative),
+    lines: internalLines(grid, from, to).map((line) => ({
+      a: relative(line.a),
+      b: relative(line.b),
+    })),
     cols: w,
     rows: h,
   };
+}
+
+/**
+ * The divisions between the spaces a selection covers.
+ *
+ * A footprint that is only an outline says how much room the artwork has;
+ * the divisions say where each space in it begins, which is what you draw
+ * against when the artwork spans several. Only the edges a cell shares with
+ * its `+cx` and `+cy` neighbours are emitted, so no line is drawn twice.
+ *
+ * Both projections put those two edges at the same two indices of
+ * `cellPolygon` — right→bottom and bottom→left for a diamond, right→bottom
+ * and bottom→left for a square — so the walk is written once.
+ */
+function internalLines(
+  grid: Grid,
+  from: Cell,
+  to: Cell,
+): Array<{ a: { x: number; y: number }; b: { x: number; y: number } }> {
+  const x1 = Math.max(from.cx, to.cx);
+  const y1 = Math.max(from.cy, to.cy);
+  const out: Array<{ a: { x: number; y: number }; b: { x: number; y: number } }> = [];
+
+  for (const cell of cellsInRange(from, to)) {
+    if (out.length >= MAX_LINES) break;
+    const poly = grid.cellPolygon(cell);
+    if (cell.cx < x1) out.push({ a: poly[1], b: poly[2] });
+    if (cell.cy < y1) out.push({ a: poly[2], b: poly[3] });
+  }
+  return out;
 }
 
 /**

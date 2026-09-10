@@ -28,6 +28,10 @@ export interface InspectorCallbacks {
   /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
+  /** Hand a filled run of grid spaces on as a placed PSD. */
+  onFillToPsd: () => void;
+  /** Give a referencing placement its own copy of the PSD. */
+  onRemoveReference: (key: string) => void;
   /** The pencil's brush, size and colour changed. */
   onStrokeStyle: (patch: Partial<StrokeStyle>) => void;
 }
@@ -341,6 +345,13 @@ export class Inspector {
           text: fill.walkable ? "Make blocking" : "Make walkable",
           onClick: () => this.callbacks.onToggleWalkable(!fill.walkable),
         }),
+        // A fill is a fast way to block a shape out on the grid; this is
+        // what turns the block-out into something an artist can paint.
+        h("button", {
+          class: "panel-btn",
+          text: "Convert to PSD",
+          onClick: () => this.callbacks.onFillToPsd(),
+        }),
         h("button", {
           class: "panel-btn",
           text: "Delete fill",
@@ -386,6 +397,26 @@ export class Inspector {
     if (!placement) return this.renderEmpty();
 
     this.head("Image", `${placement.psdKey}.psd`);
+
+    // A placement shares its file with any other placement of the same key,
+    // which is what an option-drag makes. Say so before anything else: the
+    // consequence is that editing the PSD edits all of them.
+    const sharing = this.placementsOfKey(placement.psdKey);
+    if (sharing > 1) {
+      this.body.appendChild(
+        h(
+          "div",
+          { class: "inspect-note" },
+          h("span", { text: `Reference · ${sharing} placements share this PSD` }),
+          h("button", {
+            class: "panel-btn",
+            text: "Remove Reference",
+            onClick: () => this.callbacks.onRemoveReference(placement.psdKey),
+          }),
+        ),
+      );
+    }
+
     this.row("Layer path", placement.layerPath);
     this.row("Position", `${Math.round(placement.x)}, ${Math.round(placement.y)}`);
     this.row("Size", `${Math.round(placement.width)} × ${Math.round(placement.height)}`);
@@ -465,6 +496,17 @@ export class Inspector {
         }),
       ),
     );
+  }
+
+  /** How many placements in the whole document read one PSD. */
+  private placementsOfKey(key: string): number {
+    let n = 0;
+    for (const layer of this.store.layers) {
+      for (const placement of layer.placements) {
+        if (placement.psdKey === key) n++;
+      }
+    }
+    return n;
   }
 
   private renderZone(layerId: string, zoneId: string): void {

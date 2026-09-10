@@ -53,6 +53,31 @@ describe("marksForSelection", () => {
     expect(far.outline).toEqual(near.outline);
   });
 
+  it("has nothing to divide on a single space", () => {
+    const grid = new Grid("orthogonal", 32);
+    expect(marksForSelection(grid, { cx: 0, cy: 0 }, { cx: 0, cy: 0 }).lines)
+      .toEqual([]);
+  });
+
+  it("divides a run of spaces once between each pair", () => {
+    const grid = new Grid("orthogonal", 32);
+    // Two spaces side by side: one division, down the shared edge.
+    const pair = marksForSelection(grid, { cx: 0, cy: 0 }, { cx: 1, cy: 0 });
+    expect(pair.lines).toEqual([{ a: { x: 32, y: 0 }, b: { x: 32, y: 32 } }]);
+
+    // A 3x3 block has two divisions each way, and each is drawn once per
+    // space it borders rather than once for the whole run.
+    const block = marksForSelection(grid, { cx: 0, cy: 0 }, { cx: 2, cy: 2 });
+    expect(block.lines).toHaveLength(12);
+  });
+
+  it("runs an isometric division along the diamond's own edge", () => {
+    const grid = new Grid("isometric", 64);
+    const pair = marksForSelection(grid, { cx: 0, cy: 0 }, { cx: 1, cy: 0 });
+    // The edge cell (0,0) shares with (1,0): its right corner to its bottom.
+    expect(pair.lines).toEqual([{ a: { x: 32, y: 0 }, b: { x: 0, y: 16 } }]);
+  });
+
   it("counts the spaces it covers, for the zone's name", () => {
     const grid = new Grid("orthogonal", 16);
     const marks = marksForSelection(grid, { cx: 0, cy: 0 }, { cx: 2, cy: 4 });

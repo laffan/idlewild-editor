@@ -21,6 +21,13 @@ pub struct MarkPoint {
     pub y: f32,
 }
 
+/// One division between two grid spaces, anchor-relative.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct MarkLine {
+    pub a: MarkPoint,
+    pub b: MarkPoint,
+}
+
 /// Where an import was dropped on the grid, sent from the editor because the
 /// editor is what owns the projection. Absent when there was no grid
 /// selection behind the import — a pasted screenshot, a rasterised sketch —
@@ -30,6 +37,16 @@ pub struct AnchorMarks {
     /// The grid selection's outline, anchor-relative. A diamond under an
     /// isometric template, a rectangle under an orthogonal one.
     pub outline: Vec<MarkPoint>,
+    /// The divisions between the spaces it covers, in the same frame. Empty
+    /// for a single space, which has nothing to divide.
+    #[serde(default)]
+    pub lines: Vec<MarkLine>,
+    /// Where the artwork's top-left goes relative to the anchor. Omitted by
+    /// an image import, which has no opinion and gets centred; sent by a
+    /// conversion of something already on the grid — a fill, say — which
+    /// knows exactly which pixels belong over which spaces.
+    #[serde(default)]
+    pub art: Option<MarkPoint>,
     /// How many grid spaces it covers, which names the zone layer.
     #[serde(default)]
     pub cols: u32,
@@ -37,19 +54,9 @@ pub struct AnchorMarks {
     pub rows: u32,
 }
 
-/// A single-layer PSD built from raw RGBA8 pixels.
-pub fn psd_from_rgba(
-    name: &str,
-    width: u32,
-    height: u32,
-    rgba: Vec<u8>,
-) -> Result<Vec<u8>, String> {
-    psd_from_rgba_marked(name, width, height, rgba, None)
-}
-
-/// The same, plus the orienting marks when the import came from a grid
-/// selection. See `psd_marks` for what they are and why they are invisible
-/// to the game.
+/// A PSD built from raw RGBA8 pixels, plus the orienting marks when there is
+/// a grid selection behind it. See `psd_marks` for what they are and why
+/// they are invisible to the game.
 pub fn psd_from_rgba_marked(
     name: &str,
     width: u32,

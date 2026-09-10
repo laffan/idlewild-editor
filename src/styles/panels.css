@@ -313,3 +313,16 @@
 /* The slider takes the row's slack, so its readout is fixed rather than
    flexible — the shared .inspect-value rule pushes values right instead. */
 .inspect-row.brush-row-size .inspect-value { flex: none; width: 40px; }
+
+/* A standing fact about the selection, above its properties — a placement
+   that shares its PSD with another, and what to do about it. */
+.inspect-note {
+  padding: 10px 16px 14px;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  font: 600 10px var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent-300);
+}
+.inspect-note .panel-btn { text-transform: none; letter-spacing: 0; }

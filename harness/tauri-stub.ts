@@ -58,6 +58,20 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       return "// harness stub\nexport default class WorldScene {}\n";
     case "write_game_file": return undefined;
     case "open_psd": return undefined;
+    case "duplicate_psd": {
+      const a = args as Record<string, string>;
+      const key = `${a.key}-copy`;
+      return {
+        key, width: 200, height: 160,
+        manifest: JSON.stringify({
+          name: key, width: 200, height: 160,
+          layers: [
+            { name: "hut", category: "sprite", x: 0, y: 0, width: 200, height: 160 },
+            { name: "anchor", category: "point", x: 100, y: 80, width: 12, height: 12 },
+          ],
+        }),
+      };
+    }
     case "create_psd_from_rgba": {
       const a = args as Record<string, number | string>;
       (window as any).__lastRgba = { width: a.width, height: a.height, name: a.name };

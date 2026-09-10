@@ -17,17 +17,10 @@ import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { PlayController } from "./play-controller";
+import { DragController } from "./drag";
 import { evictPsd, loadPsd, reconcilePlacements } from "./psd-loader";
 import type { Viewport } from "../drawing";
-import {
-  boxToPlacement,
-  handleAt,
-  HANDLE_SCREEN_PX,
-  placementBox,
-  resizeBox,
-  type Box,
-  type Corner,
-} from "./resize";
+
 
 export interface WorldSceneConfig {
   store: DocStore;
@@ -49,33 +42,6 @@ export interface WorldSceneConfig {
   onViewport?: (view: Viewport) => void;
 }
 
-/** What a drag gesture is moving, captured at pointer-down. */
-type DragState =
-  | {
-      kind: "placement";
-      layerId: string;
-      id: string;
-      grabCell: Cell;
-      originCell: Cell;
-      offsetX: number;
-      offsetY: number;
-    }
-  | {
-      kind: "fill";
-      layerId: string;
-      id: string;
-      grabCell: Cell;
-      cells: Cell[];
-    }
-  | {
-      kind: "resize";
-      layerId: string;
-      id: string;
-      corner: Corner;
-      /** The box as it was at pointer-down, so the drag never compounds. */
-      original: Box;
-    };
-
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 4;
 
@@ -93,7 +59,7 @@ export class WorldScene extends Phaser.Scene {
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
   private marqueeAnchor: Cell | null = null;
-  private drag: DragState | null = null;
+  private drag!: DragController;
   /** Set once the camera is where it should stay — restored, or user-moved. */
   private cameraPlaced = false;
   /** The last camera state pushed to `onViewport`, to skip idle frames. */
@@ -119,6 +85,16 @@ export class WorldScene extends Phaser.Scene {
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
     this.play = new PlayController(this, this.store, this.grid);
+    this.drag = new DragController({
+      store: this.store,
+      grid: this.grid,
+      worldAt: (x, y) => this.worldAt(x, y),
+      zoom: () => this.cameras.main.zoom,
+      getSelection: () => this.selection,
+      setSelection: (selection) => this.setSelection(selection),
+      render: (layerId, placement) => this.placeOne(layerId, placement),
+      onDragStateChange: (dragging) => this.config.onDragStateChange(dragging),
+    });
 
     const saved = this.store.doc.camera;
     if (saved) {
@@ -135,9 +111,9 @@ export class WorldScene extends Phaser.Scene {
 
     this.rig = new CameraRig(this.game.canvas, {
       onTap: (x, y) => this.handleTap(x, y),
-      onDragStart: (x, y) => this.beginDrag(x, y),
-      onDragMove: (x, y) => this.moveDrag(x, y),
-      onDragEnd: () => this.endDrag(),
+      onDragStart: (x, y, alt) => this.mode !== "play" && this.drag.begin(x, y, alt),
+      onDragMove: (x, y) => this.drag.move(x, y),
+      onDragEnd: () => this.drag.end(),
       onMarqueeStart: (x, y) => this.beginMarquee(x, y),
       onMarqueeMove: (x, y) => this.extendMarquee(x, y),
       onMarqueeEnd: () => this.endMarquee(),
@@ -307,147 +283,6 @@ export class WorldScene extends Phaser.Scene {
     this.marqueeAnchor = null;
   }
 
-  // ── dragging ──────────────────────────────────────────────────────────────
-
-  /**
-   * Begin dragging whatever is selected, if the pointer went down on it.
-   *
-   * Only the current selection is draggable: a pointer-down anywhere else
-   * still pans, which keeps the camera reachable everywhere and means a drag
-   * is always something the user deliberately picked first.
-   */
-  private beginDrag(screenX: number, screenY: number): boolean {
-    if (this.mode === "play") return false;
-
-    // Copy to a local so TypeScript narrows the union past the closure.
-    const selection = this.selection;
-    const world = this.worldAt(screenX, screenY);
-    const grabCell = this.grid.worldToCell(world);
-
-    if (selection.kind === "placement") {
-      const layer = this.store.layer(selection.layerId);
-      if (!layer || layer.locked) return false;
-      const placement = layer.placements.find(
-        (p) => p.id === selection.placementId,
-      );
-      if (!placement) return false;
-
-      // A corner handle resizes; the body moves. Handles are drawn at a
-      // constant screen size, so the world-space target scales with zoom.
-      const box = placementBox(placement);
-      const corner = handleAt(
-        box,
-        world,
-        HANDLE_SCREEN_PX / this.cameras.main.zoom,
-      );
-      if (corner) {
-        this.drag = {
-          kind: "resize",
-          layerId: layer.id,
-          id: placement.id,
-          corner,
-          original: box,
-        };
-        this.config.onDragStateChange(true);
-        return true;
-      }
-
-      if (
-        world.x < placement.x ||
-        world.x > placement.x + placement.width ||
-        world.y < placement.y ||
-        world.y > placement.y + placement.height
-      ) {
-        return false;
-      }
-
-      const anchorWorld = this.grid.cellToWorld(placement.anchor);
-      this.drag = {
-        kind: "placement",
-        layerId: layer.id,
-        id: placement.id,
-        grabCell,
-        originCell: placement.anchor,
-        offsetX: placement.x - anchorWorld.x,
-        offsetY: placement.y - anchorWorld.y,
-      };
-      this.config.onDragStateChange(true);
-      return true;
-    }
-
-    if (selection.kind === "fill") {
-      const layer = this.store.layer(selection.layerId);
-      if (!layer || layer.locked) return false;
-      const fill = layer.fills.find((f) => f.id === selection.fillId);
-      if (!fill) return false;
-      if (!fill.cells.some((c) => c.cx === grabCell.cx && c.cy === grabCell.cy)) {
-        return false;
-      }
-
-      this.drag = {
-        kind: "fill",
-        layerId: layer.id,
-        id: fill.id,
-        grabCell,
-        cells: fill.cells,
-      };
-      this.config.onDragStateChange(true);
-      return true;
-    }
-
-    return false;
-  }
-
-  private moveDrag(screenX: number, screenY: number): void {
-    const drag = this.drag;
-    if (!drag) return;
-
-    const world = this.worldAt(screenX, screenY);
-
-    if (drag.kind === "resize") {
-      // Resizing works in pixels, not cells: an image's size is a property of
-      // the image, and the grid has nothing to say about it.
-      const box = resizeBox(drag.original, drag.corner, world);
-      this.store.updatePlacement(drag.layerId, drag.id, {
-        ...boxToPlacement(box),
-        anchor: this.grid.worldToCell({
-          x: box.x + box.width / 2,
-          y: box.y + box.height / 2,
-        }),
-      });
-      return;
-    }
-
-    const cell = this.grid.worldToCell(world);
-    const dx = cell.cx - drag.grabCell.cx;
-    const dy = cell.cy - drag.grabCell.cy;
-
-    if (drag.kind === "placement") {
-      // Snap to the grid: the anchor cell moves whole, and the placement
-      // keeps whatever offset it had inside that cell.
-      const anchor = {
-        cx: drag.originCell.cx + dx,
-        cy: drag.originCell.cy + dy,
-      };
-      const anchorWorld = this.grid.cellToWorld(anchor);
-      this.store.updatePlacement(drag.layerId, drag.id, {
-        anchor,
-        x: anchorWorld.x + drag.offsetX,
-        y: anchorWorld.y + drag.offsetY,
-      });
-    } else {
-      this.store.updateFill(drag.layerId, drag.id, {
-        cells: drag.cells.map((c) => ({ cx: c.cx + dx, cy: c.cy + dy })),
-      });
-    }
-  }
-
-  private endDrag(): void {
-    if (!this.drag) return;
-    this.drag = null;
-    this.config.onDragStateChange(false);
-  }
-
   setSelection(selection: Selection): void {
     this.selection = selection;
     this.overlay.render(selection, this.store, this.cameras.main.zoom);
@@ -588,6 +423,47 @@ export class WorldScene extends Phaser.Scene {
     this.docRenderer.render();
   }
 
+  /**
+   * Point one placement at a different PSD and redraw it.
+   *
+   * What breaking a reference does: the copy is byte-identical, so the
+   * layer path and the geometry carry over untouched and only the key
+   * changes. Everything else still reading the original is left alone,
+   * which is the whole point of doing it per placement.
+   */
+  async repointPlacement(
+    selection: Extract<Selection, { kind: "placement" }>,
+    key: string,
+    manifestJson: string,
+  ): Promise<void> {
+    const placement = this.store
+      .layer(selection.layerId)
+      ?.placements.find((p) => p.id === selection.placementId);
+    if (!placement) return;
+
+    const manifest = parseManifest(manifestJson);
+    const entry =
+      manifest.all.find((l) => l.path === placement.layerPath) ??
+      placeableLayers(manifest)[0];
+    if (!entry) {
+      log.warn(`${key}.psd has nothing matching ${placement.layerPath}`);
+      return;
+    }
+
+    this.docRenderer.detachOne(placement.id);
+    this.store.updatePlacement(selection.layerId, selection.placementId, {
+      psdKey: key,
+      layerPath: entry.path,
+    });
+
+    await this.loadPsd(key);
+    const updated = this.store
+      .layer(selection.layerId)
+      ?.placements.find((p) => p.id === selection.placementId);
+    if (updated) this.placeOne(selection.layerId, updated);
+    this.docRenderer.render();
+  }
+
   private plugin(): PsdToPhaser | undefined {
     return (this as unknown as Record<string, PsdToPhaser | undefined>).P2P;
   }
@@ -658,6 +534,7 @@ export class WorldScene extends Phaser.Scene {
   setMode(mode: EditorMode): void {
     if (this.mode === mode) return;
     this.mode = mode;
+    this.drag.cancel();
     if (mode === "play") {
       this.setSelection({ kind: "none" });
       this.play.start();

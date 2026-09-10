@@ -19,7 +19,7 @@ fn swatch(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
 
 #[test]
 fn rgba_becomes_a_readable_psd() {
-    let bytes = psd_write::psd_from_rgba("sketch", 16, 8, swatch(16, 8, [236, 48, 19, 255]))
+    let bytes = psd_write::psd_from_rgba_marked("sketch", 16, 8, swatch(16, 8, [236, 48, 19, 255]), None)
         .expect("PSD should be written");
 
     let parsed = psd::Psd::from_bytes(&bytes).expect("PSD should parse back");
@@ -41,7 +41,7 @@ fn rgba_becomes_a_readable_psd() {
 
 #[test]
 fn rgba_length_is_validated() {
-    let err = psd_write::psd_from_rgba("bad", 4, 4, vec![0; 10]).unwrap_err();
+    let err = psd_write::psd_from_rgba_marked("bad", 4, 4, vec![0; 10], None).unwrap_err();
     assert!(err.contains("expected"), "unhelpful error: {err}");
 }
 
@@ -108,7 +108,7 @@ fn a_project_round_trips_an_image_through_psd_to_json() {
     // happens — including on a failed assertion.
     let result = std::panic::catch_unwind(|| {
         let psd_bytes =
-            psd_write::psd_from_rgba("tower", 32, 48, swatch(32, 48, [32, 30, 29, 255]))
+            psd_write::psd_from_rgba_marked("tower", 32, 48, swatch(32, 48, [32, 30, 29, 255]), None)
                 .expect("PSD should be written");
         let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
         std::fs::write(psd_dir.join("tower.psd"), psd_bytes).expect("PSD should save");
@@ -161,7 +161,7 @@ fn a_converted_image_names_its_layer_after_the_key() {
         .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
-        let bytes = psd_write::psd_from_rgba("build", 8, 8, swatch(8, 8, [1, 2, 3, 255]))
+        let bytes = psd_write::psd_from_rgba_marked("build", 8, 8, swatch(8, 8, [1, 2, 3, 255]), None)
             .expect("PSD should be written");
         std::fs::write(
             store::psd_dir(&meta.id).unwrap().join("build.psd"),
@@ -266,7 +266,7 @@ fn reimporting_replaces_the_file_behind_a_key() {
 
     let result = std::panic::catch_unwind(|| {
         let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
-        let original = psd_write::psd_from_rgba("hut", 16, 16, swatch(16, 16, [10, 20, 30, 255]))
+        let original = psd_write::psd_from_rgba_marked("hut", 16, 16, swatch(16, 16, [10, 20, 30, 255]), None)
             .expect("PSD should be written");
         std::fs::write(psd_dir.join("hut.psd"), original).expect("PSD should save");
         psd_pipeline::process(&meta.id, "hut", &psd_pipeline::ProcessOptions::default(), |_| {})
@@ -274,7 +274,7 @@ fn reimporting_replaces_the_file_behind_a_key() {
 
         // The edited file, standing in for whatever came back from Photoshop:
         // a different size, dropped into a differently named temporary file.
-        let edited = psd_write::psd_from_rgba("hut", 48, 24, swatch(48, 24, [1, 2, 3, 255]))
+        let edited = psd_write::psd_from_rgba_marked("hut", 48, 24, swatch(48, 24, [1, 2, 3, 255]), None)
             .expect("edited PSD should be written");
         let inbox = psd_dir.join("whatever-the-editor-called-it.psd");
         std::fs::write(&inbox, edited).expect("edited PSD should save");
@@ -332,6 +332,10 @@ fn an_import_marks_its_anchor_and_grid_footprint() {
                 MarkPoint { x: 32.0, y: 32.0 },
                 MarkPoint { x: 0.0, y: 32.0 },
             ],
+            // One space has nothing to divide.
+            lines: vec![],
+            // An image import has no opinion; it gets centred.
+            art: None,
             cols: 1,
             rows: 1,
         };
@@ -406,4 +410,72 @@ fn an_import_marks_its_anchor_and_grid_footprint() {
     if let Err(payload) = result {
         std::panic::resume_unwind(payload);
     }
+}
+
+/// A footprint spanning several spaces draws the divisions between them.
+///
+/// The outline alone says how much room the artwork has; the divisions say
+/// where each space in it begins, which is what an artist lines a
+/// multi-space sprite up against. This reads the pixels back out of the PSD
+/// rather than trusting the drawing code, because the whole value of the
+/// mark is that it is visible.
+#[test]
+fn a_multi_space_footprint_draws_its_divisions() {
+    use crate::psd_write::{AnchorMarks, MarkLine, MarkPoint};
+
+    let at = |x: f32, y: f32| MarkPoint { x, y };
+    // Two orthogonal 32 px spaces side by side, anchored on the left one.
+    let marks = AnchorMarks {
+        outline: vec![at(0.0, 0.0), at(64.0, 0.0), at(64.0, 32.0), at(0.0, 32.0)],
+        lines: vec![MarkLine {
+            a: at(32.0, 0.0),
+            b: at(32.0, 32.0),
+        }],
+        art: None,
+        cols: 2,
+        rows: 1,
+    };
+
+    let bytes = psd_write::psd_from_rgba_marked(
+        "pair",
+        64,
+        32,
+        swatch(64, 32, [0, 0, 0, 255]),
+        Some(&marks),
+    )
+    .expect("marked PSD should be written");
+
+    let doc = psd::Psd::from_bytes(&bytes).expect("marked PSD should parse");
+    let zone = doc
+        .layers()
+        .iter()
+        .find(|l| l.name().starts_with("Z |"))
+        .expect("a zone layer should exist");
+    assert_eq!(zone.name(), "Z | grid-2x1", "the name carries the span");
+
+    assert_eq!((zone.width(), zone.height()), (64, 32));
+    assert_eq!((zone.layer_left(), zone.layer_top()), (32, 16));
+
+    // `rgba()` hands back the layer composited onto the whole canvas, not
+    // its own rect, so read it in canvas coordinates.
+    let canvas_w = doc.width() as usize;
+    let rgba = zone.rgba();
+    let alpha_at = |x: i32, y: i32| {
+        let cx = (zone.layer_left() + x) as usize;
+        let cy = (zone.layer_top() + y) as usize;
+        rgba[(cy * canvas_w + cx) * 4 + 3]
+    };
+
+    // Down the middle of the footprint: the division, drawn but lighter than
+    // the boundary so the two read differently.
+    let division = alpha_at(32, 16);
+    let outline = alpha_at(0, 16);
+    let wash = alpha_at(16, 16);
+    assert!(division > wash, "the division should be visible: {division} vs {wash}");
+    assert!(
+        division < outline,
+        "the division should be lighter than the outline: {division} vs {outline}"
+    );
+    // And the interior between the lines is only a wash, not solid.
+    assert!(wash > 0 && wash < 60, "the interior should be a wash, got {wash}");
 }

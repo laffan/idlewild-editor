@@ -6,7 +6,7 @@
 //! named for psd-to-json's pipe convention:
 //!
 //!   `P | anchor`  a red dot on the grid space the image is anchored to
-//!   `Z | grid`    the outline of the grid selection it was dropped into
+//!   `Z | grid`    the grid selection it was dropped into, spaces and all
 //!
 //! Neither reaches the game as pixels. psd-to-json exports images only for
 //! sprites and tilesets — a point becomes its centre, a zone its bounds —
@@ -28,6 +28,10 @@ const DOT: u32 = 12;
 
 const ACCENT: [u8; 3] = [236, 48, 19];
 
+/// A point and a segment in the zone layer's own pixel space.
+type Px = (f32, f32);
+type Segment = (Px, Px);
+
 /// Where everything sits once the artwork and the grid footprint are laid
 /// out around a common anchor.
 pub struct Layout {
@@ -48,13 +52,19 @@ pub struct Layout {
 
 /// Lay the artwork and the grid footprint out around the anchor.
 ///
-/// The artwork is centred on the anchor, which is where the editor has
-/// always put an imported image. The footprint sits wherever the grid
-/// selection actually was relative to that, and the canvas grows to hold
-/// both — a tall sprite dropped on one tile keeps its own size and simply
-/// has the tile marked underneath it.
+/// An imported image has no opinion about where on its grid space it
+/// belongs, so it is centred on the anchor — which is where the editor has
+/// always put one. Something converted from what is already on the grid does
+/// know, and says so in `art`.
+///
+/// The footprint sits wherever the grid selection actually was relative to
+/// the anchor, and the canvas grows to hold both — a tall sprite dropped on
+/// one tile keeps its own size and simply has the tile marked underneath it.
 pub fn layout(image_width: u32, image_height: u32, marks: &AnchorMarks) -> Layout {
-    let (art_x, art_y) = (-(image_width as f32) / 2.0, -(image_height as f32) / 2.0);
+    let (art_x, art_y) = match marks.art {
+        Some(p) => (p.x, p.y),
+        None => (-(image_width as f32) / 2.0, -(image_height as f32) / 2.0),
+    };
     let art = (art_x, art_y, image_width as f32, image_height as f32);
 
     let zone = outline_box(marks).unwrap_or(art);
@@ -144,14 +154,26 @@ fn dot_pixels() -> Vec<u8> {
     out
 }
 
-/// The grid footprint: a translucent wash inside the outline and a solid
-/// edge on it. Drawn from the polygon the editor sends rather than a
-/// rectangle, so an isometric selection is the diamond it really is.
+/// How the footprint is drawn: a solid outer edge, a lighter line on each
+/// division between spaces, and a wash over the whole thing.
+const OUTLINE_ALPHA: u8 = 220;
+const DIVISION_ALPHA: u8 = 110;
+const WASH_ALPHA: u8 = 26;
+/// Half the stroke width, in pixels.
+const LINE_HALF: f32 = 0.75;
+
+/// The grid footprint: the outline, the divisions between the spaces inside
+/// it, and a translucent wash.
+///
+/// Drawn from the polygon and segments the editor sends rather than from a
+/// rectangle and a step, so an isometric selection is the diamond it really
+/// is and its divisions run along the diamond's own diagonals. The outline
+/// wins where the two meet, so the boundary always reads as the boundary.
 fn zone_pixels(layout: &Layout, marks: &AnchorMarks) -> Option<Vec<u8>> {
     let (ox, oy, _, _) = outline_box(marks)?;
-    // Into layer-local coordinates: the outline is anchor-relative, the
+    // Into layer-local coordinates: the marks are anchor-relative, the
     // layer's own origin is its top-left.
-    let poly: Vec<(f32, f32)> = marks
+    let poly: Vec<Px> = marks
         .outline
         .iter()
         .map(|p| (p.x - ox, p.y - oy))
@@ -159,6 +181,11 @@ fn zone_pixels(layout: &Layout, marks: &AnchorMarks) -> Option<Vec<u8>> {
     if poly.len() < 3 {
         return None;
     }
+    let divisions: Vec<Segment> = marks
+        .lines
+        .iter()
+        .map(|l| ((l.a.x - ox, l.a.y - oy), (l.b.x - ox, l.b.y - oy)))
+        .collect();
 
     let (w, h) = (layout.zone_width, layout.zone_height);
     let mut out = Vec::with_capacity((w * h * 4) as usize);
@@ -166,11 +193,12 @@ fn zone_pixels(layout: &Layout, marks: &AnchorMarks) -> Option<Vec<u8>> {
         for x in 0..w {
             let px = x as f32 + 0.5;
             let py = y as f32 + 0.5;
-            let edge = distance_to_outline(px, py, &poly);
-            let alpha = if edge <= 1.5 {
-                220
+            let alpha = if distance_to_outline(px, py, &poly) <= LINE_HALF * 2.0 {
+                OUTLINE_ALPHA
+            } else if near_any(px, py, &divisions) {
+                DIVISION_ALPHA
             } else if point_in_polygon(px, py, &poly) {
-                26
+                WASH_ALPHA
             } else {
                 0
             };
@@ -180,7 +208,13 @@ fn zone_pixels(layout: &Layout, marks: &AnchorMarks) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn point_in_polygon(x: f32, y: f32, poly: &[(f32, f32)]) -> bool {
+fn near_any(x: f32, y: f32, lines: &[Segment]) -> bool {
+    lines
+        .iter()
+        .any(|(a, b)| point_to_segment(x, y, *a, *b) <= LINE_HALF)
+}
+
+fn point_in_polygon(x: f32, y: f32, poly: &[Px]) -> bool {
     let mut inside = false;
     let mut j = poly.len() - 1;
     for i in 0..poly.len() {
@@ -194,7 +228,7 @@ fn point_in_polygon(x: f32, y: f32, poly: &[(f32, f32)]) -> bool {
     inside
 }
 
-fn distance_to_outline(x: f32, y: f32, poly: &[(f32, f32)]) -> f32 {
+fn distance_to_outline(x: f32, y: f32, poly: &[Px]) -> f32 {
     let mut best = f32::MAX;
     let mut j = poly.len() - 1;
     for i in 0..poly.len() {
@@ -204,7 +238,7 @@ fn distance_to_outline(x: f32, y: f32, poly: &[(f32, f32)]) -> f32 {
     best
 }
 
-fn point_to_segment(px: f32, py: f32, a: (f32, f32), b: (f32, f32)) -> f32 {
+fn point_to_segment(px: f32, py: f32, a: Px, b: Px) -> f32 {
     let (vx, vy) = (b.0 - a.0, b.1 - a.1);
     let (wx, wy) = (px - a.0, py - a.1);
     let vv = vx * vx + vy * vy;
