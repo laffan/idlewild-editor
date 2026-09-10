@@ -19,6 +19,16 @@ const DOC = {
   ],
 };
 
+/** A live game tree, so the code column's operations can be driven. */
+const TREE: Array<{ path: string; isDir: boolean }> = [
+  { path: "index.html", isDir: false },
+  { path: "css", isDir: true },
+  { path: "css/styles.css", isDir: false },
+  { path: "js", isDir: true },
+  { path: "js/WorldScene.js", isDir: false },
+  { path: "js/main.js", isDir: false },
+];
+
 export async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   (window as any).__calls = [...((window as any).__calls ?? []), { cmd, args }];
   switch (cmd) {
@@ -48,15 +58,43 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     }
     case "list_projects": return [];
     case "list_game_files":
-      return [
-        { path: "index.html", isDir: false },
-        { path: "js", isDir: true },
-        { path: "js/WorldScene.js", isDir: false },
-        { path: "js/main.js", isDir: false },
-      ];
+      return [...TREE].sort((a, b) => a.path.localeCompare(b.path));
     case "read_game_file":
-      return "// harness stub\nexport default class WorldScene {}\n";
+      return `// ${(args as any).path}\nexport default class WorldScene {}\n`;
     case "write_game_file": return undefined;
+    case "create_game_file":
+    case "create_game_dir": {
+      const path = String((args as any).path);
+      if (TREE.some((f) => f.path === path)) throw new Error(`${path} already exists`);
+      TREE.push({ path, isDir: cmd === "create_game_dir" });
+      return undefined;
+    }
+    case "move_game_path": {
+      const { from, to } = args as Record<string, string>;
+      if (TREE.some((f) => f.path === to)) throw new Error(`${to} already exists`);
+      if (`${to}/`.startsWith(`${from}/`)) throw new Error("inside itself");
+      for (const f of TREE) {
+        if (f.path === from) f.path = to;
+        else if (f.path.startsWith(`${from}/`)) f.path = to + f.path.slice(from.length);
+      }
+      return undefined;
+    }
+    case "copy_game_path": {
+      const path = String((args as any).path);
+      const dot = path.lastIndexOf(".");
+      const copy = dot > 0
+        ? `${path.slice(0, dot)} copy${path.slice(dot)}`
+        : `${path} copy`;
+      TREE.push({ path: copy, isDir: TREE.find((f) => f.path === path)?.isDir ?? false });
+      return copy;
+    }
+    case "delete_game_path": {
+      const path = String((args as any).path);
+      for (let i = TREE.length - 1; i >= 0; i--) {
+        if (TREE[i].path === path || TREE[i].path.startsWith(`${path}/`)) TREE.splice(i, 1);
+      }
+      return undefined;
+    }
     case "open_psd": return undefined;
     case "duplicate_psd": {
       const a = args as Record<string, string>;

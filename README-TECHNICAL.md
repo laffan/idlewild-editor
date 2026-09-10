@@ -166,11 +166,12 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 |---|---|
 | Projects | `list_projects`, `create_project`, `rename_project`, `delete_project`, `duplicate_project`, `read_project_meta` |
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
-| Game tree | `list_game_files`, `read_game_file`, `write_game_file` |
+| Game tree | `list_game_files`, `read_game_file`, `write_game_file`, `create_game_file`, `create_game_dir`, `move_game_path`, `copy_game_path`, `delete_game_path` |
 | PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
 
-`import_image` and `import_image_bytes` take an optional `marks` describing
-the grid selection the image was dropped into, as an anchor-relative polygon.
+`import_image`, `import_image_bytes` and `create_psd_from_rgba` take an
+optional `marks` describing the grid selection behind them, as an
+anchor-relative polygon plus the divisions inside it.
 The editor computes it because the editor owns the projection; Rust only ever
 sees a polygon. See **The marks an import writes** below.
 | Publish | `publish_zip`, `save_bytes` |
@@ -270,12 +271,23 @@ the dot stayed on the spot that should sit on that space. Moving the dot is
 therefore the interface: put it at the artwork's bottom-left and the thing
 stands on its tile instead of floating centred over it.
 
-The zone is the orienting half. It is drawn from the polygon the editor
-sends rather than a rectangle, so an isometric selection is the diamond it
-really is; the canvas is the union of the artwork and that footprint, so a
-tall sprite dropped on one tile keeps its own size and simply has the tile
-marked underneath it. The dot's diameter is even on purpose — psd-to-json
-reports a point as its layer's centre, and an odd one lands half a pixel off.
+The zone is the orienting half, and it shows the spaces rather than only the
+region: an outline alone says how much room the artwork has, while the
+divisions say where each space in it begins, which is what you line a
+multi-space sprite up against. Both are drawn from the polygon and segments
+the editor sends rather than from a rectangle and a step, so an isometric
+selection is the diamond it really is and its divisions run along the
+diamond's own diagonals; the outline wins where the two meet. The canvas is
+the union of the artwork and that footprint, so a tall sprite dropped on one
+tile keeps its own size and simply has the tile marked underneath it. The
+dot's diameter is even on purpose — psd-to-json reports a point as its
+layer's centre, and an odd one lands half a pixel off.
+
+`AnchorMarks.art` says where the artwork's top-left goes relative to the
+anchor. An image import omits it and gets centred, because it has no opinion
+about where on a grid space it belongs. Anything converted from what is
+already *on* the grid — a fill — does have one, and sends it, so the PSD
+lands back exactly over what it replaced.
 
 A `.psd` imported as a `.psd` is left exactly as its author built it. Adding
 marks would mean rewriting someone else's layer stack to say something it may
@@ -387,6 +399,45 @@ range, and anything reporting the 0.5 default is left there rather than made
 to look like a light touch. `getCoalescedEvents` is drained on every move,
 which is the difference between a curve and a polyline on a 120 Hz Pencil
 against a 60 Hz frame.
+
+### References
+
+An option-drag copies the fill or placement under the pointer and drags the
+copy, so the original stays put and the thing under the finger is the new one.
+
+A copied *placement* keeps its `psdKey`. Both then read the same file, which
+is what makes it a reference rather than a duplicate: the copy costs one
+`place()` call and no disk at all, because the textures are already in. What
+it costs instead is that editing the PSD edits both, so the inspector says so
+above everything else — that is the consequence, not a detail.
+
+`Remove Reference` copies the PSD to a key of its own (`<key>-copy`) and
+repoints only the selected placement. Whichever of the two you were looking
+at is the one that becomes independent; everything else still reading the
+original is left alone, which is the point of doing it per placement rather
+than per key.
+
+### Managing the game tree
+
+`code/file-tree.ts` owns the code modal's file column. Its five operations —
+create, rename, duplicate, delete, move — all go through `store.rs`, which
+refuses a path that would climb out of `game/`, refuses a destination that
+already exists, and refuses to move a folder inside itself. The modal has no
+undo, so silently overwriting is the one mistake it must never make.
+
+Dragging is pointer events, like the layer panel's, and for the same reason:
+`dragstart` never fires for touch. Unlike the layer panel it does *not*
+rearrange the DOM as it goes — a tree has one legal drop per row (into that
+folder, or into the folder holding that file) rather than a position in a
+list, so the destination row is highlighted instead.
+
+Rename, new file and delete ask through the app's own sheets rather than
+`window.prompt` and `window.confirm`. Every other input in the app is a
+sheet, and a WKWebView only shows a JS prompt if the host has wired up the
+panel delegate — not something to discover on an iPad. The per-row menu is
+hover-revealed on a pointer device and always visible under
+`@media (hover: none)`, or it would be unreachable on the platform this is
+mainly for.
 
 ### Two exits, and both consume the sketch
 
@@ -550,6 +601,9 @@ on chrome never highlights it.
   anchors on its canvas centre until someone adds one.
 - `IMPORT_SCALE` is a constant rather than a per-project setting. A 1× asset
   arrives at half size and has to be resized once.
+- A stroke selection converted to a PSD is still centred on the cell under
+  its middle rather than sending an `art` offset, so it can land up to half a
+  space from where it was drawn. A fill conversion is exact.
 - Play mode's character is a placeholder rectangle, not a sprite from the
   template.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both

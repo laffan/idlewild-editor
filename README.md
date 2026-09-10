@@ -51,12 +51,19 @@ remaining pieces are wired to real slots rather than mocked.
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
   a blocking boundary play mode walks around
 - Inspector for layers, selections, fills, placed images and boundaries
+- Option-drag a fill or an image to copy it. A copied image references the
+  same PSD, which the inspector says so you know editing one edits both —
+  and Remove Reference gives it a copy of its own
+- Convert a fill to a PSD, the same way a sketch converts
+- Delete removes whatever is selected
 - Export a selection as a transparent PNG (save or copy)
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
   to the system editor on macOS and to the share sheet on iPadOS, Re-import
   PSD replaces it under the same key and re-runs the pipeline
 - Play mode: a character, a following camera, tap-to-walk over A*
-- Code modal: the project's real file tree in CodeMirror 6, dockable
+- Code modal: the project's real file tree in CodeMirror 6, full-screen or
+  pinned above the console. New file and folder, rename, duplicate, delete,
+  and drag files between folders
 - Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
   by psd-to-json's own progress
 - Publish: a zipped project carrying both runtimes

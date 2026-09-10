@@ -31,7 +31,7 @@
 /* Docked, the chrome competes with the editor for a much shorter box. */
 .code-backdrop.docked .code-head { min-height: var(--bar-h); }
 .code-backdrop.docked .code-foot { min-height: 40px; }
-.code-backdrop.docked .code-files { width: 200px; }
+.code-backdrop.docked .code-column { width: 200px; }
 
 .code-panel {
   width: 100%;
@@ -84,25 +84,98 @@
 
 .code-body { flex: 1; min-height: 0; display: flex; }
 
-.code-files {
+/* The file column: its own header of create buttons, then the tree. */
+.code-column {
   width: 248px;
   flex: none;
   border-right: var(--rule-chrome);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
+.code-column-head {
+  flex: none;
+  display: flex;
+  border-bottom: var(--rule-chrome);
+}
+.code-new {
+  flex: 1;
+  min-height: 36px;
+  border: 0;
+  border-left: var(--rule-chrome);
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: 600 11px var(--font-heading);
+}
+.code-new:first-child { border-left: 0; }
+.code-new:hover { background: var(--chrome-panel); color: var(--chrome-text); }
+
+.code-files { flex: 1; min-height: 0; }
 .code-file {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 48px;
-  padding: 0 16px;
+  min-height: 38px;
+  padding: 0 4px 0 12px;
   border-bottom: 1px solid var(--chrome-panel);
   color: var(--color-neutral-300);
   font: 400 13px var(--font-mono);
   cursor: pointer;
+  /* The row is dragged, so the browser must not also select its text. */
+  touch-action: none;
+}
+.code-file svg { flex: none; }
+.code-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .code-file:hover { background: var(--chrome-panel); }
 .code-file.active { background: var(--chrome-rule); color: var(--chrome-text); }
-.code-file.dir { color: var(--color-neutral-500); cursor: default; }
+.code-file.dir { color: var(--color-neutral-500); }
+
+/* The per-row menu: rename, duplicate, delete. Hidden until the row is
+   under the pointer, so a long tree stays a list of names. */
+.code-file-menu {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--color-neutral-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0;
+}
+.code-file:hover .code-file-menu,
+.code-file-menu:focus-visible { opacity: 1; }
+.code-file-menu:hover { color: var(--chrome-text); background: var(--chrome-rule); }
+/* There is no hover on an iPad, so on touch it is simply always there —
+   otherwise rename, duplicate and delete would be unreachable on the
+   platform this is mainly for. */
+@media (hover: none) {
+  .code-file-menu { opacity: 1; }
+}
+
+/* Dragging a file or folder. Unlike the layer panel the rows do not move —
+   a tree has one legal drop per row, so the destination is marked instead. */
+.code-files.dragging { cursor: grabbing; }
+.code-files.dragging .code-file { pointer-events: none; }
+.code-file.dragged { opacity: 0.5; }
+.code-file.drop-into {
+  background: var(--chrome-rule);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+  color: var(--chrome-text);
+}
+.code-files.drop-root { box-shadow: inset 0 0 0 2px var(--color-accent); }
 
 .code-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .code-bar {

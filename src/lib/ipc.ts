@@ -94,6 +94,18 @@ export const gameFiles = {
     invoke<string>("read_game_file", { id, path }),
   write: (id: string, path: string, content: string) =>
     invoke<void>("write_game_file", { id, path, content }),
+  createFile: (id: string, path: string) =>
+    invoke<void>("create_game_file", { id, path }),
+  createDir: (id: string, path: string) =>
+    invoke<void>("create_game_dir", { id, path }),
+  /** Move and rename are the same call with different intent. */
+  move: (id: string, from: string, to: string) =>
+    invoke<void>("move_game_path", { id, from, to }),
+  /** Returns the path the copy actually took. */
+  copy: (id: string, path: string) =>
+    invoke<string>("copy_game_path", { id, path }),
+  remove: (id: string, path: string) =>
+    invoke<void>("delete_game_path", { id, path }),
 };
 
 export const psd = {

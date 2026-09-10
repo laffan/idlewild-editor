@@ -22,17 +22,17 @@ import { javascript } from "@codemirror/lang-javascript";
 import { html as htmlLang } from "@codemirror/lang-html";
 import { css as cssLang } from "@codemirror/lang-css";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { clear, h, ICONS, icon } from "../lib/dom";
+import { h, ICONS, icon } from "../lib/dom";
 import { gameFiles } from "../lib/ipc";
-import type { GameFile } from "../lib/ipc";
 import * as log from "../lib/log";
+import { FileTree } from "./file-tree";
 
 const languageCompartment = new Compartment();
 
 export class CodeModal {
   readonly root: HTMLElement;
   private readonly projectId: string;
-  private readonly fileList: HTMLElement;
+  private readonly tree: FileTree;
   private readonly filename: HTMLElement;
   private readonly dirtyFlag: HTMLElement;
   private readonly editorHost: HTMLElement;
@@ -51,7 +51,20 @@ export class CodeModal {
   ) {
     this.projectId = projectId;
     this.onPinChange = onPinChange;
-    this.fileList = h("div", { class: "code-files scroll" });
+    this.tree = new FileTree(projectId, {
+      onOpen: (path) => void this.openFile(path),
+      onMoved: (from, to) => {
+        // The editor is showing a file that just changed name or folder.
+        if (this.openPath !== from) return;
+        this.openPath = to;
+        this.filename.textContent = to;
+        this.tree.setOpen(to);
+      },
+      onRemoved: (path) => {
+        if (this.openPath !== path) return;
+        this.closeFile();
+      },
+    });
     this.filename = h("div", { class: "code-filename m", text: "No file open" });
     this.dirtyFlag = h("div", { class: "code-dirty m" });
     this.editorHost = h("div", { class: "code-editor" });
@@ -90,7 +103,7 @@ export class CodeModal {
       h(
         "div",
         { class: "code-body" },
-        this.fileList,
+        this.tree.root,
         h(
           "div",
           { class: "code-main" },
@@ -131,36 +144,19 @@ export class CodeModal {
   }
 
   private async reloadFiles(): Promise<void> {
-    let files: GameFile[] = [];
-    try {
-      files = await gameFiles.list(this.projectId);
-    } catch (err) {
-      log.error("Could not list project files:", err);
-      return;
-    }
-
-    clear(this.fileList);
-    for (const file of files) {
-      const depth = file.path.split("/").length - 1;
-      const name = file.path.split("/").pop() ?? file.path;
-      this.fileList.appendChild(
-        h(
-          "div",
-          {
-            class: file.isDir ? "code-file dir" : "code-file",
-            style: { paddingLeft: `${16 + depth * 14}px` },
-            onClick: () => {
-              if (!file.isDir) void this.openFile(file.path);
-            },
-          },
-          icon(file.isDir ? ICONS.folder : ICONS.file, 14),
-          h("span", { text: name }),
-        ),
-      );
-    }
-
+    const files = await this.tree.reload();
     const first = files.find((f) => !f.isDir && f.path.endsWith("WorldScene.js"));
     if (first) void this.openFile(first.path);
+  }
+
+  /** The open file went away under us. */
+  private closeFile(): void {
+    this.openPath = null;
+    this.filename.textContent = "No file open";
+    this.setDirty(false);
+    this.view?.destroy();
+    this.view = null;
+    this.tree.setOpen(null);
   }
 
   private async openFile(path: string): Promise<void> {
@@ -177,10 +173,7 @@ export class CodeModal {
     this.openPath = path;
     this.filename.textContent = path;
     this.setDirty(false);
-
-    for (const el of this.fileList.querySelectorAll(".code-file")) {
-      el.classList.toggle("active", el.textContent?.trim() === path.split("/").pop());
-    }
+    this.tree.setOpen(path);
 
     const state = EditorState.create({
       doc: content,
@@ -244,6 +237,7 @@ export class CodeModal {
   }
 
   destroy(): void {
+    this.tree.destroy();
     this.view?.destroy();
     this.root.remove();
   }

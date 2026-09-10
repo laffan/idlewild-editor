@@ -100,3 +100,85 @@ export function confirmSheet(
     );
   });
 }
+
+/**
+ * Ask for one line of text, resolving to it or to null if the user backs out.
+ *
+ * The app's own sheet rather than `window.prompt`, for two reasons: every
+ * other input here is a sheet, and a WKWebView only shows a JS prompt if the
+ * host has wired up the panel delegate — which is not something to find out
+ * on an iPad.
+ */
+export function promptSheet(options: {
+  title: string;
+  label: string;
+  value?: string;
+  confirmLabel?: string;
+  light?: boolean;
+}): Promise<string | null> {
+  return new Promise((resolve) => {
+    const sheet = openSheet({
+      title: options.title,
+      light: options.light,
+      width: 520,
+    });
+
+    const field = h("input", {
+      class: "input",
+      value: options.value ?? "",
+      spellcheck: "false",
+      autocapitalize: "off",
+      autocomplete: "off",
+    });
+
+    let answered = false;
+    const answer = (value: string | null) => {
+      if (answered) return;
+      answered = true;
+      sheet.close();
+      resolve(value);
+    };
+    const submit = () => {
+      const text = field.value.trim();
+      answer(text ? text : null);
+    };
+
+    field.addEventListener("keydown", (event: KeyboardEvent) => {
+      if (event.key === "Enter") submit();
+      // Escape reaches the sheet's own handler and closes it, which resolves
+      // through the backdrop listener below.
+    });
+
+    sheet.body.append(
+      h("div", { class: "sheet-row-key m", text: options.label }),
+      field,
+    );
+    sheet.root.addEventListener("click", () => answer(null));
+    sheet.actions.append(
+      h("button", {
+        class: "btn btn-primary",
+        text: options.confirmLabel ?? "Create",
+        onClick: submit,
+      }),
+      h("button", {
+        class: "btn btn-ghost",
+        text: "Cancel",
+        onClick: () => answer(null),
+      }),
+    );
+
+    // Selecting the stem rather than the whole path is what a rename wants:
+    // the folder is usually right and the name is what is being changed.
+    field.focus();
+    const stem = stemRange(field.value);
+    field.setSelectionRange(stem.start, stem.end);
+  });
+}
+
+/** The part of a path a rename is usually aiming at: its base name's stem. */
+function stemRange(value: string): { start: number; end: number } {
+  const slash = value.lastIndexOf("/");
+  const start = slash + 1;
+  const dot = value.lastIndexOf(".");
+  return { start, end: dot > start ? dot : value.length };
+}

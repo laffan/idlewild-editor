@@ -479,3 +479,86 @@ fn a_multi_space_footprint_draws_its_divisions() {
     // And the interior between the lines is only a wash, not solid.
     assert!(wash > 0 && wash < 60, "the interior should be a wash, got {wash}");
 }
+
+/// Managing the game tree from the code modal.
+///
+/// The guards matter more than the happy paths: the modal has no undo, so a
+/// move that silently overwrote, or a folder dragged into itself, would take
+/// work with it.
+#[test]
+fn the_game_tree_can_be_managed_without_losing_files() {
+    let meta = store::create_project("Files", Projection::Orthogonal, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let listing = || {
+            let mut paths: Vec<String> = store::list_game_files(id)
+                .expect("files should list")
+                .into_iter()
+                .map(|f| f.path)
+                .collect();
+            paths.sort();
+            paths
+        };
+
+        // Create, and refuse to create over something that is already there.
+        store::create_game_dir(id, "js/systems").expect("folder should be created");
+        store::create_game_file(id, "js/systems/spawn.js").expect("file should be created");
+        assert!(listing().contains(&"js/systems/spawn.js".to_string()));
+        assert!(
+            store::create_game_file(id, "js/systems/spawn.js").is_err(),
+            "creating over an existing file should fail"
+        );
+
+        // Move, and refuse to move onto something that is already there.
+        store::move_game_path(id, "js/systems/spawn.js", "js/spawn.js")
+            .expect("move should succeed");
+        assert!(listing().contains(&"js/spawn.js".to_string()));
+        assert!(!listing().contains(&"js/systems/spawn.js".to_string()));
+        assert!(
+            store::move_game_path(id, "js/spawn.js", "js/main.js").is_err(),
+            "moving onto an existing file should fail"
+        );
+
+        // A folder cannot be moved inside itself: the destination would go
+        // with it, and the whole subtree would be lost.
+        assert!(
+            store::move_game_path(id, "js", "js/nested").is_err(),
+            "moving a folder into itself should fail"
+        );
+
+        // Copy names itself the way a file manager does, extension kept.
+        let copy = store::copy_game_path(id, "js/main.js").expect("copy should succeed");
+        assert_eq!(copy, "js/main copy.js");
+        let second = store::copy_game_path(id, "js/main.js").expect("second copy");
+        assert_eq!(second, "js/main copy 2.js");
+        assert!(listing().contains(&"js/main.js".to_string()), "the original stays");
+
+        // A copied folder brings its contents.
+        let folder = store::copy_game_path(id, "js").expect("folder copy");
+        assert_eq!(folder, "js copy");
+        assert!(listing().contains(&"js copy/main.js".to_string()));
+
+        // Delete takes a folder whole, and is quiet about what is not there.
+        store::delete_game_path(id, "js copy").expect("delete should succeed");
+        assert!(!listing().iter().any(|p| p.starts_with("js copy")));
+        store::delete_game_path(id, "js/never-existed.js")
+            .expect("deleting nothing should not be an error");
+
+        // And none of it can climb out of game/.
+        for bad in ["../meta.json", "js/../../doc.json"] {
+            assert!(store::create_game_file(id, bad).is_err(), "{bad} should be refused");
+            assert!(store::delete_game_path(id, bad).is_err(), "{bad} should be refused");
+            assert!(
+                store::move_game_path(id, "js/main.js", bad).is_err(),
+                "{bad} should be refused as a destination"
+            );
+        }
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}

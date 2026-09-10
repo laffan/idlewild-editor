@@ -235,6 +235,114 @@ pub fn write_game_file(id: &str, rel: &str, content: &str) -> Result<(), String>
     fs::write(&path, content).map_err(|e| format!("Cannot write {rel}: {e}"))
 }
 
+// ── managing the game tree ──────────────────────────────────────────────────
+//
+// Everything below refuses a path that would climb out of `game/` and a
+// destination that already exists. Overwriting silently is the one mistake a
+// file manager must never make, and the code modal has no undo.
+
+pub fn create_game_file(id: &str, rel: &str) -> Result<(), String> {
+    let path = game_dir(id)?.join(safe_relative(rel)?);
+    if path.exists() {
+        return Err(format!("{rel} already exists"));
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(&path, "").map_err(|e| format!("Cannot create {rel}: {e}"))
+}
+
+pub fn create_game_dir(id: &str, rel: &str) -> Result<(), String> {
+    let path = game_dir(id)?.join(safe_relative(rel)?);
+    if path.exists() {
+        return Err(format!("{rel} already exists"));
+    }
+    fs::create_dir_all(&path).map_err(|e| format!("Cannot create {rel}: {e}"))
+}
+
+/// Move or rename a file or folder inside the tree.
+///
+/// A folder moved into itself would take its own destination with it, so the
+/// prefix check is a correctness guard, not a nicety.
+pub fn move_game_path(id: &str, from: &str, to: &str) -> Result<(), String> {
+    let root = game_dir(id)?;
+    let src = root.join(safe_relative(from)?);
+    let dst = root.join(safe_relative(to)?);
+
+    if !src.exists() {
+        return Err(format!("{from} does not exist"));
+    }
+    if dst.exists() {
+        return Err(format!("{to} already exists"));
+    }
+    if src.is_dir() && dst.starts_with(&src) {
+        return Err(format!("Cannot move {from} inside itself"));
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::rename(&src, &dst).map_err(|e| format!("Cannot move {from}: {e}"))
+}
+
+/// Copy a file or folder, returning the path the copy actually took.
+pub fn copy_game_path(id: &str, rel: &str) -> Result<String, String> {
+    let root = game_dir(id)?;
+    let src = root.join(safe_relative(rel)?);
+    if !src.exists() {
+        return Err(format!("{rel} does not exist"));
+    }
+
+    let taken = next_free_copy(&root, rel)?;
+    let dst = root.join(&taken);
+    if src.is_dir() {
+        copy_dir(&src, &dst)?;
+    } else {
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::copy(&src, &dst).map_err(|e| format!("Cannot copy {rel}: {e}"))?;
+    }
+    Ok(taken.to_string_lossy().replace('\\', "/"))
+}
+
+pub fn delete_game_path(id: &str, rel: &str) -> Result<(), String> {
+    let path = game_dir(id)?.join(safe_relative(rel)?);
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        fs::remove_dir_all(&path).map_err(|e| format!("Cannot delete {rel}: {e}"))
+    } else {
+        fs::remove_file(&path).map_err(|e| format!("Cannot delete {rel}: {e}"))
+    }
+}
+
+/// `main.js` → `main copy.js` → `main copy 2.js`, keeping the extension
+/// where a file manager keeps it.
+fn next_free_copy(root: &Path, rel: &str) -> Result<PathBuf, String> {
+    let path = Path::new(rel);
+    let parent = path.parent().unwrap_or(Path::new(""));
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| format!("Cannot name a copy of {rel}"))?;
+    let ext = path.extension().and_then(|e| e.to_str());
+
+    for n in 1..1000 {
+        let name = match (n, ext) {
+            (1, Some(e)) => format!("{stem} copy.{e}"),
+            (1, None) => format!("{stem} copy"),
+            (_, Some(e)) => format!("{stem} copy {n}.{e}"),
+            (_, None) => format!("{stem} copy {n}"),
+        };
+        let candidate = parent.join(name);
+        if !root.join(&candidate).exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(format!("Too many copies of {rel}"))
+}
+
 pub fn copy_dir(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst).map_err(|e| e.to_string())?;
     for entry in fs::read_dir(src).map_err(|e| e.to_string())?.flatten() {

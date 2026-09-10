@@ -122,6 +122,33 @@ fn write_game_file(id: String, path: String, content: String) -> Result<(), Stri
     store::write_game_file(&id, &path, &content)
 }
 
+#[tauri::command]
+fn create_game_file(id: String, path: String) -> Result<(), String> {
+    store::create_game_file(&id, &path)
+}
+
+#[tauri::command]
+fn create_game_dir(id: String, path: String) -> Result<(), String> {
+    store::create_game_dir(&id, &path)
+}
+
+/// Move or rename, which are the same operation with different intent.
+#[tauri::command]
+fn move_game_path(id: String, from: String, to: String) -> Result<(), String> {
+    store::move_game_path(&id, &from, &to)
+}
+
+/// Copy, returning the path the copy actually took.
+#[tauri::command]
+fn copy_game_path(id: String, path: String) -> Result<String, String> {
+    store::copy_game_path(&id, &path)
+}
+
+#[tauri::command]
+fn delete_game_path(id: String, path: String) -> Result<(), String> {
+    store::delete_game_path(&id, &path)
+}
+
 // ── PSD pipeline ────────────────────────────────────────────────────────────
 
 /// Stream psd-to-json's progress to the frontend terminal.
@@ -390,6 +417,11 @@ pub fn run() {
             list_game_files,
             read_game_file,
             write_game_file,
+            create_game_file,
+            create_game_dir,
+            move_game_path,
+            copy_game_path,
+            delete_game_path,
             import_image,
             import_image_bytes,
             create_psd_from_rgba,
