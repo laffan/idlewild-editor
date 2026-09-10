@@ -35,6 +35,17 @@
   touch-action: none;
 }
 
+/* A file is over the canvas. The frame says the drop will be taken; what it
+   would land *on* is drawn inside the scene, where the image is. */
+.editor-canvas-wrap.drop-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid var(--color-accent);
+  z-index: 5;
+}
+
 /* The Pan tool, and the space bar standing in for it. On the canvas rather
    than on the wrapper so the drawing layer's own crosshair still wins where
    it is active, and closed while the drag is under way — a hand that stays

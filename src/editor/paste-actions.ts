@@ -13,10 +13,11 @@
  */
 
 import { Grid } from "../lib/grid";
-import { psd } from "../lib/ipc";
+import { psd, toBase64 } from "../lib/ipc";
 import type { AnchorMarks } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { Cell, Rect } from "../lib/types";
+import { clipboardImage } from "./clipboard";
 import { pasteName } from "./paste";
 import {
   EXPORT_SCALE,
@@ -55,11 +56,14 @@ export async function importPasted(
   target: PasteTarget,
   name: string,
   file: File,
+  landing?: Cell,
 ): Promise<void> {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const size = await imageSize(file);
-    const at = target.centreCell();
+    // A paste has no pointer behind it and lands in the middle of the view;
+    // a drop lands where it was let go of, which is the whole gesture.
+    const at = landing ?? target.centreCell();
     const plan = size ? planFor(target.grid, at, size) : null;
 
     const result = await psd.importBytes(
@@ -68,7 +72,7 @@ export async function importPasted(
       toBase64(bytes),
       plan?.marks,
     );
-    log.info(`Pasted ${result.key} (${result.width}×${result.height})`);
+    log.info(`Imported ${result.key} (${result.width}×${result.height})`);
     await target.placePsd(result.key, result.manifest, plan?.anchor ?? at, IMPORT_SCALE);
   } catch (err) {
     log.error("Could not paste that:", err);
@@ -78,14 +82,12 @@ export async function importPasted(
 /**
  * The same thing, asked for rather than pasted.
  *
- * An iPad has no ⌘V, so without this the paste path is unreachable — and
- * untestable — on the platform this editor is mostly for. Reading the
- * clipboard *cold* is a different call from taking a paste event: the event
- * carries its data, this has to ask for it, and asking can be refused.
- *
- * The webview's clipboard rather than the Tauri plugin's, because the plugin
- * has no image support on iOS at all. What comes back is wrapped in a `File`
- * so it goes down exactly the route a real paste goes down, marks and all.
+ * An iPad has no ⌘V — and would not deliver a paste event over a canvas even
+ * with one — so without this the paste path is unreachable on the platform
+ * this editor is mostly for. Reading the clipboard *cold* is a different
+ * problem from taking a paste event: the event carries its data, this has to
+ * ask, and on an iPad the webview is the wrong thing to ask. See
+ * `editor/clipboard.ts`.
  */
 export async function pasteFromClipboard(
   projectId: string,
@@ -93,36 +95,12 @@ export async function pasteFromClipboard(
 ): Promise<void> {
   let file: File;
   try {
-    file = await clipboardFile();
+    file = await clipboardImage();
   } catch (err) {
     log.error("Nothing to paste:", err);
     return;
   }
   await importPasted(projectId, target, pasteName(file), file);
-}
-
-async function clipboardFile(): Promise<File> {
-  const items = await navigator.clipboard.read();
-  const seen: string[] = [];
-  for (const item of items) {
-    seen.push(...item.types);
-    const type = item.types.find(
-      (t) => t.startsWith("image/") || t.endsWith("photoshop-image"),
-    );
-    if (!type) continue;
-    const blob = await item.getType(type);
-    // `image.png` is what a screenshot is called on every platform, and
-    // `pasteName` turns that into a timestamp rather than a project full of
-    // files called image.
-    return new File([blob], type.endsWith("photoshop-image") ? "image.psd" : "image.png", {
-      type,
-    });
-  }
-  throw new Error(
-    seen.length === 0
-      ? "the clipboard is empty"
-      : `the clipboard has no image this app can read — it offered ${seen.join(", ")}`,
-  );
 }
 
 /**
@@ -189,13 +167,4 @@ async function imageSize(
   } catch {
     return null;
   }
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
 }

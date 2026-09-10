@@ -55,7 +55,13 @@ remaining pieces are wired to real slots rather than mocked.
   at half size because everything drawn on a retina machine is 2×
 - Paste an image or a PSD straight onto the canvas: it is imported like any
   other file — marks and all — and lands in the middle of the view, on the
-  layer you are on. ⌘V, or Paste Image in the menu where there is no ⌘
+  layer you are on. ⌘V, or Paste Image in the menu where there is no ⌘. The
+  clipboard is read through the shell rather than the webview, which is what
+  makes a PSD copied in Files reachable at all on an iPad
+- Drag a file onto the canvas and it lands where you let go of it, imported
+  exactly as a paste is. Drag it over an image already there and that image
+  lights up: dropping on it offers to put the new file behind it instead,
+  which changes every placement of that PSD at once
 - Every import carries its grid space into the PSD as two marks a game never
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork

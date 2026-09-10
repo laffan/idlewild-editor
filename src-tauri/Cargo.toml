@@ -9,7 +9,6 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
-tauri-plugin-clipboard-manager = "2"
 tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -23,7 +22,20 @@ portpicker = "0.1"
 # The PSD pipeline, shared with Phaser Bench.
 psd-to-json = { git = "https://github.com/laffan/psd-to-json-rust" }
 psd = { git = "https://github.com/laffan/psd", branch = "master" }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# TIFF and GIF are here for the clipboard rather than for the file pickers:
+# a macOS pasteboard offers TIFF where it offers anything, and an image the
+# pipeline refuses to decode is worse than one it never offered to take.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "gif"] }
+
+# Reading the system pasteboard. WebKit hands a page only a web-safe subset
+# of what the clipboard holds, which never includes a PSD — see clipboard.rs.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPasteboard"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSEnumerator", "NSString"] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "UIPasteboard"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSEnumerator", "NSString"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

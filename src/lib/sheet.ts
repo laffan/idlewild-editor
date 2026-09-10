@@ -102,6 +102,58 @@ export function confirmSheet(
 }
 
 /**
+ * Ask which of several things to do, resolving to the answer or to null.
+ *
+ * `confirmSheet` asks a yes/no question; this one exists because a dropped
+ * file poses a three-way one — replace what it landed on, add it beside, or
+ * neither — and offering only "replace or cancel" would make adding an image
+ * to a busy canvas a matter of finding a gap to aim at.
+ */
+export function chooseSheet(options: {
+  title: string;
+  message: string;
+  choices: Array<{ id: string; label: string; primary?: boolean }>;
+  light?: boolean;
+}): Promise<string | null> {
+  return new Promise((resolve) => {
+    const sheet = openSheet({
+      title: options.title,
+      light: options.light,
+      width: 520,
+    });
+    sheet.body.appendChild(
+      h("div", { style: { font: "500 15px var(--font-body)" }, text: options.message }),
+    );
+
+    let answered = false;
+    const answer = (value: string | null) => {
+      if (answered) return;
+      answered = true;
+      sheet.close();
+      resolve(value);
+    };
+
+    sheet.root.addEventListener("click", () => answer(null));
+    for (const choice of options.choices) {
+      sheet.actions.appendChild(
+        h("button", {
+          class: choice.primary ? "btn btn-primary" : "btn btn-ghost",
+          text: choice.label,
+          onClick: () => answer(choice.id),
+        }),
+      );
+    }
+    sheet.actions.appendChild(
+      h("button", {
+        class: "btn btn-ghost",
+        text: "Cancel",
+        onClick: () => answer(null),
+      }),
+    );
+  });
+}
+
+/**
  * Ask for one line of text, resolving to it or to null if the user backs out.
  *
  * The app's own sheet rather than `window.prompt`, for two reasons: every

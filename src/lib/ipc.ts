@@ -3,6 +3,38 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Genre, ProjectMeta, Projection } from "./types";
 
+/**
+ * Bytes as the command surface takes them.
+ *
+ * Every route that hands Rust a file — an import, a paste, a drop, a saved
+ * PNG — sends base64 over the bridge, so the encoding lives beside the calls
+ * rather than being written out again in each caller. Chunked because
+ * `String.fromCharCode` is applied to the whole run at once and a megabyte of
+ * arguments overflows the stack.
+ */
+export function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
+ * And back the other way, for bytes a command hands over.
+ *
+ * The buffer is spelled out because a plain `Uint8Array` is backed by
+ * `ArrayBufferLike`, which a `Blob` will not take — and everything reading
+ * this makes a `File` out of it.
+ */
+export function fromBase64(base64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 export interface GameFile {
   path: string;
   isDir: boolean;
@@ -85,6 +117,21 @@ export interface ImportResult {
   manifest: string;
 }
 
+/** A file taken off the system pasteboard — see src-tauri/src/clipboard.rs. */
+export interface ClipboardFile {
+  /** A filename with an extension; its stem becomes the PSD's key. */
+  name: string;
+  /** The pasteboard type the bytes came from, for the log. */
+  uti: string;
+  dataBase64: string;
+}
+
+export interface ClipboardRead {
+  /** Everything the pasteboard offered, readable or not. */
+  types: string[];
+  file: ClipboardFile | null;
+}
+
 /**
  * The asset server's port. psd-to-phaser concatenates onto the base path it
  * is given and lazy-loads long after the initial load, so it needs a real
@@ -99,6 +146,25 @@ export const getServerPort = () => invoke<number>("get_server_port");
  * one it is.
  */
 export const platform = () => invoke<string>("platform");
+
+/**
+ * What the system pasteboard is holding.
+ *
+ * The webview's own clipboard sees only a web-safe subset of it, which never
+ * includes a PSD — so the shell is asked instead. See `editor/clipboard.ts`.
+ */
+export const clipboard = {
+  read: () => invoke<ClipboardRead>("read_clipboard"),
+};
+
+/**
+ * A file dropped on the window, read by path.
+ *
+ * Only where the shell intercepts the drag: a drop the webview handles itself
+ * arrives as a `File` and needs nothing from Rust. See `editor/drop.ts`.
+ */
+export const droppedFile = (sourcePath: string) =>
+  invoke<{ name: string; dataBase64: string }>("read_dropped_file", { sourcePath });
 
 /** The base URL for a project's processed assets. */
 export async function assetBase(projectId: string): Promise<string> {

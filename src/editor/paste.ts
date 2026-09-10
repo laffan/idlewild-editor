@@ -10,7 +10,10 @@
  * The browser's own `paste` event is what this listens for, rather than
  * `navigator.clipboard.read()`. The event carries the data with it, so there
  * is no permission prompt and nothing to fall back on. Reading the clipboard
- * cold is what the Add Image sheet does, because there no paste has happened.
+ * cold is what the Add Image sheet does, because there no paste has happened
+ * — and it is the *only* route on an iPad, where WKWebView delivers a paste
+ * event only into an editable element and the canvas is never one. See
+ * `editor/clipboard.ts`.
  */
 
 export interface PasteCallbacks {
@@ -47,13 +50,16 @@ export function listenForPaste(callbacks: PasteCallbacks): () => void {
 }
 
 /**
- * The first image on the clipboard.
+ * The first image on a `DataTransfer` — a paste's, or a drop's.
  *
  * `files` covers a screenshot and anything copied out of another app; `items`
  * covers the same ground on the engines that populate only that, and both are
  * cheap to ask. A PSD arrives with whatever type its platform invented for it
  * — `image/vnd.adobe.photoshop` on some, nothing at all on others — so a
  * `.psd` name is accepted on its own account.
+ *
+ * A drop reads the same question off the same object, so `editor/drop.ts`
+ * asks this rather than deciding again what counts as an image.
  */
 export function imageFrom(data: DataTransfer | null): File | null {
   if (!data) return null;
@@ -73,7 +79,7 @@ export function imageFrom(data: DataTransfer | null): File | null {
 }
 
 /**
- * What the pasted file is called in the project.
+ * What a pasted or dropped file is called in the project.
  *
  * A file copied out of Finder brings a name worth keeping; a screenshot on
  * the clipboard is `image.png` on every platform, and a project full of

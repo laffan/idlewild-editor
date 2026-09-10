@@ -16,13 +16,8 @@ import { Inspector } from "./inspector";
 import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
-import { listenForPaste } from "./paste";
 import { bindShortcuts } from "./shortcuts";
-import {
-  importPasted,
-  pasteFromClipboard,
-  type PasteTarget,
-} from "./paste-actions";
+import { startIntake } from "./intake";
 import { PlayPad } from "./play-pad";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
@@ -226,10 +221,7 @@ export async function mountEditor(
       onBack: () => void leave(),
       onMode: (next) => setMode(next),
       onCode: () => toggleCode(),
-      onPasteImage: () => {
-        const target = pasteTarget();
-        if (target) void pasteFromClipboard(meta.id, target);
-      },
+      onPasteImage: () => intake.paste(),
       onPublish: () => openPublish(meta.id, meta.name),
       onOptions: () => openProjectOptions(meta, store.layers.length),
     },
@@ -298,27 +290,19 @@ export async function mountEditor(
     terminal.root,
   );
 
-  // A paste is an import: the bytes become a PSD, marked with the grid spaces
-  // they landed on, and placed in the middle of the view on the layer being
-  // worked on. Bound to the document rather than the canvas, which never
-  // holds focus — every pointer handler over it calls preventDefault, so
-  // nothing in the scene is ever the focused element.
-  const pasteTarget = (): PasteTarget | null => {
-    const scene = handle?.scene;
-    if (!scene) return null;
-    return {
-      grid,
-      centreCell: () => scene.centreCell(),
-      placePsd: (key, manifest, at, scale) =>
-        scene.placePsd(key, manifest, at, scale),
-    };
-  };
-
-  const stopPaste = listenForPaste({
+  // A paste and a drop are the same import: the bytes become a PSD, marked
+  // with the grid spaces they landed on, and placed on the layer being worked
+  // on. A drop that lands on an image already there offers to replace the
+  // file behind it instead — see editor/intake.ts.
+  const intake = startIntake({
+    projectId: meta.id,
+    grid,
+    canvas: canvasWrap,
+    scene: () => handle?.scene ?? null,
     enabled: () => mode === "edit",
-    onImage: (name, file) => {
-      const target = pasteTarget();
-      if (target) void importPasted(meta.id, target, name, file);
+    onPsdReplaced: async (key, manifest) => {
+      await handle?.scene.reloadPsd(key, manifest);
+      inspector.reloadPsdLayers(key);
     },
   });
 
@@ -672,7 +656,7 @@ export async function mountEditor(
 
   async function teardown(): Promise<void> {
     stopShortcuts();
-    stopPaste();
+    intake.stop();
     if (mode === "play") setMode("edit");
     await saveThumbnail();
     await store.flush();

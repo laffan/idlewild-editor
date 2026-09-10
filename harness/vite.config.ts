@@ -15,7 +15,6 @@ export default defineConfig({
       "@tauri-apps/api/core": stub("tauri-stub.ts"),
       "@tauri-apps/api/event": stub("event-stub.ts"),
       "@tauri-apps/plugin-dialog": stub("dialog-stub.ts"),
-      "@tauri-apps/plugin-clipboard-manager": stub("clipboard-stub.ts"),
     },
   },
 });

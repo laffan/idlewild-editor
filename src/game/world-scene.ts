@@ -14,6 +14,7 @@ import { CameraRig, type RigMode } from "./camera-rig";
 import { DocRenderer, pickPlacementsIn } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
+import { DropTargets, type PlacedTarget } from "./drop-target";
 import { PlayController, type PlayMode } from "./play-controller";
 import { PlatformerController } from "./play-platformer";
 import type { PlayInput } from "./platformer";
@@ -60,6 +61,7 @@ export class WorldScene extends Phaser.Scene {
   private gridRenderer!: GridRenderer;
   private docRenderer!: DocRenderer;
   private overlay!: SelectionOverlay;
+  private drops!: DropTargets;
   private play!: PlayMode;
   /** Held movement, written by the editor's play pad and its keyboard. */
   private playInput: PlayInput = { left: false, right: false, jump: false };
@@ -114,6 +116,7 @@ export class WorldScene extends Phaser.Scene {
     this.gridRenderer = new GridRenderer(this.add.graphics(), this.grid);
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
+    this.drops = new DropTargets(this.add.graphics(), this.store);
     // Which play mode this project has is a property of the project, decided
     // when it was created and carried in the document ever since.
     this.play =
@@ -517,6 +520,23 @@ export class WorldScene extends Phaser.Scene {
     return this.grid.worldToCell({ x: camera.midPoint.x, y: camera.midPoint.y });
   }
 
+  /** The grid space under a point on the page — where a drop lands. */
+  cellAt(clientX: number, clientY: number): Cell {
+    return this.grid.worldToCell(this.worldAt(clientX, clientY));
+  }
+
+  /** The placed PSD under a point on the page — what a drop would replace. */
+  placedAt(clientX: number, clientY: number): PlacedTarget | null {
+    if (this.mode === "play") return null;
+    const world = this.worldAt(clientX, clientY);
+    return this.drops.at(world.x, world.y);
+  }
+
+  /** Outline what a drop would replace, or clear the outline. */
+  markDrop(target: PlacedTarget | null): void {
+    this.drops.mark(target, this.cameras.main.zoom);
+  }
+
   /** Screen position for the floating action bar over a region selection. */
   selectionScreenAnchor(): { x: number; y: number; width: number } | null {
     if (this.selection.kind !== "region" || !this.held) return null;
@@ -606,6 +626,9 @@ export class WorldScene extends Phaser.Scene {
     if (this.mode === mode) return;
     this.mode = mode;
     this.drag.cancel();
+    // Nothing can be dropped on a running game, so a highlight left over
+    // from a drag that ended in Play would never be cleared.
+    this.markDrop(null);
     if (mode === "play") {
       this.setSelection({ kind: "none" });
       this.play.start();
@@ -638,6 +661,7 @@ export class WorldScene extends Phaser.Scene {
   shutdownScene(): void {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.recentreUntilTouched, this);
     this.rig.destroy();
+    this.drops.destroy();
     this.docRenderer.destroy();
   }
 }

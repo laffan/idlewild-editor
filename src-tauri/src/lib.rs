@@ -1,6 +1,7 @@
 //! Tauri command surface. Every frontend call lands here; the modules below
 //! hold the actual work.
 
+mod clipboard;
 mod file_server;
 mod game_config;
 mod project;
@@ -34,6 +35,52 @@ fn get_server_port(state: tauri::State<'_, ServerPort>) -> u16 {
 #[tauri::command]
 fn platform() -> &'static str {
     std::env::consts::OS
+}
+
+/// What the system pasteboard is holding.
+///
+/// Not `async`, so Tauri runs it on the main thread: `UIPasteboard` requires
+/// that and `NSPasteboard` is happier for it. See clipboard.rs for why the
+/// webview's own clipboard cannot answer this.
+#[tauri::command]
+fn read_clipboard() -> Result<clipboard::ClipboardRead, String> {
+    clipboard::read()
+}
+
+/// A file the OS handed over by path, as bytes the frontend can measure.
+///
+/// A drop onto the canvas arrives as a path where the shell intercepts the
+/// drag before the webview sees it, and as a `File` where it does not. The
+/// marks an import writes describe where the artwork sits, so its size has to
+/// be known *before* the import — which means the bytes have to be in the
+/// frontend either way. Restricted to what the pipeline can import, so this
+/// is a route for dropped artwork rather than a general file reader.
+#[tauri::command]
+fn read_dropped_file(source_path: String) -> Result<DroppedFile, String> {
+    let path = psd_write::source_path(&source_path);
+    if !clipboard::importable_path(&path) {
+        return Err(format!(
+            "{} is not an image this app can import",
+            path.display()
+        ));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
+    use base64::Engine;
+    Ok(DroppedFile {
+        name: path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("image")
+            .to_string(),
+        data_base64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+    })
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DroppedFile {
+    name: String,
+    data_base64: String,
 }
 
 // ── projects ────────────────────────────────────────────────────────────────
@@ -443,7 +490,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_clipboard_manager::init())
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -481,6 +527,8 @@ pub fn run() {
             delete_game_path,
             import_image,
             import_image_bytes,
+            read_clipboard,
+            read_dropped_file,
             create_psd_from_rgba,
             reprocess_psd,
             reimport_psd,

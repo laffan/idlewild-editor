@@ -8,9 +8,6 @@
     "opener:default",
     "dialog:default",
     "fs:default",
-    "clipboard-manager:default",
-    "clipboard-manager:allow-read-image",
-    "clipboard-manager:allow-write-image",
     "deep-link:default"
   ]
 }

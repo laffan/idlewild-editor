@@ -39,6 +39,7 @@ Extension of [README.md](README.md).
 │                        Rust backend                            │
 │  store.rs        per-project directories on disk               │
 │  psd_write.rs    image / RGBA → PSD  (psd fork, write half)    │
+│  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
 │  templates.rs    per-genre scaffolds, per-projection grid      │
 │  publish.rs      zip export, both runtimes included            │
@@ -612,13 +613,13 @@ hangs from is its *top-left* space and is only its middle by accident. The
 whole thing then scales by `EXPORT_SCALE`, since marks are in the file's
 pixels and the box is in world pixels.
 
-**⌘V is not the only way in.** An iPad has no ⌘, so the paste path would be
-unreachable — and untestable — on the platform this editor is mostly for.
-*Paste Image* in the header menu runs the same route, differing only in where
-the bytes come from: a paste event carries its data, this has to ask
-`navigator.clipboard.read()` for it, and asking can be refused. What comes
-back is wrapped in a `File` so everything downstream is identical, marks
-included.
+**⌘V is not the only way in.** An iPad has no ⌘ — and would not deliver a
+paste event over a canvas even with one — so the paste path would be
+unreachable on the platform this editor is mostly for. *Paste Image* in the
+header menu runs the same route, differing only in where the bytes come from:
+a paste event carries its data, this has to go and ask. What comes back is
+wrapped in a `File` so everything downstream is identical, marks included.
+Who gets asked is the next section, and it is the whole of the iPad story.
 
 The exception is a grid that does not snap. A blank project's spaces are
 single world pixels, so asking which of them a screenshot covers enumerates
@@ -642,6 +643,107 @@ extension, but bytes off a clipboard have no name to read, and handing a
 perfectly good PSD to the image decoder only ever produced "failed to decode
 image". `import_image_bytes` therefore measures the file it wrote rather than
 decoding the input twice.
+
+### The clipboard the webview cannot see
+
+*Paste Image* reported **"The clipboard is empty"** on an iPad holding a PSD
+copied out of Files. The clipboard was not empty. The page was never shown
+what was on it.
+
+WebKit hands a page only a *web-safe* subset of the pasteboard — plain text,
+HTML, a URL list, PNG, and web custom formats — and suppresses everything
+else, files included. A PSD is `com.adobe.photoshop-image`, which is on none
+of those lists, so `navigator.clipboard.read()` came back with items carrying
+no type this app could use, and the only honest thing the old code could say
+about that was that it had found nothing.
+
+The other half of the trap is why ⌘V is no way round it. WKWebView on iPadOS
+delivers a `paste` event only when the caret is in an editable element. The
+editor's canvas is never one — every pointer handler over it calls
+`preventDefault`, so nothing in the scene is ever focused — so on an iPad the
+paste event that *would* have carried the file never fires at all. Both web
+routes are shut, and they are shut by design rather than by a bug to work
+around.
+
+So the shell is asked instead. `src-tauri/src/clipboard.rs` reads
+`UIPasteboard` on iOS and `NSPasteboard` on macOS through `objc2`, where there
+is no web-safe subset: it lists the types the pasteboard is really holding and
+takes the bytes of the first one the pipeline can use. Three passes, in the
+order that gets the best answer:
+
+1. **A copied file** (`public.file-url`) — the only route that knows the
+   artwork's real name, and on macOS the only route at all, since a file
+   copied in Finder puts a URL on the pasteboard and no bytes.
+2. **The types it knows by name**, PSD first: copying a PSD out of an editor
+   usually leaves a flattened preview beside it, and taking the preview would
+   silently discard the layer stack.
+3. **Whatever is left, by signature** — `8BPS`, the PNG magic, `GIF89a` —
+   because an app that invents its own `dyn.a…` type for a perfectly ordinary
+   PNG is not a reason to refuse it.
+
+The command is deliberately **not** `async`, which is what makes Tauri run it
+on the main thread: `UIPasteboard` requires that and `NSPasteboard` prefers
+it. Since iOS 16 a program reading the pasteboard raises a system prompt, so
+a *declined* prompt now looks like an empty clipboard again — `describeEmpty`
+tells the three cases apart and says which one happened, because "copy
+something first", "save it and import it from Files" and "allow the paste when
+asked" are three different next steps.
+
+`editor/clipboard.ts` is the frontend half: shell first, webview second. The
+fallback is not dead code — it is what the browser harness and any
+non-Apple build use, and it is the same route as before, now second in line
+rather than first. Both hand back a `File`, so nothing downstream can tell
+which answered.
+
+`tauri-plugin-clipboard-manager` went with this. It was the desktop route and
+its iOS half implements text only, which is exactly the gap this closes; a
+plugin nothing calls is worse than no plugin.
+
+### Dropping is pasting with a pointer
+
+A file dropped on the canvas takes the same route a paste takes — bytes to
+Rust, a marked PSD written, psd-to-json over it, a placement anchored on a
+grid space. The only thing a drop knows that a paste does not is *where*, and
+that buys the two things `editor/drop.ts` is for: the image lands on the space
+it was let go over rather than in the middle of the view, and a drop onto an
+image that is already there is an offer to replace the file behind it.
+
+**Two routes in, because the platforms differ.** On macOS the shell intercepts
+the drag before the webview sees it, and Tauri reports it as an event carrying
+OS paths; on iPadOS there is no such interception and the webview gets
+ordinary HTML5 drag events carrying `File`s. Both are wired, which is the
+arrangement phaser-bench arrived at, and exactly one of them fires per
+platform. They meet at `Incoming`, which is a name, an optional OS path, and a
+thunk for the bytes — a thunk because the confirmation names the file, and
+reading a fifty-megabyte PSD to put its name in a sentence the user is about
+to decline is work for nothing.
+
+Positions from the shell are **physical** pixels and everything in the page is
+in CSS pixels, so they are divided through by the device pixel ratio. (With
+the web inspector attached, macOS reports them from somewhere else entirely.
+That is a known Tauri limitation, not something to correct for.)
+
+**What is under the pointer is drawn where the image is.** `game/drop-target.ts`
+hit-tests the document with the same front-most rules a tap follows and
+outlines the whole placed *unit* rather than the one layer under the pointer,
+because that is what a replacement acts on. It has graphics of its own rather
+than the selection overlay's: dragging over something does not select it, and
+a highlight that moved the selection would leave the wrong thing chosen when
+the drag was abandoned. The canvas frame says a drop will be taken at all.
+
+**A replacement asks first, and then keeps the key.** Replacing rewrites
+`<project>/psd/<key>.psd` and re-runs the pipeline, so every placement of that
+PSD changes with it — including copies elsewhere in the project that reference
+the same file. That is what makes the gesture worth having and what makes it
+worth a question, so the sheet offers Replace, Add as new, and Cancel. A path
+goes through the same `reimport_psd` a picked file does; bytes are written
+under the existing key, which overwrites it for the same reason
+`import_image_bytes` is already how the clipboard replaces a PSD.
+
+Names still decide keys, so dropping `roof.png` into a project that already
+has a `roof.psd` overwrites that file, as importing it from Files always has.
+A drop onto empty grid is the same import by another gesture, and inherits
+that.
 
 ### A footprint is the spaces covered, not the range around them
 
@@ -977,11 +1079,23 @@ manifest → zip, plus the path-traversal guards, the project scaffold, what an
 export's config carries, and the shapes a file picker hands back. It runs
 against the real store and cleans up after itself, including on failure.
 
+The pasteboard is split so that most of it is testable anywhere: which type to
+take, what extension it maps to, and what a buffer's own signature says it is
+are plain functions with tests beside them, and only the two calls that
+actually touch `UIPasteboard` and `NSPasteboard` are behind a `cfg`. Those two
+compile on no other platform, so on Linux the module builds its "no pasteboard
+here" arm instead and the frontend falls back to the webview — which is the
+same code path a Windows build would take. `cargo check --target
+aarch64-apple-darwin` and `--target aarch64-apple-ios` are what type-check the
+Apple arms without a Mac; neither one links, and neither is a substitute for
+running it on a device.
+
 `vitest` covers the pure halves — the grid projection, fill geometry,
 picking (a point's and a marquee's), resize geometry, the unit arithmetic
 behind a placed PSD, what the clipboard hands a paste and where that paste
-lands, colour, the log's `%c` parsing, the manifest reader, the platformer's
-body step, and the drawing layer's ported maths.
+lands, what a failed clipboard read says happened and which of a dragged
+selection of files a drop takes, colour, the log's `%c` parsing, the manifest
+reader, the platformer's body step, and the drawing layer's ported maths.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -1270,4 +1384,14 @@ on chrome never highlights it.
 - Pattern fills export as a flat colour, matching what the editor draws, and
   a pattern's PSD key is not among the `psdKeys` an export loads.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both
-  need a machine with the platform SDKs.
+  need a machine with the platform SDKs. The pasteboard's Apple arms are
+  type-checked against both Apple targets but have never been run on one.
+- An import takes its key from the file's name and overwrites a PSD already
+  under it. That is deliberate for the clipboard — it is how *Replace from
+  clipboard* works — but it means a dropped `roof.png` silently replaces an
+  earlier `roof.psd`, where a drop *onto* an image asks first. The two ought
+  to agree, and making them agree is a decision about what an import means,
+  not a bug fix.
+- Dropping several files at once takes the first one the pipeline can read.
+  A drop is one gesture landing on one space, and a run of images would need
+  somewhere to put the rest.

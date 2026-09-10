@@ -296,6 +296,21 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
           { name: "anchor", category: "point", x: 180, y: 120, width: 12, height: 12 },
         ],
       });
+    // The system pasteboard, which the harness has no access to: scripts set
+    // __clipboard to whatever a read should find. Left unset it is empty,
+    // which is what makes the fallback to the webview's clipboard reachable
+    // here — the same route a Linux or Windows build takes.
+    case "read_clipboard":
+      return (window as any).__clipboard ?? { types: [], file: null };
+    // A file dropped through the shell rather than the webview. Only macOS
+    // takes this route, but a script can drive it by setting __droppedFile.
+    case "read_dropped_file":
+      return (
+        (window as any).__droppedFile ?? {
+          name: String((args as any)?.sourcePath ?? "dropped.psd").split("/").pop(),
+          dataBase64: "AAAA",
+        }
+      );
     case "reimport_psd":
       return {
         key: "tower",

@@ -4,14 +4,15 @@
  */
 
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
-import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
-import { psd, publish } from "../lib/ipc";
+import { psd, publish, toBase64 } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import type { ProjectMeta } from "../lib/types";
 import { isMobile } from "../lib/platform";
 import * as log from "../lib/log";
+import { clipboardImage } from "./clipboard";
+import { pasteName } from "./paste";
 
 /** What the desktop dialog offers. Neither mobile picker reads extensions. */
 const IMAGE_EXTENSIONS = ["psd", "png", "jpg", "jpeg"];
@@ -99,7 +100,7 @@ export function openAddImage(
       }),
     ),
     option("Paste from clipboard", "⌘V", () =>
-      run(() => importClipboard(projectId, os, marks)),
+      run(() => importClipboard(projectId, marks)),
     ),
   );
 
@@ -186,7 +187,7 @@ export function openReplacePsd(
         // PSD and re-runs the pipeline over it, which is precisely a
         // replacement — there is nothing a separate command would do
         // differently, and a clipboard image never carries layers to lose.
-        run(() => importClipboard(projectId, os, undefined, key)),
+        run(() => importClipboard(projectId, undefined, key)),
       ),
     );
 
@@ -347,94 +348,24 @@ export function openProjectOptions(meta: ProjectMeta, layerCount: number): void 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Read an image from the clipboard and put it through the pipeline.
- *
- * Two routes, because neither is reliable everywhere: the Tauri plugin hands
- * back raw RGBA and works on desktop, while the webview's own clipboard API
- * hands back encoded bytes and is what iPadOS actually serves. Try the plugin
- * first and fall back rather than failing the paste.
- *
- * `key` names the PSD to write. Omitted, the paste gets a fresh key of its
- * own; given an existing one, it overwrites that file — which is how the
- * clipboard replaces a PSD as well as adding one.
- */
-/**
  * Import whatever image is on the clipboard.
  *
- * Two routes, and which is tried first depends on the platform. The Tauri
- * clipboard plugin reads the *system* pasteboard, which is the right answer
- * on a Mac — but on iOS it has no image support at all: `read_image` is a
- * hard error there and the plugin's own Swift side implements only text. So
- * mobile goes straight to the webview's clipboard and skips a call that can
- * only fail, which is also what stops "Clipboard plugin unavailable" being
- * logged before every successful paste.
+ * The reading is `editor/clipboard.ts`, which asks the shell before it asks
+ * the webview — on an iPad the webview is never shown a PSD, which is what
+ * made this route report an empty clipboard over a pasteboard holding one.
+ * What comes back is a `File`, so this is the same import every other route
+ * makes, marks included.
  *
- * When both fail, the *webview's* error is the one worth reporting: it is the
- * route that could have worked. Re-throwing the plugin's error meant every
- * failure on an iPad read "Unsupported on this platform", which named the
- * wrong thing and hid what the clipboard actually held.
+ * `key` names the PSD to write. Omitted, the paste gets a key of its own from
+ * the file's name; given an existing one, it overwrites that file — which is
+ * how the clipboard replaces a PSD as well as adding one.
  */
 async function importClipboard(
   projectId: string,
-  os: string,
   marks?: AnchorMarks,
   key?: string,
 ): Promise<ImportResult> {
-  const name = key ?? `pasted-${Date.now().toString(36)}`;
-
-  if (!isMobile(os)) {
-    try {
-      const image = await readImage();
-      const { width, height } = await image.size();
-      const rgba = await image.rgba();
-      // Raw pixels rather than an encoded file, so this route goes through
-      // the RGBA command — which takes no marks, and a paste arriving this
-      // way has no grid selection to describe anyway.
-      return await psd.fromRgba(projectId, name, width, height, toBase64(rgba));
-    } catch (err) {
-      log.info("The system clipboard had no image; trying the webview's:", err);
-    }
-  }
-
   const file = await clipboardImage();
-  return psd.importBytes(projectId, name, toBase64(file), marks);
-}
-
-/**
- * The first image the webview will hand over, as bytes.
- *
- * WebKit exposes only a safe subset of the pasteboard — `text/plain`,
- * `text/html`, `text/uri-list`, `image/png` and web custom formats — so a PSD
- * copied out of another app may simply not be there to read, whatever the
- * pasteboard itself holds. When that happens the types that *were* offered go
- * into the error, because "nothing on the clipboard" and "a PSD this cannot
- * see" need different answers from whoever is reading the console.
- */
-async function clipboardImage(): Promise<Uint8Array> {
-  const items = await navigator.clipboard.read();
-  const seen: string[] = [];
-  for (const item of items) {
-    seen.push(...item.types);
-    const type = item.types.find(
-      (t) => t.startsWith("image/") || t.endsWith("photoshop-image"),
-    );
-    if (!type) continue;
-    const blob = await item.getType(type);
-    return new Uint8Array(await blob.arrayBuffer());
-  }
-  throw new Error(
-    seen.length === 0
-      ? "The clipboard is empty"
-      : `The clipboard has no image this app can read — it offered ${seen.join(", ")}. ` +
-        "Save the file and use Import from Files instead.",
-  );
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(binary);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return psd.importBytes(projectId, key ?? pasteName(file), toBase64(bytes), marks);
 }
