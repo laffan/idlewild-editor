@@ -6,10 +6,8 @@
  */
 
 import Phaser from "phaser";
-import PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, cellsInRange } from "../lib/grid";
-import { parseManifest, placeableLayers, placedPosition } from "../lib/manifest";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig } from "./camera-rig";
@@ -20,7 +18,8 @@ import { PlayController, type PlayMode } from "./play-controller";
 import { PlatformerController } from "./play-platformer";
 import type { PlayInput } from "./platformer";
 import { DragController } from "./drag";
-import { evictPsd, loadPsd, reconcilePlacements } from "./psd-loader";
+import { PsdPlacements } from "./psd-placements";
+import { instanceMembers, instanceOf } from "./instance";
 import type { Viewport } from "../drawing";
 
 
@@ -69,12 +68,21 @@ export class WorldScene extends Phaser.Scene {
   private selection: Selection = { kind: "none" };
   private marqueeAnchor: Cell | null = null;
   private drag!: DragController;
+  private psds!: PsdPlacements;
   /** Set once the camera is where it should stay — restored, or user-moved. */
   private cameraPlaced = false;
   /** The last camera state pushed to `onViewport`, to skip idle frames. */
   private lastView = "";
   /** The layer new work lands on. */
   activeLayerId = "";
+  /**
+   * The placed PSD whose layers are being moved individually.
+   *
+   * Null is the normal state, where a PSD is one thing: tapping any of its
+   * layers selects it and dragging moves the lot. A double-tap opens the unit
+   * under the finger up, and it stays open until the selection leaves it.
+   */
+  private adjusting: string | null = null;
 
   constructor() {
     super("World");
@@ -88,6 +96,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Named so the host object below can read the scene's live state through
+    // a getter rather than a value copied at construction.
+    const sceneRef = this;
     this.cameras.main.setBackgroundColor("#d9e6ef");
 
     this.gridRenderer = new GridRenderer(this.add.graphics(), this.grid);
@@ -106,7 +117,8 @@ export class WorldScene extends Phaser.Scene {
       zoom: () => this.cameras.main.zoom,
       getSelection: () => this.selection,
       setSelection: (selection) => this.setSelection(selection),
-      render: (layerId, placement) => this.placeOne(layerId, placement),
+      adjustingInstance: () => this.adjusting,
+      render: (layerId, placement) => this.psds.placeOne(layerId, placement),
       detachCopy: (layerId, placementId, key) =>
         this.config.onDetachCopy?.(layerId, placementId, key),
       onDragStateChange: (dragging) => this.config.onDragStateChange(dragging),
@@ -127,6 +139,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.rig = new CameraRig(this.game.canvas, {
       onTap: (x, y) => this.handleTap(x, y),
+      onDoubleTap: (x, y) => this.handleDoubleTap(x, y),
       onDragStart: (x, y, modifiers) =>
         this.mode !== "play" && this.drag.begin(x, y, modifiers),
       onDragMove: (x, y) => this.drag.move(x, y),
@@ -139,8 +152,25 @@ export class WorldScene extends Phaser.Scene {
       onChange: () => this.persistCamera(),
     });
 
+    this.psds = new PsdPlacements({
+      scene: this,
+      store: this.store,
+      grid: this.grid,
+      docRenderer: this.docRenderer,
+      assetBase: this.config.assetBase,
+      // Read through, not captured: the active layer changes as the user
+      // works, and a PSD is placed on whichever one is current.
+      get activeLayerId() {
+        return sceneRef.activeLayerId;
+      },
+      setSelection: (selection) => this.setSelection(selection),
+      reselect: () => this.setSelection(this.selection),
+      refresh: () => this.refresh(),
+    });
+
     this.store.addEventListener("change", () => this.refresh());
-    void this.loadPlacements();
+    this.psds.migrateInstances();
+    void this.psds.loadAll();
     this.refresh();
   }
 
@@ -205,7 +235,12 @@ export class WorldScene extends Phaser.Scene {
   /** Repaint from the document. Cheap: everything here is retained state. */
   refresh(): void {
     this.docRenderer.render();
-    this.overlay.render(this.selection, this.store, this.cameras.main.zoom);
+    this.overlay.render(
+      this.selection,
+      this.store,
+      this.cameras.main.zoom,
+      this.adjusting,
+    );
   }
 
   // ── camera ────────────────────────────────────────────────────────────────
@@ -228,7 +263,7 @@ export class WorldScene extends Phaser.Scene {
     camera.scrollY += before.y - after.y;
     this.gridRenderer.invalidate();
     // Selection chrome is sized against the zoom, so it has to be redrawn.
-    this.overlay.render(this.selection, this.store, camera.zoom);
+    this.overlay.render(this.selection, this.store, camera.zoom, this.adjusting);
   }
 
   /** Re-centre on the origin while the viewport is still settling. */
@@ -326,13 +361,123 @@ export class WorldScene extends Phaser.Scene {
   }
 
   setSelection(selection: Selection): void {
+    // Layer adjustment belongs to the unit it was opened on. Selecting
+    // anything else closes it, so the mode never outlives what it is about
+    // and a PSD is one thing again the moment you look away from it.
+    if (this.adjusting && !this.inAdjustedInstance(selection)) {
+      this.adjusting = null;
+    }
     this.selection = selection;
-    this.overlay.render(selection, this.store, this.cameras.main.zoom);
+    this.overlay.render(
+      selection,
+      this.store,
+      this.cameras.main.zoom,
+      this.adjusting,
+    );
     this.config.onSelectionChange(selection);
+  }
+
+  private inAdjustedInstance(selection: Selection): boolean {
+    if (selection.kind !== "placement") return false;
+    const placement = this.store
+      .layer(selection.layerId)
+      ?.placements.find((p) => p.id === selection.placementId);
+    return !!placement && instanceOf(placement) === this.adjusting;
+  }
+
+  /** Which unit is open for layer-by-layer editing, if any. */
+  get adjustingInstance(): string | null {
+    return this.adjusting;
+  }
+
+  /**
+   * Open the placed PSD under the finger up into its own layers, or close it.
+   *
+   * The first tap of the double has already selected something, so this only
+   * has to decide what that selection means from here on.
+   */
+  private handleDoubleTap(screenX: number, screenY: number): void {
+    if (this.mode === "play") return;
+    const world = this.worldAt(screenX, screenY);
+    const hit = this.docRenderer.pick(world.x, world.y);
+    if (!hit) return;
+
+    const instance = instanceOf(hit.placement);
+    this.adjusting = this.adjusting === instance ? null : instance;
+    log.info(
+      this.adjusting
+        ? `${hit.placement.psdKey}.psd — adjusting layers; tap away to finish`
+        : `${hit.placement.psdKey}.psd — moving as one again`,
+    );
+    this.setSelection({
+      kind: "placement",
+      layerId: hit.layerId,
+      placementId: hit.placement.id,
+    });
+  }
+
+  /** Open the selected PSD up into its layers, from outside the canvas. */
+  startAdjusting(): void {
+    if (this.selection.kind !== "placement") return;
+    const placement = this.selectedPlacement();
+    if (!placement) return;
+    this.adjusting = instanceOf(placement);
+    this.refresh();
+    this.config.onSelectionChange(this.selection);
+  }
+
+  /**
+   * Remove what is selected, when it is a placed PSD.
+   *
+   * The unit, unless it has been opened up — deleting one layer of a PSD that
+   * moves as one thing would leave the rest of it behind looking broken, and
+   * "Remove from layer" on something drawn as a single outline should remove
+   * what that outline is around.
+   */
+  removeSelectedPlacement(): void {
+    if (this.selection.kind !== "placement") return;
+    const placement = this.selectedPlacement();
+    if (!placement) return;
+
+    const doomed =
+      this.adjusting === instanceOf(placement)
+        ? [placement]
+        : instanceMembers(
+            this.store.layers,
+            this.selection.layerId,
+            instanceOf(placement),
+          );
+    for (const member of doomed) {
+      this.store.removePlacement(this.selection.layerId, member.id);
+    }
+    this.setSelection({ kind: "none" });
+  }
+
+  private selectedPlacement(): Placement | undefined {
+    // Copied to a local so TypeScript narrows the union past the callback.
+    const selection = this.selection;
+    if (selection.kind !== "placement") return undefined;
+    return this.store
+      .layer(selection.layerId)
+      ?.placements.find((p) => p.id === selection.placementId);
+  }
+
+  /** Leave layer adjustment without changing what is selected. */
+  stopAdjusting(): void {
+    if (!this.adjusting) return;
+    this.adjusting = null;
+    this.overlay.render(this.selection, this.store, this.cameras.main.zoom, null);
+    this.config.onSelectionChange(this.selection);
   }
 
   getSelection(): Selection {
     return this.selection;
+  }
+
+  /** The grid space at the middle of the view — where a paste lands. */
+  centreCell(): Cell {
+    const camera = this.cameras.main;
+    return this.grid.worldToCell({ x: camera.midPoint.x, y: camera.midPoint.y });
   }
 
   /** Screen position for the floating action bar over a region selection. */
@@ -379,263 +524,40 @@ export class WorldScene extends Phaser.Scene {
   /**
    * Register a processed PSD with psd-to-phaser and place it.
    *
-   * One placement per top-level manifest layer, each keeping its offset
-   * within the PSD so a multi-layer document arrives as the composition its
-   * author built. There is no "root" path — `place()` resolves by walking
-   * the manifest's layers by name, so it must be given a real one.
-   *
-   * The PSD's `P | anchor` mark is what lands on the anchor cell. A file
-   * without one falls back to its canvas centre, which is where an import
-   * has always gone; a file with one keeps its position through the artist
-   * resizing the canvas or moving the artwork inside it, because the mark
-   * moves with them and the centre does not.
-   *
-   * `scale` is how big the artwork is displayed against its own pixels —
-   * see `editor/import-anchor.ts` for why an import arrives at a half of it.
+   * The work is `game/psd-placements.ts`; these four are the scene's face on
+   * it, because a PSD is placed from the editor shell and from both of the
+   * drawing layer's conversions.
    */
-  async placePsd(
+  placePsd(
     key: string,
     manifestJson: string,
     at: Cell,
     scale = 1,
   ): Promise<void> {
-    const layer = this.store.layer(this.activeLayerId);
-    if (!layer || layer.locked) {
-      log.warn("The active layer is locked");
-      return;
-    }
-
-    const manifest = parseManifest(manifestJson);
-    const layers = placeableLayers(manifest);
-    if (layers.length === 0) {
-      log.warn(`${key}.psd has no placeable layers — check the naming convention`);
-      return;
-    }
-
-    const world = this.grid.cellToWorld(at);
-    await this.loadPsd(key);
-
-    let last: Placement | null = null;
-    for (const entry of layers) {
-      const width = entry.width || manifest.width;
-      const height = entry.height || manifest.height;
-      const at2 = placedPosition(world, manifest, entry, scale, scale);
-      const placement = this.store.addPlacement(layer.id, {
-        psdKey: key,
-        layerPath: entry.path,
-        x: at2.x,
-        y: at2.y,
-        width: width * scale,
-        height: height * scale,
-        // The size the manifest exported at, which the displayed size is
-        // measured against — so a re-import can keep this scale.
-        naturalWidth: width,
-        naturalHeight: height,
-        anchor: at,
-      });
-      this.placeOne(layer.id, placement);
-      last = placement;
-    }
-
-    if (last) {
-      this.setSelection({
-        kind: "placement",
-        layerId: layer.id,
-        placementId: last.id,
-      });
-    }
+    return this.psds.place(key, manifestJson, at, scale);
   }
 
-  /**
-   * Swap in a re-imported PSD under the key it already had.
-   *
-   * Every cache holding the old file is dropped first — see `evictPsd` — and
-   * the placements pointing at the key are brought in line with the new
-   * manifest before anything is drawn, so an edit lands where the old
-   * artwork was standing.
-   *
-   * `renames` is for the one edit that changes a layer's name rather than
-   * its pixels: the inspector's layer list. It says which paths moved, so a
-   * renamed layer is recognised rather than mourned.
-   */
-  async reloadPsd(
+  /** Swap in a re-imported PSD under the key it already had. */
+  reloadPsd(
     key: string,
     manifestJson: string,
     renames?: ReadonlyMap<string, string>,
   ): Promise<void> {
-    reconcilePlacements(
-      this.store,
-      this.grid,
-      key,
-      parseManifest(manifestJson),
-      renames,
-    );
-
-    this.docRenderer.detachKey(key);
-    evictPsd(this, this.plugin(), key, this.otherPsdKeys(key));
-    await this.loadPsd(key);
-
-    for (const layer of this.store.layers) {
-      for (const placement of layer.placements) {
-        if (placement.psdKey === key) this.placeOne(layer.id, placement);
-      }
-    }
-    this.docRenderer.render();
+    return this.psds.reload(key, manifestJson, renames);
   }
 
-  /**
-   * Move every placement on one PSD key over to another.
-   *
-   * The file behind the key has been renamed, not changed: the same bytes
-   * under a new name, re-run through psd-to-json. So the geometry is left
-   * exactly as it is — there is nothing to reconcile — and all this has to do
-   * is take the rendered objects down, forget the caches under the *old* key,
-   * rewrite the key on each placement, and load and place the new one.
-   */
-  async renamePsd(from: string, to: string): Promise<void> {
-    this.docRenderer.detachKey(from);
-    evictPsd(this, this.plugin(), from, this.otherPsdKeys(from));
-
-    const moved: Array<{ layerId: string; placement: Placement }> = [];
-    for (const layer of this.store.layers) {
-      for (const placement of layer.placements) {
-        if (placement.psdKey !== from) continue;
-        this.store.updatePlacement(layer.id, placement.id, { psdKey: to });
-        moved.push({ layerId: layer.id, placement: { ...placement, psdKey: to } });
-      }
-    }
-
-    await this.loadPsd(to);
-    for (const { layerId, placement } of moved) this.placeOne(layerId, placement);
-    this.docRenderer.render();
-
-    // The selection still names a placement id, which has not changed — but
-    // the inspector reads the key off the document, so it has to be told to
-    // look again now the document says something different.
-    this.setSelection(this.selection);
+  /** Move every placement on one PSD key over to another. */
+  renamePsd(from: string, to: string): Promise<void> {
+    return this.psds.rename(from, to);
   }
 
-  /**
-   * Point one placement at a different PSD and redraw it.
-   *
-   * What breaking a reference does: the copy is byte-identical, so the
-   * layer path and the geometry carry over untouched and only the key
-   * changes. Everything else still reading the original is left alone,
-   * which is the whole point of doing it per placement.
-   */
-  async repointPlacement(
+  /** Point one placement at a different PSD and redraw it. */
+  repointPlacement(
     selection: Extract<Selection, { kind: "placement" }>,
     key: string,
     manifestJson: string,
   ): Promise<void> {
-    const placement = this.store
-      .layer(selection.layerId)
-      ?.placements.find((p) => p.id === selection.placementId);
-    if (!placement) return;
-
-    const manifest = parseManifest(manifestJson);
-    const entry =
-      manifest.all.find((l) => l.path === placement.layerPath) ??
-      placeableLayers(manifest)[0];
-    if (!entry) {
-      log.warn(`${key}.psd has nothing matching ${placement.layerPath}`);
-      return;
-    }
-
-    this.docRenderer.detachOne(placement.id);
-    this.store.updatePlacement(selection.layerId, selection.placementId, {
-      psdKey: key,
-      layerPath: entry.path,
-    });
-
-    await this.loadPsd(key);
-    const updated = this.store
-      .layer(selection.layerId)
-      ?.placements.find((p) => p.id === selection.placementId);
-    if (updated) this.placeOne(selection.layerId, updated);
-    this.docRenderer.render();
-  }
-
-  /**
-   * Every other PSD the document has placed.
-   *
-   * `evictPsd` needs it because textures are keyed on layer *names*, which
-   * two files can share — so a name still in use elsewhere must survive this
-   * file being dropped.
-   */
-  private otherPsdKeys(key: string): string[] {
-    const keys = new Set<string>();
-    for (const layer of this.store.layers) {
-      for (const placement of layer.placements) {
-        if (placement.psdKey !== key) keys.add(placement.psdKey);
-      }
-    }
-    return [...keys];
-  }
-
-  private plugin(): PsdToPhaser | undefined {
-    return (this as unknown as Record<string, PsdToPhaser | undefined>).P2P;
-  }
-
-  private loadPsd(key: string): Promise<void> {
-    return loadPsd(this, this.plugin(), key, this.config.assetBase);
-  }
-
-  private placeOne(layerId: string, placement: Placement): void {
-    const p2p = this.plugin();
-    if (!p2p) return;
-    try {
-      const object = p2p.place(this, placement.psdKey, placement.layerPath);
-      this.docRenderer.attach(layerId, placement, object);
-    } catch (err) {
-      log.error(`Could not place ${placement.psdKey}:`, err);
-    }
-  }
-
-  /** On open, bring back every placement the document already holds. */
-  private async loadPlacements(): Promise<void> {
-    const keys = new Set<string>();
-    for (const layer of this.store.layers) {
-      for (const placement of layer.placements) keys.add(placement.psdKey);
-    }
-    for (const key of keys) {
-      try {
-        await this.loadPsd(key);
-      } catch (err) {
-        log.error(`Could not load ${key}:`, err);
-      }
-    }
-
-    for (const layer of this.store.layers) {
-      for (const placement of layer.placements) {
-        this.placeOne(layer.id, this.migrateLayerPath(layer.id, placement));
-      }
-    }
-    this.refresh();
-  }
-
-  /**
-   * Rewrite the placeholder path early builds wrote.
-   *
-   * Those saved `layerPath: "root"`, which psd-to-phaser resolves by looking
-   * for a layer of that name and never finds — the placement came back as an
-   * empty group. Repoint it at the PSD's first real top-level layer.
-   */
-  private migrateLayerPath(layerId: string, placement: Placement): Placement {
-    if (placement.layerPath !== "root") return placement;
-
-    const data = this.plugin()?.getData(placement.psdKey);
-    const layers = (data?.original as { layers?: Array<{ name?: string }> })
-      ?.layers;
-    const name = layers?.[0]?.name;
-    if (!name) {
-      log.warn(`${placement.psdKey} has no top-level layer to place`);
-      return placement;
-    }
-
-    log.info(`Repointed ${placement.psdKey} from "root" to "${name}"`);
-    this.store.updatePlacement(layerId, placement.id, { layerPath: name });
-    return { ...placement, layerPath: name };
+    return this.psds.repoint(selection, key, manifestJson);
   }
 
   // ── modes ─────────────────────────────────────────────────────────────────

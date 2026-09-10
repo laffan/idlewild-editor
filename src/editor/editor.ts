@@ -16,6 +16,7 @@ import { Inspector } from "./inspector";
 import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
+import { listenForPaste } from "./paste";
 import { PlayPad } from "./play-pad";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
@@ -91,6 +92,11 @@ export async function mountEditor(
     onOpenPsd: (key) => void openPsd(key),
     onRefreshPsd: (key) => void refresh(key),
     onRenamePsd: (key, name) => void renamePsd(key, name),
+    onToggleLayerAdjust: () => {
+      if (!handle) return;
+      if (handle.scene.adjustingInstance) handle.scene.stopAdjusting();
+      else handle.scene.startAdjusting();
+    },
     onStrokesToPsd: () => void strokesToPsd(),
     onStrokesToZone: () => strokesToZone(),
     onFillToPsd: () => void fillToPsd(),
@@ -108,7 +114,7 @@ export async function mountEditor(
     },
     onDeleteSelection: () => deleteSelection(),
     onUsePatternImage: () =>
-      openAddImage(meta.id, (result) => {
+      openAddImage(meta.id, os, (result) => {
         const selection = handle?.scene.getSelection();
         if (selection?.kind !== "fill") return;
         store.updateFill(selection.layerId, selection.fillId, {
@@ -128,6 +134,7 @@ export async function mountEditor(
       // anchor mark that comes back out is what the placement lines up on.
       openAddImage(
         meta.id,
+        os,
         (result) => {
           void handle?.scene.placePsd(
             result.key,
@@ -256,6 +263,19 @@ export async function mountEditor(
     terminal.root,
   );
 
+  // A paste is an import: the bytes become a PSD and land in the middle of
+  // the view, on the layer being worked on. Bound to the document rather than
+  // the canvas, which never holds focus — every pointer handler over it calls
+  // preventDefault, so nothing in the scene is ever the focused element.
+  const stopPaste = listenForPaste(meta.id, {
+    enabled: () => mode === "edit",
+    onImported: (result) => {
+      const at = handle?.scene.centreCell();
+      if (!at) return;
+      void handle?.scene.placePsd(result.key, result.manifest, at, IMPORT_SCALE);
+    },
+  });
+
   clear(container);
   container.appendChild(shell);
   document.addEventListener("keydown", onKeyDown);
@@ -313,6 +333,9 @@ export async function mountEditor(
 
   function onSelection(selection: Selection): void {
     inspector.setSelection(selection);
+    // Fired for a change of mode as well as of selection, which is how the
+    // panel learns that the canvas has opened a PSD up.
+    inspector.setAdjusting(handle?.scene.adjustingInstance ?? null);
     actions.update(selection, handle?.scene.selectionScreenAnchor() ?? null);
 
     if (selection.kind === "layer") {
@@ -384,7 +407,10 @@ export async function mountEditor(
     if (selection.kind === "fill") {
       store.removeFill(selection.layerId, selection.fillId);
     } else if (selection.kind === "placement") {
-      store.removePlacement(selection.layerId, selection.placementId);
+      // The scene decides how much of a placed PSD goes: the whole thing, or
+      // the one layer of it that has been opened up.
+      handle?.scene.removeSelectedPlacement();
+      return;
     } else if (selection.kind === "zone") {
       store.removeZone(selection.layerId, selection.zoneId);
     } else if (selection.kind === "strokes") {
@@ -605,6 +631,7 @@ export async function mountEditor(
 
   async function teardown(): Promise<void> {
     document.removeEventListener("keydown", onKeyDown);
+    stopPaste();
     if (mode === "play") setMode("edit");
     await saveThumbnail();
     await store.flush();

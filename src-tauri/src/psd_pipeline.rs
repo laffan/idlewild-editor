@@ -285,7 +285,8 @@ fn next_free_key(project_id: &str, key: &str) -> Result<String, String> {
     Err(format!("Too many copies of {key}"))
 }
 
-fn psd_dimensions(path: &Path) -> Result<(u32, u32), String> {
+/// A PSD's canvas size, read back from the file that was just written.
+pub fn psd_dimensions(path: &Path) -> Result<(u32, u32), String> {
     let bytes = std::fs::read(path).map_err(|e| format!("Cannot read PSD: {e}"))?;
     let doc = psd::Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse PSD: {e}"))?;
     Ok((doc.width(), doc.height()))

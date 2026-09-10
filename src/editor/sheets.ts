@@ -10,26 +10,40 @@ import { openSheet } from "../lib/sheet";
 import { psd, publish } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import type { ProjectMeta } from "../lib/types";
+import { isMobile } from "../lib/platform";
 import * as log from "../lib/log";
 
-/** What the document picker will take. The media picker ignores extensions. */
+/** What the desktop dialog offers. Neither mobile picker reads extensions. */
 const IMAGE_EXTENSIONS = ["psd", "png", "jpg", "jpeg"];
 
 /**
- * Pick a file through the *document* picker.
+ * Pick a file through the *document* picker — Files on an iPad, the ordinary
+ * open dialog on a Mac.
  *
- * `pickerMode` is load-bearing on iPadOS. Left to itself the dialog plugin
- * chooses between the Files browser and the photo library by looking at the
- * filters: a set that is nothing but image and video types gets the photo
- * library. Every filter this app has is an image type, so "Import from
- * Files" and "Re-import" both opened Photos — which is not where a PSD is.
- * Saying which picker is wanted is the only way to have both.
+ * On iPadOS **the filters decide, not `pickerMode`.** The plugin's own
+ * comment says so: "if the picker mode is media, images, or videos, we always
+ * want to show the media picker regardless of what's in the filters.
+ * Otherwise, if the filters A) do not include non-media types and B) include
+ * either image or video, we want to show the media picker." The two clauses
+ * are `||`-ed, so `pickerMode: "document"` does not *force* anything — it
+ * only declines to force the photo library, and the filter heuristic then
+ * sends it there anyway. Every filter this app has is an image type, a PSD
+ * included (`com.adobe.photoshop-image` conforms to `public.image`), so
+ * asking for Files kept opening Photos.
+ *
+ * Passing no filters is what actually reaches the document picker: with none
+ * to inspect, all three flags are false and the plugin falls through to
+ * `UTType.item`, the catch-all. So mobile gets an unfiltered browser and the
+ * desktop keeps its filtered dialog, which is the platform each one wants.
+ * Anything undecodable is refused by the pipeline with a message naming it.
  */
-function pickDocument(): Promise<string | null> {
+function pickDocument(os: string): Promise<string | null> {
   return openFileDialog({
     multiple: false,
     pickerMode: "document",
-    filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
+    filters: isMobile(os)
+      ? undefined
+      : [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
   });
 }
 
@@ -45,6 +59,7 @@ function pickPhoto(): Promise<string | null> {
  */
 export function openAddImage(
   projectId: string,
+  os: string,
   onImported: (result: ImportResult) => void,
   marks?: AnchorMarks,
 ): void {
@@ -71,7 +86,7 @@ export function openAddImage(
   list.append(
     option("Import from Files", "PSD, PNG, JPEG", () =>
       run(async () => {
-        const picked = await pickDocument();
+        const picked = await pickDocument(os);
         if (typeof picked !== "string") return null;
         return psd.importPath(projectId, picked, undefined, marks);
       }),
@@ -113,6 +128,7 @@ export function openAddImage(
 export function openReplacePsd(
   projectId: string,
   key: string,
+  os: string,
 ): Promise<string | null> {
   return new Promise((resolve) => {
     let settled = false;
@@ -153,7 +169,7 @@ export function openReplacePsd(
     list.append(
       option("Replace from Files", "PSD, PNG, JPEG", () =>
         run(async () => {
-          const picked = await pickDocument();
+          const picked = await pickDocument(os);
           if (typeof picked !== "string") return null;
           return psd.reimport(projectId, key, picked);
         }),

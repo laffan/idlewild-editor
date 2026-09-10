@@ -67,6 +67,29 @@ fn png_bytes_convert_to_psd() {
     assert_eq!((parsed.width(), parsed.height()), (4, 4));
 }
 
+/// Bytes off a clipboard have no name to read, so the `8BPS` signature is
+/// what says a paste is already a document. Handing one to the image decoder
+/// only ever produced "failed to decode image" for a file that was fine.
+#[test]
+fn psd_bytes_pass_through_instead_of_being_decoded() {
+    let original = psd_write::psd_from_rgba_marked("tower", 6, 4, swatch(6, 4, [10, 20, 30, 255]), None)
+        .expect("swatch should convert");
+    assert!(psd_write::is_psd(&original));
+
+    let passed = psd_write::psd_from_image_bytes_marked("pasted", &original, None)
+        .expect("a PSD should be taken as it is");
+    // Byte-identical: the file arrives as its author built it, layer stack
+    // and all, rather than being flattened into a one-layer wrapper.
+    assert_eq!(passed, original);
+
+    let mut png = Vec::new();
+    image::RgbaImage::from_raw(2, 2, swatch(2, 2, [1, 2, 3, 255]))
+        .expect("swatch should fit")
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .expect("PNG should encode");
+    assert!(!psd_write::is_psd(&png));
+}
+
 #[test]
 fn stems_are_safe_for_paths_and_keys() {
     assert_eq!(psd_write::sanitise_stem("Screen Shot 2026"), "Screen_Shot_2026");

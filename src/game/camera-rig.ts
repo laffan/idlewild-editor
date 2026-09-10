@@ -19,6 +19,14 @@ export interface RigEvents {
   /** A tap that did not turn into a pan, hold or pinch. */
   onTap: (screenX: number, screenY: number) => void;
   /**
+   * A second tap in the same place, soon after the first.
+   *
+   * The first tap has already been reported, so this is what *follows* a
+   * selection rather than replacing it: on the canvas it is what opens a
+   * placed PSD up into its own layers.
+   */
+  onDoubleTap: (screenX: number, screenY: number) => void;
+  /**
    * Asked once per pointer-down: is there a selected object under the finger
    * that should move instead of the camera? Returning true routes the gesture
    * to onDragMove / onDragEnd.
@@ -45,6 +53,10 @@ export interface RigEvents {
 
 const HOLD_MS = 320;
 const MOVE_TOLERANCE = 8;
+/** How long after a tap a second one still counts as a double. */
+const DOUBLE_TAP_MS = 320;
+/** And how far it may land from the first — a finger is not a mouse. */
+const DOUBLE_TAP_PX = 24;
 
 export class CameraRig {
   private readonly el: HTMLElement;
@@ -58,6 +70,10 @@ export class CameraRig {
   private lastX = 0;
   private lastY = 0;
   private pinchDistance = 0;
+  /** The last tap, for deciding whether the next one doubles it. */
+  private lastTap: { at: number; x: number; y: number } | null = null;
+  /** Whether the drag in progress has actually gone anywhere. */
+  private dragMoved = false;
   /** Set while a tool wants raw input (pencil, eraser, boundary). */
   private suspended = false;
 
@@ -139,6 +155,7 @@ export class CameraRig {
       })
     ) {
       this.phase = "drag";
+      this.dragMoved = false;
       return;
     }
 
@@ -171,6 +188,12 @@ export class CameraRig {
     }
 
     if (this.phase === "drag") {
+      if (
+        Math.hypot(event.clientX - this.startX, event.clientY - this.startY) >
+        MOVE_TOLERANCE
+      ) {
+        this.dragMoved = true;
+      }
       this.events.onDragMove(event.clientX, event.clientY);
       return;
     }
@@ -224,16 +247,41 @@ export class CameraRig {
     if (this.phase === "drag") {
       this.phase = "idle";
       this.events.onDragEnd();
+      // A drag that never went anywhere is a tap, and has to be reported as
+      // one or an object that is already selected can never be tapped again:
+      // the pointer-down is claimed by the drag before the tap is considered,
+      // so a second click on it would never reach `onDoubleTap`.
+      if (!this.dragMoved) this.reportTap(event);
       return;
     }
 
     const wasPending = this.holdTimer !== null;
     this.clearHold();
-    if (wasPending && this.phase === "idle") {
-      this.events.onTap(event.clientX, event.clientY);
-    }
+    if (wasPending && this.phase === "idle") this.reportTap(event);
     this.phase = "idle";
   };
+
+  private reportTap(event: PointerEvent): void {
+    this.events.onTap(event.clientX, event.clientY);
+    if (this.doublesLastTap(event)) {
+      // Reported after the tap, not instead of it: the first tap picked the
+      // thing, and this says what to do with what is now picked.
+      this.lastTap = null;
+      this.events.onDoubleTap(event.clientX, event.clientY);
+    } else {
+      this.lastTap = { at: Date.now(), x: event.clientX, y: event.clientY };
+    }
+  }
+
+  private doublesLastTap(event: PointerEvent): boolean {
+    const previous = this.lastTap;
+    if (!previous) return false;
+    return (
+      Date.now() - previous.at <= DOUBLE_TAP_MS &&
+      Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <=
+        DOUBLE_TAP_PX
+    );
+  }
 
   private onWheel = (event: WheelEvent): void => {
     if (this.suspended) return;

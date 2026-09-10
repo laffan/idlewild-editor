@@ -235,7 +235,11 @@ export class DocStore extends EventTarget {
           return { ...l, placements: l.placements.filter((p) => p.id !== placementId) };
         }
         if (l.id === toLayerId) {
-          return { ...l, placements: [...l.placements, placement] };
+          // Out of its unit as well as its layer: the placements of one PSD
+          // are one thing on the canvas because they were placed together on
+          // one layer, and this is the gesture that says otherwise.
+          const { instance: _instance, ...moved } = placement;
+          return { ...l, placements: [...l.placements, moved] };
         }
         return l;
       }),

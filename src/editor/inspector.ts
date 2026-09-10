@@ -10,10 +10,12 @@
 import { clear, h } from "../lib/dom";
 import { strokesBox, type DrawingTool, type StrokeStyle } from "../drawing";
 import { brushPanel } from "./inspect-brush";
+import { scaleOf, sizeControls } from "./inspect-transform";
 import { count } from "./layers-panel";
 import { openPsdLabel, refreshPsdLabel } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
+import { instanceMembers, instanceOf } from "../game/instance";
 import type { DocStore } from "../lib/doc-store";
 import { describeRange, Grid } from "../lib/grid";
 import { describeFill, type FillPatch, type Placement, type Selection } from "../lib/types";
@@ -27,6 +29,13 @@ export interface InspectorCallbacks {
   onRefreshPsd: (key: string) => void;
   /** Rename the file behind a placement. `name` is the stem, without ".psd". */
   onRenamePsd: (key: string, name: string) => void;
+  /**
+   * Open the selected PSD up into its own layers, or close it again.
+   *
+   * The canvas gesture is a double-tap, which nothing on screen says; this is
+   * the same switch where someone would look for it.
+   */
+  onToggleLayerAdjust: () => void;
   onDeleteSelection: () => void;
   onUsePatternImage: () => void;
   /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
@@ -71,6 +80,8 @@ export class Inspector {
    * Apply causes.
    */
   private psdLayers: PsdLayerEditor | null = null;
+  /** The placed PSD opened up into its layers, if any — see `game/instance.ts`. */
+  private adjusting: string | null = null;
 
   constructor(
     store: DocStore,
@@ -140,6 +151,13 @@ export class Inspector {
 
   setSelection(selection: Selection): void {
     this.selection = selection;
+    this.render();
+  }
+
+  /** Which placed PSD the canvas has opened up, so the panel can say so. */
+  setAdjusting(instance: string | null): void {
+    if (this.adjusting === instance) return;
+    this.adjusting = instance;
     this.render();
   }
 
@@ -475,6 +493,34 @@ export class Inspector {
       );
     }
 
+    // Whether the canvas is treating this as one thing or as its layers, and
+    // the switch between them. Only worth saying for a PSD that has more than
+    // one placed layer; a single-layer file is a unit of one either way.
+    const members = instanceMembers(
+      this.store.layers,
+      layerId,
+      instanceOf(placement),
+    );
+    const open = this.adjusting === instanceOf(placement);
+    if (members.length > 1) {
+      this.body.appendChild(
+        h(
+          "div",
+          { class: open ? "inspect-note adjusting" : "inspect-note quiet" },
+          h("span", {
+            text: open
+              ? `Adjusting layers · ${members.length} in this PSD`
+              : `${members.length} layers · moves as one`,
+          }),
+          h("button", {
+            class: "panel-btn",
+            text: open ? "Done adjusting" : "Adjust layers",
+            onClick: () => this.callbacks.onToggleLayerAdjust(),
+          }),
+        ),
+      );
+    }
+
     this.section("Info");
     this.row("Layer path", placement.layerPath);
     this.row("Position", `${Math.round(placement.x)}, ${Math.round(placement.y)}`);
@@ -524,7 +570,8 @@ export class Inspector {
       ),
       h("button", {
         class: "panel-btn",
-        text: "Remove from layer",
+        text:
+          members.length > 1 && !open ? "Remove PSD from layer" : "Remove from layer",
         onClick: () => this.callbacks.onDeleteSelection(),
       }),
     );
@@ -620,47 +667,4 @@ export class Inspector {
       ),
     );
   }
-}
-
-/**
- * Numeric width/height for image edit mode.
- *
- * The fields are set at the label's size, as the read-only values beside them
- * are: a row is a label and its value, and a 16px field among 10px rows read
- * as a heading with a box round it.
- */
-function sizeControls(
-  placement: Placement,
-  onChange: (patch: Partial<Placement>) => void,
-): HTMLElement {
-  const make = (label: string, value: number, key: "width" | "height") =>
-    h(
-      "div",
-      { class: "inspect-row" },
-      h("div", { class: "inspect-key m", text: label }),
-      h("input", {
-        class: "inspect-input",
-        type: "number",
-        value: String(Math.round(value)),
-        onChange: (event: Event) => {
-          const next = Number((event.target as HTMLInputElement).value);
-          if (Number.isFinite(next) && next > 0) onChange({ [key]: next });
-        },
-      }),
-    );
-
-  return h(
-    "div",
-    {},
-    make("Width", placement.width, "width"),
-    make("Height", placement.height, "height"),
-  );
-}
-
-/**
- * How big a placement is against the pixels it really has. An import lands at
- * half — see IMPORT_SCALE — and this is the only place that says so.
- */
-function scaleOf(placement: Placement): number {
-  return placement.width / (placement.naturalWidth || placement.width);
 }

@@ -296,15 +296,19 @@ psd-to-json, which clears the old `assets/<key>/` first.
 
 **Which picker, and why it has to be said.** Re-import asks *where the file
 came back from* — Files, the photo library, or the clipboard — rather than
-guessing. Left to itself the dialog plugin picks between the Files browser and
-the photo library by looking at the filters: a set that is nothing but image
-and video types gets the photo library, and a PSD *is* an image type. Every
-filter this app has is one, so "Import from Files" and "Re-import" both opened
-Photos, which is not where a PSD is. `pickerMode: "document"` and
-`pickerMode: "image"` are what make both reachable. The clipboard route needs
-no new command: importing bytes under a key that already exists overwrites
-that key's PSD and re-runs the pipeline, which is precisely a replacement —
-and a clipboard image never carries layers to lose.
+guessing. Getting "Files" to actually mean Files took two goes, so the rule is
+written down here: **on iOS the filters decide, not `pickerMode`.** The plugin
+shows the media picker when the mode asks for it *or* when the filters name no
+non-media type and do name an image or video one — the two are `||`-ed, and
+the plugin's own source comment says the media picker wins "regardless of
+what's in the filters". Every filter this app would naturally pass (`psd`,
+`png`, `jpg`) is an image type, so a filtered call opens Photos whatever the
+mode says, and `pickerMode: "document"` cannot pull it back. Passing **no
+filters at all** on mobile is what reaches `UIDocumentPicker`; desktop keeps
+its filters, where they only narrow what is selectable. The clipboard route
+needs no new command: importing bytes under a key that already exists
+overwrites that key's PSD and re-runs the pipeline, which is precisely a
+replacement — and a clipboard image never carries layers to lose.
 
 Three caches then hold the *old* PSD and all three have to go, or the reload
 quietly shows the previous artwork: psd-to-phaser's parsed manifest, Phaser's
@@ -451,6 +455,38 @@ Files / Photos / clipboard / drawn strokes
 The `S | ` prefix is load-bearing: psd-to-json classifies by the pipe
 convention and silently ignores layers without it, so a converted image
 without the prefix would process to nothing.
+
+### Pasting is importing
+
+A paste on the canvas takes the first image on the clipboard and runs it down
+that same pipe, landing it in the middle of the view on the active layer.
+There is no separate paste path and no paste-shaped document object: the bytes
+become `<project>/psd/<key>.psd` like every other import, which is why a
+pasted screenshot can be opened in Photoshop, re-parsed and reconciled with
+everything else.
+
+`editor/paste.ts` listens for the DOM's own `paste` event rather than calling
+`navigator.clipboard.read()`. The event arrives carrying the data, so there is
+no permission prompt and nothing to fall back on; reading the clipboard *cold*
+is what the Add Image sheet does, because there no paste has happened. The
+listener stands down whenever the caret is in a field — a layer name, a
+numeric input, the code editor — where a paste means paste.
+
+Two details of the clipboard itself are worth naming. A PSD arrives with
+whatever type its platform invented for it (`image/vnd.adobe.photoshop` on
+some, nothing at all on others), so a `.psd` name is accepted on its own
+account alongside anything matching `image/*`. And a screenshot is
+`image.png` on every platform, so an anonymous paste is named
+`pasted-<base36>` rather than filling a project with `image`, `image-2`,
+`image-3`.
+
+Rust had to learn one thing for this: `psd_from_image_bytes_marked` now checks
+the `8BPS` signature and passes a document that is *already* a PSD through
+untouched (`psd_write::is_psd`). An import from a path decides that by the
+extension, but bytes off a clipboard have no name to read, and handing a
+perfectly good PSD to the image decoder only ever produced "failed to decode
+image". `import_image_bytes` therefore measures the file it wrote rather than
+decoding the input twice.
 
 ### A footprint is the spaces covered, not the range around them
 
@@ -731,8 +767,9 @@ manifest → zip, plus the path-traversal guards and the project scaffold. It
 runs against the real store and cleans up after itself, including on failure.
 
 `vitest` covers the pure halves — the grid projection, fill geometry,
-picking, resize geometry, colour, the log's `%c` parsing, the manifest
-reader, the platformer's body step, and the drawing layer's ported maths.
+picking, resize geometry, the unit arithmetic behind a placed PSD, what the
+clipboard hands a paste, colour, the log's `%c` parsing, the manifest reader,
+the platformer's body step, and the drawing layer's ported maths.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -848,6 +885,48 @@ column of facts and one of them happens to be editable, which a box drawn
 round it all the time would overstate. The extension sits beside the field
 rather than in it, because it is not part of the name and retyping it would
 only be a way to get it wrong.
+
+### A placed PSD is one thing, until you say otherwise
+
+Placing a PSD makes one placement per placeable layer — that is what
+psd-to-phaser hands back and what the inspector needs in order to talk about a
+stack. But a file with three layers in it is still *one thing someone dropped
+on the grid*, and dragging a roof off its tower is almost never what was
+meant. So the placements one `placePsd` call produces share an `instance` id,
+and the canvas works on the instance by default: selecting any member selects
+the unit, the overlay draws the union of their boxes, and a drag moves every
+member by the same cell step.
+
+`game/instance.ts` is the whole of the model — `instanceOf`, `instanceMembers`,
+`unionRect`, `scaleWithin` — and it is pure, so the arithmetic is tested
+without a canvas. `instance` is optional on disk, because documents written
+before it existed have none; `instanceOf` falls back to the placement's own
+id, which makes such a placement a unit of one, and the scene migrates whole
+documents on load so the fallback is a floor rather than the usual path.
+
+**Resizing scales the members, it does not scale a group.** Each placement is
+an independent rectangle in the document, so a member's offset inside the unit
+has to scale with its size or the composition comes apart — that is
+`scaleWithin`, applied against the union box captured at pointer-down. The
+anchors move by the cells the *union's* middle moved, all by the same step:
+re-anchoring each layer on its own new middle would let the members drift, and
+it is the shared anchor that brings them back in the same arrangement after a
+re-import.
+
+**Double-tapping opens a unit up.** In that mode — `adjusting`, holding the
+instance id — a drag moves the one layer under the finger, the overlay
+outlines it with filled handles and draws its siblings faintly, and the
+inspector says so and offers a way out. Selecting anything outside the unit
+closes the mode, so it never outlives what it is about: `setSelection` clears
+`adjusting` unless the new selection is a member of it. A double-tap has to
+survive a *tap that was offered to the drag controller first*, which is why
+`camera-rig.ts` tracks whether a drag ever moved and reports a drag that did
+not as a tap.
+
+Carrying a placement to another layer in the left panel takes it out of its
+unit — `movePlacement` strips `instance` — because a unit is made together on
+one layer and a member that has moved away is no longer part of what the rest
+of them are.
 
 ## The iPad's safe area
 

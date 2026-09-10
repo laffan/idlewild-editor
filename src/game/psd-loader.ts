@@ -337,6 +337,9 @@ function adoptNewLayers(
       naturalWidth: width,
       naturalHeight: height,
       anchor,
+      // Part of the same placed thing as the layers it arrived beside, so
+      // the PSD still moves as one.
+      instance: sibling.placement.instance,
     });
     log.info(`${key}.psd gained "${entry.path}" — placed on the same layer`);
   }

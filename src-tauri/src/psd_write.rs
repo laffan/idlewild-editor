@@ -96,12 +96,33 @@ pub fn psd_from_rgba_marked(
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
 }
 
+/// A PSD's file signature. Four bytes, and the only thing that distinguishes
+/// bytes to be wrapped from bytes that are already a document.
+const PSD_SIGNATURE: &[u8; 4] = b"8BPS";
+
+/// Whether a buffer is already a Photoshop document.
+pub fn is_psd(bytes: &[u8]) -> bool {
+    bytes.starts_with(PSD_SIGNATURE)
+}
+
 /// Decode any image the `image` crate reads (PNG, JPEG) and wrap it in a PSD.
+///
+/// Bytes that are *already* a PSD are taken as they are. An import from a
+/// path decides that by the file's extension; bytes off a clipboard have no
+/// name to read, so the signature is what says so — and handing a PSD to the
+/// image decoder only ever produced "failed to decode image" for a file that
+/// was perfectly good. Marks are dropped in that case for the same reason
+/// they are for a `.psd` on disk: the file arrives as its author built it,
+/// and adding ours would mean rewriting someone else's layer stack.
 pub fn psd_from_image_bytes_marked(
     name: &str,
     bytes: &[u8],
     marks: Option<&AnchorMarks>,
 ) -> Result<Vec<u8>, String> {
+    if is_psd(bytes) {
+        psd::Psd::from_bytes(bytes).map_err(|e| format!("Not a readable PSD: {e}"))?;
+        return Ok(bytes.to_vec());
+    }
     let img = image::load_from_memory(bytes)
         .map_err(|e| format!("Failed to decode image: {e}"))?;
     let (width, height) = img.dimensions();

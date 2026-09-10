@@ -14,7 +14,12 @@ const DOC = {
     {
       id: "layer-1", name: "Foreground", locked: false, visible: true,
       fills: [{ id: "fill-1", cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }], kind: "color", color: "#ec3013", walkable: true }],
-      placements: [{ id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 } }],
+      // Two layers of one file, sharing an instance: on the canvas they are
+      // one placed PSD, and a double-tap is what takes them apart.
+      placements: [
+        { id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
+        { id: "place-2", psdKey: "tower", layerPath: "roof", x: 16, y: -24, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
+      ],
       // A boundary, so selecting and dragging one can be driven here.
       zones: [
         {
@@ -142,6 +147,28 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
             { name: "hut", category: "sprite", x: 0, y: 0, width: 200, height: 160 },
             { name: "grid", category: "zone", x: 68, y: 64, width: 64, height: 32 },
             { name: "anchor", category: "point", x: 100, y: 80, width: 12, height: 12 },
+          ],
+        }),
+      };
+    }
+    case "import_image_bytes": {
+      // The paste path. Keyed on the name the caller worked out, so a script
+      // can check what a screenshot ended up called, and the base64 payload
+      // is kept so it can check the bytes made it across.
+      const name = String((args as any)?.name ?? "pasted");
+      (window as any).__lastPaste = {
+        name,
+        bytes: String((args as any)?.dataBase64 ?? "").length,
+        marks: (args as any)?.marks ?? null,
+      };
+      return {
+        key: name,
+        width: 120,
+        height: 80,
+        manifest: JSON.stringify({
+          name, width: 120, height: 80,
+          layers: [
+            { name, category: "sprite", x: 0, y: 0, width: 120, height: 80 },
           ],
         }),
       };

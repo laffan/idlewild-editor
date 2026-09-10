@@ -100,6 +100,15 @@ export interface Placement {
   naturalHeight?: number;
   /** The cell the placement was anchored to, kept so a grid resize can follow. */
   anchor: Cell;
+  /**
+   * Which placed instance of the PSD this belongs to.
+   *
+   * Placing a PSD makes one placement per placeable layer, and they share
+   * this: on the canvas they are one thing, dragged and resized together,
+   * until a double-tap says otherwise. Optional because documents written
+   * before it existed have none — see `game/instance.ts`.
+   */
+  instance?: string;
 }
 
 /**

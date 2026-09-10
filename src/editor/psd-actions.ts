@@ -18,14 +18,8 @@
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { psd, publish } from "../lib/ipc";
 import * as log from "../lib/log";
+import { isMobile } from "../lib/platform";
 import { openReplacePsd } from "./sheets";
-
-const MOBILE = new Set(["ios", "android"]);
-
-/** True where a document leaves the app rather than being edited in place. */
-export function isMobile(os: string): boolean {
-  return MOBILE.has(os);
-}
 
 /**
  * What the second PSD button is called here. The two are different actions —
@@ -115,7 +109,7 @@ export async function refreshPsd(
     log.info(`Re-parsed ${key}.psd`);
     return manifest;
   }
-  return openReplacePsd(projectId, key);
+  return openReplacePsd(projectId, key, os);
 }
 
 const PSD_MIME = "image/vnd.adobe.photoshop";

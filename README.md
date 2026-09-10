@@ -41,9 +41,14 @@ remaining pieces are wired to real slots rather than mocked.
 - Fill a selection with any colour, from a full picker with recent swatches
 - Drag placed images, fills and boundaries, snapped to the grid; resize images
   from their corner handles, or freely from the inspector
+- A placed PSD moves as one thing: every layer it came in with drags and
+  resizes together, keeping the arrangement it was built with. Double-tap to
+  open it up and move a single layer, and tap away to close it again
 - Resizable sidebars and console drawer, persisted per install
 - Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed,
   at half size because everything drawn on a retina machine is 2×
+- Paste an image or a PSD straight onto the canvas: it is imported like any
+  other file and lands in the middle of the view, on the layer you are on
 - Every import carries its grid space into the PSD as two marks a game never
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork

@@ -9,6 +9,7 @@ import { Grid, fillShape } from "../lib/grid";
 import type { Selection } from "../lib/types";
 import { CORNERS, cornerPoint, HANDLE_SCREEN_PX, placementBox } from "./resize";
 import { strokesBox } from "../drawing";
+import { instanceMembers, instanceOf, unionRect } from "./instance";
 
 const ACCENT = 0xec3013;
 const OVERLAY_DEPTH = 1_000_000;
@@ -23,8 +24,17 @@ export class SelectionOverlay {
     this.graphics.setDepth(OVERLAY_DEPTH);
   }
 
-  /** @param zoom camera zoom, so handles stay a constant size on screen. */
-  render(selection: Selection, store: DocStore, zoom = 1): void {
+  /**
+   * @param zoom camera zoom, so handles stay a constant size on screen.
+   * @param adjusting the placed PSD whose layers are being moved one at a
+   *        time, if any — everything else draws a PSD as the one thing it is.
+   */
+  render(
+    selection: Selection,
+    store: DocStore,
+    zoom = 1,
+    adjusting: string | null = null,
+  ): void {
     const g = this.graphics;
     g.clear();
 
@@ -56,6 +66,15 @@ export class SelectionOverlay {
         // constant on screen, so divide through by the zoom.
         const scale = 1 / zoom;
 
+        // What the gesture will act on: the whole placed PSD, or the one
+        // layer of it that has been opened up. Outlining anything else would
+        // promise a drag the canvas is not about to make.
+        const open = adjusting === instanceOf(placement);
+        const members = open
+          ? [placement]
+          : instanceMembers(store.layers, selection.layerId, instanceOf(placement));
+        const box = unionRect(members) ?? placementBox(placement);
+
         // The cell the image is anchored to. It is what a grid resize will
         // move the image by, and it is not otherwise visible anywhere —
         // a placement can sit a long way from the space that owns it.
@@ -64,20 +83,29 @@ export class SelectionOverlay {
         g.lineStyle(2 * scale, ACCENT, 0.8);
         polygon(g, anchor, true);
 
+        // Opened up, the sibling layers are drawn faintly: they are what the
+        // one being moved is being moved *against*, and a layer dragged out
+        // of a PSD with nothing to judge it by is a layer dragged blind.
+        if (open) {
+          g.lineStyle(1 * scale, ACCENT, 0.35);
+          for (const other of instanceMembers(
+            store.layers,
+            selection.layerId,
+            instanceOf(placement),
+          )) {
+            if (other.id === placement.id) continue;
+            g.strokeRect(other.x, other.y, other.width, other.height);
+          }
+        }
+
         g.lineStyle(2 * scale, ACCENT, 1);
-        g.strokeRect(
-          placement.x,
-          placement.y,
-          placement.width,
-          placement.height,
-        );
+        g.strokeRect(box.x, box.y, box.width, box.height);
 
         // The four resize handles of image edit mode.
-        const box = placementBox(placement);
         const size = HANDLE_SCREEN_PX * scale;
         for (const corner of CORNERS) {
           const c = cornerPoint(box, corner);
-          g.fillStyle(0xf3f2f2, 1);
+          g.fillStyle(open ? ACCENT : 0xf3f2f2, 1);
           g.fillRect(c.x - size / 2, c.y - size / 2, size, size);
           g.lineStyle(2 * scale, ACCENT, 1);
           g.strokeRect(c.x - size / 2, c.y - size / 2, size, size);

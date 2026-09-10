@@ -16,6 +16,7 @@
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { rectContains } from "../lib/grid";
+import { makeId } from "../lib/doc-store";
 import type {
   Cell,
   FillPatch,
@@ -27,6 +28,12 @@ import type {
 } from "../lib/types";
 import type { DragModifiers } from "./camera-rig";
 import { pointInPolygon } from "./doc-renderer";
+import {
+  instanceMembers,
+  instanceOf,
+  scaleWithin,
+  unionRect,
+} from "./instance";
 import {
   boxToPlacement,
   handleAt,
@@ -42,11 +49,17 @@ type DragState =
   | {
       kind: "placement";
       layerId: string;
-      id: string;
+      /**
+       * Every placement moving together — the whole placed PSD, or the one
+       * layer of it that a double-tap opened up.
+       */
+      members: Array<{
+        id: string;
+        originCell: Cell;
+        offsetX: number;
+        offsetY: number;
+      }>;
       grabCell: Cell;
-      originCell: Cell;
-      offsetX: number;
-      offsetY: number;
     }
   | {
       kind: "fill";
@@ -68,7 +81,8 @@ type DragState =
   | {
       kind: "resize";
       layerId: string;
-      id: string;
+      /** The ids scaling together, and their boxes at pointer-down. */
+      members: Array<{ id: string; rect: Rect; anchor: Cell }>;
       corner: Corner;
       /** The box as it was at pointer-down, so the drag never compounds. */
       original: Box;
@@ -84,6 +98,12 @@ export interface DragHost {
   zoom(): number;
   getSelection(): Selection;
   setSelection(selection: Selection): void;
+  /**
+   * Which placed PSD is open for layer-by-layer editing, if any.
+   *
+   * Null — the usual state — means a PSD drags and resizes as one thing.
+   */
+  adjustingInstance(): string | null;
   /** Draw a placement the controller has just added to the document. */
   render(layerId: string, placement: Placement): void;
   /**
@@ -95,6 +115,16 @@ export interface DragHost {
   detachCopy(layerId: string, placementId: string, key: string): void;
   /** Brackets the gesture, so the panels can hold their re-renders. */
   onDragStateChange(dragging: boolean): void;
+}
+
+/** The middle of a box, which is what an anchor is measured from. */
+function centreOf(box: Box): Point {
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** `scaleWithin` reads a placement's geometry; a captured rect is enough. */
+function asPlacement(rect: Rect): Placement {
+  return { ...rect } as unknown as Placement;
 }
 
 export class DragController {
@@ -155,13 +185,23 @@ export class DragController {
       // Resizing works in pixels, not cells: an image's size is a property of
       // the image, and the grid has nothing to say about it.
       const box = resizeBox(drag.original, drag.corner, world);
-      store.updatePlacement(drag.layerId, drag.id, {
-        ...boxToPlacement(box),
-        anchor: grid.worldToCell({
-          x: box.x + box.width / 2,
-          y: box.y + box.height / 2,
-        }),
-      });
+      // The anchors move by the cells the group's middle moved, all by the
+      // same step. Re-anchoring each layer on its *own* new middle would let
+      // the members of one PSD drift apart, and it is the shared anchor that
+      // brings them back together in the same arrangement after a re-import.
+      const before = grid.worldToCell(centreOf(drag.original));
+      const after = grid.worldToCell(centreOf(box));
+      const step = { cx: after.cx - before.cx, cy: after.cy - before.cy };
+
+      for (const member of drag.members) {
+        store.updatePlacement(drag.layerId, member.id, {
+          ...boxToPlacement(scaleWithin(asPlacement(member.rect), drag.original, box)),
+          anchor: {
+            cx: member.anchor.cx + step.cx,
+            cy: member.anchor.cy + step.cy,
+          },
+        });
+      }
       return;
     }
 
@@ -170,18 +210,20 @@ export class DragController {
     const dy = cell.cy - drag.grabCell.cy;
 
     if (drag.kind === "placement") {
-      // Snap to the grid: the anchor cell moves whole, and the placement
-      // keeps whatever offset it had inside that cell.
-      const anchor = {
-        cx: drag.originCell.cx + dx,
-        cy: drag.originCell.cy + dy,
-      };
-      const anchorWorld = grid.cellToWorld(anchor);
-      store.updatePlacement(drag.layerId, drag.id, {
-        anchor,
-        x: anchorWorld.x + drag.offsetX,
-        y: anchorWorld.y + drag.offsetY,
-      });
+      // Snap to the grid: each anchor cell moves whole and by the same step,
+      // and every placement keeps whatever offset it had inside its own.
+      for (const member of drag.members) {
+        const anchor = {
+          cx: member.originCell.cx + dx,
+          cy: member.originCell.cy + dy,
+        };
+        const anchorWorld = grid.cellToWorld(anchor);
+        store.updatePlacement(drag.layerId, member.id, {
+          anchor,
+          x: anchorWorld.x + member.offsetX,
+          y: anchorWorld.y + member.offsetY,
+        });
+      }
       return;
     }
 
@@ -235,26 +277,45 @@ export class DragController {
     const placement = layer.placements.find((p) => p.id === selection.placementId);
     if (!placement) return false;
 
+    // What the gesture is about: the whole placed PSD, or the one layer of it
+    // a double-tap opened up. Everything below works on the group either way,
+    // which is what keeps the two cases from drifting apart.
+    const adjusting = this.host.adjustingInstance() === instanceOf(placement);
+    const group = adjusting
+      ? [placement]
+      : instanceMembers(
+          this.host.store.layers,
+          layer.id,
+          instanceOf(placement),
+        );
+
     // A corner handle resizes; the body moves. Handles are drawn at a
     // constant screen size, so the world-space target scales with zoom.
-    const box = placementBox(placement);
+    const box = unionRect(group) ?? placementBox(placement);
     const corner = handleAt(box, world, HANDLE_SCREEN_PX / this.host.zoom());
     if (corner) {
       this.start({
         kind: "resize",
         layerId: layer.id,
-        id: placement.id,
+        members: group.map((p) => ({
+          id: p.id,
+          rect: placementBox(p),
+          anchor: p.anchor,
+        })),
         corner,
         original: box,
       });
       return true;
     }
 
+    // Inside the group's box, not just the layer that was tapped: a PSD whose
+    // layers do not fill their union would otherwise have gaps you cannot
+    // pick it up by.
     if (
-      world.x < placement.x ||
-      world.x > placement.x + placement.width ||
-      world.y < placement.y ||
-      world.y > placement.y + placement.height
+      world.x < box.x ||
+      world.x > box.x + box.width ||
+      world.y < box.y ||
+      world.y > box.y + box.height
     ) {
       return false;
     }
@@ -262,22 +323,26 @@ export class DragController {
     // A copied placement keeps the same `psdKey`, so both read the same file:
     // the copy is a *reference*, and editing the PSD edits both. The
     // inspector says so, and offers to break it — or shift asks for it broken
-    // straight away, which is the same thing without the round trip.
-    const dragged = modifiers.alt
-      ? this.copyPlacement(layer.id, placement)
-      : placement;
+    // straight away, which is the same thing without the round trip. Copying
+    // a whole PSD copies every layer of it, into a unit of its own.
+    const dragged = modifiers.alt ? this.copyGroup(layer.id, group, placement) : group;
     if (modifiers.alt && modifiers.shift) {
-      this.host.detachCopy(layer.id, dragged.id, dragged.psdKey);
+      this.host.detachCopy(layer.id, dragged[0].id, dragged[0].psdKey);
     }
-    const anchorWorld = this.host.grid.cellToWorld(dragged.anchor);
+
     this.start({
       kind: "placement",
       layerId: layer.id,
-      id: dragged.id,
       grabCell,
-      originCell: dragged.anchor,
-      offsetX: dragged.x - anchorWorld.x,
-      offsetY: dragged.y - anchorWorld.y,
+      members: dragged.map((p) => {
+        const anchorWorld = this.host.grid.cellToWorld(p.anchor);
+        return {
+          id: p.id,
+          originCell: p.anchor,
+          offsetX: p.x - anchorWorld.x,
+          offsetY: p.y - anchorWorld.y,
+        };
+      }),
     });
     return true;
   }
@@ -359,18 +424,38 @@ export class DragController {
   }
 
   /**
-   * Duplicate a placement in place, render it, and select it.
+   * Duplicate a whole placed PSD in place, render it, and select it.
    *
    * The same `psdKey`, deliberately: the PSD is already loaded and its
-   * textures are already in, so the copy costs one `place()` call and no disk
-   * at all. What it costs instead is a shared file, which is what
+   * textures are already in, so the copy costs one `place()` call per layer
+   * and no disk at all. What it costs instead is a shared file, which is what
    * `Remove Reference` in the inspector exists to undo.
+   *
+   * The copy gets an instance of its own, so it is a second *thing* rather
+   * than more layers of the first — otherwise pulling a copy out of a PSD
+   * would drag the original along with it ever after.
    */
-  private copyPlacement(layerId: string, source: Placement): Placement {
-    const { id: _id, ...rest } = source;
-    const copy = this.host.store.addPlacement(layerId, rest);
-    this.host.render(layerId, copy);
-    this.host.setSelection({ kind: "placement", layerId, placementId: copy.id });
-    return copy;
+  private copyGroup(
+    layerId: string,
+    group: readonly Placement[],
+    grabbed: Placement,
+  ): Placement[] {
+    const instance = makeId("psd");
+    const copies = group.map((source) => {
+      const { id: _id, ...rest } = source;
+      return this.host.store.addPlacement(layerId, { ...rest, instance });
+    });
+    for (const copy of copies) this.host.render(layerId, copy);
+
+    // Select the copy of whatever was under the finger, so the inspector goes
+    // on describing the same layer.
+    const index = group.findIndex((p) => p.id === grabbed.id);
+    const selected = copies[index < 0 ? 0 : index];
+    this.host.setSelection({
+      kind: "placement",
+      layerId,
+      placementId: selected.id,
+    });
+    return copies;
   }
 }

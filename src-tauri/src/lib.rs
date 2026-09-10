@@ -215,9 +215,10 @@ fn import_image_bytes(
     std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
 
     let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
-    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
-    use image::GenericImageView;
-    let (width, height) = img.dimensions();
+    // Measured from the PSD that was written rather than by decoding the
+    // input again: the input may already *be* a PSD, which the image decoder
+    // cannot read — and the file on disk is the thing being described.
+    let (width, height) = psd_pipeline::psd_dimensions(&dest)?;
     Ok(ImportResult {
         key,
         width,

@@ -399,6 +399,19 @@
 }
 .inspect-note .panel-btn { text-transform: none; letter-spacing: 0; }
 
+/* A standing fact that is not a warning: how many layers a placed PSD has,
+   and whether the canvas is treating them as one thing or as several. Drawn
+   in the panel's own neutrals until the PSD is actually opened up, at which
+   point it is a mode and says so in the accent. */
+.inspect-note.quiet {
+  background: transparent;
+  color: var(--chrome-dim);
+}
+.inspect-note.adjusting {
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+  color: var(--color-accent-300);
+}
+
 /* The selected PSD's own layer stack — see editor/psd-layers.ts. Denser than
    the document's layer list on purpose: this is a property of the selection,
    not the panel's subject. */
