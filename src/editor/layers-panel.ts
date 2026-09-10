@@ -22,6 +22,22 @@ export interface LayersPanelCallbacks {
   getSelection: () => Selection;
 }
 
+/**
+ * A name being edited when the panel was rebuilt under it.
+ *
+ * The panel re-renders on every document change, and one of those changes is
+ * the layer selection a tap on the name itself causes — so without this the
+ * input is destroyed on mouse-up and typing only lands while the button is
+ * still held down.
+ */
+interface NameFocus {
+  layerId: string;
+  /** The uncommitted text: names commit on Enter or blur, not per keystroke. */
+  value: string;
+  start: number;
+  end: number;
+}
+
 /** A drag in flight: the group being moved and the pointer that owns it. */
 interface DragState {
   layerId: string;
@@ -96,6 +112,7 @@ export class LayersPanel {
 
     const active = this.callbacks.getActiveLayerId();
     const selection = this.callbacks.getSelection();
+    const editing = this.captureName();
 
     clear(this.body);
     this.store.layers.forEach((layer) => {
@@ -133,6 +150,34 @@ export class LayersPanel {
         );
       }
     });
+
+    this.restoreName(editing);
+  }
+
+  /** The name input being edited, if the rebuild is about to destroy it. */
+  private captureName(): NameFocus | null {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLInputElement) || !this.body.contains(el)) return null;
+    const group = el.closest(".layer-group");
+    const layerId = group instanceof HTMLElement ? group.dataset.layerId : null;
+    if (!layerId) return null;
+    return {
+      layerId,
+      value: el.value,
+      start: el.selectionStart ?? el.value.length,
+      end: el.selectionEnd ?? el.value.length,
+    };
+  }
+
+  private restoreName(memo: NameFocus | null): void {
+    if (!memo) return;
+    const input = this.body.querySelector(
+      `.layer-group[data-layer-id="${memo.layerId}"] .layer-name`,
+    );
+    if (!(input instanceof HTMLInputElement)) return;
+    input.value = memo.value;
+    input.focus();
+    input.setSelectionRange(memo.start, memo.end);
   }
 
   /**

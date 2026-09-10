@@ -6,7 +6,7 @@
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { Grid, rangeSize } from "../lib/grid";
-import { assetBase, platform, projects, psd } from "../lib/ipc";
+import { assetBase, platform, projects } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
@@ -19,7 +19,7 @@ import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
 import { createResizer } from "./resizer";
-import { openPsdExternally, pickReimportSource } from "./psd-actions";
+import { openPsdExternally, refreshPsd } from "./psd-actions";
 import {
   openAddImage,
   openExportSelection,
@@ -39,6 +39,9 @@ export async function mountEditor(
   const store = await DocStore.load(meta.id);
   const grid = new Grid(store.projection, store.gridSize);
   const base = await assetBase(meta.id);
+  // Resolved once: it decides whether a PSD's edits come back by re-parsing
+  // a file that never moved or by picking the one the share sheet sent out.
+  const os = await platform();
 
   let activeLayerId = store.layers[0]?.id ?? "";
   let mode: EditorMode = "edit";
@@ -72,7 +75,7 @@ export async function mountEditor(
     },
   });
 
-  const inspector = new Inspector(store, grid, {
+  const inspector = new Inspector(store, grid, os, {
     onFillColor: (color) => applyFillColour(color),
     onToggleWalkable: (walkable) => {
       const selection = handle?.scene.getSelection();
@@ -80,7 +83,7 @@ export async function mountEditor(
       store.updateFill(selection.layerId, selection.fillId, { walkable });
     },
     onOpenPsd: (key) => void openPsd(key),
-    onReimportPsd: (key) => void reimportPsd(key),
+    onRefreshPsd: (key) => void refresh(key),
     onDeleteSelection: () => deleteSelection(),
     onUsePatternImage: () =>
       openAddImage(meta.id, (result) => {
@@ -186,6 +189,10 @@ export async function mountEditor(
   });
   terminal.mountResizeHandle(consoleResizer.handle);
 
+  // The docked code panel's own divider. It is built up front so its stored
+  // height survives closing and reopening the modal within a session.
+  let codeResizer: ReturnType<typeof createResizer> | null = null;
+
   const shell = h(
     "div",
     { class: "editor" },
@@ -281,28 +288,25 @@ export async function mountEditor(
   }
 
   /**
-   * Hand the PSD to the OS. On macOS that is the editor registered for PSDs;
-   * on iPadOS, where an app cannot open another app's document in place, it
-   * is the share sheet.
+   * Hand the PSD to the OS. On macOS that is the editor registered for PSDs,
+   * opened where the file lies; on iPadOS, where an app cannot open another
+   * app's document in place, it is the share sheet.
    */
   async function openPsd(key: string): Promise<void> {
     try {
-      await openPsdExternally(meta.id, key, await platform());
+      await openPsdExternally(meta.id, key, os);
     } catch (err) {
       log.error(`Could not open ${key}.psd:`, err);
     }
   }
 
-  /** Replace the file behind a PSD key, then reload what is on the canvas. */
-  async function reimportPsd(key: string): Promise<void> {
+  /** Bring a PSD's edits back in, then reload what is on the canvas. */
+  async function refresh(key: string): Promise<void> {
     try {
-      const source = await pickReimportSource(key);
-      if (!source) return;
-      const result = await psd.reimport(meta.id, key, source);
-      await handle?.scene.reloadPsd(key, result.manifest);
-      log.info(`Re-imported ${key}.psd (${result.width}×${result.height})`);
+      const manifest = await refreshPsd(meta.id, key, os);
+      if (manifest) await handle?.scene.reloadPsd(key, manifest);
     } catch (err) {
-      log.error(`Could not re-import ${key}:`, err);
+      log.error(`Could not refresh ${key}:`, err);
     }
   }
 
@@ -326,15 +330,51 @@ export async function mountEditor(
 
   function toggleCode(): void {
     if (codeModal) {
-      codeModal.destroy();
-      codeModal = null;
+      closeCode();
       return;
     }
-    codeModal = new CodeModal(meta.id, meta.name, () => {
-      codeModal?.destroy();
-      codeModal = null;
-    });
+    codeModal = new CodeModal(
+      meta.id,
+      meta.name,
+      () => closeCode(),
+      (pinned) => setCodePinned(pinned),
+    );
     canvasWrap.appendChild(codeModal.root);
+  }
+
+  function closeCode(): void {
+    codeModal?.destroy();
+    codeModal = null;
+    codeResizer?.destroy();
+    codeResizer = null;
+  }
+
+  /**
+   * Move the code panel between floating over the canvas and sitting as a row
+   * of the shell above the console. Docked it takes a divider of its own, so
+   * the two stacked panels are sized the same way.
+   */
+  function setCodePinned(pinned: boolean): void {
+    if (!codeModal) return;
+
+    if (!pinned) {
+      codeResizer?.destroy();
+      codeResizer = null;
+      canvasWrap.appendChild(codeModal.root);
+      return;
+    }
+
+    codeResizer = createResizer({
+      target: codeModal.root,
+      axis: "height",
+      edge: "start",
+      min: 140,
+      max: 720,
+      storageKey: "codeHeight",
+    });
+    shell.insertBefore(codeResizer.handle, terminal.root);
+    shell.insertBefore(codeModal.root, terminal.root);
+    codeResizer.restore();
   }
 
   async function saveThumbnail(): Promise<void> {
@@ -358,7 +398,7 @@ export async function mountEditor(
     await store.flush();
     header.destroy();
     layers.destroy();
-    codeModal?.destroy();
+    closeCode();
     terminal.destroy();
     leftResizer.destroy();
     rightResizer.destroy();

@@ -6,6 +6,12 @@
  * over the project's real `game/` tree. Phaser Bench's Phaser-aware
  * autocomplete and its live preview reload are the next increment; the spec
  * asks only for a dockable modal for now.
+ *
+ * Pin docks it. Left and right were two ways of covering the canvas with the
+ * same floating panel, which is not what pinning is for — pinned, it becomes
+ * a full-width row above the console, resizable on the same divider, and the
+ * canvas keeps whatever is left. Where it lives in the DOM is the editor
+ * shell's business, so pinning is reported rather than acted on here.
  */
 
 import { EditorState, Compartment } from "@codemirror/state";
@@ -32,14 +38,34 @@ export class CodeModal {
   private view: EditorView | null = null;
   private openPath: string | null = null;
   private dirty = false;
-  private pin: "left" | "right" = "right";
+  private pinned = false;
+  private readonly pinButton: HTMLButtonElement;
+  private readonly onPinChange: (pinned: boolean) => void;
 
-  constructor(projectId: string, projectName: string, onClose: () => void) {
+  constructor(
+    projectId: string,
+    projectName: string,
+    onClose: () => void,
+    onPinChange: (pinned: boolean) => void,
+  ) {
     this.projectId = projectId;
+    this.onPinChange = onPinChange;
     this.fileList = h("div", { class: "code-files scroll" });
     this.filename = h("div", { class: "code-filename m", text: "No file open" });
     this.dirtyFlag = h("div", { class: "code-dirty m" });
     this.editorHost = h("div", { class: "code-editor" });
+
+    this.pinButton = h(
+      "button",
+      {
+        class: "code-pin-btn",
+        title: "Dock above the console",
+        "aria-pressed": "false",
+        onClick: () => this.setPinned(!this.pinned),
+      },
+      icon(ICONS.pin, 15),
+      h("span", { text: "Pin" }),
+    );
 
     const panel = h(
       "div",
@@ -52,13 +78,7 @@ export class CodeModal {
         h(
           "div",
           { class: "code-head-right" },
-          h("div", { class: "m", text: "Pin" }),
-          h(
-            "div",
-            { class: "code-pin" },
-            pinButton("left", () => this.setPin("left")),
-            pinButton("right", () => this.setPin("right")),
-          ),
+          this.pinButton,
           h(
             "button",
             { class: "icon-btn", title: "Close", onClick: onClose },
@@ -89,18 +109,24 @@ export class CodeModal {
       ),
     );
 
-    this.root = h("div", { class: "code-backdrop pin-right" }, panel);
+    this.root = h("div", { class: "code-backdrop" }, panel);
     void this.reloadFiles();
   }
 
-  private setPin(side: "left" | "right"): void {
-    this.pin = side;
-    this.root.classList.toggle("pin-left", side === "left");
-    this.root.classList.toggle("pin-right", side === "right");
+  /** Dock it above the console, or float it back over the canvas. */
+  setPinned(pinned: boolean): void {
+    if (pinned === this.pinned) return;
+    this.pinned = pinned;
+    this.root.classList.toggle("docked", pinned);
+    this.pinButton.setAttribute("aria-pressed", String(pinned));
+    this.pinButton.title = pinned
+      ? "Float over the canvas"
+      : "Dock above the console";
+    this.onPinChange(pinned);
   }
 
-  get pinnedTo(): "left" | "right" {
-    return this.pin;
+  get isPinned(): boolean {
+    return this.pinned;
   }
 
   private async reloadFiles(): Promise<void> {
@@ -220,34 +246,6 @@ export class CodeModal {
     this.view?.destroy();
     this.root.remove();
   }
-}
-
-function pinButton(side: "left" | "right", onClick: () => void): HTMLElement {
-  const left = side === "left";
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("width", "15");
-  svg.setAttribute("height", "15");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "2.2");
-  for (const [x, dim] of [
-    [3, left],
-    [13, !left],
-  ] as Array<[number, boolean]>) {
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("x", String(x));
-    rect.setAttribute("y", "4");
-    rect.setAttribute("width", "8");
-    rect.setAttribute("height", "16");
-    if (!dim) rect.setAttribute("stroke-opacity", "0.4");
-    svg.appendChild(rect);
-  }
-  return h(
-    "button",
-    { class: "code-pin-btn", title: `Pin ${side}`, onClick },
-    svg,
-  );
 }
 
 function languageFor(path: string) {

@@ -162,6 +162,11 @@
   font: 600 14px var(--font-heading);
   color: var(--chrome-text);
   outline: none;
+  /* The shell suppresses selection globally so a drag on chrome never
+     highlights it; a field being typed into has to opt back in, or WebKit
+     will not place a caret in it. */
+  -webkit-user-select: text;
+  user-select: text;
 }
 .layer-name:focus { background: var(--chrome-bg); }
 .layer-meta { font-size: 10px; color: var(--chrome-dim); margin-top: 4px; }
@@ -198,7 +203,7 @@
   align-items: center;
   gap: 10px;
   padding: 0 16px;
-  min-height: 40px;
+  min-height: 28px;
 }
 .inspect-key {
   font-size: 10px;
@@ -206,8 +211,10 @@
   flex: none;
   width: 106px;
 }
+/* Set at the label's size: a row is a label and its value, and the value
+   reading three sizes larger made every one of them look like a heading. */
 .inspect-value {
-  font: 500 14px var(--font-body);
+  font: 500 10px var(--font-body);
   color: var(--chrome-text);
   text-align: right;
   flex: 1;
@@ -237,21 +244,27 @@
 .swatch:first-child { border-left: 0; }
 .swatch[aria-pressed="true"] { outline: 3px solid var(--chrome-text); outline-offset: -6px; }
 
+/* Half the height they were: these are inspector actions sitting under a
+   panel of 10px labels, and at 48px they outweighed everything they act on. */
 .panel-btn {
   width: 100%;
-  min-height: 48px;
+  min-height: 24px;
   border: 1px solid var(--color-neutral-700);
   background: transparent;
   color: var(--chrome-text);
-  font: 600 14px var(--font-heading);
+  font: 600 11px var(--font-heading);
   text-align: left;
-  padding: 0 14px;
-  margin-top: 12px;
+  padding: 0 8px;
+  margin-top: 6px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 .panel-btn:hover { background: var(--chrome-rule); }
+
+/* Two halves of one action — Open PSD and its way back — share a row. */
+.panel-btn-row { display: flex; gap: 6px; }
+.panel-btn-row .panel-btn { justify-content: center; text-align: center; }
 .panel-btn.primary {
   background: var(--color-accent);
   border-color: var(--chrome-bg);

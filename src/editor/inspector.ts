@@ -8,6 +8,7 @@
  */
 
 import { clear, h } from "../lib/dom";
+import { refreshPsdLabel } from "./psd-actions";
 import { createColorPicker } from "../lib/color-picker";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, rangeSize } from "../lib/grid";
@@ -18,8 +19,8 @@ export interface InspectorCallbacks {
   onToggleWalkable: (walkable: boolean) => void;
   /** Hand the PSD to the OS: a desktop editor, or an iPadOS share sheet. */
   onOpenPsd: (key: string) => void;
-  /** Pick a file to replace the PSD with, then run the pipeline over it. */
-  onReimportPsd: (key: string) => void;
+  /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
+  onRefreshPsd: (key: string) => void;
   onDeleteSelection: () => void;
   onUsePatternImage: () => void;
 }
@@ -30,6 +31,8 @@ export class Inspector {
   private readonly store: DocStore;
   private readonly grid: Grid;
   private readonly callbacks: InspectorCallbacks;
+  /** `std::env::consts::OS`; only the PSD buttons read it. */
+  private readonly platform: string;
   private selection: Selection = { kind: "none" };
   /** Carried between selections so the picker reopens where it was left. */
   private lastColor = "#ec3013";
@@ -38,10 +41,12 @@ export class Inspector {
   constructor(
     store: DocStore,
     grid: Grid,
+    platform: string,
     callbacks: InspectorCallbacks,
   ) {
     this.store = store;
     this.grid = grid;
+    this.platform = platform;
     this.callbacks = callbacks;
 
     this.body = h("div", { class: "panel-body scroll" });
@@ -239,24 +244,28 @@ export class Inspector {
     this.row("Size", `${Math.round(placement.width)} × ${Math.round(placement.height)}`);
     this.row("Anchor cell", `${placement.anchor.cx}, ${placement.anchor.cy}`);
 
-    // Editing a PSD is a round trip out of the app and back: open it where
-    // it can be edited, then bring the edited file in over the old one.
-    // Re-parsing alone had nothing to re-parse, because nothing between the
-    // two steps could ever change the file.
+    // Editing a PSD is a round trip out of the app and back, so the two
+    // halves sit together on one row: open it where it can be edited, then
+    // bring the edits in. What the second one does depends on where the file
+    // went — see psd-actions.
     this.body.appendChild(
       h(
         "div",
         { class: "inspect-section" },
-        h("button", {
-          class: "panel-btn",
-          text: "Open PSD",
-          onClick: () => this.callbacks.onOpenPsd(placement.psdKey),
-        }),
-        h("button", {
-          class: "panel-btn",
-          text: "Re-import PSD…",
-          onClick: () => this.callbacks.onReimportPsd(placement.psdKey),
-        }),
+        h(
+          "div",
+          { class: "panel-btn-row" },
+          h("button", {
+            class: "panel-btn",
+            text: "Open PSD",
+            onClick: () => this.callbacks.onOpenPsd(placement.psdKey),
+          }),
+          h("button", {
+            class: "panel-btn",
+            text: refreshPsdLabel(this.platform),
+            onClick: () => this.callbacks.onRefreshPsd(placement.psdKey),
+          }),
+        ),
         sizeControls(placement, (patch) => {
           this.store.updatePlacement(layerId, placementId, patch);
         }),
@@ -303,7 +312,7 @@ function sizeControls(
         class: "input",
         type: "number",
         value: String(Math.round(value)),
-        style: { minHeight: "36px", maxWidth: "120px" },
+        style: { minHeight: "26px", maxWidth: "96px" },
         onChange: (event: Event) => {
           const next = Number((event.target as HTMLInputElement).value);
           if (Number.isFinite(next) && next > 0) onChange({ [key]: next });

@@ -5,11 +5,14 @@
  * button with nothing to re-parse: the PSD sat inside the app's store, and
  * nothing between one parse and the next could change it.
  *
- * The way out differs by platform, because the platforms differ. macOS opens
- * the file in whatever is registered for PSDs and the user saves over it in
- * place. iPadOS has no equivalent — an app cannot hand another app its
- * document and get the edits back — so the file goes to the share sheet, is
- * edited wherever it lands, and comes home through Re-import.
+ * The way back differs by platform, because the platforms differ.
+ *
+ * On desktop the editor opens the file where it lies in the project store and
+ * saves over it, so the file on disk is already the edited one and all that
+ * is left to do is parse it again — asking the user to go and find it would
+ * be busywork. On iPadOS an app cannot hand another app its document and get
+ * the edits back, so the file goes out through the share sheet, is edited
+ * wherever it lands, and has to be picked to come home.
  */
 
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -22,6 +25,20 @@ const REIMPORT_FILTERS = [
 ];
 
 const MOBILE = new Set(["ios", "android"]);
+
+/** True where a document leaves the app rather than being edited in place. */
+export function isMobile(os: string): boolean {
+  return MOBILE.has(os);
+}
+
+/**
+ * What the second PSD button is called here. The two are different actions —
+ * one re-reads a file that never moved, the other takes a file back — and
+ * the label is the only thing that says which.
+ */
+export function refreshPsdLabel(os: string): string {
+  return isMobile(os) ? "Re-import" : "Re-parse";
+}
 
 /**
  * Hand `<key>.psd` to the OS.
@@ -36,9 +53,9 @@ export async function openPsdExternally(
   key: string,
   os: string,
 ): Promise<void> {
-  if (!MOBILE.has(os)) {
+  if (!isMobile(os)) {
     await psd.openExternally(projectId, key);
-    log.info(`Opened ${key}.psd — Re-import it when you have saved your edits`);
+    log.info(`Opened ${key}.psd — Re-parse it when you have saved your edits`);
     return;
   }
 
@@ -74,16 +91,34 @@ async function savePsdCopy(projectId: string, key: string): Promise<void> {
 }
 
 /**
- * Ask for the file to replace a PSD with. Returns null when the user backs
- * out of the picker, which is not an error and should not be logged as one.
+ * Bring a PSD's edits back into the project and return the fresh manifest.
+ *
+ * Desktop re-parses the file in place. Mobile asks for the file that came
+ * back from wherever the share sheet sent it, and returns null when the user
+ * backs out of the picker — a cancelled pick is not an error and should not
+ * be logged as one.
  */
-export async function pickReimportSource(key: string): Promise<string | null> {
+export async function refreshPsd(
+  projectId: string,
+  key: string,
+  os: string,
+): Promise<string | null> {
+  if (!isMobile(os)) {
+    const manifest = await psd.reprocess(projectId, key);
+    log.info(`Re-parsed ${key}.psd`);
+    return manifest;
+  }
+
   const picked = await openFileDialog({
     multiple: false,
     title: `Replace ${key}.psd`,
     filters: REIMPORT_FILTERS,
   });
-  return typeof picked === "string" ? picked : null;
+  if (typeof picked !== "string") return null;
+
+  const result = await psd.reimport(projectId, key, picked);
+  log.info(`Re-imported ${key}.psd (${result.width}×${result.height})`);
+  return result.manifest;
 }
 
 const PSD_MIME = "image/vnd.adobe.photoshop";

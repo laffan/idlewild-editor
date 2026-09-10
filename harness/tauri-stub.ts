@@ -28,6 +28,16 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     case "write_document": return undefined;
     case "read_thumbnail": return null;
     case "list_projects": return [];
+    case "list_game_files":
+      return [
+        { path: "index.html", isDir: false },
+        { path: "js", isDir: true },
+        { path: "js/WorldScene.js", isDir: false },
+        { path: "js/main.js", isDir: false },
+      ];
+    case "read_game_file":
+      return "// harness stub\nexport default class WorldScene {}\n";
+    case "write_game_file": return undefined;
     case "open_psd": return undefined;
     case "read_psd_bytes": return "AAAA";
     case "reimport_psd":

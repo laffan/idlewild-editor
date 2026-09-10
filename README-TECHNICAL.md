@@ -181,16 +181,20 @@ instead.
 `open_psd` goes out through the opener plugin's *Rust* API rather than the
 frontend one, so the webview never needs a filesystem scope over the store —
 the only path it can ask for is one built from a project id and a PSD key it
-already holds. On macOS that opens the registered editor and the user saves
-over the file in place; on iPadOS an app cannot hand another app its document
-and get the edits back, so `platform` steers the frontend to the share sheet
-(`navigator.share` with the bytes from `read_psd_bytes`), and a copy saved
-through the document picker is the fallback where the sheet refuses files.
+already holds.
 
-`reimport_psd` writes the picked file over `<project>/psd/<key>.psd` — the
-stem is forced to the existing key, which is what makes it an overwrite
-rather than a second import — and re-runs psd-to-json, which clears the old
-`assets/<key>/` first.
+The way *back* differs by platform, and `platform` is what decides. On
+desktop the editor opens the file where it lies in the store and saves over
+it, so the file on disk is already the edited one and `reprocess_psd` is the
+whole of it — asking the user to go and find a file that never moved would
+be busywork. On iPadOS an app cannot hand another app its document and get
+the edits back, so the file goes out through the share sheet
+(`navigator.share` with the bytes from `read_psd_bytes`, or a copy saved
+through the document picker where the sheet refuses files) and has to be
+picked to come home: `reimport_psd` writes it over
+`<project>/psd/<key>.psd` — the stem is forced to the existing key, which is
+what makes it an overwrite rather than a second import — and re-runs
+psd-to-json, which clears the old `assets/<key>/` first.
 
 Three caches then hold the *old* PSD and all three have to go, or the reload
 quietly shows the previous artwork: psd-to-phaser's parsed manifest, Phaser's

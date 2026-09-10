@@ -54,6 +54,15 @@ export class SelectionOverlay {
         // Everything below is sized in world units but wants to look
         // constant on screen, so divide through by the zoom.
         const scale = 1 / zoom;
+
+        // The cell the image is anchored to. It is what a grid resize will
+        // move the image by, and it is not otherwise visible anywhere —
+        // a placement can sit a long way from the space that owns it.
+        const anchor = this.grid.cellPolygon(placement.anchor);
+        g.fillStyle(ACCENT, 0.25);
+        g.lineStyle(2 * scale, ACCENT, 0.8);
+        polygon(g, anchor, true);
+
         g.lineStyle(2 * scale, ACCENT, 1);
         g.strokeRect(
           placement.x,
