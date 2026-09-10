@@ -20,11 +20,10 @@ import type { DrawingLayer } from "../drawing";
 import { strokesBox, strokesToPsd, strokesToZonePoints } from "../drawing";
 import type { WorldScene } from "../game/world-scene";
 import {
-  anchorCell,
-  cellRangeForBox,
   EXPORT_SCALE,
+  footprintForBox,
   IMPORT_SCALE,
-  marksForSelection,
+  marksForCells,
   scaleMarks,
 } from "./import-anchor";
 
@@ -51,8 +50,7 @@ export async function convertStrokesToPsd(
     // spaces the ink covers, and `art` says where the ink sits inside them.
     // Whoever opens the PSD to paint over the sketch then has the same grid
     // under it that the drawing was made on.
-    const { from, to } = cellRangeForBox(grid, box);
-    const anchor = anchorCell(from, to);
+    const { cells, anchor } = footprintForBox(grid, box);
     const anchorWorld = grid.cellToWorld(anchor);
 
     // The layer's own atlas, so the export carries the brush textures that
@@ -62,13 +60,10 @@ export async function convertStrokesToPsd(
       scale: EXPORT_SCALE,
       marks: (raster) =>
         scaleMarks(
-          {
-            ...marksForSelection(grid, from, to),
-            art: {
-              x: raster.bounds.x - anchorWorld.x,
-              y: raster.bounds.y - anchorWorld.y,
-            },
-          },
+          marksForCells(grid, cells, anchor, {
+            x: raster.bounds.x - anchorWorld.x,
+            y: raster.bounds.y - anchorWorld.y,
+          }),
           EXPORT_SCALE,
         ),
     });

@@ -7,12 +7,18 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { Grid } from "../../lib/grid";
+import {
+  cellsBounds,
+  convexOverlapsRect,
+  Grid,
+  pointsBounds,
+} from "../../lib/grid";
 import {
   anchorCell,
-  cellRangeForBox,
   EXPORT_SCALE,
+  footprintForBox,
   IMPORT_SCALE,
+  marksForCells,
   marksForSelection,
   scaleMarks,
 } from "../import-anchor";
@@ -144,26 +150,95 @@ describe("scaleMarks", () => {
   });
 });
 
-describe("cellRangeForBox", () => {
+describe("footprintForBox", () => {
   it("covers the spaces an orthogonal box sits over", () => {
     const grid = new Grid("orthogonal", 32);
-    expect(cellRangeForBox(grid, { x: 0, y: 0, width: 64, height: 32 })).toEqual({
-      from: { cx: 0, cy: 0 },
-      to: { cx: 2, cy: 1 },
+    const { cells, anchor } = footprintForBox(grid, {
+      x: 0,
+      y: 0,
+      width: 64,
+      height: 32,
     });
+    expect(anchor).toEqual({ cx: 0, cy: 0 });
+    // Two spaces across, one down: the box's own right and bottom edges only
+    // graze the next ones, which is not covering them.
+    expect(cells).toEqual([
+      { cx: 0, cy: 0 },
+      { cx: 1, cy: 0 },
+    ]);
   });
 
-  it("reads all four corners, which is what an isometric box needs", () => {
-    // A world-space box is a diamond in cell space: its widest cell extents
-    // come from the corners a rectangle would call top-right and bottom-left.
+  /**
+   * The bug this exists for.
+   *
+   * A world-space box is a diamond in cell space, so the axis-aligned *range*
+   * around an isometric box holds many spaces the box never touches — and the
+   * footprint drawn from that range decides how big the PSD's canvas is. A
+   * 132 x 136 sketch was landing in an 832 x 416 file.
+   */
+  it("takes only the spaces an isometric box really touches", () => {
     const grid = new Grid("isometric", 64);
-    const range = cellRangeForBox(grid, { x: -64, y: -32, width: 128, height: 64 });
-    expect(range.from.cx).toBeLessThan(0);
-    expect(range.from.cy).toBeLessThan(0);
-    expect(range.to.cx).toBeGreaterThan(0);
-    expect(range.to.cy).toBeGreaterThan(0);
-    // Symmetric about the origin, so the two extents mirror.
-    expect(range.to.cx).toBe(-range.from.cx);
-    expect(range.to.cy).toBe(-range.from.cy);
+    const box = { x: 0, y: 0, width: 132, height: 136 };
+    const { cells } = footprintForBox(grid, box);
+
+    // Every cell it kept genuinely overlaps the box.
+    for (const cell of cells) {
+      expect(convexOverlapsRect(grid.cellPolygon(cell), box)).toBe(true);
+    }
+
+    // And the footprint it produces is far tighter than the enclosing range.
+    const covered = pointsBounds(cells.flatMap((c) => grid.cellPolygon(c)));
+    const { from, to } = cellsBounds(cells);
+    const enclosing = grid.rangeBounds(from, to);
+    expect(covered.width).toBeLessThan(enclosing.width);
+    expect(covered.width).toBeLessThan(box.width * 2);
+    expect(covered.height).toBeLessThan(box.height * 2);
+  });
+});
+
+describe("marksForCells", () => {
+  it("outlines the box around the spaces, and divides them one by one", () => {
+    const grid = new Grid("orthogonal", 32);
+    const cells = [
+      { cx: 0, cy: 0 },
+      { cx: 1, cy: 0 },
+    ];
+    const marks = marksForCells(grid, cells, { cx: 0, cy: 0 });
+
+    // Anchor-relative, so the first space starts at the origin.
+    expect(marks.outline).toEqual([
+      { x: 0, y: 0 },
+      { x: 64, y: 0 },
+      { x: 64, y: 32 },
+      { x: 0, y: 32 },
+    ]);
+    // Four edges per space, so the artist sees where each one begins.
+    expect(marks.lines).toHaveLength(8);
+    expect([marks.cols, marks.rows]).toEqual([2, 1]);
+  });
+
+  it("keeps an irregular set irregular rather than filling in its box", () => {
+    const grid = new Grid("orthogonal", 32);
+    const marks = marksForCells(
+      grid,
+      [
+        { cx: 0, cy: 0 },
+        { cx: 0, cy: 1 },
+        { cx: 1, cy: 1 },
+      ],
+      { cx: 0, cy: 0 },
+    );
+    // Three spaces drawn, inside a two-by-two outline: the missing corner is
+    // visibly missing, which is the point of drawing the spaces at all.
+    expect(marks.lines).toHaveLength(12);
+    expect([marks.cols, marks.rows]).toEqual([2, 2]);
+  });
+
+  it("carries the artwork offset through untouched", () => {
+    const grid = new Grid("orthogonal", 32);
+    const art = { x: 4, y: -7 };
+    expect(marksForCells(grid, [{ cx: 0, cy: 0 }], { cx: 0, cy: 0 }, art).art).toEqual(
+      art,
+    );
   });
 });

@@ -310,10 +310,41 @@ Three caches then hold the *old* PSD and all three have to go, or the reload
 quietly shows the previous artwork: psd-to-phaser's parsed manifest, Phaser's
 JSON cache entry for `data.json`, and every texture the plugin built. The
 plugin exposes no `removeData`, so its entry is overwritten with nothing —
-`loadPsd`'s `getData` check is what reads it back. Textures are namespaced
-`<psdKey>_<layerName>`, which is what makes them findable from the key alone.
-`game/psd-loader.ts` holds all of this. The asset server already answers
-`Cache-Control: no-store`, so the browser is not the fourth cache.
+`loadPsd`'s `getData` check is what reads it back. `game/psd-loader.ts` holds
+all of this. The asset server already answers `Cache-Control: no-store`, so
+the browser is not the fourth cache.
+
+### The texture keys, and why getting them wrong hangs the editor
+
+**A texture is keyed on the layer's own name, not the PSD's.** The plugin's
+sprite loader is `scene.load.image(layer.name, url)`, so a PSD keyed `tower`
+holding `S | roof` produces a texture called `roof` and nothing called
+`tower_roof`. This file used to sweep for `<psdKey>_*` on eviction, which
+worked for exactly one reason: an image the editor converts names its only
+layer after the key, so `roof === tower` and the sweep caught it by accident.
+
+Add a second layer in Photoshop and it stops working, in a way that looks
+nothing like a stale-cache bug. Phaser's loader **silently drops** a file
+whose key already exists — `LoaderPlugin.addFile` consults `keyExists` and
+simply does not queue it, with no event and no error. The plugin counts its
+own assets in and waits for a `filecomplete` that will never fire, so its
+total is never reached and `psdLoadComplete` is never emitted. The editor
+then sat on `loadPsd`'s fifteen-second timeout and placed a PSD whose
+textures had all been evicted and never replaced: every image on that file
+disappeared.
+
+So the names are read out of the plugin's own parsed data before it is
+cleared, rather than derived from a convention, and three shapes are removed
+per name — `name`, `name_mask`, and `name_tile_<col>_<row>`.
+
+The same fact from the other end is why `evictPsd` takes the project's other
+PSD keys. Two files with a same-named layer share one texture, which the
+plugin can only fix by loading them through `loadMultiple`; until then, a
+name another loaded PSD is still using is left alone. A stale texture on the
+file being reloaded is a smaller lie than a blank one on a file nobody
+touched — and `loadPsd` no longer hangs when it meets one, because the loader
+going idle settles the wait as a second, weaker signal, and any sprite left
+without a texture is named in the console.
 
 Placements survive the swap: each keeps its position and its size *relative
 to* what the manifest exported, so a deliberately shrunk image stays shrunk
@@ -402,6 +433,30 @@ Files / Photos / clipboard / drawn strokes
 The `S | ` prefix is load-bearing: psd-to-json classifies by the pipe
 convention and silently ignores layers without it, so a converted image
 without the prefix would process to nothing.
+
+### A footprint is the spaces covered, not the range around them
+
+An import into a marquee marks that marquee: the user dragged out a shape and
+that shape is the footprint. A *conversion* — a sketch or a fill becoming a
+PSD — is different, and the difference is invisible until the template is
+isometric.
+
+A box in world space is a diamond in cell space, so the axis-aligned cell
+*range* enclosing an isometric box holds a great many spaces the box never
+touches, and the range's own world bounds are far larger than the box that
+produced it. `psd_marks::layout` grows the canvas to hold the footprint, so
+marking the range put a 132 × 136 sketch into an 832 × 416 file — six times
+the area, and a PSD whose canvas bears no relation to the size the inspector
+reports for the placement.
+
+`cellsUnderBox` answers the question that was actually being asked: which
+spaces does this box overlap? It is a separating-axis test against each
+candidate cell's outline, which for a diamond is four axes. `marksForCells`
+then outlines the box around *those* spaces and draws each of them as
+divisions, so an irregular set stays irregular and the canvas is only as big
+as the ink and the spaces under it. The same helper serves both conversions;
+only an import still marks a range, because for an import the range is the
+truth.
 
 ### The marks an import writes
 
@@ -825,7 +880,10 @@ on chrome never highlights it.
 - Pattern fills store their PSD key and render as a tint; the texture is not
   yet sampled into the fill.
 - Two PSDs with a same-named layer collide in Phaser's texture cache: P2P
-  keys textures on the layer name unless loaded via `loadMultiple`.
+  keys textures on the layer name unless loaded via `loadMultiple`. Reloading
+  one of them now leaves the shared texture alone rather than blanking the
+  other, so the collision shows as the wrong artwork rather than none — but it
+  is still a collision.
 - Resizing a placement that holds a *group* of sprites scales each child
   about its own origin, so their relative offsets do not grow with it.
   Scaling a composition as a unit needs a Container, and `place()` returns a

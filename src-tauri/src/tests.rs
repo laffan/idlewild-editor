@@ -588,3 +588,73 @@ fn psd_layers_can_be_reordered_and_renamed() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// Every sprite layer exports a PNG named after the layer, not after the file.
+///
+/// This is what the frontend's texture eviction depends on: psd-to-phaser
+/// keys a sprite's texture on the layer's own name, so a reload has to know
+/// the names to clear them — and a texture it fails to clear makes Phaser
+/// silently drop the file, which hangs the whole load. See
+/// `src/game/psd-loader.ts`.
+///
+/// A layer with nothing painted on it is included on purpose: an artist who
+/// adds a layer in Photoshop and saves before drawing still gets a sprite
+/// entry and a real file, so nothing downstream may assume otherwise.
+#[test]
+fn every_sprite_layer_exports_a_png_named_after_the_layer() {
+    use psd::{LayerBuilder, PsdBuilder};
+
+    let meta = store::create_project("Layer names", Projection::Isometric, Genre::Topdown, 64)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let mut builder = PsdBuilder::new(64, 64);
+        builder.add_layer(
+            LayerBuilder::new("S | sketch").rgba(64, 64, swatch(64, 64, [1, 2, 3, 255])),
+        );
+        builder.add_layer(
+            LayerBuilder::new("S | haze").rgba(64, 64, swatch(64, 64, [0, 0, 0, 0])),
+        );
+        std::fs::write(
+            store::psd_dir(&meta.id).unwrap().join("art.psd"),
+            builder.to_bytes().expect("PSD should be written"),
+        )
+        .expect("PSD should save");
+
+        let manifest = psd_pipeline::process(
+            &meta.id,
+            "art",
+            &psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("processing should succeed");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should be JSON");
+        let names: Vec<&str> = parsed["layers"]
+            .as_array()
+            .expect("layers array")
+            .iter()
+            .map(|l| l["name"].as_str().unwrap_or_default())
+            .collect();
+        assert!(names.contains(&"sketch"), "got {names:?}");
+        assert!(
+            names.contains(&"haze"),
+            "an unpainted layer still reaches the manifest: {names:?}"
+        );
+
+        let files: Vec<String> = psd_pipeline::list_output_files(&meta.id, "art")
+            .expect("outputs should list")
+            .into_iter()
+            .map(|f| f.relative_path)
+            .collect();
+        for expected in ["sprites/sketch.png", "sprites/haze.png"] {
+            assert!(files.contains(&expected.to_string()), "{expected} missing from {files:?}");
+        }
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}

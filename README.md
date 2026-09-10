@@ -58,7 +58,9 @@ remaining pieces are wired to real slots rather than mocked.
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
   a blocking boundary play mode walks around. The PSD carries the same
   orienting marks an import does — the anchor dot and the grid the sketch was
-  drawn over — so there is a grid under the ink when you open it to paint
+  drawn over — so there is a grid under the ink when you open it to paint.
+  Its canvas is the ink plus the spaces the ink actually covers, not the
+  larger diamond enclosing them
 - Inspector for layers, selections, fills, placed images and boundaries, in
   Info / Transform / Layers sections. A placed image's title is its filename,
   and retyping the part before `.psd` renames the file, moves its assets with

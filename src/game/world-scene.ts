@@ -472,7 +472,7 @@ export class WorldScene extends Phaser.Scene {
     );
 
     this.docRenderer.detachKey(key);
-    evictPsd(this, this.plugin(), key);
+    evictPsd(this, this.plugin(), key, this.otherPsdKeys(key));
     await this.loadPsd(key);
 
     for (const layer of this.store.layers) {
@@ -494,7 +494,7 @@ export class WorldScene extends Phaser.Scene {
    */
   async renamePsd(from: string, to: string): Promise<void> {
     this.docRenderer.detachKey(from);
-    evictPsd(this, this.plugin(), from);
+    evictPsd(this, this.plugin(), from, this.otherPsdKeys(from));
 
     const moved: Array<{ layerId: string; placement: Placement }> = [];
     for (const layer of this.store.layers) {
@@ -554,6 +554,23 @@ export class WorldScene extends Phaser.Scene {
       ?.placements.find((p) => p.id === selection.placementId);
     if (updated) this.placeOne(selection.layerId, updated);
     this.docRenderer.render();
+  }
+
+  /**
+   * Every other PSD the document has placed.
+   *
+   * `evictPsd` needs it because textures are keyed on layer *names*, which
+   * two files can share — so a name still in use elsewhere must survive this
+   * file being dropped.
+   */
+  private otherPsdKeys(key: string): string[] {
+    const keys = new Set<string>();
+    for (const layer of this.store.layers) {
+      for (const placement of layer.placements) {
+        if (placement.psdKey !== key) keys.add(placement.psdKey);
+      }
+    }
+    return [...keys];
   }
 
   private plugin(): PsdToPhaser | undefined {

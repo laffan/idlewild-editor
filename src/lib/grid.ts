@@ -259,6 +259,103 @@ export function fillShape(
   };
 }
 
+/**
+ * The cells a world-space box actually covers.
+ *
+ * Not the same as the cell *range* enclosing the box, and the difference is
+ * large under an isometric projection: a box in world space is a diamond in
+ * cell space, so the axis-aligned range around it holds a great many cells
+ * the box never touches. A 132 × 136 sketch on a 64px isometric grid falls
+ * inside a 7 × 6 range whose own world bounds are 416 × 208 — three times the
+ * width of the thing that produced it. Anything marking "the spaces this was
+ * drawn over" wants these cells, not that range.
+ *
+ * The test is a separating-axis check between the box and the cell's outline,
+ * both convex: they overlap unless some axis separates them, and the axes
+ * worth trying are the box's two and the outline's edge normals.
+ */
+export function cellsUnderBox(grid: Grid, box: Rect): Cell[] {
+  const corners = [
+    grid.worldToCell({ x: box.x, y: box.y }),
+    grid.worldToCell({ x: box.x + box.width, y: box.y }),
+    grid.worldToCell({ x: box.x, y: box.y + box.height }),
+    grid.worldToCell({ x: box.x + box.width, y: box.y + box.height }),
+  ];
+  // A cell whose centre is outside the box can still overlap it, so the
+  // candidate range is widened by one before anything is ruled out.
+  const x0 = Math.min(...corners.map((c) => c.cx)) - 1;
+  const x1 = Math.max(...corners.map((c) => c.cx)) + 1;
+  const y0 = Math.min(...corners.map((c) => c.cy)) - 1;
+  const y1 = Math.max(...corners.map((c) => c.cy)) + 1;
+
+  const out: Cell[] = [];
+  for (let cy = y0; cy <= y1; cy++) {
+    for (let cx = x0; cx <= x1; cx++) {
+      if (convexOverlapsRect(grid.cellPolygon({ cx, cy }), box)) {
+        out.push({ cx, cy });
+      }
+    }
+  }
+  return out;
+}
+
+/** Separating-axis overlap between a convex polygon and an axis-aligned box. */
+export function convexOverlapsRect(points: readonly Point[], box: Rect): boolean {
+  if (points.length < 3) return false;
+
+  const axes: Point[] = [{ x: 1, y: 0 }, { x: 0, y: 1 }];
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    axes.push({ x: -(b.y - a.y), y: b.x - a.x });
+  }
+
+  const rect: Point[] = [
+    { x: box.x, y: box.y },
+    { x: box.x + box.width, y: box.y },
+    { x: box.x + box.width, y: box.y + box.height },
+    { x: box.x, y: box.y + box.height },
+  ];
+
+  for (const axis of axes) {
+    const a = project(points, axis);
+    const b = project(rect, axis);
+    // Touching along an edge is not overlapping: a cell the box only grazes
+    // is not a space it was drawn over.
+    if (a.max <= b.min || b.max <= a.min) return false;
+  }
+  return true;
+}
+
+function project(
+  points: readonly Point[],
+  axis: Point,
+): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const p of points) {
+    const value = p.x * axis.x + p.y * axis.y;
+    if (value < min) min = value;
+    if (value > max) max = value;
+  }
+  return { min, max };
+}
+
+/** The box around a set of world-space points. */
+export function pointsBounds(points: readonly Point[]): Rect {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 /** Whether a world point falls inside a rectangle, edges included. */
 export function rectContains(rect: Rect, p: Point): boolean {
   return (

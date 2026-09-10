@@ -20,10 +20,16 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid, cellsBounds as cellsRange, fillShape } from "../lib/grid";
 import { psd } from "../lib/ipc";
 import type { AnchorMarks } from "../lib/ipc";
-import type { FillPatch, Point, Rect, Selection } from "../lib/types";
+import type { Cell, FillPatch, Point, Rect, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { WorldScene } from "../game/world-scene";
-import { anchorCell, EXPORT_SCALE, IMPORT_SCALE, scaleMarks } from "./import-anchor";
+import {
+  anchorCell,
+  EXPORT_SCALE,
+  IMPORT_SCALE,
+  marksForCells,
+  scaleMarks,
+} from "./import-anchor";
 
 type FillSelection = Extract<Selection, { kind: "fill" }>;
 
@@ -70,7 +76,7 @@ export async function convertFillToPsd(
       // Marks and pixels are both in the file's own space, so both are taken
       // up together — and the placement scales back down by the same factor.
       scaleMarks(
-        marksForFill(grid, fill, shape.bounds, anchorWorld, {
+        marksForFill(grid, fill, shape.bounds, anchor, {
           x: raster.x - anchorWorld.x,
           y: raster.y - anchorWorld.y,
         }),
@@ -141,47 +147,34 @@ function rasteriseFill(
  * them. A fill is often an irregular shape, and an outline that enclosed
  * spaces it never touched would tell the artist something untrue — so each
  * covered space is drawn in full, and the outline is only there to give the
- * zone its bounds.
+ * zone its bounds. `marksForCells` is that, shared with the sketch
+ * conversion, which asks the same question of its ink.
  */
 function marksForFill(
   grid: Grid,
   fill: FillPatch,
   bounds: Rect,
-  anchorWorld: Point,
+  anchor: Cell,
   art: { x: number; y: number },
 ): AnchorMarks {
-  const relative = (p: Point) => ({
-    x: p.x - anchorWorld.x,
-    y: p.y - anchorWorld.y,
-  });
-
-  const outline = [
-    { x: bounds.x, y: bounds.y },
-    { x: bounds.x + bounds.width, y: bounds.y },
-    { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
-    { x: bounds.x, y: bounds.y + bounds.height },
-  ].map(relative);
-
   // A rectangle covers one space of its own size, so its outline is the whole
   // of its footprint and there is nothing inside it to divide.
-  if (fill.rect) return { outline, lines: [], art, cols: 1, rows: 1 };
-
-  const lines: AnchorMarks["lines"] = [];
-  for (const cell of fill.cells) {
-    const poly = grid.cellPolygon(cell).map(relative);
-    for (let i = 0; i < poly.length; i++) {
-      lines.push({ a: poly[i], b: poly[(i + 1) % poly.length] });
-    }
+  if (fill.rect) {
+    const anchorWorld = grid.cellToWorld(anchor);
+    const relative = (p: Point) => ({
+      x: p.x - anchorWorld.x,
+      y: p.y - anchorWorld.y,
+    });
+    const outline = [
+      { x: bounds.x, y: bounds.y },
+      { x: bounds.x + bounds.width, y: bounds.y },
+      { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+      { x: bounds.x, y: bounds.y + bounds.height },
+    ].map(relative);
+    return { outline, lines: [], art, cols: 1, rows: 1 };
   }
 
-  const { from, to } = cellsRange(fill.cells);
-  return {
-    outline: grid.rangePolygon(from, to).map(relative),
-    lines,
-    art,
-    cols: Math.abs(to.cx - from.cx) + 1,
-    rows: Math.abs(to.cy - from.cy) + 1,
-  };
+  return marksForCells(grid, fill.cells, anchor, art);
 }
 
 function toBase64(bytes: Uint8ClampedArray): string {

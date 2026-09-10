@@ -9,8 +9,14 @@
 
 import { Grid } from "../lib/grid";
 import type { AnchorMarks } from "../lib/ipc";
-import type { Cell } from "../lib/types";
-import { cellsInRange, rangeSize } from "../lib/grid";
+import type { Cell, Rect } from "../lib/types";
+import {
+  cellsBounds,
+  cellsInRange,
+  cellsUnderBox,
+  pointsBounds,
+  rangeSize,
+} from "../lib/grid";
 
 /**
  * A ceiling on the internal lines a footprint draws.
@@ -71,32 +77,19 @@ export function scaleMarks(marks: AnchorMarks, factor: number): AnchorMarks {
 }
 
 /**
- * The grid spaces a world-space box sits over.
+ * The spaces a world-space box was drawn over, and the space it hangs from.
  *
- * All four corners, because a box in world space is a diamond in cell space
- * under an isometric template and its extremes are not the two corners a
- * rectangle would suggest.
+ * `cellsUnderBox` rather than the cell range enclosing the box: under an
+ * isometric template those are very different sets, and only the first is
+ * true. See `marksForCells`.
  */
-export function cellRangeForBox(
+export function footprintForBox(
   grid: Grid,
-  box: { x: number; y: number; width: number; height: number },
-): { from: Cell; to: Cell } {
-  const corners = [
-    grid.worldToCell({ x: box.x, y: box.y }),
-    grid.worldToCell({ x: box.x + box.width, y: box.y }),
-    grid.worldToCell({ x: box.x, y: box.y + box.height }),
-    grid.worldToCell({ x: box.x + box.width, y: box.y + box.height }),
-  ];
-  return {
-    from: {
-      cx: Math.min(...corners.map((c) => c.cx)),
-      cy: Math.min(...corners.map((c) => c.cy)),
-    },
-    to: {
-      cx: Math.max(...corners.map((c) => c.cx)),
-      cy: Math.max(...corners.map((c) => c.cy)),
-    },
-  };
+  box: Rect,
+): { cells: Cell[]; anchor: Cell } {
+  const cells = cellsUnderBox(grid, box);
+  const { from, to } = cellsBounds(cells);
+  return { cells, anchor: anchorCell(from, to) };
 }
 
 /**
@@ -137,6 +130,63 @@ export function marksForSelection(
     })),
     cols: w,
     rows: h,
+  };
+}
+
+/**
+ * Describe the *spaces something covers* for the PSD writer, rather than the
+ * range enclosing them.
+ *
+ * The difference matters under an isometric projection, and it is the whole
+ * reason this exists beside `marksForSelection`. A marquee genuinely is its
+ * range — the user dragged out a diamond and that diamond is the footprint.
+ * A conversion is not: a sketch or a fill covers particular spaces, and the
+ * axis-aligned range around those spaces is a far bigger diamond. Marking
+ * that range put a 132 × 136 sketch into an 832 × 416 PSD, six times the area
+ * it needed, because `psd_marks::layout` grows the canvas to hold the
+ * footprint.
+ *
+ * So the outline is the box around the covered spaces — which is what gives
+ * the canvas its size and the zone its bounds — and the divisions draw the
+ * spaces themselves, irregular shape and all.
+ */
+export function marksForCells(
+  grid: Grid,
+  cells: readonly Cell[],
+  anchor: Cell,
+  art?: { x: number; y: number },
+): AnchorMarks {
+  const world = grid.cellToWorld(anchor);
+  const relative = (p: { x: number; y: number }) => ({
+    x: p.x - world.x,
+    y: p.y - world.y,
+  });
+
+  const polygons = cells.map((cell) => grid.cellPolygon(cell));
+  const bounds = pointsBounds(polygons.flat());
+  const outline = [
+    { x: bounds.x, y: bounds.y },
+    { x: bounds.x + bounds.width, y: bounds.y },
+    { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+    { x: bounds.x, y: bounds.y + bounds.height },
+  ].map(relative);
+
+  const lines: AnchorMarks["lines"] = [];
+  for (const polygon of polygons) {
+    if (lines.length >= MAX_LINES) break;
+    const points = polygon.map(relative);
+    for (let i = 0; i < points.length; i++) {
+      lines.push({ a: points[i], b: points[(i + 1) % points.length] });
+    }
+  }
+
+  const { from, to } = cellsBounds(cells);
+  return {
+    outline,
+    lines,
+    art,
+    cols: Math.abs(to.cx - from.cx) + 1,
+    rows: Math.abs(to.cy - from.cy) + 1,
   };
 }
 
