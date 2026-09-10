@@ -77,9 +77,14 @@ export interface Zone {
   blocking: boolean;
 }
 
-/** A freehand stroke. The engine port fills `points` out in a later pass. */
+/** A freehand stroke from the drawing layer. */
 export interface Stroke {
   id: string;
+  /**
+   * World pixels, flat: `[x, y, pressure, x, y, pressure, …]`. Flat because
+   * a document is JSON on disk and a sketch is thousands of points; pressure
+   * per point because that is what makes a Pencil stroke taper.
+   */
   points: number[];
   brushId: number;
   size: number;
@@ -122,11 +127,17 @@ export type Selection =
   | { kind: "region"; from: Cell; to: Cell }
   | { kind: "fill"; layerId: string; fillId: string }
   | { kind: "placement"; layerId: string; placementId: string }
-  | { kind: "zone"; layerId: string; zoneId: string };
+  | { kind: "zone"; layerId: string; zoneId: string }
+  | { kind: "strokes"; layerId: string; ids: string[] };
 
 export type EditorMode = "edit" | "play";
 
-export type ToolId = "select" | "pencil" | "eraser" | "boundary" | "pan";
+/**
+ * The rail's tools. Boundary is not among them: a boundary is made from
+ * strokes already drawn and lassoed, so it is an action on a selection
+ * rather than a mode you draw in.
+ */
+export type ToolId = "select" | "pan" | "pencil" | "eraser" | "lasso";
 
 export interface PsdManifestEntry {
   key: string;

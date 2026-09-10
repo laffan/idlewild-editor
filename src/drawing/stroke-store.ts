@@ -9,6 +9,7 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
+import * as log from "../lib/log";
 import { makeId } from "../lib/doc-store";
 import type { Stroke } from "../lib/types";
 import { DEFAULT_STYLE, type StrokeStyle } from "./types";
@@ -37,6 +38,11 @@ export class StrokeStore extends EventTarget {
 
   get selectedStrokes(): Stroke[] {
     return this.strokes.filter((s) => this.selected.has(s.id));
+  }
+
+  /** Replace the layer's strokes wholesale — how an erase drag commits. */
+  replace(strokes: readonly Stroke[]): void {
+    this.writeStrokes([...strokes]);
   }
 
   add(points: number[], style: StrokeStyle = this.style): Stroke {
@@ -75,7 +81,12 @@ export class StrokeStore extends EventTarget {
    */
   private writeStrokes(next: Stroke[]): void {
     const layer = this.doc.layer(this.layerId);
-    if (!layer || layer.locked) return;
+    if (!layer) return;
+    if (layer.locked) {
+      // Silently dropping the stroke reads as the pencil being broken.
+      log.warn(`${layer.name} is locked — unlock it to draw on it`);
+      return;
+    }
     this.doc.replaceStrokes(this.layerId, next);
     this.dispatchEvent(new CustomEvent("change"));
   }

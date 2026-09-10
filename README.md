@@ -40,6 +40,11 @@ remaining pieces are wired to real slots rather than mocked.
 - Layers: drag by the grip to reorder, rename, lock, hide, with live counts
   and an expandable list of what is on each one — selecting there selects on
   the canvas
+- Draw on any layer with Hush's stroke engine: five brushes, pressure and
+  Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
+  and pinch the game camera, so a hand can rest on the glass
+- Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
+  a blocking boundary play mode walks around
 - Inspector for layers, selections, fills, placed images and boundaries
 - Export a selection as a transparent PNG (save or copy)
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
@@ -53,10 +58,10 @@ remaining pieces are wired to real slots rather than mocked.
 
 **Next**
 
-- The drawing layer — Hush's stroke engine, Apple Pencil, infinite canvas.
-  Its integration surface is built (`src/drawing/`); the engine port is the
-  next increment, and the pencil / eraser / boundary tools are disabled in the
-  rail until it lands rather than pretending to work.
+- Hush's blit-forward re-anchor, so panning a stroke-heavy layer past the
+  drawing backing's edge slides its pixels instead of re-baking them
+- Undo, which the drawing layer wants first and the rest of the editor
+  wants too
 - Pattern fills rendering their PSD texture rather than a tint
 - Phaser-aware autocomplete in the code modal, and canvas ↔ code binding
 - rsync publish targets

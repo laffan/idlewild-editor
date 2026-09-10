@@ -62,7 +62,10 @@ export function append(parent: Node, children: Child[]): void {
 }
 
 export function clear(el: Element): void {
-  while (el.firstChild) el.removeChild(el.firstChild);
+  // One call rather than a removeChild loop: removing a focused field fires
+  // its blur handler, and a blur handler that touches the DOM used to leave
+  // the loop holding a node that was no longer its child.
+  el.replaceChildren();
 }
 
 /**
@@ -118,6 +121,11 @@ export const ICONS = {
   eraser: "M8 20h11M6 16l7-7 5 5-4 4H8l-2-2Z",
   fill: "M6 12 12 6l6 6-6 6-6-6Zm13 4c0 1.7 1 2.6 2 2.6",
   boundary: "M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4",
+  /* A freehand loop closing on itself — the lasso's own gesture. */
+  lasso: [
+    "M4 13a8 5 0 1 0 16 0 8 5 0 1 0-16 0",
+    "M6.5 17.2c-.6 1.2-.4 2.4.6 3.1",
+  ],
   hand: "M8 13V6a1.6 1.6 0 0 1 3.2 0v6m0-1V5a1.6 1.6 0 0 1 3.2 0v7m0-2a1.6 1.6 0 0 1 3.2 0v6a5 5 0 0 1-5 5h-1a6 6 0 0 1-6-6v-3",
   file: "M6 3h8l4 4v14H6V3Z",
   folder: "M3 6h6l2 3h10v11H3V6Z",

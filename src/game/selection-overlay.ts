@@ -8,6 +8,7 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import type { Selection } from "../lib/types";
 import { CORNERS, cornerPoint, HANDLE_SCREEN_PX, placementBox } from "./resize";
+import { strokesBox } from "../drawing";
 
 const ACCENT = 0xec3013;
 const OVERLAY_DEPTH = 1_000_000;
@@ -90,6 +91,19 @@ export class SelectionOverlay {
         if (!zone || zone.points.length < 2) break;
         g.lineStyle(2, ACCENT, 1);
         polygon(g, zone.points, false);
+        break;
+      }
+      case "strokes": {
+        // The ink itself is on the drawing layer's own canvas, so all this
+        // has to add is the box around what the lasso caught.
+        const layer = store.layer(selection.layerId);
+        if (!layer) break;
+        const chosen = new Set(selection.ids);
+        const box = strokesBox(layer.strokes.filter((s) => chosen.has(s.id)));
+        if (!box) break;
+        const scale = 1 / zoom;
+        g.lineStyle(2 * scale, ACCENT, 1);
+        g.strokeRect(box.x, box.y, box.width, box.height);
         break;
       }
       case "layer":

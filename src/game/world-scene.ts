@@ -18,6 +18,7 @@ import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { PlayController } from "./play-controller";
 import { evictPsd, loadPsd, reconcilePlacements } from "./psd-loader";
+import type { Viewport } from "../drawing";
 import {
   boxToPlacement,
   handleAt,
@@ -39,6 +40,13 @@ export interface WorldSceneConfig {
    * picker — and the layer panel its name inputs — on every frame of a drag.
    */
   onDragStateChange: (dragging: boolean) => void;
+  /**
+   * The camera, whenever it has actually moved. The drawing layer's stage is
+   * slaved to this: its ink is baked in world coordinates and presented
+   * with a transform, so it has to be told where the camera is, and told
+   * only when there is something to tell.
+   */
+  onViewport?: (view: Viewport) => void;
 }
 
 /** What a drag gesture is moving, captured at pointer-down. */
@@ -88,6 +96,8 @@ export class WorldScene extends Phaser.Scene {
   private drag: DragState | null = null;
   /** Set once the camera is where it should stay — restored, or user-moved. */
   private cameraPlaced = false;
+  /** The last camera state pushed to `onViewport`, to skip idle frames. */
+  private lastView = "";
   /** The layer new work lands on. */
   activeLayerId = "";
 
@@ -143,7 +153,49 @@ export class WorldScene extends Phaser.Scene {
 
   override update(): void {
     this.gridRenderer.update(this.cameras.main);
+    this.publishViewport();
     if (this.mode === "play") this.play.update();
+  }
+
+  /** How the world maps onto the screen right now. */
+  viewport(): Viewport {
+    const camera = this.cameras.main;
+    const topLeft = camera.getWorldPoint(0, 0);
+    return {
+      originX: topLeft.x,
+      originY: topLeft.y,
+      zoom: camera.zoom,
+      width: camera.width,
+      height: camera.height,
+    };
+  }
+
+  /**
+   * Push the camera out when it has moved.
+   *
+   * Driven from `update` rather than from the gesture arbiter because the
+   * camera also moves without a gesture — a window resize, a re-centre, the
+   * restore on open — and a stage left behind by any of those shows its ink
+   * in the wrong place. The string compare is what keeps an idle frame free.
+   */
+  private publishViewport(): void {
+    if (!this.config.onViewport) return;
+    const view = this.viewport();
+    const key = `${view.originX}|${view.originY}|${view.zoom}|${view.width}|${view.height}`;
+    if (key === this.lastView) return;
+    this.lastView = key;
+    this.config.onViewport(view);
+  }
+
+  /** Camera moves the drawing layer asks for while it owns the pointer. */
+  panScreen(dxScreen: number, dyScreen: number): void {
+    this.pan(dxScreen, dyScreen);
+    this.persistCamera();
+  }
+
+  zoomAt(factor: number, screenX: number, screenY: number): void {
+    this.zoom(factor, screenX, screenY);
+    this.persistCamera();
   }
 
   /** Repaint from the document. Cheap: everything here is retained state. */

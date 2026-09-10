@@ -1,13 +1,14 @@
 /**
  * The tool rail down the left edge of the canvas.
  *
- * Pencil, eraser and boundary belong to the drawing layer, which is the Hush
- * notebook engine port. They are present and wired to the same selection
- * model, but disabled until that port lands rather than pretending to work.
+ * Two groups, split by who owns the pointer. Select and Pan are the game
+ * canvas's — grid spaces, placed images, the camera. Pencil, Eraser and
+ * Lasso belong to the drawing layer, which takes raw input while one of
+ * them is up and hands it back when it is not.
  *
- * There is no Fill tool. Filling is an action on a selection, not a mode you
- * enter — it is the first button on the bar that appears over a selected run
- * of spaces — so a rail slot for it only ever did nothing.
+ * There is no Fill tool and no Boundary tool. Both are actions on something
+ * already selected — a run of grid spaces, a group of strokes — rather than
+ * modes you enter, so a rail slot for either only ever did nothing.
  */
 
 import { h, ICONS, icon } from "../lib/dom";
@@ -16,17 +17,17 @@ import type { ToolId } from "../lib/types";
 interface ToolSpec {
   id: ToolId;
   name: string;
-  path: string;
-  /** Set while the drawing engine port is outstanding. */
-  pending?: boolean;
+  path: string | readonly string[];
+  /** Starts the group that hands the pointer to the drawing layer. */
+  divide?: boolean;
 }
 
 export const TOOLS: ToolSpec[] = [
   { id: "select", name: "Select", path: ICONS.select },
   { id: "pan", name: "Pan", path: ICONS.hand },
-  { id: "pencil", name: "Pencil", path: ICONS.pencil, pending: true },
-  { id: "eraser", name: "Eraser", path: ICONS.eraser, pending: true },
-  { id: "boundary", name: "Boundary", path: ICONS.boundary, pending: true },
+  { id: "pencil", name: "Pencil", path: ICONS.pencil, divide: true },
+  { id: "eraser", name: "Eraser", path: ICONS.eraser },
+  { id: "lasso", name: "Lasso", path: ICONS.lasso },
 ];
 
 export class ToolRail {
@@ -43,14 +44,10 @@ export class ToolRail {
       const button = h(
         "button",
         {
-          class: "tool-btn",
-          title: tool.pending
-            ? `${tool.name} — arrives with the drawing layer`
-            : tool.name,
-          disabled: tool.pending ? "true" : null,
+          class: tool.divide ? "tool-btn divide" : "tool-btn",
+          title: tool.name,
           "aria-pressed": String(tool.id === this.current),
           onClick: () => {
-            if (tool.pending) return;
             this.setTool(tool.id);
             onPick(tool.id);
           },

@@ -39,6 +39,20 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       return "// harness stub\nexport default class WorldScene {}\n";
     case "write_game_file": return undefined;
     case "open_psd": return undefined;
+    case "create_psd_from_rgba": {
+      const a = args as Record<string, number | string>;
+      (window as any).__lastRgba = { width: a.width, height: a.height, name: a.name };
+      return {
+        key: String(a.name),
+        width: a.width,
+        height: a.height,
+        manifest: JSON.stringify({
+          name: a.name, width: a.width, height: a.height,
+          layers: [{ name: `S | ${a.name}`, category: "sprite", x: 0, y: 0,
+            width: a.width, height: a.height }],
+        }),
+      };
+    }
     case "read_psd_bytes": return "AAAA";
     case "reimport_psd":
       return {

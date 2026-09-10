@@ -162,6 +162,8 @@
   justify-content: center;
 }
 .tool-btn:first-child { border-top: 0; }
+/* The break between the canvas's tools and the drawing layer's. */
+.tool-btn.divide { border-top: 3px solid var(--chrome-bg); margin-top: 8px; }
 .tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
 .tool-btn[disabled] { opacity: 0.45; }
@@ -299,3 +301,44 @@
 .editor.play-mode .tool-name,
 .editor.play-mode .edge-toggle,
 .editor.play-mode .selection-actions { display: none; }
+
+/* ── the drawing layer ────────────────────────────────────────────────────
+   Hush's ink, superimposed over the game canvas. The stage is a
+   GPU-composited wrapper around a canvas that covers rather more world than
+   fits on screen: a pan or a zoom is one transform on it and touches no
+   pixels, which is the whole reason the ink can keep up with a Pencil. See
+   src/drawing/surface.ts. */
+.draw-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  /* Inert until a drawing tool is up, so the grid tools keep the pointer. */
+  pointer-events: none;
+  overflow: hidden;
+}
+.draw-surface.active {
+  pointer-events: auto;
+  /* The layer runs its own pan and pinch; the browser must not also scroll. */
+  touch-action: none;
+  cursor: crosshair;
+}
+/* The eraser paints its own disc at the pointer, so the arrow is noise. */
+.draw-surface.active.erasing { cursor: none; }
+
+.draw-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+.draw-stage canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* Play mode hides the tools, so it hides their layer with them. */
+.editor.play-mode .draw-surface { display: none; }

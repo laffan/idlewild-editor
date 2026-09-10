@@ -25,9 +25,9 @@ Extension of [README.md](README.md).
 │  ┌─────────┐  ┌─────────────────────────────┐  ┌───────────┐  │
 │  │ Layers  │  │      Phaser 4 canvas        │  │ Inspector │  │
 │  │ panel   │  │   ┌─────────────────────┐   │  │           │  │
-│  │         │  │   │  drawing layer      │   │  │           │  │
-│  │         │  │   │  (2D canvases,      │   │  │           │  │
-│  │         │  │   │   camera slaved)    │   │  │           │  │
+│  │         │  │   │  drawing stage      │   │  │           │  │
+│  │         │  │   │  (baked ink, one    │   │  │           │  │
+│  │         │  │   │   CSS transform)    │   │  │           │  │
 │  │         │  │   └─────────────────────┘   │  │           │  │
 │  └─────────┘  │   grid · fills · zones ·    │  └───────────┘  │
 │               │   psd-to-phaser placements  │                 │
@@ -143,9 +143,11 @@ contract:
 | Tap | Pick the image under the finger, else the fill, else clear |
 | Ctrl/⌘ + wheel | Zoom (WebKit reports a trackpad pinch this way) |
 
-There is one arbiter because the drawing layer will want raw input for its own
-tools: `setSuspended(true)` hands input over without tearing down camera
-state.
+There is one arbiter at a time. A drawing tool calls `setSuspended(true)`,
+which hands input over without tearing down camera state, and the drawing
+layer runs its own two-finger pan and pinch back into `panScreen` / `zoomAt`
+— so the two layers never both read the same gesture, and the camera works
+identically under either.
 
 Only the *current selection* is draggable. A pointer-down anywhere else still
 pans, which keeps the camera reachable everywhere and makes a drag always
@@ -268,22 +270,96 @@ carries no key, so loads are run one at a time.
 
 ## Drawing layer
 
-Hush's notebook has its own renderer, camera, hit-testing, stroke model and
-layer stack, so it is superimposed rather than merged: a stack of 2D canvases
-above Phaser's, camera slaved to Phaser's.
+Hush's notebook has its own renderer, camera, hit-testing and stroke model,
+and none of them are Phaser's — so it is superimposed rather than merged: a
+stage of 2D canvases above Phaser's, its camera slaved to Phaser's. What
+crosses between them is narrow: a viewport in, camera gestures and a stroke
+selection out.
 
-`src/drawing/` holds the seam:
+| From `hush/src/notebook/drawing/` | Here |
+|---|---|
+| `engine/stroke-geometry.js` | `geometry.ts` — streamline, stamp angle, the slice walk, the lasso's point-in-polygon |
+| `engine/stroke-atlas.js` | `atlas.ts` — brush atlases and the tint cache, with Hush's own `brush-N.png` masks |
+| `engine/stroke-render.js` | `render.ts` — the per-stamp loop |
+| `engine/stroke.js`, `engine/selection.js` | `tools.ts` — draw, slice-erase and lasso sessions |
+| `drawing-layer*.ts`, `re-anchor.ts` | `surface.ts`, `drawing-layer.ts` |
+| `stroke-paint.ts` | `rasterise.ts` — strokes → RGBA → PSD |
 
-- `stroke-store.ts` — the slim replacement for Hush's `DrawingState`. Strokes
-  live on game-document layers, so they persist and appear in layer counts.
-- `rasterise.ts` — strokes → RGBA → PSD, the bridge the spec asks for: sketch,
-  select, hand to another layer as a PSD or a boundary.
-- `types.ts` — stroke styles and bounds.
+Not coming across, because none of it is drawing: the shelf, the pocket,
+splits, proof pages, flowcharts, markdown, text and image shapes, brush slots
+and their flyouts, theme-tracking colour sentinels, the highlight bake target
+and its second canvas pair, and ML Kit handwriting recognition. `DrawingState`
+is replaced by `StrokeStore`, which keeps only what the engine needs and
+writes through to the game document, so strokes persist with the project and
+appear in the layer panel's counts. Hush's load-bearing invariant comes with
+it: strokes are immutable once stored.
 
-Coming across from Hush: `engine/` (stroke, render, geometry, atlas, erase,
-selection, gestures, layers, brushes), `re-anchor`, `region-select`,
-`sync-shim`, `stroke-paint`. Not coming across: shelf, pocket, splits, proof
-pages, flowchart, markdown, text and image shapes, handwriting recognition.
+### Why the ink is baked, not repainted
+
+The canvases are **not** viewport-sized and repainted as the camera moves.
+WebKit rasterises Canvas2D on the CPU and uploads the dirty region of a
+*visible* canvas at a fixed rate, so re-presenting a screenful of ink every
+pan frame costs tens of milliseconds however cheap the drawing itself is —
+the cost model behind half of Hush's engine deltas. Instead the ink is baked
+once into a canvas covering rather more world than fits on screen, and a pan
+or a zoom is one `transform` on the wrapper: a compositor operation that
+touches no pixels.
+
+The backing cannot cover an infinite canvas, so it follows the camera.
+`Surface.sync` re-anchors when the viewport drifts within 7 % of an edge, or
+when the zoom has moved more than 1.4× from the one the ink was baked at and
+presenting it would visibly stretch. The pixel budget is fixed — viewport ×
+1.6 × DPR, capped at 4096 a side — and the *world* size is what varies with
+zoom, which is what keeps the ink at screen resolution however far in the
+user has gone without the backing growing without bound when they go out.
+
+Hush's blit-forward re-anchor (its delta #25) — slide the baked pixels by the
+same delta and repaint only the newly exposed strips — is the next increment.
+This one re-bakes what is visible.
+
+### Fingers never draw
+
+A pen or a mouse runs the active tool; touch pans and pinches, and is
+forwarded to the game camera so the two layers move together. That is Hush's
+iPad rule, and it is the whole reason the Pencil feels like a pencil there:
+you can rest a hand, pan with it, and keep drawing without switching tools.
+Pointer routing is all-or-nothing — a drawing tool suspends the camera rig
+and the surface takes pointer events; select and pan leave both alone — so
+there is exactly one arbiter at a time.
+
+Pressure is read the way Hush reads it: a pen reporting a real value is
+scaled up a little, because few people press through the digitiser's full
+range, and anything reporting the 0.5 default is left there rather than made
+to look like a light touch. `getCoalescedEvents` is drained on every move,
+which is the difference between a curve and a polyline on a 120 Hz Pencil
+against a 60 Hz frame.
+
+### Two exits, and both consume the sketch
+
+The spec asks for exactly two ways out of the drawing layer, and both are
+actions on a lasso selection rather than tools of their own — which is why
+there is no Boundary tool in the rail.
+
+- **Convert to PSD** rasterises through the engine's own stamping (so the
+  export carries the brush texture and the pressure taper), builds a PSD from
+  the pixels, and places it anchored on the cell under the middle of the
+  sketch, so the image lands where the ink was.
+- **Convert to boundary** concatenates the selected strokes oldest-first,
+  simplifies the path against the grid (Ramer–Douglas–Peucker at a twentieth
+  of a tile), and stores it as a blocking zone — a psd-to-phaser zone with no
+  PSD behind it, which is what play mode's navigation grid reads.
+
+Both consume the strokes. The PSD and the zone are the same shape in a better
+form, and leaving the ink behind means every sketch you convert is drawn
+twice, in the same place, at the same size.
+
+### One correction to the port
+
+Hush's slice walk falls back to the *far* end of a segment when a
+crossing lands exactly on a recorded sample (`enterT = 1` entering the
+eraser disc, `exitT = 0` leaving it). Both are the wrong end: they keep one
+sample of ink inside the disc. `geometry.ts` uses `0` and `1` respectively,
+and `__tests__/geometry.test.ts` pins the cut to the disc's edge.
 
 ---
 
@@ -293,6 +369,12 @@ pages, flowchart, markdown, text and image shapes, handwriting recognition.
 manifest → zip, plus the path-traversal guards and the project scaffold. It
 runs against the real store and cleans up after itself, including on failure.
 
+`vitest` covers the pure halves — the grid projection, picking, resize
+geometry, colour, the log's `%c` parsing, the manifest reader, and the
+drawing layer's ported maths. That last one earns its place: a slice that
+cuts in the wrong spot or a lasso that misses is a tool that does not work,
+and neither shows up in a typecheck.
+
 The frontend's check is `tsc --noEmit` plus `vite build`.
 
 `npm run harness` serves the editor shell in a plain browser: `harness/` is
@@ -301,7 +383,10 @@ the panels and the sheets can be opened, driven and screenshotted without a
 Mac or an iPad. It boots a fixture document with three layers and one
 placement, and reads `window.__platform`, `window.__pick` and
 `window.__manifest` so the platform split and the re-import path can be
-exercised from a script. What it cannot stand in for is the pipeline: there
+exercised from a script. Drawing is drivable there too: CDP's
+`Input.dispatchMouseEvent` takes a `pointerType: "pen"` and a `force`, which
+is enough to lay a pressure-varying stroke, slice it, lasso it and read the
+ink back off the canvas. What it cannot stand in for is the pipeline: there
 is no asset server behind it, so placements log a load failure and draw
 nothing. The Phaser scene itself still wants a device.
 
@@ -390,8 +475,16 @@ on chrome never highlights it.
   about its own origin, so their relative offsets do not grow with it.
   Scaling a composition as a unit needs a Container, and `place()` returns a
   Group. Single-sprite placements — every converted image — are exact.
-- Strokes are listed under a layer as a count rather than individually; they
-  get their own selection model with the drawing engine port.
+- Strokes are listed under a layer as one row rather than individually. A
+  sketch is a few hundred strokes and each is a stroke of a pen, not an
+  object; the row selects the lot, which is the granularity both conversions
+  work at anyway.
+- The project thumbnail is a snapshot of Phaser's canvas, so a layer that is
+  only a sketch photographs blank.
+- There is no undo. The drawing layer wants it most — Hush routes every
+  engine mutation into a snapshot stack — and it is the next thing to build.
+- Strokes do not reach a publish. They are scaffolding for the PSDs and
+  boundaries they become, and play mode hides them for the same reason.
 - The code modal edits and saves the project's real files but does not yet
   drive the canvas, and has none of phaser-bench's Phaser-aware completions.
 - Re-import replaces a whole PSD. There is no diff against the previous

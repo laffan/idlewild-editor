@@ -1,29 +1,41 @@
 /**
- * The drawing layer — the seam Hush's notebook engine plugs into.
+ * The drawing layer — Hush's notebook ink, superimposed over the game canvas.
  *
- * Hush's freehand layer has its own renderer, camera, hit-testing, stroke
- * model and layer stack, so it is superimposed over the game canvas rather
- * than merged into it: a stack of 2D canvases above Phaser's, with its camera
- * slaved to Phaser's so the two never drift.
+ * Hush's freehand layer has its own renderer, camera, hit-testing and stroke
+ * model, so it sits *over* Phaser's canvas rather than inside it: a stage of
+ * 2D canvases with its camera slaved to Phaser's. It is a tool for getting
+ * data into the other layers — sketch, select, then hand the selection on as
+ * a PSD or as a boundary.
  *
- * What comes across, per the port plan:
- *   drawing/engine/    stroke, stroke-render, stroke-geometry, stroke-atlas,
- *                      stroke-erase, selection, gestures, layers, brushes/
- *   re-anchor.ts       camera-following origin shifts — the infinite canvas
- *   region-select.ts   lasso and marquee over strokes
- *   sync-shim.ts       identity diff between the store and engine.strokes
- *   stroke-paint.ts    per-stroke re-render into a foreign context
+ * What came across from `hush/src/notebook/drawing/`:
+ *   engine/stroke-geometry.js  → geometry.ts  streamline, stamp angle, the
+ *                                slice walk, the lasso's point-in-polygon
+ *   engine/stroke-atlas.js     → atlas.ts     brush atlases + tint cache,
+ *                                with Hush's own brush-N.png masks
+ *   engine/stroke-render.js    → render.ts    the per-stamp loop
+ *   engine/stroke.js           → tools.ts     draw / erase sessions
+ *   engine/selection.js        → tools.ts     the lasso
+ *   drawing-layer*.ts          → surface.ts, drawing-layer.ts
+ *   re-anchor.ts               → surface.ts   the backing that follows the
+ *                                camera, which is what makes it infinite
+ *   stroke-paint.ts            → rasterise.ts stroke → PSD
  *
- * What does not: the shelf, pocket, splits, proof pages, flowchart, markdown,
- * text and image shapes, and ML Kit handwriting recognition — none of it is
- * drawing, and none of it belongs in a game editor.
+ * What did not, because none of it is drawing: the shelf, the pocket,
+ * splits, proof pages, flowcharts, markdown, text and image shapes, brush
+ * slots and their flyouts, theme-tracking colour sentinels, the highlight
+ * bake target, and ML Kit handwriting recognition.
  *
- * `DrawingState` is replaced by StrokeStore below, which keeps only what the
- * engine actually needs and writes through to the game document. Hush's
- * load-bearing invariant comes with it: strokes are immutable once stored, so
- * the sync shim's identity diff and structurally shared undo both hold.
+ * `DrawingState` is replaced by `StrokeStore`, which keeps only what the
+ * engine needs and writes through to the game document — so strokes persist
+ * with the project and show up in the layer panel's counts. Hush's
+ * load-bearing invariant comes with it: strokes are immutable once stored.
  */
 
+export { DrawingLayer, type DrawingCallbacks } from "./drawing-layer";
 export { StrokeStore } from "./stroke-store";
 export { rasteriseStrokes, strokesToPsd } from "./rasterise";
-export type { DrawingTool, StrokeStyle } from "./types";
+export { strokesToZonePoints } from "./to-zone";
+export { strokesBox } from "./geometry";
+export type { Viewport } from "./surface";
+export { BRUSHES } from "./atlas";
+export { DEFAULT_STYLE, type DrawingTool, type StrokeStyle } from "./types";

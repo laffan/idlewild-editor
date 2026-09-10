@@ -8,6 +8,8 @@
  */
 
 import { clear, h } from "../lib/dom";
+import { BRUSHES, strokesBox, type DrawingTool, type StrokeStyle } from "../drawing";
+import { count } from "./layers-panel";
 import { refreshPsdLabel } from "./psd-actions";
 import { createColorPicker } from "../lib/color-picker";
 import type { DocStore } from "../lib/doc-store";
@@ -23,6 +25,11 @@ export interface InspectorCallbacks {
   onRefreshPsd: (key: string) => void;
   onDeleteSelection: () => void;
   onUsePatternImage: () => void;
+  /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
+  onStrokesToPsd: () => void;
+  onStrokesToZone: () => void;
+  /** The pencil's brush, size and colour changed. */
+  onStrokeStyle: (patch: Partial<StrokeStyle>) => void;
 }
 
 export class Inspector {
@@ -34,6 +41,10 @@ export class Inspector {
   /** `std::env::consts::OS`; only the PSD buttons read it. */
   private readonly platform: string;
   private selection: Selection = { kind: "none" };
+  /** Set while a drawing tool holds the pointer, so the panel can offer the
+   *  brush instead of an empty state nobody can act on. */
+  private drawingTool: DrawingTool | null = null;
+  private strokeStyle: StrokeStyle | null = null;
   /** Carried between selections so the picker reopens where it was left. */
   private lastColor = "#ec3013";
   private suspended = false;
@@ -91,11 +102,32 @@ export class Inspector {
     this.render();
   }
 
+  /** Which drawing tool is up, and the style it will draw with. */
+  setDrawingTool(tool: DrawingTool | null, style: StrokeStyle | null): void {
+    this.drawingTool = tool;
+    this.strokeStyle = style;
+    this.render();
+  }
+
+  /**
+   * Take a style the panel itself just changed.
+   *
+   * Deliberately does not re-render. The colour picker fires continuously
+   * while it is being dragged, and rebuilding the panel under it would throw
+   * away the drag — and, when the change came from the hex field's blur,
+   * remove the field from inside its own handler. The controls that show the
+   * style keep themselves current instead.
+   */
+  updateStrokeStyle(style: StrokeStyle): void {
+    this.strokeStyle = style;
+  }
+
   render(): void {
     clear(this.body);
     switch (this.selection.kind) {
       case "none":
-        this.renderEmpty();
+        if (this.drawingTool) this.renderBrush();
+        else this.renderEmpty();
         break;
       case "layer":
         this.renderLayer(this.selection.layerId);
@@ -111,6 +143,9 @@ export class Inspector {
         break;
       case "zone":
         this.renderZone(this.selection.layerId, this.selection.zoneId);
+        break;
+      case "strokes":
+        this.renderStrokes(this.selection.layerId, this.selection.ids);
         break;
     }
   }
@@ -145,6 +180,118 @@ export class Inspector {
           "Nothing selected. Hold on the canvas to select a run of grid " +
           "spaces, or tap a placed image.",
       }),
+    );
+  }
+
+  /**
+   * The pencil's own controls. Hush puts these in four brush slots with an
+   * edit flyout each; here there is one brush at a time, because the editor's
+   * pencil is for sketching a game object rather than for finished drawing.
+   */
+  private renderBrush(): void {
+    const style = this.strokeStyle;
+    if (!style) return this.renderEmpty();
+
+    if (this.drawingTool === "eraser") {
+      this.head("Eraser", "Slice");
+      this.body.appendChild(
+        h("div", {
+          class: "inspect-empty",
+          text:
+            "Drag across a stroke to cut it where the disc passes. A stroke " +
+            "cut through the middle becomes two.",
+        }),
+      );
+      return;
+    }
+
+    if (this.drawingTool === "lasso") {
+      this.head("Lasso", "Select strokes");
+      this.body.appendChild(
+        h("div", {
+          class: "inspect-empty",
+          text:
+            "Sweep a loop around a sketch to select it, then hand it to this " +
+            "layer as a PSD or as a boundary.",
+        }),
+      );
+      return;
+    }
+
+    const name = h("div", {
+      class: "inspect-title",
+      text: BRUSHES.find((b) => b.id === style.brushId)?.name ?? "Ink",
+    });
+    this.body.appendChild(
+      h(
+        "div",
+        { class: "inspect-head" },
+        h("div", { class: "inspect-kicker m", text: "Pencil" }),
+        name,
+      ),
+    );
+
+    const brushes = h("div", { class: "brush-row" });
+    for (const brush of BRUSHES) {
+      const button = h("button", {
+        class: "brush-btn",
+        title: brush.name,
+        text: String(brush.id),
+        "aria-pressed": String(brush.id === style.brushId),
+        onClick: () => {
+          for (const other of brushes.children) {
+            other.setAttribute("aria-pressed", String(other === button));
+          }
+          name.textContent = brush.name;
+          this.callbacks.onStrokeStyle({ brushId: brush.id });
+        },
+      });
+      brushes.appendChild(button);
+    }
+
+    const readout = h("div", { class: "inspect-value", text: `${style.size} px` });
+    const size = h("input", {
+      class: "brush-size",
+      type: "range",
+      min: "1",
+      max: "48",
+      step: "1",
+      value: String(style.size),
+      // `input` rather than `change`: the ink should follow the slider.
+      onInput: (event: Event) => {
+        const next = Number((event.target as HTMLInputElement).value);
+        if (!Number.isFinite(next)) return;
+        readout.textContent = `${next} px`;
+        this.callbacks.onStrokeStyle({ size: next });
+      },
+    });
+
+    const picker = createColorPicker({
+      value: style.color,
+      onChange: (hex) => this.callbacks.onStrokeStyle({ color: hex }),
+      onCommit: (hex) => this.callbacks.onStrokeStyle({ color: hex }),
+    });
+
+    this.body.append(
+      h(
+        "div",
+        { class: "inspect-section" },
+        h("div", { class: "inspect-section-title m", text: "Brush" }),
+        brushes,
+        h(
+          "div",
+          { class: "inspect-row brush-row-size" },
+          h("div", { class: "inspect-key m", text: "Size" }),
+          size,
+          readout,
+        ),
+      ),
+      h(
+        "div",
+        { class: "inspect-section" },
+        h("div", { class: "inspect-section-title m", text: "Colour" }),
+        picker.root,
+      ),
     );
   }
 
@@ -272,6 +419,48 @@ export class Inspector {
         h("button", {
           class: "panel-btn",
           text: "Remove from layer",
+          onClick: () => this.callbacks.onDeleteSelection(),
+        }),
+      ),
+    );
+  }
+
+  /**
+   * A lasso selection. The two buttons are the drawing layer's only exits:
+   * the sketch becomes a game object, or it becomes a region play mode can
+   * walk around. Both consume the strokes — see editor/stroke-actions.
+   */
+  private renderStrokes(layerId: string, ids: readonly string[]): void {
+    const layer = this.store.layer(layerId);
+    if (!layer) return this.renderEmpty();
+    const strokes = layer.strokes.filter((s) => ids.includes(s.id));
+    if (strokes.length === 0) return this.renderEmpty();
+
+    this.head("Sketch", count(strokes.length, "stroke"));
+    this.row("Layer", layer.name);
+    const box = strokesBox(strokes);
+    if (box) {
+      this.row("Size", `${Math.round(box.width)} × ${Math.round(box.height)}`);
+      this.row("Origin", `${Math.round(box.x)}, ${Math.round(box.y)}`);
+    }
+
+    this.body.appendChild(
+      h(
+        "div",
+        { class: "inspect-section" },
+        h("button", {
+          class: "panel-btn primary",
+          text: "Convert to PSD",
+          onClick: () => this.callbacks.onStrokesToPsd(),
+        }),
+        h("button", {
+          class: "panel-btn",
+          text: "Convert to boundary",
+          onClick: () => this.callbacks.onStrokesToZone(),
+        }),
+        h("button", {
+          class: "panel-btn",
+          text: "Delete strokes",
           onClick: () => this.callbacks.onDeleteSelection(),
         }),
       ),

@@ -139,14 +139,32 @@ export class LayersPanel {
         );
       }
 
-      // Strokes are listed as a count until the drawing layer's own
-      // selection model arrives; there is nothing to point at yet.
+      // Strokes are listed as one row rather than individually — a sketch
+      // is a few hundred of them and each is a stroke of a pen, not an
+      // object. Selecting the row selects the lot, which is the granularity
+      // the two conversions work at anyway.
       if (layer.strokes.length > 0) {
         group.appendChild(
-          h("div", {
-            class: "layer-item empty m",
-            text: `${layer.strokes.length} strokes`,
-          }),
+          h(
+            "button",
+            {
+              class:
+                selection.kind === "strokes" && selection.layerId === layer.id
+                  ? "layer-item active"
+                  : "layer-item",
+              onClick: () =>
+                this.callbacks.onSelectItem({
+                  kind: "strokes",
+                  layerId: layer.id,
+                  ids: layer.strokes.map((stroke) => stroke.id),
+                }),
+            },
+            icon(ICONS.pencil, 14),
+            h("span", {
+              class: "layer-item-label",
+              text: count(layer.strokes.length, "stroke"),
+            }),
+          ),
         );
       }
     });
@@ -401,14 +419,17 @@ export class LayersPanel {
 
 function describe(layer: Layer): string {
   const parts: string[] = [];
-  if (layer.placements.length) {
-    parts.push(`${layer.placements.length} psd`);
-  }
+  if (layer.placements.length) parts.push(`${layer.placements.length} psd`);
   if (layer.fills.length) {
     const cells = layer.fills.reduce((n, f) => n + f.cells.length, 0);
-    parts.push(`${cells} cells`);
+    parts.push(count(cells, "cell"));
   }
-  if (layer.zones.length) parts.push(`${layer.zones.length} zones`);
-  if (layer.strokes.length) parts.push(`${layer.strokes.length} strokes`);
+  if (layer.zones.length) parts.push(count(layer.zones.length, "zone"));
+  if (layer.strokes.length) parts.push(count(layer.strokes.length, "stroke"));
   return parts.length ? parts.join(" · ") : "empty";
+}
+
+/** These read at a glance, and "1 strokes" stops the glance. */
+export function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
