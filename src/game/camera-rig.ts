@@ -9,6 +9,16 @@
 
 export type RigPhase = "idle" | "pan" | "pinch" | "marquee" | "drag";
 
+/**
+ * What a one-finger drag on empty space does.
+ *
+ * The rail's Select and Pan tools, as the arbiter sees them. It used to be
+ * neither: a drag always panned and only a hold started a selection, which
+ * made Select and Pan the same tool with a delay between them and left no
+ * way to rubber-band over several things at once.
+ */
+export type RigMode = "select" | "pan";
+
 /** What was held when the drag began. */
 export interface DragModifiers {
   alt: boolean;
@@ -76,6 +86,8 @@ export class CameraRig {
   private dragMoved = false;
   /** Set while a tool wants raw input (pencil, eraser, boundary). */
   private suspended = false;
+  /** What a drag on empty space means: the rail's tool, or space held down. */
+  private mode: RigMode = "select";
 
   constructor(el: HTMLElement, events: RigEvents) {
     this.el = el;
@@ -102,6 +114,18 @@ export class CameraRig {
   setSuspended(suspended: boolean): void {
     this.suspended = suspended;
     if (suspended) this.reset();
+  }
+
+  /**
+   * Say what a drag means from here on.
+   *
+   * Changing it mid-gesture would be a surprise — a pan that turns into a
+   * marquee halfway across the canvas — so it takes effect on the next
+   * pointer-down, which is also what makes holding space feel like borrowing
+   * the Pan tool rather than fighting the one already in use.
+   */
+  setMode(mode: RigMode): void {
+    this.mode = mode;
   }
 
   get currentPhase(): RigPhase {
@@ -159,11 +183,16 @@ export class CameraRig {
       return;
     }
 
-    this.holdTimer = window.setTimeout(() => {
-      this.holdTimer = null;
-      this.phase = "marquee";
-      this.events.onMarqueeStart(this.startX, this.startY);
-    }, HOLD_MS);
+    // A hold still opens a selection where the finger already is, so a single
+    // space can be picked without dragging out a box around it. Under Pan
+    // there is nothing to hold for.
+    if (this.mode === "select") {
+      this.holdTimer = window.setTimeout(() => {
+        this.holdTimer = null;
+        this.phase = "marquee";
+        this.events.onMarqueeStart(this.startX, this.startY);
+      }, HOLD_MS);
+    }
   };
 
   private onMove = (event: PointerEvent): void => {
@@ -204,8 +233,18 @@ export class CameraRig {
       this.phase === "idle" &&
       Math.hypot(movedX, movedY) > MOVE_TOLERANCE
     ) {
-      // Moved before the hold matured: this is a pan, not a selection.
       this.clearHold();
+      if (this.mode === "select") {
+        // Straight into the box, from where the finger went down rather than
+        // from where it is now — otherwise the first few pixels of every
+        // marquee are lost and a small one selects nothing.
+        this.phase = "marquee";
+        this.events.onMarqueeStart(this.startX, this.startY);
+        this.events.onMarqueeMove(event.clientX, event.clientY);
+        this.lastX = event.clientX;
+        this.lastY = event.clientY;
+        return;
+      }
       this.phase = "pan";
     }
 

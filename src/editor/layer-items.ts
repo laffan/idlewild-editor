@@ -123,6 +123,11 @@ export function renderLayerItem(
 /** Whether a selection points at this item, so the row can show as current. */
 export function isSelected(item: LayerItem, selection: Selection): boolean {
   const a = item.selection;
+  // Several images caught by a marquee light up every row they cover, which
+  // is the one place the row's kind and the selection's differ.
+  if (a.kind === "placement" && selection.kind === "placements") {
+    return selection.ids.includes(a.placementId);
+  }
   if (a.kind !== selection.kind) return false;
   switch (a.kind) {
     case "placement":

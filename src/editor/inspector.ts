@@ -8,16 +8,22 @@
  */
 
 import { clear, h } from "../lib/dom";
-import { strokesBox, type DrawingTool, type StrokeStyle } from "../drawing";
+import type { DrawingTool, StrokeStyle } from "../drawing";
 import { brushPanel } from "./inspect-brush";
+import {
+  renderPlacements,
+  renderRegion,
+  renderStrokes,
+  renderZone,
+  type PanelSurface,
+} from "./inspect-panels";
 import { scaleOf, sizeControls } from "./inspect-transform";
-import { count } from "./layers-panel";
 import { openPsdLabel, refreshPsdLabel } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
 import { instanceMembers, instanceOf } from "../game/instance";
 import type { DocStore } from "../lib/doc-store";
-import { describeRange, Grid } from "../lib/grid";
+import { Grid } from "../lib/grid";
 import { describeFill, type FillPatch, type Placement, type Selection } from "../lib/types";
 
 export interface InspectorCallbacks {
@@ -37,6 +43,8 @@ export interface InspectorCallbacks {
    */
   onToggleLayerAdjust: () => void;
   onDeleteSelection: () => void;
+  /** Write the selected grid area out as a transparent PNG. */
+  onExportSelection: () => void;
   onUsePatternImage: () => void;
   /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
   onStrokesToPsd: () => void;
@@ -194,7 +202,7 @@ export class Inspector {
         this.renderLayer(this.selection.layerId);
         break;
       case "region":
-        this.renderRegion(this.selection.from, this.selection.to);
+        renderRegion(this.surface(), this.grid, this.callbacks, this.selection);
         break;
       case "fill":
         this.renderFill(this.selection.layerId, this.selection.fillId);
@@ -202,11 +210,14 @@ export class Inspector {
       case "placement":
         this.renderPlacement(this.selection.layerId, this.selection.placementId);
         break;
+      case "placements":
+        renderPlacements(this.surface(), this.store, this.callbacks, this.selection);
+        break;
       case "zone":
-        this.renderZone(this.selection.layerId, this.selection.zoneId);
+        renderZone(this.surface(), this.store, this.callbacks, this.selection);
         break;
       case "strokes":
-        this.renderStrokes(this.selection.layerId, this.selection.ids);
+        renderStrokes(this.surface(), this.store, this.callbacks, this.selection);
         break;
     }
     this.restoreName(editing);
@@ -240,6 +251,24 @@ export class Inspector {
     input.value = memo.value;
     input.focus();
     input.setSelectionRange(memo.start, memo.end);
+  }
+
+  /**
+   * What the panels in `inspect-panels.ts` write through.
+   *
+   * Made per render rather than held: everything on it delegates, and the
+   * state the panels actually touch — `this.current`, the section a row
+   * belongs to — is read at call time either way.
+   */
+  private surface(): PanelSurface {
+    return {
+      body: this.body,
+      head: (kicker, title) => this.head(kicker, title),
+      section: (title) => this.section(title),
+      row: (key, value) => this.row(key, value),
+      empty: () => this.renderEmpty(),
+      fillSection: (fill) => this.fillSection(fill),
+    };
   }
 
   private head(kicker: string, title: string): void {
@@ -372,22 +401,6 @@ export class Inspector {
     this.row("Fills", String(layer.fills.length));
     this.row("Boundaries", String(layer.zones.length));
     this.row("Strokes", String(layer.strokes.length));
-  }
-
-  private renderRegion(
-    from: { cx: number; cy: number },
-    to: { cx: number; cy: number },
-  ): void {
-    const bounds = this.grid.rangeBounds(from, to);
-    this.head("Selection", describeRange(this.grid, from, to));
-    this.section("Info");
-    this.row("Origin", `${Math.min(from.cx, to.cx)}, ${Math.min(from.cy, to.cy)}`);
-    this.row("Pixels", `${Math.round(bounds.width)} × ${Math.round(bounds.height)}`);
-    this.row("Template", this.grid.projection);
-    // A blank project has a nominal unit but does not round to it, and a row
-    // that said "Grid: 64 px" over a selection that ignored it would lie.
-    this.row("Grid", this.grid.snaps ? `${this.grid.size} px` : "no snapping");
-    this.fillSection(undefined);
   }
 
   private renderFill(layerId: string, fillId: string): void {
@@ -589,49 +602,6 @@ export class Inspector {
     return this.psdLayers.root;
   }
 
-  /**
-   * A lasso selection. The two buttons are the drawing layer's only exits:
-   * the sketch becomes a game object, or it becomes a region play mode can
-   * walk around. Both consume the strokes — see editor/stroke-actions.
-   */
-  private renderStrokes(layerId: string, ids: readonly string[]): void {
-    const layer = this.store.layer(layerId);
-    if (!layer) return this.renderEmpty();
-    const strokes = layer.strokes.filter((s) => ids.includes(s.id));
-    if (strokes.length === 0) return this.renderEmpty();
-
-    this.head("Sketch", count(strokes.length, "stroke"));
-    this.section("Info");
-    this.row("Layer", layer.name);
-    const box = strokesBox(strokes);
-    if (box) {
-      this.row("Size", `${Math.round(box.width)} × ${Math.round(box.height)}`);
-      this.row("Origin", `${Math.round(box.x)}, ${Math.round(box.y)}`);
-    }
-
-    this.body.appendChild(
-      h(
-        "div",
-        { class: "inspect-section" },
-        h("button", {
-          class: "panel-btn primary",
-          text: "Convert to PSD",
-          onClick: () => this.callbacks.onStrokesToPsd(),
-        }),
-        h("button", {
-          class: "panel-btn",
-          text: "Convert to boundary",
-          onClick: () => this.callbacks.onStrokesToZone(),
-        }),
-        h("button", {
-          class: "panel-btn",
-          text: "Delete strokes",
-          onClick: () => this.callbacks.onDeleteSelection(),
-        }),
-      ),
-    );
-  }
-
   /** How many placements in the whole document draw this same PSD layer. */
   private copiesOf(placement: Placement): number {
     let n = 0;
@@ -648,23 +618,4 @@ export class Inspector {
     return n;
   }
 
-  private renderZone(layerId: string, zoneId: string): void {
-    const zone = this.store.layer(layerId)?.zones.find((z) => z.id === zoneId);
-    if (!zone) return this.renderEmpty();
-    this.head("Boundary", zone.name);
-    this.section("Info");
-    this.row("Points", String(zone.points.length));
-    this.row("Blocking", zone.blocking ? "Yes" : "No");
-    this.body.appendChild(
-      h(
-        "div",
-        { class: "inspect-section" },
-        h("button", {
-          class: "panel-btn",
-          text: "Delete boundary",
-          onClick: () => this.callbacks.onDeleteSelection(),
-        }),
-      ),
-    );
-  }
 }

@@ -10,8 +10,8 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid, cellsInRange } from "../lib/grid";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
-import { CameraRig } from "./camera-rig";
-import { DocRenderer } from "./doc-renderer";
+import { CameraRig, type RigMode } from "./camera-rig";
+import { DocRenderer, pickPlacementsIn } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { PlayController, type PlayMode } from "./play-controller";
@@ -356,8 +356,30 @@ export class WorldScene extends Phaser.Scene {
     this.setSelection({ kind: "region", from: this.marqueeAnchor, to: cell });
   }
 
+  /**
+   * What the box caught.
+   *
+   * A marquee over images is a way of picking several of them up; a marquee
+   * over empty grid is a way of saying "this much space", which is what Fill,
+   * Add Image and Generate PSD act on. Both are the same gesture, and the
+   * answer is decided by what is under it at the end rather than by a
+   * modifier nobody would find.
+   */
   private endMarquee(): void {
+    const anchor = this.marqueeAnchor;
     this.marqueeAnchor = null;
+    if (!anchor || this.selection.kind !== "region") return;
+
+    // The marquee's own shape, which under an isometric template is a
+    // diamond — the box around it reaches a long way past what was dragged.
+    const outline = this.grid.rangePolygon(this.selection.from, this.selection.to);
+    const caught = pickPlacementsIn(this.store.layers, outline);
+    if (!caught) return;
+    this.setSelection({
+      kind: "placements",
+      layerId: caught.layerId,
+      ids: caught.ids,
+    });
   }
 
   setSelection(selection: Selection): void {
@@ -481,7 +503,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Screen position for the floating action bar over a region selection. */
-  selectionScreenAnchor(): { x: number; y: number } | null {
+  selectionScreenAnchor(): { x: number; y: number; width: number } | null {
     if (this.selection.kind !== "region") return null;
     const bounds = this.grid.rangeBounds(this.selection.from, this.selection.to);
     const camera = this.cameras.main;
@@ -489,6 +511,9 @@ export class WorldScene extends Phaser.Scene {
     return {
       x: rect.left + (bounds.x - camera.worldView.x) * camera.zoom,
       y: rect.top + (bounds.y - camera.worldView.y) * camera.zoom,
+      // The width comes too, so the bar can sit over the middle of the
+      // selection rather than over its left-hand corner.
+      width: bounds.width * camera.zoom,
     };
   }
 
@@ -575,6 +600,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Let a tool take raw pointer input — the drawing layer's entry point. */
+  /** What a drag on empty space does: rubber-band, or move the camera. */
+  setGestureMode(mode: RigMode): void {
+    this.rig.setMode(mode);
+  }
+
   suspendGestures(suspended: boolean): void {
     this.rig.setSuspended(suspended);
   }

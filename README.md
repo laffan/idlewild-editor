@@ -37,8 +37,12 @@ remaining pieces are wired to real slots rather than mocked.
 - A full-width header carrying the project and the Edit/Play toggle, with
   Code, Publish and Project Options behind its menu. It insets itself out of
   the iPad's status bar, as the console drawer does out of the home indicator
-- Infinite grid, one-finger pan, two-finger zoom, hold-to-select, tap-to-pick
+- Infinite grid, two-finger zoom, tap-to-pick. Select drags a box around
+  things — several images at once, or a patch of grid; Pan drags the camera,
+  and holding space borrows it from wherever you are
 - Fill a selection with any colour, from a full picker with recent swatches
+- Generate PSD makes an empty file the size and shape of the selected grid
+  area, already marked and anchored — somewhere to go and paint
 - Drag placed images, fills and boundaries, snapped to the grid; resize images
   from their corner handles, or freely from the inspector
 - A placed PSD moves as one thing: every layer it came in with drags and
@@ -49,7 +53,7 @@ remaining pieces are wired to real slots rather than mocked.
   at half size because everything drawn on a retina machine is 2×
 - Paste an image or a PSD straight onto the canvas: it is imported like any
   other file — marks and all — and lands in the middle of the view, on the
-  layer you are on
+  layer you are on. ⌘V, or Paste Image in the menu where there is no ⌘
 - Every import carries its grid space into the PSD as two marks a game never
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork
@@ -84,7 +88,7 @@ remaining pieces are wired to real slots rather than mocked.
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail
 - Delete removes whatever is selected
-- Export a selection as a transparent PNG (save or copy)
+- Export a selection as a transparent PNG (save or copy), from the inspector
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
   to the system editor on macOS and to the share sheet on iPadOS. Re-import
   asks where the edited file came back from — Files, the photo library or the

@@ -164,6 +164,9 @@ export class DragController {
     if (selection.kind === "placement") {
       return this.beginPlacement(selection, world, grabCell, modifiers);
     }
+    if (selection.kind === "placements") {
+      return this.beginPlacements(selection, world, grabCell, modifiers);
+    }
     if (selection.kind === "fill") {
       // A fill has no file behind it, so shift has nothing to detach.
       return this.beginFill(selection, world, grabCell, modifiers.alt);
@@ -288,15 +291,51 @@ export class DragController {
           layer.id,
           instanceOf(placement),
         );
+    return this.beginGroup(layer.id, group, world, grabCell, modifiers, true);
+  }
+
+  /**
+   * Several images caught by a marquee, moved together.
+   *
+   * The same machinery as one placed PSD, with resizing left out: scaling a
+   * PSD against its own box keeps its layers in the arrangement they were
+   * built in, and there is no such relationship between things that only
+   * happen to be near each other. Sizes stay each image's own.
+   */
+  private beginPlacements(
+    selection: Extract<Selection, { kind: "placements" }>,
+    world: Point,
+    grabCell: Cell,
+    modifiers: DragModifiers,
+  ): boolean {
+    const layer = this.host.store.layer(selection.layerId);
+    if (!layer || layer.locked) return false;
+    const group = layer.placements.filter((p) => selection.ids.includes(p.id));
+    if (group.length === 0) return false;
+    return this.beginGroup(layer.id, group, world, grabCell, modifiers, false);
+  }
+
+  private beginGroup(
+    layerId: string,
+    group: Placement[],
+    world: Point,
+    grabCell: Cell,
+    modifiers: DragModifiers,
+    resizable: boolean,
+  ): boolean {
+    const placement = group[0];
+    if (!placement) return false;
 
     // A corner handle resizes; the body moves. Handles are drawn at a
     // constant screen size, so the world-space target scales with zoom.
     const box = unionRect(group) ?? placementBox(placement);
-    const corner = handleAt(box, world, HANDLE_SCREEN_PX / this.host.zoom());
+    const corner = resizable
+      ? handleAt(box, world, HANDLE_SCREEN_PX / this.host.zoom())
+      : null;
     if (corner) {
       this.start({
         kind: "resize",
-        layerId: layer.id,
+        layerId,
         members: group.map((p) => ({
           id: p.id,
           rect: placementBox(p),
@@ -325,14 +364,14 @@ export class DragController {
     // inspector says so, and offers to break it — or shift asks for it broken
     // straight away, which is the same thing without the round trip. Copying
     // a whole PSD copies every layer of it, into a unit of its own.
-    const dragged = modifiers.alt ? this.copyGroup(layer.id, group, placement) : group;
+    const dragged = modifiers.alt ? this.copyGroup(layerId, group, placement) : group;
     if (modifiers.alt && modifiers.shift) {
-      this.host.detachCopy(layer.id, dragged[0].id, dragged[0].psdKey);
+      this.host.detachCopy(layerId, dragged[0].id, dragged[0].psdKey);
     }
 
     this.start({
       kind: "placement",
-      layerId: layer.id,
+      layerId,
       grabCell,
       members: dragged.map((p) => {
         const anchorWorld = this.host.grid.cellToWorld(p.anchor);

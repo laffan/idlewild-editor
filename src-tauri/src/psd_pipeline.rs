@@ -7,6 +7,7 @@
 
 use crate::project::{ImportResult, OutputFile};
 use crate::psd_write::AnchorMarks;
+use crate::psd_layers;
 use crate::store;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -231,7 +232,20 @@ pub fn rename_and_process(
     }
 
     let (width, height) = psd_dimensions(&dest)?;
-    let manifest = process(project_id, to, &ProcessOptions::default(), emit_log)?;
+    let mut manifest = process(project_id, to, &ProcessOptions::default(), &emit_log)?;
+
+    // A converted image, a rasterised sketch and a generated PSD all name
+    // their one sprite layer after the key. Renaming the file leaves that
+    // layer holding the old name, which the layers panel then shows in its
+    // detail column beside the new one — so the layer follows the file, and
+    // the manifest is taken from the rewrite rather than from the parse
+    // above. Only a layer that was named after the file moves; a stack
+    // someone built in Photoshop keeps its own names, and a file this cannot
+    // rewrite at all is left alone.
+    if psd_layers::rename_layers_named_after(project_id, to, key, to, &emit_log)? {
+        manifest = read_manifest(project_id, to)?;
+    }
+
     Ok(ImportResult {
         key: to.to_string(),
         width,

@@ -17,7 +17,12 @@ import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
 import { listenForPaste } from "./paste";
-import { importPasted } from "./paste-actions";
+import { bindShortcuts } from "./shortcuts";
+import {
+  importPasted,
+  pasteFromClipboard,
+  type PasteTarget,
+} from "./paste-actions";
 import { PlayPad } from "./play-pad";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
@@ -26,7 +31,7 @@ import { createResizer } from "./resizer";
 import { openPsdExternally, refreshPsd } from "./psd-actions";
 import { PsdLayerEditor } from "./psd-layers";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
-import { convertFillToPsd } from "./fill-actions";
+import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import {
   openAddImage,
@@ -73,6 +78,7 @@ export async function mountEditor(
       // so the next Fill or Add Image lands where the user is looking.
       const layerId =
         selection.kind === "placement" ||
+        selection.kind === "placements" ||
         selection.kind === "fill" ||
         selection.kind === "zone" ||
         selection.kind === "strokes"
@@ -114,6 +120,14 @@ export async function mountEditor(
       inspector.updateStrokeStyle(drawing.style);
     },
     onDeleteSelection: () => deleteSelection(),
+    onExportSelection: () => {
+      const selection = handle?.scene.getSelection();
+      if (selection?.kind !== "region") return;
+      openExportSelection(
+        describeRange(grid, selection.from, selection.to),
+        async () => exportSelectionPng(store, grid, selection.from, selection.to),
+      );
+    },
     onUsePatternImage: () =>
       openAddImage(meta.id, os, (result) => {
         const selection = handle?.scene.getSelection();
@@ -147,28 +161,40 @@ export async function mountEditor(
         marksForSelection(grid, selection.from, selection.to),
       );
     },
-    onExport: () => {
+    onGeneratePsd: () => {
       const selection = handle?.scene.getSelection();
-      if (selection?.kind !== "region") return;
-      openExportSelection(
-        describeRange(grid, selection.from, selection.to),
-        async () => exportSelectionPng(store, grid, selection.from, selection.to),
-      );
+      const scene = handle?.scene;
+      if (selection?.kind !== "region" || !scene) return;
+      void generatePsdForRegion(meta.id, grid, scene, selection.from, selection.to);
     },
   });
 
   // Pencil, eraser and lasso hand the pointer to the drawing layer; select
   // and pan leave it with the game canvas and its gesture arbiter.
-  const rail = new ToolRail((tool: ToolId) => {
+  const rail = new ToolRail((tool: ToolId) => applyTool(tool));
+
+  /**
+   * Put a tool in the pointer's hands.
+   *
+   * Called by the rail and by the space bar, which borrows Pan for as long as
+   * it is held. `rail.setTool` is what the space bar needs from it: the rail
+   * has to show what the pointer is actually doing, or holding space looks
+   * like nothing happened.
+   */
+  function applyTool(tool: ToolId, announce = true): void {
+    rail.setTool(tool);
     const drawingTool =
       tool === "pencil" || tool === "eraser" || tool === "lasso" ? tool : null;
     handle?.scene.suspendGestures(drawingTool !== null);
+    handle?.scene.setGestureMode(tool === "pan" ? "pan" : "select");
     drawing?.setTool(drawingTool);
     inspector.setDrawingTool(drawingTool, drawing?.style ?? null);
+    if (!announce) return;
+    if (tool === "select") log.info("Select — drag a box around what you want");
     if (tool === "pan") log.info("Pan tool: drag to move the camera");
     if (tool === "pencil") log.info("Pencil — draw with a pencil or a mouse; fingers pan");
     if (tool === "lasso") log.info("Lasso — sweep around strokes to select them");
-  });
+  }
 
   const leftToggle = h(
     "button",
@@ -196,6 +222,10 @@ export async function mountEditor(
       onBack: () => void leave(),
       onMode: (next) => setMode(next),
       onCode: () => toggleCode(),
+      onPasteImage: () => {
+        const target = pasteTarget();
+        if (target) void pasteFromClipboard(meta.id, target);
+      },
       onPublish: () => openPublish(meta.id, meta.name),
       onOptions: () => openProjectOptions(meta, store.layers.length),
     },
@@ -269,28 +299,36 @@ export async function mountEditor(
   // worked on. Bound to the document rather than the canvas, which never
   // holds focus — every pointer handler over it calls preventDefault, so
   // nothing in the scene is ever the focused element.
+  const pasteTarget = (): PasteTarget | null => {
+    const scene = handle?.scene;
+    if (!scene) return null;
+    return {
+      grid,
+      centreCell: () => scene.centreCell(),
+      placePsd: (key, manifest, at, scale) =>
+        scene.placePsd(key, manifest, at, scale),
+    };
+  };
+
   const stopPaste = listenForPaste({
     enabled: () => mode === "edit",
     onImage: (name, file) => {
-      const scene = handle?.scene;
-      if (!scene) return;
-      void importPasted(
-        meta.id,
-        {
-          grid,
-          centreCell: () => scene.centreCell(),
-          placePsd: (key, manifest, at, scale) =>
-            scene.placePsd(key, manifest, at, scale),
-        },
-        name,
-        file,
-      );
+      const target = pasteTarget();
+      if (target) void importPasted(meta.id, target, name, file);
     },
   });
 
   clear(container);
   container.appendChild(shell);
-  document.addEventListener("keydown", onKeyDown);
+  const stopShortcuts = bindShortcuts({
+    currentTool: () => rail.tool,
+    applyTool: (tool) => applyTool(tool, false),
+    hasSelection: () => {
+      const selection = handle?.scene.getSelection();
+      return !!selection && selection.kind !== "none" && selection.kind !== "layer";
+    },
+    onDelete: () => deleteSelection(),
+  });
   leftResizer.restore();
   rightResizer.restore();
   consoleResizer.restore();
@@ -359,6 +397,7 @@ export async function mountEditor(
     // Picking something on the canvas reveals it in the layer list too.
     if (
       selection.kind === "placement" ||
+      selection.kind === "placements" ||
       selection.kind === "fill" ||
       selection.kind === "zone" ||
       selection.kind === "strokes"
@@ -392,27 +431,6 @@ export async function mountEditor(
    * there, backspace means backspace. `isContentEditable` is what catches
    * CodeMirror, which is a div rather than a textarea.
    */
-  function onKeyDown(event: KeyboardEvent): void {
-    if (event.key !== "Delete" && event.key !== "Backspace") return;
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-
-    const target = event.target;
-    if (
-      target instanceof HTMLInputElement ||
-      target instanceof HTMLTextAreaElement ||
-      (target instanceof HTMLElement && target.isContentEditable)
-    ) {
-      return;
-    }
-
-    const selection = handle?.scene.getSelection();
-    if (!selection || selection.kind === "none" || selection.kind === "layer") {
-      return;
-    }
-    event.preventDefault();
-    deleteSelection();
-  }
-
   function deleteSelection(): void {
     const selection = handle?.scene.getSelection();
     if (!selection) return;
@@ -423,6 +441,13 @@ export async function mountEditor(
       // the one layer of it that has been opened up.
       handle?.scene.removeSelectedPlacement();
       return;
+    } else if (selection.kind === "placements") {
+      // Every image the marquee caught, whole. A unit opened up for layer
+      // adjustment is the one case where part of a PSD can go, and a marquee
+      // is never that.
+      for (const id of selection.ids) {
+        store.removePlacement(selection.layerId, id);
+      }
     } else if (selection.kind === "zone") {
       store.removeZone(selection.layerId, selection.zoneId);
     } else if (selection.kind === "strokes") {
@@ -642,7 +667,7 @@ export async function mountEditor(
   }
 
   async function teardown(): Promise<void> {
-    document.removeEventListener("keydown", onKeyDown);
+    stopShortcuts();
     stopPaste();
     if (mode === "play") setMode("edit");
     await saveThumbnail();

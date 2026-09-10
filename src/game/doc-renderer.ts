@@ -7,8 +7,8 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { Grid, fillShape } from "../lib/grid";
-import type { FillPatch, Layer, Placement, Zone } from "../lib/types";
+import { convexOverlapsRect, Grid, fillShape } from "../lib/grid";
+import type { FillPatch, Layer, Placement, Point, Rect, Zone } from "../lib/types";
 import * as log from "../lib/log";
 
 const DEPTH_STRIDE = 1000;
@@ -325,6 +325,46 @@ export function layerDepth(layers: readonly Layer[], layerId: string): number {
  * final placement. Locked and hidden layers are inert to the pointer, the
  * same rule Hush applies to its own pick paths.
  */
+/**
+ * Every placement a box caught, on the front-most layer that has any.
+ *
+ * One layer's worth, because that is what a drag can move together — and the
+ * layer is chosen by the same front-most-wins rule a tap follows, so a
+ * marquee over a stack of layers picks the one you would have hit by tapping
+ * rather than the one that happens to be active.
+ *
+ * A placement counts when the marquee *overlaps* it, not when it contains it:
+ * dragging a box that swallows everything whole is the fiddly half of every
+ * marquee, and nothing here is small enough to catch by accident.
+ *
+ * The marquee arrives as its own outline rather than as a rectangle, because
+ * under an isometric template it is a diamond and the box around that diamond
+ * is very much bigger than what was dragged — a marquee in one corner of the
+ * screen would otherwise pick up images in another.
+ */
+export function pickPlacementsIn(
+  layers: readonly Layer[],
+  outline: readonly Point[],
+): { layerId: string; ids: string[] } | null {
+  for (const layer of layers) {
+    if (layer.locked || !layer.visible) continue;
+    const ids = layer.placements
+      .filter((p) => convexOverlapsRect(outline, placementRect(p)))
+      .map((p) => p.id);
+    if (ids.length > 0) return { layerId: layer.id, ids };
+  }
+  return null;
+}
+
+function placementRect(placement: Placement): Rect {
+  return {
+    x: placement.x,
+    y: placement.y,
+    width: placement.width,
+    height: placement.height,
+  };
+}
+
 export function pickPlacement(
   layers: readonly Layer[],
   worldX: number,

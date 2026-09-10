@@ -17,6 +17,7 @@ import { psd } from "../lib/ipc";
 import type { AnchorMarks } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { Cell, Rect } from "../lib/types";
+import { pasteName } from "./paste";
 import {
   EXPORT_SCALE,
   footprintForBox,
@@ -72,6 +73,56 @@ export async function importPasted(
   } catch (err) {
     log.error("Could not paste that:", err);
   }
+}
+
+/**
+ * The same thing, asked for rather than pasted.
+ *
+ * An iPad has no ⌘V, so without this the paste path is unreachable — and
+ * untestable — on the platform this editor is mostly for. Reading the
+ * clipboard *cold* is a different call from taking a paste event: the event
+ * carries its data, this has to ask for it, and asking can be refused.
+ *
+ * The webview's clipboard rather than the Tauri plugin's, because the plugin
+ * has no image support on iOS at all. What comes back is wrapped in a `File`
+ * so it goes down exactly the route a real paste goes down, marks and all.
+ */
+export async function pasteFromClipboard(
+  projectId: string,
+  target: PasteTarget,
+): Promise<void> {
+  let file: File;
+  try {
+    file = await clipboardFile();
+  } catch (err) {
+    log.error("Nothing to paste:", err);
+    return;
+  }
+  await importPasted(projectId, target, pasteName(file), file);
+}
+
+async function clipboardFile(): Promise<File> {
+  const items = await navigator.clipboard.read();
+  const seen: string[] = [];
+  for (const item of items) {
+    seen.push(...item.types);
+    const type = item.types.find(
+      (t) => t.startsWith("image/") || t.endsWith("photoshop-image"),
+    );
+    if (!type) continue;
+    const blob = await item.getType(type);
+    // `image.png` is what a screenshot is called on every platform, and
+    // `pasteName` turns that into a timestamp rather than a project full of
+    // files called image.
+    return new File([blob], type.endsWith("photoshop-image") ? "image.psd" : "image.png", {
+      type,
+    });
+  }
+  throw new Error(
+    seen.length === 0
+      ? "the clipboard is empty"
+      : `the clipboard has no image this app can read — it offered ${seen.join(", ")}`,
+  );
 }
 
 /**

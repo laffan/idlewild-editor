@@ -260,6 +260,68 @@ fn a_converted_image_names_its_layer_after_the_key() {
 /// PSD keys reach the pipeline from the document — a file on disk — and now
 /// name a path the shell is asked to hand to another application, so a key
 /// that could climb out of the project must never resolve to a path.
+/// The bug this pins: renaming a PSD renamed the file and re-ran the
+/// pipeline, but left the layer *inside* it holding the old name — so the
+/// layers panel showed the new name on the left and the old one in its grey
+/// detail column, which is the layer path, for no reason a user could work
+/// out.
+#[test]
+fn renaming_a_psd_renames_the_layer_it_named_after_itself() {
+    use psd::{LayerBuilder, PsdBuilder};
+
+    let meta = store::create_project("Layer names", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        // Two layers: one named after the file, one named by a person.
+        let mut builder = PsdBuilder::new(8, 8);
+        builder.add_layer(
+            LayerBuilder::new("S | before").rgba(8, 8, swatch(8, 8, [1, 2, 3, 255])),
+        );
+        builder.add_layer(
+            LayerBuilder::new("S | hand painted").rgba(8, 8, swatch(8, 8, [4, 5, 6, 255])),
+        );
+        let bytes = builder.to_bytes().expect("PSD should build");
+
+        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
+        std::fs::write(psd_dir.join("before.psd"), &bytes).expect("PSD should save");
+        psd_pipeline::process(&meta.id, "before", &psd_pipeline::ProcessOptions::default(), |_| {})
+            .expect("first parse");
+
+        let renamed = psd_pipeline::rename_and_process(&meta.id, "before", "after", |_| {})
+            .expect("rename should succeed");
+        assert_eq!(renamed.key, "after");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&renamed.manifest).expect("manifest should be JSON");
+        let names: Vec<String> = parsed["layers"]
+            .as_array()
+            .expect("layers")
+            .iter()
+            .map(|l| l["name"].as_str().unwrap_or_default().to_string())
+            .collect();
+
+        assert!(
+            names.contains(&"after".to_string()),
+            "the layer named after the file should follow it: {names:?}"
+        );
+        assert!(
+            !names.contains(&"before".to_string()),
+            "the old name should be gone: {names:?}"
+        );
+        // Somebody's own name for a layer is not the file's to change.
+        assert!(
+            names.contains(&"hand painted".to_string()),
+            "a hand-named layer should be untouched: {names:?}"
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 #[test]
 fn psd_keys_cannot_escape_the_project() {
     assert!(psd_pipeline::safe_key("tower-01_a").is_ok());
@@ -371,11 +433,13 @@ fn renaming_a_psd_moves_its_file_and_its_assets() {
             "the old asset directory should have gone with it"
         );
 
-        // The layer keeps its own name, which is what every existing
-        // placement's `layerPath` still points at.
+        // The layer was named after the file, so it follows it — and every
+        // placement's `layerPath` is repointed with it. See
+        // `renaming_a_psd_renames_the_layer_it_named_after_itself` for the
+        // other half of that rule.
         let manifest: serde_json::Value =
             serde_json::from_str(&renamed.manifest).expect("manifest should be JSON");
-        assert_eq!(manifest["layers"][0]["name"], "pasted-m2k9f1");
+        assert_eq!(manifest["layers"][0]["name"], "hero");
 
         // A rename onto a name already in use would silently eat a file.
         let other = psd_write::psd_from_rgba_marked("hero", 4, 4, swatch(4, 4, [0, 0, 0, 255]), None)

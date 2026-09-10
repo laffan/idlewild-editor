@@ -229,6 +229,80 @@ fn unwritable_because(doc: &Psd) -> Option<String> {
 /// What psd-to-json will make of a layer, read from its pipe prefix. Kept in
 /// step with `parser.rs` there; anything else is ignored by the pipeline and
 /// says so.
+/// Rename the layers a file named after itself, when the file is renamed.
+///
+/// A converted image or a generated PSD has exactly one sprite layer, and it
+/// is named after the key by construction — `S | sketch-mtw0b4rf`. Rename the
+/// *file* and that layer keeps the old name, which is what the layers panel
+/// then shows in its grey detail column: the correct name on the left and a
+/// stale one on the right, for no reason a user could work out.
+///
+/// So the layer follows the file — but only a layer that was named after it.
+/// A stack someone built in Photoshop has names of their own choosing and
+/// nothing here has any business touching them, and a file this cannot
+/// rewrite at all (groups, masks, clipping) is left exactly as it is: the
+/// grey column showing a real layer path is the honest answer there.
+///
+/// Returns whether anything was rewritten, so a caller can skip re-parsing a
+/// file it did not change.
+pub fn rename_layers_named_after(
+    project_id: &str,
+    key: &str,
+    from: &str,
+    to: &str,
+    emit_log: impl Fn(&str),
+) -> Result<bool, String> {
+    let list = read(project_id, key)?;
+    if !list.writable {
+        return Ok(false);
+    }
+
+    let mut edits = Vec::with_capacity(list.layers.len());
+    let mut changed = false;
+    for layer in &list.layers {
+        let renamed = rename_segment(&layer.name, from, to);
+        changed |= renamed != layer.name;
+        edits.push(LayerEdit {
+            index: layer.index,
+            name: renamed,
+        });
+    }
+    if !changed {
+        return Ok(false);
+    }
+
+    write(project_id, key, &edits, emit_log)?;
+    Ok(true)
+}
+
+/// Swap the name out of `S | name`, leaving every other segment alone.
+///
+/// The second segment is what psd-to-json takes as the layer's name and what
+/// a placement's `layerPath` points at; the prefix says what kind of thing it
+/// is and is none of a rename's business.
+fn rename_segment(layer_name: &str, from: &str, to: &str) -> String {
+    let parts: Vec<&str> = layer_name.split('|').collect();
+    if parts.len() < 2 || parts[1].trim() != from {
+        return layer_name.to_string();
+    }
+    // Rebuilt from the original segments, so the prefix and any third or
+    // fourth segment survive a rename of the second.
+    parts
+        .iter()
+        .enumerate()
+        .map(|(i, part)| {
+            if i == 1 {
+                format!(" {to} ")
+            } else {
+                part.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("|")
+        .trim()
+        .to_string()
+}
+
 fn category_of(name: &str) -> String {
     // The shape as well as the prefix: psd-to-json takes the name from the
     // second segment, so a layer called plain "S" is ignored rather than a

@@ -190,11 +190,29 @@ contract:
 | Input | Result |
 |---|---|
 | One finger down on the current selection | Drag it, snapped to the grid |
-| One finger, moved | Pan |
+| One finger, moved, under **Select** | Rubber-band a selection from where it went down |
+| One finger, moved, under **Pan** | Pan |
+| Space held | Borrow Pan until it is released |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
-| Hold ~320 ms, still | Begin a grid selection |
+| Hold ~320 ms, still | Begin a grid selection where the finger is |
 | Tap | Pick the image under the finger, else the boundary, else the fill, else clear |
+| Double-tap a placed PSD | Open it up into its own layers |
 | Ctrl/⌘ + wheel | Zoom (WebKit reports a trackpad pinch this way) |
+
+**The rail's tool decides what a drag means**, through `rig.setMode`. It used
+to decide nothing: a drag always panned and only a hold started a selection,
+which made Select and Pan the same tool with a delay between them and left no
+way to rubber-band over several things at once. The mode takes effect on the
+next pointer-down rather than immediately, so a pan never turns into a
+marquee halfway across the canvas.
+
+Space borrows Pan for as long as it is held (`editor/shortcuts.ts`), which is
+what makes a Select tool that no longer pans bearable — the camera is one
+thumb away from wherever you are. The tool it interrupted is remembered
+rather than re-read on release, because the rail shows Pan while the key is
+down. An iPad has no space bar, which is why Pan is also a rail tool. A
+window that loses focus mid-hold never sees the keyup, so `blur` releases it
+too.
 
 There is one arbiter at a time. A drawing tool calls `setSuspended(true)`,
 which hands input over without tearing down camera state, and the drawing
@@ -216,12 +234,41 @@ term in either projection — which is what makes it usable on a *difference*
 as well as on a position. The outline keeps its shape and whatever sub-cell
 offset it had, and moves a whole space at a time.
 
-Only the *current selection* is draggable. A pointer-down anywhere else still
-pans, which keeps the camera reachable everywhere and makes a drag always
-something the user picked first. A drag writes to the document on every
-pointer move, so the scene brackets it with `onDragStateChange` and the panels
-hold their re-renders — otherwise the inspector would rebuild its colour
-picker, and the layer panel its name inputs, every frame.
+Only the *current selection* is draggable. A pointer-down anywhere else
+starts whatever the tool says — a marquee, or a pan — which makes a drag of
+something always something the user picked first. A drag writes to the
+document on every pointer move, so the scene brackets it with
+`onDragStateChange` and the panels hold their re-renders — otherwise the
+inspector would rebuild its colour picker, and the layer panel its name
+inputs, every frame.
+
+### What a marquee catches
+
+A marquee is one gesture with two possible answers, and which one it gives is
+decided by what is under it when it is released rather than by a modifier
+nobody would find. Over images it selects them — a `placements` selection,
+which drags and deletes as a group. Over empty grid it stays a `region`,
+which is what Fill, Add Image and Generate PSD act on.
+
+`pickPlacementsIn` takes the marquee's **own outline**, not the box around it.
+Under an isometric template the marquee is a diamond and the box around that
+diamond reaches a long way past what was dragged: hit-testing the box let a
+marquee in one corner of the screen pick up images in another. It is the same
+mistake, in a different place, as the one that put a 132 × 136 sketch into an
+832 × 416 PSD. A placement counts when the marquee *overlaps* it rather than
+contains it — dragging a box that swallows everything whole is the fiddly
+half of every marquee, and nothing here is small enough to catch by accident.
+
+The catch is one layer's worth, chosen by the same front-most-wins rule a tap
+follows, so a marquee over a stack picks the layer you would have hit by
+tapping. One layer because that is what a drag can move together, and because
+carrying placements between layers is the layer panel's job rather than
+something a marquee should do by accident.
+
+A `placements` selection has no resize handles. Scaling a PSD against its own
+box keeps its layers in the arrangement they were built in (see *A placed PSD
+is one thing*), and there is no such relationship between things that only
+happen to be near each other — so sizes stay each image's own.
 
 ---
 
@@ -262,14 +309,26 @@ output directory, run the pipeline again under the new name. Renaming
 the sprites beneath it are written with the key in them, and moving the folder
 leaves a directory whose contents disagree with its name.
 
-The layer *inside* the file keeps whatever it was called, which is why a
-rename does not disturb a single placement: a placement points at its layer by
-name, and renaming the file is not a claim about what is in it. The inspector
-therefore shows a `hero.psd` whose layer path is still `pasted-m2k9f1` until
-someone renames that too — which is what the PSD layer list right underneath
-is for, and it handles the manifest rename map properly. On the frontend,
-`WorldScene.renamePsd` evicts the caches under the *old* key, rewrites
-`psdKey` on every placement holding it, then loads and places the new one.
+**The layer inside follows the file, when it was named after it.** Every PSD
+this editor makes — a converted image, a rasterised sketch, a generated one —
+has a single sprite layer named for its key by construction, `S | hero`.
+Renaming only the file left that layer holding the old name, which the layers
+panel then showed in its grey detail column: the new name on the left and a
+stale one on the right, for no reason a user could work out. So
+`rename_layers_named_after` rewrites the second pipe segment of any layer
+whose name matches the old key, and `renamePsd` repoints those placements'
+`layerPath` with it.
+
+Only a layer that was named after the file moves. A stack someone built in
+Photoshop has names of their own choosing and nothing here has any business
+touching them, and a file that cannot be rewritten at all — groups, masks,
+clipping — is left exactly as it is, where the grey column showing a real
+layer path is the honest answer. Renaming *those* is what the PSD layer list
+right underneath is for.
+
+On the frontend, `WorldScene.renamePsd` evicts the caches under the *old* key,
+rewrites `psdKey` (and `layerPath`, where it matched) on every placement
+holding it, then loads and places the new one.
 
 ## Editing a PSD, and getting it back
 
@@ -326,6 +385,31 @@ Backing out is not failure. Swiping the share sheet away rejects
 `navigator.share` with an `AbortError`, which was logged in red every time
 somebody changed their mind; a cancelled pick already resolved to null, and
 now a cancelled share does the same.
+
+**Share the file, and nothing else.** `navigator.share({ files, title })`
+looks harmless and is not: iOS counts the title as a second item, the sheet
+says *Save 2 items*, and an app that opens one PSD declines a two-item share
+— so Photoshop and Procreate were missing from a list whose entire purpose
+was to reach them. The file goes alone, and its name is what names it in the
+sheet.
+
+**The clipboard has no image route on iOS.** `tauri-plugin-clipboard-manager`
+reads the system pasteboard, which is the right answer on a Mac, but its
+mobile half is text-only: `read_image` is a hard error and the iOS Swift
+plugin implements `writeText`, `readText` and `clear`. So mobile goes straight
+to the webview's clipboard and skips a call that can only fail — which also
+stops *Clipboard plugin unavailable* being logged before every successful
+paste. When both routes fail, the **webview's** error is the one reported: it
+is the route that could have worked, and re-throwing the plugin's made every
+failure on an iPad read "Unsupported on this platform", naming the wrong thing
+and hiding what the clipboard actually held.
+
+That matters because WebKit exposes only a safe subset of the pasteboard —
+`text/plain`, `text/html`, `text/uri-list`, `image/png` and web custom formats
+— so a PSD copied out of another app may simply not be there to read whatever
+the pasteboard itself holds. When no readable image is found, the types that
+*were* offered go into the message, because "the clipboard is empty" and "a
+PSD this cannot see" need different answers from whoever reads the console.
 
 Three caches then hold the *old* PSD and all three have to go, or the reload
 quietly shows the previous artwork: psd-to-phaser's parsed manifest, Phaser's
@@ -510,6 +594,14 @@ rather than left to Rust's default centring, because the anchor a footprint
 hangs from is its *top-left* space and is only its middle by accident. The
 whole thing then scales by `EXPORT_SCALE`, since marks are in the file's
 pixels and the box is in world pixels.
+
+**⌘V is not the only way in.** An iPad has no ⌘, so the paste path would be
+unreachable — and untestable — on the platform this editor is mostly for.
+*Paste Image* in the header menu runs the same route, differing only in where
+the bytes come from: a paste event carries its data, this has to ask
+`navigator.clipboard.read()` for it, and asking can be refused. What comes
+back is wrapped in a `File` so everything downstream is identical, marks
+included.
 
 The exception is a grid that does not snap. A blank project's spaces are
 single world pixels, so asking which of them a screenshot covers enumerates
@@ -869,10 +961,10 @@ export's config carries, and the shapes a file picker hands back. It runs
 against the real store and cleans up after itself, including on failure.
 
 `vitest` covers the pure halves — the grid projection, fill geometry,
-picking, resize geometry, the unit arithmetic behind a placed PSD, what the
-clipboard hands a paste and where that paste lands, colour, the log's `%c`
-parsing, the manifest reader, the platformer's body step, and the drawing
-layer's ported maths.
+picking (a point's and a marquee's), resize geometry, the unit arithmetic
+behind a placed PSD, what the clipboard hands a paste and where that paste
+lands, colour, the log's `%c` parsing, the manifest reader, the platformer's
+body step, and the drawing layer's ported maths.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -974,6 +1066,35 @@ Resizing writes a displayed `width`/`height` against the `naturalWidth`/
 `naturalHeight` the manifest exported, and their ratio becomes a `setScale`.
 A sprite placed with `setOrigin(0, 0)` scales away from its top-left, which is
 the corner the placement's x/y describes, so box and image agree.
+
+### The floating action bar
+
+Fill, Add Image and Generate PSD, over a region selection. All three turn
+*this much space* into something, which is the test for belonging there —
+Export failed it (it sends content out rather than making any) and moved to
+the inspector's region panel, where the rest of what is true about a
+selection already lives.
+
+**Generate PSD** is an empty PSD the size and shape of the selection: the
+shortcut for filling it transparent and converting that fill, with neither
+step visible. Transparent means there is nothing to rasterise, so unlike a
+fill conversion it writes the buffer straight. The artwork is the selection's
+bounding box — a PSD canvas is a rectangle whatever shape the spaces under it
+are — and the marks say which spaces those were, so what comes out is a file
+with the grid drawn on it, already the right size and already anchored where
+it will sit. It is capped at roughly a 4K canvas: the selection is drawn at
+`EXPORT_SCALE`, and a careless drag over a few hundred spaces asks for a
+buffer measured in hundreds of megabytes.
+
+The bar is centred over the selection and sits above it where there is room.
+Two coordinate spaces meet in `update`, and getting them confused is what
+made it hang off the selection's corner: the anchor is in *viewport*
+coordinates, and the bar is absolutely positioned inside the canvas column,
+which starts where the layers panel ends. The arithmetic is done in viewport
+terms, because that is where the edges it must stay clear of are, and only
+the last step subtracts the column's origin. Those edges are the column's,
+not the window's — bounding it by the window let it slide under the layers
+panel, where the column's own overflow clipped the first button off.
 
 The same items are listed under each layer in the left panel
 (`editor/layer-items.ts`), and selecting one there is equivalent to picking it

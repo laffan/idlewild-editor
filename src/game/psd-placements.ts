@@ -179,8 +179,16 @@ export class PsdPlacements {
     for (const layer of this.host.store.layers) {
       for (const placement of layer.placements) {
         if (placement.psdKey !== from) continue;
-        this.host.store.updatePlacement(layer.id, placement.id, { psdKey: to });
-        moved.push({ layerId: layer.id, placement: { ...placement, psdKey: to } });
+        // The layer inside the file is renamed with it when it was named
+        // after it — every converted image, sketch and generated PSD is —
+        // and a placement points at its layer by that name, so it follows.
+        // A layer someone named in Photoshop is left alone at both ends.
+        const patch =
+          placement.layerPath === from
+            ? { psdKey: to, layerPath: to }
+            : { psdKey: to };
+        this.host.store.updatePlacement(layer.id, placement.id, patch);
+        moved.push({ layerId: layer.id, placement: { ...placement, ...patch } });
       }
     }
 

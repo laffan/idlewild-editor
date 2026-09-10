@@ -17,7 +17,7 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
-import { Grid, cellsBounds as cellsRange, fillShape } from "../lib/grid";
+import { Grid, cellsBounds as cellsRange, describeRange, fillShape } from "../lib/grid";
 import { psd } from "../lib/ipc";
 import type { AnchorMarks } from "../lib/ipc";
 import type { Cell, FillPatch, Point, Rect, Selection } from "../lib/types";
@@ -28,6 +28,7 @@ import {
   EXPORT_SCALE,
   IMPORT_SCALE,
   marksForCells,
+  marksForSelection,
   scaleMarks,
 } from "./import-anchor";
 
@@ -35,6 +36,16 @@ type FillSelection = Extract<Selection, { kind: "fill" }>;
 
 /** No margin: the fill's own spaces are exactly what it covers. */
 const PADDING = 0;
+
+/**
+ * A ceiling on a generated PSD, in pixels.
+ *
+ * The selection is drawn at `EXPORT_SCALE`, so a careless drag over a few
+ * hundred spaces asks for a buffer measured in hundreds of megabytes and the
+ * webview simply dies. Roughly a 4K canvas, which is more room than anyone
+ * paints in one file.
+ */
+const MAX_GENERATED_PIXELS = 4096 * 4096;
 
 export async function convertFillToPsd(
   projectId: string,
@@ -91,6 +102,74 @@ export async function convertFillToPsd(
     );
   } catch (err) {
     log.error("Could not turn the fill into a PSD:", err);
+  }
+}
+
+/**
+ * An empty PSD the size and shape of a grid selection.
+ *
+ * The same thing as filling the selection with a transparent colour and
+ * converting that fill, with neither step visible — which is all anyone
+ * wanted from those two taps. What comes out is a file with the grid drawn
+ * on it and nothing else: somewhere to go and paint, already the right size
+ * and already anchored where it will sit.
+ *
+ * Transparent means there is nothing to rasterise, so unlike a fill this
+ * writes the buffer straight rather than drawing the shape into a canvas.
+ * The artwork is the selection's *bounding box* — a PSD canvas is a
+ * rectangle whatever shape the spaces underneath it are — and the marks say
+ * which spaces those were.
+ */
+export async function generatePsdForRegion(
+  projectId: string,
+  grid: Grid,
+  scene: WorldScene,
+  from: Cell,
+  to: Cell,
+): Promise<void> {
+  const bounds = grid.rangeBounds(from, to);
+  const width = Math.max(1, Math.round(bounds.width * EXPORT_SCALE));
+  const height = Math.max(1, Math.round(bounds.height * EXPORT_SCALE));
+  if (width * height > MAX_GENERATED_PIXELS) {
+    log.warn(
+      `That is ${width}×${height} pixels — too big to generate. ` +
+        "Select a smaller area.",
+    );
+    return;
+  }
+
+  try {
+    const name = `psd-${Date.now().toString(36)}`;
+    const anchor = anchorCell(from, to);
+    const anchorWorld = grid.cellToWorld(anchor);
+    // Every byte zero: transparent, which is what makes this a blank canvas
+    // rather than a coloured one.
+    const rgba = new Uint8ClampedArray(width * height * 4);
+
+    const result = await psd.fromRgba(
+      projectId,
+      name,
+      width,
+      height,
+      toBase64(rgba),
+      scaleMarks(
+        {
+          ...marksForSelection(grid, from, to),
+          // The artwork covers the footprint exactly, so it says so rather
+          // than being centred on the anchor like an imported image.
+          art: { x: bounds.x - anchorWorld.x, y: bounds.y - anchorWorld.y },
+        },
+        EXPORT_SCALE,
+      ),
+    );
+
+    await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+    log.info(
+      `${describeRange(grid, from, to)} → ${result.key}.psd ` +
+        `(${result.width}×${result.height}) — Open PSD to paint it`,
+    );
+  } catch (err) {
+    log.error("Could not generate a PSD for that selection:", err);
   }
 }
 

@@ -67,7 +67,12 @@ export async function openPsdExternally(
   // already been dismissed.
   if (navigator.canShare?.({ files: [file] })) {
     try {
-      await navigator.share({ files: [file], title: `${key}.psd` });
+      // The file alone, with no title beside it. A title makes iOS treat the
+      // share as *two* items — the sheet says "Save 2 items" — and an app
+      // that opens one PSD declines a two-item share, so Photoshop and
+      // Procreate were missing from a list whose whole purpose was to reach
+      // them. The filename is what names it in the sheet either way.
+      await navigator.share({ files: [file] });
       log.info(`Shared ${key}.psd — Re-import it when you have saved your edits`);
       return;
     } catch (err) {

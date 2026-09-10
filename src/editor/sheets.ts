@@ -99,7 +99,7 @@ export function openAddImage(
       }),
     ),
     option("Paste from clipboard", "⌘V", () =>
-      run(() => importClipboard(projectId, marks)),
+      run(() => importClipboard(projectId, os, marks)),
     ),
   );
 
@@ -186,7 +186,7 @@ export function openReplacePsd(
         // PSD and re-runs the pipeline over it, which is precisely a
         // replacement — there is nothing a separate command would do
         // differently, and a clipboard image never carries layers to lose.
-        run(() => importClipboard(projectId, undefined, key)),
+        run(() => importClipboard(projectId, os, undefined, key)),
       ),
     );
 
@@ -358,32 +358,76 @@ export function openProjectOptions(meta: ProjectMeta, layerCount: number): void 
  * own; given an existing one, it overwrites that file — which is how the
  * clipboard replaces a PSD as well as adding one.
  */
+/**
+ * Import whatever image is on the clipboard.
+ *
+ * Two routes, and which is tried first depends on the platform. The Tauri
+ * clipboard plugin reads the *system* pasteboard, which is the right answer
+ * on a Mac — but on iOS it has no image support at all: `read_image` is a
+ * hard error there and the plugin's own Swift side implements only text. So
+ * mobile goes straight to the webview's clipboard and skips a call that can
+ * only fail, which is also what stops "Clipboard plugin unavailable" being
+ * logged before every successful paste.
+ *
+ * When both fail, the *webview's* error is the one worth reporting: it is the
+ * route that could have worked. Re-throwing the plugin's error meant every
+ * failure on an iPad read "Unsupported on this platform", which named the
+ * wrong thing and hid what the clipboard actually held.
+ */
 async function importClipboard(
   projectId: string,
+  os: string,
   marks?: AnchorMarks,
   key?: string,
 ): Promise<ImportResult> {
   const name = key ?? `pasted-${Date.now().toString(36)}`;
-  try {
-    const image = await readImage();
-    const { width, height } = await image.size();
-    const rgba = await image.rgba();
-    // Raw pixels rather than an encoded file, so this route goes through the
-    // RGBA command — which takes no marks, and a paste has no grid selection
-    // to describe anyway when it arrives this way.
-    return await psd.fromRgba(projectId, name, width, height, toBase64(rgba));
-  } catch (pluginError) {
-    log.info("Clipboard plugin unavailable, trying the webview clipboard");
-    const items = await navigator.clipboard.read();
-    for (const item of items) {
-      const type = item.types.find((t) => t.startsWith("image/"));
-      if (!type) continue;
-      const blob = await item.getType(type);
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      return psd.importBytes(projectId, name, toBase64(bytes), marks);
+
+  if (!isMobile(os)) {
+    try {
+      const image = await readImage();
+      const { width, height } = await image.size();
+      const rgba = await image.rgba();
+      // Raw pixels rather than an encoded file, so this route goes through
+      // the RGBA command — which takes no marks, and a paste arriving this
+      // way has no grid selection to describe anyway.
+      return await psd.fromRgba(projectId, name, width, height, toBase64(rgba));
+    } catch (err) {
+      log.info("The system clipboard had no image; trying the webview's:", err);
     }
-    throw pluginError;
   }
+
+  const file = await clipboardImage();
+  return psd.importBytes(projectId, name, toBase64(file), marks);
+}
+
+/**
+ * The first image the webview will hand over, as bytes.
+ *
+ * WebKit exposes only a safe subset of the pasteboard — `text/plain`,
+ * `text/html`, `text/uri-list`, `image/png` and web custom formats — so a PSD
+ * copied out of another app may simply not be there to read, whatever the
+ * pasteboard itself holds. When that happens the types that *were* offered go
+ * into the error, because "nothing on the clipboard" and "a PSD this cannot
+ * see" need different answers from whoever is reading the console.
+ */
+async function clipboardImage(): Promise<Uint8Array> {
+  const items = await navigator.clipboard.read();
+  const seen: string[] = [];
+  for (const item of items) {
+    seen.push(...item.types);
+    const type = item.types.find(
+      (t) => t.startsWith("image/") || t.endsWith("photoshop-image"),
+    );
+    if (!type) continue;
+    const blob = await item.getType(type);
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+  throw new Error(
+    seen.length === 0
+      ? "The clipboard is empty"
+      : `The clipboard has no image this app can read — it offered ${seen.join(", ")}. ` +
+        "Save the file and use Import from Files instead.",
+  );
 }
 
 function toBase64(bytes: Uint8Array): string {

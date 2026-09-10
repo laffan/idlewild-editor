@@ -190,6 +190,17 @@ export type Selection =
   | { kind: "region"; from: Cell; to: Cell }
   | { kind: "fill"; layerId: string; fillId: string }
   | { kind: "placement"; layerId: string; placementId: string }
+  /**
+   * Several placed images at once, caught by dragging a box around them.
+   *
+   * One layer's worth: a drag moves every member by the same cell step, and
+   * carrying placements between layers is the layer panel's job rather than
+   * something a marquee should do by accident. `placement` stays its own kind
+   * because almost everything — the inspector, resizing, opening a PSD up
+   * into its layers — is about one thing and would have to ask "is there
+   * exactly one?" on every line otherwise.
+   */
+  | { kind: "placements"; layerId: string; ids: string[] }
   | { kind: "zone"; layerId: string; zoneId: string }
   | { kind: "strokes"; layerId: string; ids: string[] };
 

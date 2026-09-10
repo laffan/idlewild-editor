@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   destroyPlaced,
   pickPlacement,
+  pickPlacementsIn,
   pickZone,
   pointInPolygon,
 } from "../../game/doc-renderer";
+import { Grid } from "../grid";
 import { layerItems } from "../../editor/layer-items";
 import type { Layer, Placement, Zone } from "../types";
 
@@ -236,5 +238,89 @@ describe("destroyPlaced", () => {
     };
     destroyPlaced(sprite);
     expect(calls).toEqual([[]]);
+  });
+});
+
+describe("pickPlacementsIn", () => {
+  /** A box, as the four points a marquee hands over. */
+  function box(x: number, y: number, width: number, height: number) {
+    return [
+      { x, y },
+      { x: x + width, y },
+      { x: x + width, y: y + height },
+      { x, y: y + height },
+    ];
+  }
+
+  it("catches every placement the marquee overlaps", () => {
+    const layers = [
+      layer("l1", {
+        placements: [placement("a", 0, 0), placement("b", 200, 0), placement("c", 400, 0)],
+      }),
+    ];
+    // Reaching into the first two and stopping short of the third.
+    expect(pickPlacementsIn(layers, box(-20, -20, 260, 60))?.ids).toEqual(["a", "b"]);
+  });
+
+  it("catches a placement it only clips, not just ones it swallows", () => {
+    // Dragging a box that contains everything whole is the fiddly half of
+    // every marquee, and nothing here is small enough to catch by accident.
+    const layers = [layer("l1", { placements: [placement("a", 0, 0)] })];
+    expect(pickPlacementsIn(layers, box(90, 90, 40, 40))?.ids).toEqual(["a"]);
+    expect(pickPlacementsIn(layers, box(101, 101, 40, 40))).toBeNull();
+  });
+
+  it("takes the front-most layer that has anything, and only that one", () => {
+    // The same rule a tap follows: layers are top-first, so a marquee over a
+    // stack picks the layer you would have hit by tapping.
+    const layers = [
+      layer("front", { placements: [placement("a", 0, 0)] }),
+      layer("behind", { placements: [placement("b", 10, 10)] }),
+    ];
+    const caught = pickPlacementsIn(layers, box(-50, -50, 300, 300));
+    expect(caught?.layerId).toBe("front");
+    expect(caught?.ids).toEqual(["a"]);
+  });
+
+  it("ignores locked and hidden layers", () => {
+    expect(
+      pickPlacementsIn(
+        [layer("l1", { locked: true, placements: [placement("a", 0, 0)] })],
+        box(-50, -50, 300, 300),
+      ),
+    ).toBeNull();
+    expect(
+      pickPlacementsIn(
+        [layer("l1", { visible: false, placements: [placement("a", 0, 0)] })],
+        box(-50, -50, 300, 300),
+      ),
+    ).toBeNull();
+  });
+
+  it("uses the marquee's own shape, not the box around it", () => {
+    // The bug this pins: under an isometric template a marquee is a diamond,
+    // and the box around that diamond reaches a long way past what was
+    // dragged — so a marquee in one corner picked up images in another.
+    const grid = new Grid("isometric", 64);
+    const outline = grid.rangePolygon({ cx: 0, cy: 0 }, { cx: 2, cy: 2 });
+
+    const inside = outline.reduce(
+      (acc, p) => ({ x: acc.x + p.x / outline.length, y: acc.y + p.y / outline.length }),
+      { x: 0, y: 0 },
+    );
+    const corner = {
+      x: Math.min(...outline.map((p) => p.x)),
+      y: Math.min(...outline.map((p) => p.y)),
+    };
+
+    const middle = [layer("l1", { placements: [placement("a", inside.x - 4, inside.y - 4)] })];
+    expect(pickPlacementsIn(middle, outline)?.ids).toEqual(["a"]);
+
+    // Inside the bounding box, outside the diamond: the top-left corner of
+    // the box is a long way off the top vertex of the diamond.
+    const outside = [
+      layer("l1", { placements: [placement("a", corner.x - 90, corner.y - 90)] }),
+    ];
+    expect(pickPlacementsIn(outside, outline)).toBeNull();
   });
 });

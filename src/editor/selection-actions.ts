@@ -1,17 +1,40 @@
 /**
- * The floating action bar over a grid selection: Fill, Add Image, Export.
- * Follows the selection as the camera moves.
+ * The floating action bar over a grid selection: Fill, Add Image, Generate
+ * PSD. Follows the selection as the camera moves.
+ *
+ * All three are ways of turning "this much space" into something: a colour, a
+ * file from disk, or an empty PSD to go and paint. Export used to sit here
+ * and is gone — sending a PNG *out* is the opposite of what the other two do,
+ * and it belonged with the selection about as much as Save As belongs on a
+ * shape.
  */
 
 import { h } from "../lib/dom";
 import { describeRange, type Grid } from "../lib/grid";
 import type { Selection } from "../lib/types";
 
+/** Where the selection is on screen, in viewport coordinates. */
+export interface SelectionAnchor {
+  /** Its left edge. */
+  x: number;
+  /** Its top edge. */
+  y: number;
+  /** How wide it is, so the bar can be centred over it. */
+  width: number;
+}
+
 export interface SelectionActionCallbacks {
   onFill: () => void;
   onAddImage: () => void;
-  onExport: () => void;
+  onGeneratePsd: () => void;
 }
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.max(low, Math.min(value, high));
+}
+
+/** Kept this far clear of the edges of the column it floats in. */
+const MARGIN = 12;
 
 export class SelectionActions {
   readonly root: HTMLElement;
@@ -26,16 +49,12 @@ export class SelectionActions {
       { class: "selection-actions hidden" },
       h("button", { text: "Fill", onClick: callbacks.onFill }),
       h("button", { text: "Add Image", onClick: callbacks.onAddImage }),
-      h("button", { text: "Export", onClick: callbacks.onExport }),
+      h("button", { text: "Generate PSD", onClick: callbacks.onGeneratePsd }),
       this.size,
     );
   }
 
-  /**
-   * @param anchor viewport coordinates of the selection's top-left, or null
-   *               when nothing suitable is selected
-   */
-  update(selection: Selection, anchor: { x: number; y: number } | null): void {
+  update(selection: Selection, anchor: SelectionAnchor | null): void {
     if (selection.kind !== "region" || !anchor) {
       this.root.classList.add("hidden");
       return;
@@ -44,13 +63,36 @@ export class SelectionActions {
     this.size.textContent = describeRange(this.grid, selection.from, selection.to);
     this.root.classList.remove("hidden");
 
-    // Sit above the selection where there is room, below it where there is not.
+    // Measured after un-hiding, because a hidden element has no width to
+    // centre on.
     const rect = this.root.getBoundingClientRect();
-    const top = anchor.y - rect.height - 12;
-    this.root.style.left = `${Math.max(
-      12,
-      Math.min(anchor.x, window.innerWidth - rect.width - 12),
-    )}px`;
-    this.root.style.top = `${top < 88 ? anchor.y + 12 : top}px`;
+
+    // The anchor is in viewport coordinates, and the bar is positioned inside
+    // whatever it is absolutely positioned against — the canvas column, not
+    // the viewport. That column is also what it has to stay inside: bounding
+    // it by the window instead let it slide under the layers panel, where the
+    // column's own overflow clipped the first button off.
+    const host = this.root.offsetParent?.getBoundingClientRect() ?? {
+      left: 0,
+      top: 0,
+      right: window.innerWidth,
+      bottom: window.innerHeight,
+    };
+
+    const left = clamp(
+      anchor.x + anchor.width / 2 - rect.width / 2,
+      host.left + MARGIN,
+      host.right - rect.width - MARGIN,
+    );
+    // Above the selection where it fits, below it where it does not.
+    const above = anchor.y - rect.height - MARGIN;
+    const top = clamp(
+      above < host.top + MARGIN ? anchor.y + MARGIN : above,
+      host.top + MARGIN,
+      host.bottom - rect.height - MARGIN,
+    );
+
+    this.root.style.left = `${left - host.left}px`;
+    this.root.style.top = `${top - host.top}px`;
   }
 }

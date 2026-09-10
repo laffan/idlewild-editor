@@ -112,6 +112,29 @@ export class SelectionOverlay {
         }
         break;
       }
+      case "placements": {
+        // Several images caught by a marquee. Each is outlined so it is clear
+        // what was caught, and the box around the lot says what a drag moves
+        // — but no handles: they resize as a group only when they are one
+        // PSD, and these merely happen to be near each other.
+        const layer = store.layer(selection.layerId);
+        if (!layer) break;
+        const chosen = new Set(selection.ids);
+        const members = layer.placements.filter((p) => chosen.has(p.id));
+        const box = unionRect(members);
+        if (!box) break;
+
+        const scale = 1 / zoom;
+        g.lineStyle(1 * scale, ACCENT, 0.55);
+        for (const member of members) {
+          g.strokeRect(member.x, member.y, member.width, member.height);
+        }
+        g.fillStyle(ACCENT, 0.06);
+        g.lineStyle(2 * scale, ACCENT, 1);
+        g.fillRect(box.x, box.y, box.width, box.height);
+        g.strokeRect(box.x, box.y, box.width, box.height);
+        break;
+      }
       case "zone": {
         const zone = store
           .layer(selection.layerId)

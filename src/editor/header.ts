@@ -20,6 +20,8 @@ export interface HeaderCallbacks {
   onBack: () => void;
   onMode: (mode: EditorMode) => void;
   onCode: () => void;
+  /** Import whatever image is on the clipboard, into the middle of the view. */
+  onPasteImage: () => void;
   onPublish: () => void;
   onOptions: () => void;
 }
@@ -99,6 +101,13 @@ export class EditorHeader {
       this.menuButton,
       [
         { label: "Code", glyph: ICONS.code, onSelect: callbacks.onCode },
+        // ⌘V does this too, on the machines that have a ⌘ — which an iPad
+        // does not, and an iPad is what this editor is mostly used on.
+        {
+          label: "Paste Image",
+          glyph: ICONS.file,
+          onSelect: callbacks.onPasteImage,
+        },
         { label: "Publish", glyph: ICONS.publish, onSelect: callbacks.onPublish },
         {
           label: "Project Options",
