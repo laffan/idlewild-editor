@@ -12,7 +12,7 @@
  */
 
 import { psd } from "../lib/ipc";
-import type { ImportResult } from "../lib/ipc";
+import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import type { Stroke } from "../lib/types";
 import { createAtlasCache, type AtlasCache } from "./atlas";
 import { strokesBox } from "./geometry";
@@ -34,16 +34,31 @@ export interface Raster {
  * `atlas` is the live layer's cache when there is one — its brush PNGs have
  * already decoded, so the export looks like the canvas rather than like the
  * procedural fallback.
+ *
+ * `scale` is pixels per world unit. Above 1 the ink is re-stamped at that
+ * size rather than drawn small and enlarged, so a doubled export is genuinely
+ * twice the detail — see `EXPORT_SCALE` in editor/import-anchor.ts for why a
+ * conversion wants that.
+ *
+ * `bounds` comes back in **world** units, padding included: what it locates
+ * is the artwork against the grid, not a pixel against a canvas.
  */
 export function rasteriseStrokes(
   strokes: readonly Stroke[],
   atlas?: AtlasCache,
+  scale = 1,
 ): Raster | null {
   const box = strokesBox(strokes);
   if (!box) return null;
 
-  const width = Math.max(1, Math.ceil(box.width) + PADDING * 2);
-  const height = Math.max(1, Math.ceil(box.height) + PADDING * 2);
+  const bounds = {
+    x: box.x - PADDING,
+    y: box.y - PADDING,
+    width: box.width + PADDING * 2,
+    height: box.height + PADDING * 2,
+  };
+  const width = Math.max(1, Math.ceil(bounds.width * scale));
+  const height = Math.max(1, Math.ceil(bounds.height * scale));
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -52,7 +67,8 @@ export function rasteriseStrokes(
   if (!ctx) return null;
 
   const cache = atlas ?? createAtlasCache();
-  ctx.translate(PADDING - box.x, PADDING - box.y);
+  ctx.scale(scale, scale);
+  ctx.translate(-bounds.x, -bounds.y);
   for (const stroke of strokes) renderStroke(ctx, stroke, cache);
   if (!atlas) cache.destroy();
 
@@ -60,21 +76,31 @@ export function rasteriseStrokes(
     rgba: ctx.getImageData(0, 0, width, height).data,
     width,
     height,
-    bounds: { x: box.x - PADDING, y: box.y - PADDING, width, height },
+    bounds,
   };
 }
 
 /**
  * Turn a selection of strokes into a processed PSD in the project, ready to
  * place. Returns null when the selection has nothing to draw.
+ *
+ * `marks` describes the grid the sketch was drawn over, which the caller
+ * builds because the grid's projection lives in the editor. Without it the
+ * PSD arrives with no orienting marks at all, and whoever opens it to paint
+ * over the sketch has nothing to line the artwork up against.
  */
 export async function strokesToPsd(
   projectId: string,
   name: string,
   strokes: readonly Stroke[],
-  atlas?: AtlasCache,
+  options: {
+    atlas?: AtlasCache;
+    scale?: number;
+    /** Built from `raster.bounds`, so ask for those first. */
+    marks?: (raster: Raster) => AnchorMarks;
+  } = {},
 ): Promise<ImportResult | null> {
-  const raster = rasteriseStrokes(strokes, atlas);
+  const raster = rasteriseStrokes(strokes, options.atlas, options.scale);
   if (!raster) return null;
   return psd.fromRgba(
     projectId,
@@ -82,6 +108,7 @@ export async function strokesToPsd(
     raster.width,
     raster.height,
     toBase64(raster.rgba),
+    options.marks?.(raster),
   );
 }
 

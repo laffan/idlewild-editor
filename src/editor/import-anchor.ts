@@ -37,6 +37,69 @@ const MAX_LINES = 600;
 export const IMPORT_SCALE = 0.5;
 
 /**
+ * How many PSD pixels a *conversion* draws per world pixel.
+ *
+ * An import arrives at 2× and is placed at `IMPORT_SCALE`, because everything
+ * drawn on a retina machine comes out at 2×. A fill or a sketch rasterised at
+ * world scale would arrive at 1× instead and sit in the same project at half
+ * the resolution of everything beside it — which shows the moment anyone
+ * opens both to paint over them. So a conversion draws at this and is placed
+ * at `IMPORT_SCALE`: the world geometry is exactly where it was, and the file
+ * has twice the pixels.
+ */
+export const EXPORT_SCALE = 1 / IMPORT_SCALE;
+
+/**
+ * Take marks from world pixels into a PSD's own pixels.
+ *
+ * Rust lays the artwork out against the marks in the file's own pixel space,
+ * so a conversion drawing at `EXPORT_SCALE` has to scale its marks by the
+ * same factor — otherwise the grid footprint comes out half the size of the
+ * artwork it is meant to sit under.
+ */
+export function scaleMarks(marks: AnchorMarks, factor: number): AnchorMarks {
+  const at = (p: { x: number; y: number }) => ({
+    x: p.x * factor,
+    y: p.y * factor,
+  });
+  return {
+    ...marks,
+    outline: marks.outline.map(at),
+    lines: marks.lines.map((line) => ({ a: at(line.a), b: at(line.b) })),
+    art: marks.art ? at(marks.art) : undefined,
+  };
+}
+
+/**
+ * The grid spaces a world-space box sits over.
+ *
+ * All four corners, because a box in world space is a diamond in cell space
+ * under an isometric template and its extremes are not the two corners a
+ * rectangle would suggest.
+ */
+export function cellRangeForBox(
+  grid: Grid,
+  box: { x: number; y: number; width: number; height: number },
+): { from: Cell; to: Cell } {
+  const corners = [
+    grid.worldToCell({ x: box.x, y: box.y }),
+    grid.worldToCell({ x: box.x + box.width, y: box.y }),
+    grid.worldToCell({ x: box.x, y: box.y + box.height }),
+    grid.worldToCell({ x: box.x + box.width, y: box.y + box.height }),
+  ];
+  return {
+    from: {
+      cx: Math.min(...corners.map((c) => c.cx)),
+      cy: Math.min(...corners.map((c) => c.cy)),
+    },
+    to: {
+      cx: Math.max(...corners.map((c) => c.cx)),
+      cy: Math.max(...corners.map((c) => c.cy)),
+    },
+  };
+}
+
+/**
  * Describe a grid selection for the PSD writer, in world pixels relative to
  * the anchor cell.
  *

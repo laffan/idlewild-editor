@@ -75,7 +75,7 @@ export class PsdLayerEditor {
     this.root = h(
       "div",
       { class: "inspect-section psd-layers" },
-      h("div", { class: "inspect-section-title m", text: "PSD layers" }),
+      h("div", { class: "inspect-section-title m", text: "Layers" }),
       this.status,
       this.list,
       this.foot,

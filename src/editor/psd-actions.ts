@@ -41,6 +41,15 @@ export function refreshPsdLabel(os: string): string {
 }
 
 /**
+ * And the first. On desktop the file is opened where it lies; on mobile it
+ * goes out through the share sheet, and calling that "Open" promises an
+ * editor the tap does not open.
+ */
+export function openPsdLabel(os: string): string {
+  return isMobile(os) ? "Share PSD" : "Open PSD";
+}
+
+/**
  * Hand `<key>.psd` to the OS.
  *
  * On desktop that is the registered editor, opened through the shell so the

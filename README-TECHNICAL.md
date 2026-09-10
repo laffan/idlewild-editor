@@ -342,8 +342,17 @@ layer's centre, and an odd one lands half a pixel off.
 `AnchorMarks.art` says where the artwork's top-left goes relative to the
 anchor. An image import omits it and gets centred, because it has no opinion
 about where on a grid space it belongs. Anything converted from what is
-already *on* the grid — a fill — does have one, and sends it, so the PSD
-lands back exactly over what it replaced.
+already *on* the grid does have one, and sends it, so the PSD lands back
+exactly over what it replaced.
+
+Both conversions send marks, for the same reason an import does: whoever
+opens the file to paint over the block-out needs the grid under it. A fill
+marks the spaces it actually covers rather than a box around them — a fill is
+usually an irregular shape, and an outline enclosing spaces it never touched
+would say something untrue. A sketch marks the spaces its ink sits over,
+which `cellRangeForBox` reads off all four corners of the bounding box:
+a world-space box is a diamond in cell space under an isometric template, and
+its widest cell extents are not the two corners a rectangle would suggest.
 
 A `.psd` imported as a `.psd` is left exactly as its author built it. Adding
 marks would mean rewriting someone else's layer stack to say something it may
@@ -360,6 +369,22 @@ the pixels the file really has, which is what the inspector's width and
 height are measured against and what a re-import reconciles through. It is a
 default, not a conversion — nothing about the file changes, and a genuinely
 1× asset is two taps from full size.
+
+The three *conversions* — a fill, a sketch, an image already on the grid —
+have the opposite problem. They draw their own pixels, and at world scale
+they would come out at 1× and sit in the same project at half the resolution
+of everything imported beside them, which shows the moment anyone opens both
+to paint over them. So they rasterise at `EXPORT_SCALE` (`1 / IMPORT_SCALE`)
+and place at `IMPORT_SCALE`: the world geometry is exactly where it was, and
+the file has twice the pixels.
+
+The marks have to go up with them. They are anchor-relative *world* pixels,
+and Rust lays the artwork out against them in the file's own pixel space, so
+a conversion that drew at 2× and marked at 1× would get a grid footprint half
+the size of the artwork standing on it. `scaleMarks` takes the outline, the
+divisions and the art offset up together; `cols` and `rows` are counts of
+spaces and stay as they are. `EXPORT_SCALE * IMPORT_SCALE === 1` is the whole
+invariant, and there is a test that says so.
 
 `P2P.load` is a module object, not a function — the call is `P2P.load.load(…)`.
 The README on `psd-to-phaser` shows `P2P.load(…)`; the shipped typings

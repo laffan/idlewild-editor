@@ -19,11 +19,11 @@ import type { AnchorMarks } from "../lib/ipc";
 import type { Cell, FillPatch, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { WorldScene } from "../game/world-scene";
-import { anchorCell } from "./import-anchor";
+import { anchorCell, EXPORT_SCALE, IMPORT_SCALE, scaleMarks } from "./import-anchor";
 
 type FillSelection = Extract<Selection, { kind: "fill" }>;
 
-/** Rendered at world scale, so one canvas pixel is one world pixel. */
+/** No margin: the fill's own spaces are exactly what it covers. */
 const PADDING = 0;
 
 export async function convertFillToPsd(
@@ -55,13 +55,18 @@ export async function convertFillToPsd(
       raster.width,
       raster.height,
       toBase64(raster.rgba),
-      marksForFill(grid, fill, anchor, {
-        x: raster.x - anchorWorld.x,
-        y: raster.y - anchorWorld.y,
-      }),
+      // Marks and pixels are both in the file's own space, so both are taken
+      // up together — and the placement scales back down by the same factor.
+      scaleMarks(
+        marksForFill(grid, fill, anchor, {
+          x: raster.x - anchorWorld.x,
+          y: raster.y - anchorWorld.y,
+        }),
+        EXPORT_SCALE,
+      ),
     );
 
-    await scene.placePsd(result.key, result.manifest, anchor);
+    await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
     store.removeFill(selection.layerId, selection.fillId);
     log.info(
       `${fill.cells.length} filled spaces → ${result.key}.psd ` +
@@ -72,15 +77,21 @@ export async function convertFillToPsd(
   }
 }
 
-/** Paint the fill's spaces onto a transparent ground, cropped to them. */
+/**
+ * Paint the fill's spaces onto a transparent ground, cropped to them.
+ *
+ * Drawn at `EXPORT_SCALE` pixels per world pixel — see the note there. The
+ * returned `x`/`y` stay in *world* units, because what they position is the
+ * artwork against the grid rather than a pixel against a canvas.
+ */
 function rasteriseFill(
   grid: Grid,
   fill: FillPatch,
 ): { rgba: Uint8ClampedArray; width: number; height: number; x: number; y: number } | null {
   const { from, to } = cellRange(fill.cells);
   const bounds = grid.rangeBounds(from, to);
-  const width = Math.max(1, Math.ceil(bounds.width) + PADDING * 2);
-  const height = Math.max(1, Math.ceil(bounds.height) + PADDING * 2);
+  const width = Math.max(1, Math.ceil((bounds.width + PADDING * 2) * EXPORT_SCALE));
+  const height = Math.max(1, Math.ceil((bounds.height + PADDING * 2) * EXPORT_SCALE));
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -88,6 +99,7 @@ function rasteriseFill(
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
+  ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
   ctx.translate(PADDING - bounds.x, PADDING - bounds.y);
   ctx.fillStyle = fill.color ?? "#ec3013";
   for (const cell of fill.cells) {

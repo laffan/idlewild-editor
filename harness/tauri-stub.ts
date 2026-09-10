@@ -60,6 +60,48 @@ function psdManifest(): string {
   });
 }
 
+/**
+ * What Rust's psd_marks::layout does, so a conversion can be checked end to
+ * end: lay the artwork and the grid footprint out around the anchor, grow the
+ * canvas to hold both, and report the anchor as a point layer at its centre.
+ */
+function markedManifest(
+  name: string, width: number, height: number, marks: any,
+): string {
+  const art = marks?.art ?? { x: -width / 2, y: -height / 2 };
+  const box = { x: art.x, y: art.y, w: width, h: height };
+  const zone = marks?.outline?.length
+    ? {
+        x: Math.min(...marks.outline.map((p: any) => p.x)),
+        y: Math.min(...marks.outline.map((p: any) => p.y)),
+        w: Math.max(...marks.outline.map((p: any) => p.x))
+          - Math.min(...marks.outline.map((p: any) => p.x)),
+        h: Math.max(...marks.outline.map((p: any) => p.y))
+          - Math.min(...marks.outline.map((p: any) => p.y)),
+      }
+    : box;
+
+  const minX = Math.floor(Math.min(box.x, zone.x));
+  const minY = Math.floor(Math.min(box.y, zone.y));
+  const layers: any[] = [
+    { name, category: "sprite", x: Math.round(box.x - minX),
+      y: Math.round(box.y - minY), width, height },
+  ];
+  if (marks?.outline?.length) {
+    layers.push({ name: "grid", category: "zone", x: Math.round(zone.x - minX),
+      y: Math.round(zone.y - minY), width: Math.round(zone.w), height: Math.round(zone.h) });
+    // psd-to-json reports a point as its centre, which is the anchor itself.
+    layers.push({ name: "anchor", category: "point", x: -minX, y: -minY,
+      width: 12, height: 12 });
+  }
+  return JSON.stringify({
+    name,
+    width: Math.ceil(Math.max(box.x + box.w, zone.x + zone.w)) - minX,
+    height: Math.ceil(Math.max(box.y + box.h, zone.y + zone.h)) - minY,
+    layers,
+  });
+}
+
 export async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   (window as any).__calls = [...((window as any).__calls ?? []), { cmd, args }];
   switch (cmd) {
@@ -142,17 +184,15 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       };
     }
     case "create_psd_from_rgba": {
-      const a = args as Record<string, number | string>;
-      (window as any).__lastRgba = { width: a.width, height: a.height, name: a.name };
+      const a = args as any;
+      (window as any).__lastRgba = {
+        width: a.width, height: a.height, name: a.name, marks: a.marks ?? null,
+      };
       return {
         key: String(a.name),
         width: a.width,
         height: a.height,
-        manifest: JSON.stringify({
-          name: a.name, width: a.width, height: a.height,
-          layers: [{ name: String(a.name), category: "sprite", x: 0, y: 0,
-            width: a.width, height: a.height }],
-        }),
+        manifest: markedManifest(String(a.name), a.width, a.height, a.marks),
       };
     }
     case "read_psd_bytes": return "AAAA";

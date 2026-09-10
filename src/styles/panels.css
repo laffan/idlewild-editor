@@ -227,11 +227,32 @@
   padding: 18px 16px;
   border-top: 1px solid var(--chrome-rule);
 }
+/* The head already draws a rule under itself. */
+.inspect-head + .inspect-section { border-top: 0; }
 .inspect-section-title {
   font-size: 10px;
   color: var(--chrome-dim);
   margin-bottom: 12px;
 }
+/* Rows carry their own side padding for the panels that put them straight in
+   the body; inside a section that padding is the section's. */
+.inspect-section .inspect-row { padding: 0; }
+
+/* Editable values are set at the label's size, like the read-only ones they
+   sit among — a 16px field in a column of 10px rows reads as a heading. */
+.inspect-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 96px;
+  min-height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  font: 500 10px var(--font-body);
+  color: var(--chrome-text);
+  text-align: right;
+}
+.inspect-input:focus { border-color: var(--color-accent); outline: none; }
 
 .swatches { display: flex; border: 1px solid var(--color-neutral-700); width: max-content; }
 .swatch {

@@ -49,8 +49,11 @@ remaining pieces are wired to real slots rather than mocked.
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
-  a blocking boundary play mode walks around
-- Inspector for layers, selections, fills, placed images and boundaries
+  a blocking boundary play mode walks around. The PSD carries the same
+  orienting marks an import does — the anchor dot and the grid the sketch was
+  drawn over — so there is a grid under the ink when you open it to paint
+- Inspector for layers, selections, fills, placed images and boundaries, in
+  Info / Transform / Layers sections
 - Option-drag a fill or an image to copy it. A copied image references the
   same PSD, which the inspector says so you know editing one edits both —
   and Remove Reference gives it a copy of its own. Option-shift-drag skips
@@ -60,7 +63,9 @@ remaining pieces are wired to real slots rather than mocked.
   pipeline. Renaming is how a sprite becomes a tileset, so it is worth having
   without a trip to Photoshop. A PSD with groups, masks or clipping is listed
   read-only, because a rewrite would flatten them
-- Convert a fill to a PSD, the same way a sketch converts
+- Convert a fill to a PSD, the same way a sketch converts. Both export at
+  double resolution and place at half, so a converted block-out matches an
+  imported image pixel for pixel instead of arriving at half its detail
 - Delete removes whatever is selected
 - Export a selection as a transparent PNG (save or copy)
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file

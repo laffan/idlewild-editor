@@ -19,6 +19,14 @@ import * as log from "../lib/log";
 import type { DrawingLayer } from "../drawing";
 import { strokesBox, strokesToPsd, strokesToZonePoints } from "../drawing";
 import type { WorldScene } from "../game/world-scene";
+import {
+  anchorCell,
+  cellRangeForBox,
+  EXPORT_SCALE,
+  IMPORT_SCALE,
+  marksForSelection,
+  scaleMarks,
+} from "./import-anchor";
 
 type StrokeSelection = Extract<Selection, { kind: "strokes" }>;
 
@@ -38,18 +46,35 @@ export async function convertStrokesToPsd(
 
   try {
     const name = `sketch-${Date.now().toString(36)}`;
+    // A sketch knows exactly which spaces it was drawn over, so it is marked
+    // like a fill rather than centred like an import: the footprint is the
+    // spaces the ink covers, and `art` says where the ink sits inside them.
+    // Whoever opens the PSD to paint over the sketch then has the same grid
+    // under it that the drawing was made on.
+    const { from, to } = cellRangeForBox(grid, box);
+    const anchor = anchorCell(from, to);
+    const anchorWorld = grid.cellToWorld(anchor);
+
     // The layer's own atlas, so the export carries the brush textures that
     // have already decoded rather than the procedural stand-in.
-    const result = await strokesToPsd(projectId, name, strokes, drawing.atlas);
+    const result = await strokesToPsd(projectId, name, strokes, {
+      atlas: drawing.atlas,
+      scale: EXPORT_SCALE,
+      marks: (raster) =>
+        scaleMarks(
+          {
+            ...marksForSelection(grid, from, to),
+            art: {
+              x: raster.bounds.x - anchorWorld.x,
+              y: raster.bounds.y - anchorWorld.y,
+            },
+          },
+          EXPORT_SCALE,
+        ),
+    });
     if (!result) return;
 
-    // `placePsd` centres a PSD on the anchor cell, so anchoring on the cell
-    // under the middle of the sketch lands the image where the ink was.
-    const anchor = grid.worldToCell({
-      x: box.x + box.width / 2,
-      y: box.y + box.height / 2,
-    });
-    await scene.placePsd(result.key, result.manifest, anchor);
+    await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
     drawing.removeStrokes(selection.ids);
     log.info(
       `${strokes.length} strokes → ${result.key}.psd ` +

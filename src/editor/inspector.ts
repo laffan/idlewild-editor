@@ -10,7 +10,7 @@
 import { clear, h } from "../lib/dom";
 import { BRUSHES, strokesBox, type DrawingTool, type StrokeStyle } from "../drawing";
 import { count } from "./layers-panel";
-import { refreshPsdLabel } from "./psd-actions";
+import { openPsdLabel, refreshPsdLabel } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
 import type { DocStore } from "../lib/doc-store";
@@ -46,6 +46,8 @@ export interface InspectorCallbacks {
 export class Inspector {
   readonly root: HTMLElement;
   private readonly body: HTMLElement;
+  /** Where `row()` writes: the body, or the section last opened. */
+  private current: HTMLElement;
   private readonly store: DocStore;
   private readonly grid: Grid;
   private readonly callbacks: InspectorCallbacks;
@@ -79,6 +81,7 @@ export class Inspector {
     this.callbacks = callbacks;
 
     this.body = h("div", { class: "panel-body scroll" });
+    this.current = this.body;
     this.root = h(
       "div",
       { class: "side-panel right" },
@@ -148,6 +151,7 @@ export class Inspector {
 
   render(): void {
     clear(this.body);
+    this.current = this.body;
     switch (this.selection.kind) {
       case "none":
         if (this.drawingTool) this.renderBrush();
@@ -183,10 +187,26 @@ export class Inspector {
         h("div", { class: "inspect-title", text: title }),
       ),
     );
+    this.current = this.body;
+  }
+
+  /**
+   * Open a section. Everything `row()` writes lands in the last one opened,
+   * so a panel reads as the sequence of sections it is made of rather than a
+   * flat run of rows with buttons somewhere in it.
+   */
+  private section(title?: string): HTMLElement {
+    const el = h("div", { class: "inspect-section" });
+    if (title) {
+      el.appendChild(h("div", { class: "inspect-section-title m", text: title }));
+    }
+    this.body.appendChild(el);
+    this.current = el;
+    return el;
   }
 
   private row(key: string, value: string): void {
-    this.body.appendChild(
+    this.current.appendChild(
       h(
         "div",
         { class: "inspect-row" },
@@ -323,6 +343,7 @@ export class Inspector {
     const layer = this.store.layer(layerId);
     if (!layer) return this.renderEmpty();
     this.head("Layer", layer.name);
+    this.section("Info");
     this.row("Locked", layer.locked ? "Yes" : "No");
     this.row("Visible", layer.visible ? "Yes" : "No");
     this.row("Images", String(layer.placements.length));
@@ -338,6 +359,7 @@ export class Inspector {
     const { w, h: height } = rangeSize(from, to);
     const bounds = this.grid.rangeBounds(from, to);
     this.head("Selection", `${w} × ${height} spaces`);
+    this.section("Info");
     this.row("Origin", `${Math.min(from.cx, to.cx)}, ${Math.min(from.cy, to.cy)}`);
     this.row("Pixels", `${Math.round(bounds.width)} × ${Math.round(bounds.height)}`);
     this.row("Projection", this.grid.projection);
@@ -350,6 +372,7 @@ export class Inspector {
     if (!fill) return this.renderEmpty();
 
     this.head("Filled space", `${fill.cells.length} spaces`);
+    this.section("Info");
     this.row("Kind", fill.kind === "pattern" ? "Pattern" : "Colour");
     this.row("Colour", fill.color ?? "—");
     this.row("Pattern", fill.patternKey ?? "—");
@@ -437,54 +460,58 @@ export class Inspector {
       );
     }
 
+    this.section("Info");
     this.row("Layer path", placement.layerPath);
     this.row("Position", `${Math.round(placement.x)}, ${Math.round(placement.y)}`);
-    this.row("Size", `${Math.round(placement.width)} × ${Math.round(placement.height)}`);
     this.row("Anchor cell", `${placement.anchor.cx}, ${placement.anchor.cy}`);
 
-    // Editing a PSD is a round trip out of the app and back, so the two
-    // halves sit together on one row: open it where it can be edited, then
-    // bring the edits in. What the second one does depends on where the file
-    // went — see psd-actions.
-    this.body.appendChild(
-      h(
-        "div",
-        { class: "inspect-section" },
-        h(
-          "div",
-          { class: "panel-btn-row" },
-          h("button", {
-            class: "panel-btn",
-            text: "Open PSD",
-            onClick: () => this.callbacks.onOpenPsd(placement.psdKey),
-          }),
-          h("button", {
-            class: "panel-btn",
-            text: refreshPsdLabel(this.platform),
-            onClick: () => this.callbacks.onRefreshPsd(placement.psdKey),
-          }),
-        ),
-        sizeControls(placement, (patch) => {
-          this.store.updatePlacement(layerId, placementId, patch);
-        }),
-      ),
+    // Size is the one property you change rather than read, so it sits with
+    // the controls that change it rather than among the facts above.
+    const transform = this.section("Transform");
+    transform.appendChild(
+      sizeControls(placement, (patch) => {
+        this.store.updatePlacement(layerId, placementId, patch);
+      }),
     );
+    this.current = transform;
+    // Documents written before resizing existed carry no natural size, and
+    // for those the displayed size is the source size.
+    const source = {
+      w: placement.naturalWidth || placement.width,
+      h: placement.naturalHeight || placement.height,
+    };
+    this.row("Source", `${Math.round(source.w)} × ${Math.round(source.h)} px`);
+    this.row("Scale", `${Math.round(scaleOf(placement) * 100)}%`);
 
-    // The stack inside the file, between what the placement is and what can
-    // be done to it: reordering and renaming are edits to the PSD, not to
-    // this placement of it.
+    // The stack inside the file. It sits above the buttons that send the file
+    // out, because most of what anyone opened Photoshop for — reordering,
+    // renaming, changing a sprite to a tileset — can be done here instead.
     this.body.appendChild(this.psdLayerSection(placement.psdKey));
 
-    this.body.appendChild(
+    // Editing a PSD elsewhere is a round trip out of the app and back, so the
+    // two halves sit together on one row: send it out, then bring the edits
+    // in. What each one does depends on the platform — see psd-actions.
+    this.section();
+    this.current.append(
       h(
         "div",
-        { class: "inspect-section" },
+        { class: "panel-btn-row" },
         h("button", {
           class: "panel-btn",
-          text: "Remove from layer",
-          onClick: () => this.callbacks.onDeleteSelection(),
+          text: openPsdLabel(this.platform),
+          onClick: () => this.callbacks.onOpenPsd(placement.psdKey),
+        }),
+        h("button", {
+          class: "panel-btn",
+          text: refreshPsdLabel(this.platform),
+          onClick: () => this.callbacks.onRefreshPsd(placement.psdKey),
         }),
       ),
+      h("button", {
+        class: "panel-btn",
+        text: "Remove from layer",
+        onClick: () => this.callbacks.onDeleteSelection(),
+      }),
     );
   }
 
@@ -512,6 +539,7 @@ export class Inspector {
     if (strokes.length === 0) return this.renderEmpty();
 
     this.head("Sketch", count(strokes.length, "stroke"));
+    this.section("Info");
     this.row("Layer", layer.name);
     const box = strokesBox(strokes);
     if (box) {
@@ -557,6 +585,7 @@ export class Inspector {
     const zone = this.store.layer(layerId)?.zones.find((z) => z.id === zoneId);
     if (!zone) return this.renderEmpty();
     this.head("Boundary", zone.name);
+    this.section("Info");
     this.row("Points", String(zone.points.length));
     this.row("Blocking", zone.blocking ? "Yes" : "No");
     this.body.appendChild(
@@ -573,7 +602,13 @@ export class Inspector {
   }
 }
 
-/** Numeric width/height for image edit mode. */
+/**
+ * Numeric width/height for image edit mode.
+ *
+ * The fields are set at the label's size, as the read-only values beside them
+ * are: a row is a label and its value, and a 16px field among 10px rows read
+ * as a heading with a box round it.
+ */
 function sizeControls(
   placement: Placement,
   onChange: (patch: Partial<Placement>) => void,
@@ -584,10 +619,9 @@ function sizeControls(
       { class: "inspect-row" },
       h("div", { class: "inspect-key m", text: label }),
       h("input", {
-        class: "input",
+        class: "inspect-input",
         type: "number",
         value: String(Math.round(value)),
-        style: { minHeight: "26px", maxWidth: "96px" },
         onChange: (event: Event) => {
           const next = Number((event.target as HTMLInputElement).value);
           if (Number.isFinite(next) && next > 0) onChange({ [key]: next });
@@ -601,4 +635,12 @@ function sizeControls(
     make("Width", placement.width, "width"),
     make("Height", placement.height, "height"),
   );
+}
+
+/**
+ * How big a placement is against the pixels it really has. An import lands at
+ * half — see IMPORT_SCALE — and this is the only place that says so.
+ */
+function scaleOf(placement: Placement): number {
+  return placement.width / (placement.naturalWidth || placement.width);
 }
