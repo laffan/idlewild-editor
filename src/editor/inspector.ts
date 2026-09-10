@@ -8,11 +8,10 @@
  */
 
 import { clear, h } from "../lib/dom";
+import { createColorPicker } from "../lib/color-picker";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, rangeSize } from "../lib/grid";
 import type { FillPatch, Placement, Selection } from "../lib/types";
-
-const FILL_SWATCHES = ["#ec3013", "#201e1d", "#9b9797", "#d9e6ef"];
 
 export interface InspectorCallbacks {
   onFillColor: (color: string) => void;
@@ -29,6 +28,9 @@ export class Inspector {
   private readonly grid: Grid;
   private readonly callbacks: InspectorCallbacks;
   private selection: Selection = { kind: "none" };
+  /** Carried between selections so the picker reopens where it was left. */
+  private lastColor = "#ec3013";
+  private suspended = false;
 
   constructor(
     store: DocStore,
@@ -51,11 +53,29 @@ export class Inspector {
       this.body,
     );
 
-    store.addEventListener("change", () => this.render());
+    store.addEventListener("change", () => {
+      if (!this.suspended) this.render();
+    });
+    this.render();
   }
 
   setCollapsed(collapsed: boolean): void {
     this.root.classList.toggle("collapsed", collapsed);
+  }
+
+  /**
+   * Hold re-rendering while the canvas is mid-drag. A drag writes to the
+   * document on every pointer move, and rebuilding this panel per frame
+   * would throw away the colour picker's state and any half-typed name.
+   */
+  setSuspended(suspended: boolean): void {
+    this.suspended = suspended;
+    if (!suspended) this.render();
+  }
+
+  /** The colour a new fill should take — whatever the picker last settled on. */
+  get fillColor(): string {
+    return this.lastColor;
   }
 
   setSelection(selection: Selection): void {
@@ -176,25 +196,25 @@ export class Inspector {
   }
 
   private fillSection(fill: FillPatch | undefined): void {
-    const swatches = h("div", { class: "swatches" });
-    for (const colour of FILL_SWATCHES) {
-      swatches.appendChild(
-        h("button", {
-          class: "swatch",
-          style: { background: colour },
-          title: colour,
-          "aria-pressed": String(fill?.color === colour),
-          onClick: () => this.callbacks.onFillColor(colour),
-        }),
-      );
-    }
+    // A full picker rather than a fixed palette: the theme's four accents are
+    // the app's colours, not the game's.
+    const picker = createColorPicker({
+      value: fill?.color ?? this.lastColor,
+      onChange: (hex) => {
+        this.lastColor = hex;
+        this.callbacks.onFillColor(hex);
+      },
+      onCommit: (hex) => {
+        this.lastColor = hex;
+      },
+    });
 
     this.body.appendChild(
       h(
         "div",
         { class: "inspect-section" },
         h("div", { class: "inspect-section-title m", text: "Fill" }),
-        swatches,
+        picker.root,
         h("button", {
           class: "panel-btn",
           text: "Use pattern image…",

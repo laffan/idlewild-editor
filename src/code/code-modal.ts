@@ -178,7 +178,14 @@ export class CodeModal {
         EditorView.updateListener.of((update) => {
           if (update.docChanged) this.setDirty(true);
         }),
-        EditorView.theme({ "&": { height: "100%" } }),
+        EditorView.theme({
+          "&": { height: "100%" },
+          // The design system's code face, not CodeMirror's default stack.
+          ".cm-content, .cm-gutters": {
+            fontFamily: "var(--font-mono)",
+            fontSize: "13px",
+          },
+        }),
       ],
     });
 

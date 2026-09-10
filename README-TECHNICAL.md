@@ -135,6 +135,7 @@ contract:
 
 | Input | Result |
 |---|---|
+| One finger down on the current selection | Drag it, snapped to the grid |
 | One finger, moved | Pan |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
 | Hold ~320 ms, still | Begin a grid selection |
@@ -144,6 +145,13 @@ contract:
 There is one arbiter because the drawing layer will want raw input for its own
 tools: `setSuspended(true)` hands input over without tearing down camera
 state.
+
+Only the *current selection* is draggable. A pointer-down anywhere else still
+pans, which keeps the camera reachable everywhere and makes a drag always
+something the user picked first. A drag writes to the document on every
+pointer move, so the scene brackets it with `onDragStateChange` and the panels
+hold their re-renders — otherwise the inspector would rebuild its colour
+picker, and the layer panel its name inputs, every frame.
 
 ---
 
@@ -193,6 +201,20 @@ without the prefix would process to nothing.
 The README on `psd-to-phaser` shows `P2P.load(…)`; the shipped typings
 disagree, and the typings are what the vendored build actually exposes.
 
+**There is no `root` path.** `place(scene, key, path)` resolves `path` by
+walking the manifest's `layers` by name (`shared/findLayer.ts`), so it must be
+given a real one. Asking for `"root"` finds nothing, logs *No layer found with
+path: root*, and returns an empty group — a selection box with no image in it.
+`src/lib/manifest.ts` reads the manifest and anchors one placement per
+top-level layer, each keeping its offset inside the PSD canvas. Documents
+written by earlier builds are repointed on open.
+
+**Wait on `psdLoadComplete`, not the loader.** P2P loads `data.json` first and
+only queues sprites once it has parsed it, so Phaser's loader can complete a
+whole pass before a single image has been requested. The plugin emits
+`psdLoadComplete` on the scene when its textures are actually in; that event
+carries no key, so loads are run one at a time.
+
 ---
 
 ## Drawing layer
@@ -227,14 +249,30 @@ headless harness for the Phaser scene yet; the canvas needs a device.
 
 ---
 
+## Console
+
+`lib/log.ts` wraps `console.*` and interprets format directives rather than
+joining raw arguments. Phaser's boot banner is a `%c`-styled string with two
+CSS arguments; joined naively it dumps a base64 `background-image` across the
+drawer on every launch. `%c` runs become styled spans, and the style is
+filtered down to colour and weight — a banner has no business setting padding
+or loading images inside the log.
+
+Output uses Fira Code (bundled, not fetched — the editor works offline) and
+opts back into text selection, which the shell suppresses globally so a drag
+on chrome never highlights it.
+
 ## Known gaps
 
 - Pattern fills store their PSD key and render as a tint; the texture is not
   yet sampled into the fill.
+- Two PSDs with a same-named layer collide in Phaser's texture cache: P2P
+  keys textures on the layer name unless loaded via `loadMultiple`.
 - The code modal edits and saves the project's real files but does not yet
   drive the canvas, and has none of phaser-bench's Phaser-aware completions.
-- Placed images resize from the inspector's numeric fields; the on-canvas
-  handles are drawn but not yet draggable.
+- Placed images and fills drag with grid snapping, and images resize from the
+  inspector's numeric fields; the on-canvas resize handles are drawn but not
+  yet draggable.
 - Play mode's character is a placeholder rectangle, not a sprite from the
   template.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both

@@ -77,12 +77,12 @@ export class Topbar {
         h(
           "button",
           {
-            class: "icon-btn topbar-group",
+            class: "chrome-btn chrome-btn-icon",
             title: "Project options",
-            style: { width: "48px" },
+            "aria-label": "Project options",
             onClick: callbacks.onOptions,
           },
-          icon("M4 7h16M4 12h16M4 17h16", 17),
+          icon(ICONS.menu, 17),
         ),
       ),
     );

@@ -31,7 +31,10 @@
 
   --font-heading: "Archivo", system-ui, sans-serif;
   --font-body: "Archivo", system-ui, sans-serif;
-  --font-mono: "Archivo Narrow", "Archivo", system-ui, sans-serif;
+  /* The uppercase micro-label face — chrome, not content. */
+  --font-label: "Archivo Narrow", "Archivo", system-ui, sans-serif;
+  /* Anything the user reads as code or output. */
+  --font-mono: "Fira Code", ui-monospace, "SF Mono", Menlo, monospace;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -59,4 +62,14 @@
 
   /* Touch targets. Everything the finger hits is at least this tall. */
   --hit: 44px;
+
+  /* Borders. The system is flat and zero-radius, but its rules are drawn in
+     neutral tones rather than near-black — the ink-heavy version read as
+     wireframe rather than interface. */
+  --rule: 1px solid var(--color-neutral-300);
+  --rule-strong: 1px solid var(--color-neutral-400);
+  --rule-chrome: 1px solid var(--chrome-rule);
+
+  /* How wide a draggable divider is to the finger. */
+  --handle: 10px;
 }

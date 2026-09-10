@@ -1,10 +1,14 @@
 @import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=Archivo+Narrow:wght@500;600&display=swap");
+/* Fira Code is bundled rather than fetched: the editor has to work offline. */
+@import "@fontsource/fira-code/400.css";
+@import "@fontsource/fira-code/500.css";
 @import "./tokens.css";
 @import "./home.css";
 @import "./sheets.css";
 @import "./editor.css";
 @import "./panels.css";
 @import "./code.css";
+@import "./controls.css";
 
 * { box-sizing: border-box; }
 
@@ -38,9 +42,20 @@ button { cursor: pointer; border-radius: 0; }
 
 /* The uppercase micro-label used throughout both screens. */
 .m {
-  font-family: var(--font-mono);
+  font-family: var(--font-label);
   letter-spacing: 0.07em;
   text-transform: uppercase;
+}
+
+/* Output and code are read, and read means selected and copied. The shell
+   suppresses selection so a drag on chrome never highlights it; these opt
+   back in. */
+.selectable,
+.terminal-body,
+.cm-editor {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
 }
 
 .hidden { display: none !important; }

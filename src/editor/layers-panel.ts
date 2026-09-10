@@ -17,6 +17,7 @@ export class LayersPanel {
   private readonly body: HTMLElement;
   private readonly store: DocStore;
   private readonly callbacks: LayersPanelCallbacks;
+  private suspended = false;
 
   constructor(store: DocStore, callbacks: LayersPanelCallbacks) {
     this.store = store;
@@ -46,12 +47,24 @@ export class LayersPanel {
       this.body,
     );
 
-    store.addEventListener("change", () => this.render());
+    store.addEventListener("change", () => {
+      if (!this.suspended) this.render();
+    });
     this.render();
   }
 
   setCollapsed(collapsed: boolean): void {
     this.root.classList.toggle("collapsed", collapsed);
+  }
+
+  /**
+   * Hold re-rendering while the canvas is mid-drag. A drag writes to the
+   * document on every pointer move, and rebuilding this panel per frame
+   * would throw away the colour picker's state and any half-typed name.
+   */
+  setSuspended(suspended: boolean): void {
+    this.suspended = suspended;
+    if (!suspended) this.render();
   }
 
   render(): void {
@@ -135,7 +148,7 @@ export class LayersPanel {
             this.store.setLayerVisible(layer.id, !layer.visible);
           },
         },
-        icon(ICONS.eye, 16),
+        icon(layer.visible ? ICONS.eye : ICONS.eyeOff, 16),
       ),
       h(
         "button",

@@ -30,14 +30,17 @@ remaining pieces are wired to real slots rather than mocked.
 - Project list with thumbnails, long-press rename / duplicate / delete
 - New Game: template (isometric, orthogonal) and grid scale (32–256 px)
 - Infinite grid, one-finger pan, two-finger zoom, hold-to-select, tap-to-pick
-- Fill a selection with a colour; mark it walkable or blocking
+- Fill a selection with any colour, from a full picker with recent swatches
+- Drag placed images and fills, snapped to the grid
+- Resizable sidebars and console drawer, persisted per install
 - Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed
 - Layers: reorder, rename, lock, hide, with live counts
 - Inspector for layers, selections, fills, placed images and boundaries
 - Export a selection as a transparent PNG (save or copy)
 - Play mode: a character, a following camera, tap-to-walk over A*
 - Code modal: the project's real file tree in CodeMirror 6, dockable
-- Console drawer, fed by the page and by psd-to-json's own progress
+- Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
+  by psd-to-json's own progress
 - Publish: a zipped project carrying both runtimes
 
 **Next**

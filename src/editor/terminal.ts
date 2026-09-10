@@ -11,9 +11,11 @@ import * as log from "../lib/log";
 
 export class Terminal {
   readonly root: HTMLElement;
-  private readonly body: HTMLElement;
+  /** The scrolling log region — the console resizer's target. */
+  readonly body: HTMLElement;
   private readonly chevron: HTMLElement;
   private open = false;
+  private resizeHandle: HTMLElement | null = null;
   private unlistenLog: (() => void) | null = null;
   private unsubscribe: (() => void) | null = null;
 
@@ -48,9 +50,17 @@ export class Terminal {
     });
   }
 
+  /** The drawer's divider sits above the toggle, so it is inserted here. */
+  mountResizeHandle(handle: HTMLElement): void {
+    this.resizeHandle = handle;
+    handle.classList.toggle("collapsed", !this.open);
+    this.root.prepend(handle);
+  }
+
   toggle(): void {
     this.open = !this.open;
     this.body.classList.toggle("hidden", !this.open);
+    this.resizeHandle?.classList.toggle("collapsed", !this.open);
     clear(this.chevron);
     this.chevron.appendChild(
       icon(this.open ? ICONS.chevronDown : ICONS.chevronUp, 14, "#9b9797"),
@@ -61,13 +71,23 @@ export class Terminal {
   private paint(entries: readonly log.LogEntry[]): void {
     clear(this.body);
     for (const entry of entries) {
+      const message = h("span", { class: "terminal-message" });
+      // Segments carry the styling from any `%c` runs in the original call.
+      for (const segment of entry.segments) {
+        message.appendChild(
+          segment.style
+            ? h("span", { style: segment.style, text: segment.text })
+            : document.createTextNode(segment.text),
+        );
+      }
+
       this.body.appendChild(
         h(
           "div",
           { class: "terminal-line" },
           h("span", { class: "terminal-time", text: entry.t }),
           h("span", { class: `terminal-level ${entry.level}`, text: entry.level }),
-          h("span", { class: "terminal-message", text: entry.message }),
+          message,
         ),
       );
     }

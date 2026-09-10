@@ -151,6 +151,53 @@ fn a_project_round_trips_an_image_through_psd_to_json() {
     }
 }
 
+/// psd-to-phaser resolves a placement path by walking the manifest's layers
+/// by name. The frontend anchors an imported image on the top-level layer it
+/// finds there, so a converted image's layer must be named for its key —
+/// otherwise every import places an empty group.
+#[test]
+fn a_converted_image_names_its_layer_after_the_key() {
+    let meta = store::create_project("Naming", Projection::Isometric, 64)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let bytes = psd_write::psd_from_rgba("build", 8, 8, swatch(8, 8, [1, 2, 3, 255]))
+            .expect("PSD should be written");
+        std::fs::write(
+            store::psd_dir(&meta.id).unwrap().join("build.psd"),
+            bytes,
+        )
+        .expect("PSD should save");
+
+        let manifest =
+            psd_pipeline::process(&meta.id, "build", &psd_pipeline::ProcessOptions::default(), |_| {})
+                .expect("processing should succeed");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should be JSON");
+
+        let layers = parsed["layers"].as_array().expect("layers array");
+        assert_eq!(layers.len(), 1, "one sprite layer, got {layers:?}");
+        assert_eq!(
+            layers[0]["name"], "build",
+            "the top-level layer must carry the key"
+        );
+        assert_eq!(
+            layers[0]["category"], "sprite",
+            "the S | prefix must classify it as a sprite"
+        );
+        // The path the old code asked for does not exist in the manifest.
+        assert!(
+            layers.iter().all(|l| l["name"] != "root"),
+            "there is no 'root' layer to place"
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 #[test]
 fn a_new_project_scaffolds_a_runnable_game() {
     let meta = store::create_project("Scaffold test", Projection::Orthogonal, 32)

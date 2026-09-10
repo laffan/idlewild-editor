@@ -78,20 +78,25 @@ export class GridRenderer {
 
     // Fade the lines out as tiles approach the legibility floor rather than
     // popping them off at the threshold.
-    const alpha = Math.min(1, (tilePx - MIN_VISIBLE_TILE_PX) / 24);
+    const alpha = Math.min(0.9, (tilePx - MIN_VISIBLE_TILE_PX) / 30);
     g.lineStyle(1, 0xa9c2d3, alpha);
 
-    for (let cy = range.from.cy; cy <= range.to.cy; cy++) {
-      for (let cx = range.from.cx; cx <= range.to.cx; cx++) {
+    // Two edges per cell, not the whole tile outline: neighbours supply the
+    // other two. Stroking every outline drew each shared edge twice, which
+    // both doubled the work and darkened the lattice where they overlapped.
+    g.beginPath();
+    for (let cy = range.from.cy; cy <= range.to.cy + 1; cy++) {
+      for (let cx = range.from.cx; cx <= range.to.cx + 1; cx++) {
+        // One path serves both projections: vertices 3 → 0 → 1 are
+        // left → top → right on an isometric diamond, and bottom-left →
+        // top-left → top-right on an orthogonal square. Either way that is
+        // the cell's two leading edges.
         const points = this.grid.cellPolygon({ cx, cy });
-        g.beginPath();
-        g.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-          g.lineTo(points[i].x, points[i].y);
-        }
-        g.closePath();
-        g.strokePath();
+        g.moveTo(points[3].x, points[3].y);
+        g.lineTo(points[0].x, points[0].y);
+        g.lineTo(points[1].x, points[1].y);
       }
     }
+    g.strokePath();
   }
 }

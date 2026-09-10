@@ -16,6 +16,13 @@ export default defineConfig({
       ),
     },
   },
+  optimizeDeps: {
+    // Without this Vite crawls every .html under the project root, finds the
+    // export templates in src-tauri/templates/, and tries to resolve their
+    // `js/main.js` as an app dependency. Those files are game source shipped
+    // to exports, not part of this bundle.
+    entries: ["index.html"],
+  },
   build: {
     target: "es2022",
     sourcemap: !!process.env.TAURI_DEBUG,

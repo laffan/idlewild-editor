@@ -7,11 +7,19 @@
  * handed out as high-level events rather than being read in three places.
  */
 
-export type RigPhase = "idle" | "pan" | "pinch" | "marquee";
+export type RigPhase = "idle" | "pan" | "pinch" | "marquee" | "drag";
 
 export interface RigEvents {
   /** A tap that did not turn into a pan, hold or pinch. */
   onTap: (screenX: number, screenY: number) => void;
+  /**
+   * Asked once per pointer-down: is there a selected object under the finger
+   * that should move instead of the camera? Returning true routes the gesture
+   * to onDragMove / onDragEnd.
+   */
+  onDragStart: (screenX: number, screenY: number) => boolean;
+  onDragMove: (screenX: number, screenY: number) => void;
+  onDragEnd: () => void;
   onMarqueeStart: (screenX: number, screenY: number) => void;
   onMarqueeMove: (screenX: number, screenY: number) => void;
   onMarqueeEnd: () => void;
@@ -73,6 +81,7 @@ export class CameraRig {
     this.clearHold();
     this.pointers.clear();
     if (this.phase === "marquee") this.events.onMarqueeEnd();
+    if (this.phase === "drag") this.events.onDragEnd();
     this.phase = "idle";
   }
 
@@ -92,6 +101,7 @@ export class CameraRig {
       // A second finger always wins: cancel any pan or pending hold.
       this.clearHold();
       if (this.phase === "marquee") this.events.onMarqueeEnd();
+      if (this.phase === "drag") this.events.onDragEnd();
       this.phase = "pinch";
       this.pinchDistance = this.spread();
       return;
@@ -104,6 +114,13 @@ export class CameraRig {
     this.lastX = event.clientX;
     this.lastY = event.clientY;
     this.phase = "idle";
+
+    // Dragging a selected object wins over both panning and the hold: the
+    // finger is already on something the user picked.
+    if (this.events.onDragStart(event.clientX, event.clientY)) {
+      this.phase = "drag";
+      return;
+    }
 
     this.holdTimer = window.setTimeout(() => {
       this.holdTimer = null;
@@ -130,6 +147,11 @@ export class CameraRig {
 
     if (this.phase === "marquee") {
       this.events.onMarqueeMove(event.clientX, event.clientY);
+      return;
+    }
+
+    if (this.phase === "drag") {
+      this.events.onDragMove(event.clientX, event.clientY);
       return;
     }
 
@@ -176,6 +198,12 @@ export class CameraRig {
     if (this.phase === "marquee") {
       this.phase = "idle";
       this.events.onMarqueeEnd();
+      return;
+    }
+
+    if (this.phase === "drag") {
+      this.phase = "idle";
+      this.events.onDragEnd();
       return;
     }
 

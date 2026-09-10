@@ -46,7 +46,7 @@
   display: flex;
   align-items: center;
   background: var(--chrome-bg);
-  border: 2px solid var(--chrome-bg);
+  border: 0;
   min-height: 48px;
 }
 
@@ -55,7 +55,7 @@
 .topbar-grid {
   font-size: 10px;
   color: var(--chrome-dim);
-  border-left: 2px solid var(--chrome-rule);
+  border-left: var(--rule-chrome);
   padding-left: 12px;
   margin-left: 6px;
 }
@@ -79,7 +79,7 @@
   min-width: 88px;
   padding: 0 20px;
   border: 0;
-  border-left: 2px solid var(--chrome-rule);
+  border-left: var(--rule-chrome);
   background: transparent;
   color: var(--chrome-dim);
   font: 600 15px var(--font-heading);
@@ -92,7 +92,7 @@
 .chrome-btn {
   min-height: 48px;
   padding: 0 18px;
-  border: 2px solid var(--chrome-bg);
+  border: 0;
   background: var(--chrome-bg);
   color: var(--chrome-text);
   font: 600 15px var(--font-heading);
@@ -102,13 +102,14 @@
   gap: 10px;
 }
 .chrome-btn:hover { background: var(--chrome-rule); }
+.chrome-btn-icon { width: 48px; padding: 0; justify-content: center; }
 
 /* Tool rail */
 .tool-rail {
   position: absolute;
   left: 16px;
   top: 100px;
-  border: 2px solid var(--chrome-bg);
+  border: 0;
   background: var(--chrome-bg);
   display: flex;
   flex-direction: column;
@@ -144,7 +145,7 @@
 .selection-actions {
   position: absolute;
   display: flex;
-  border: 2px solid var(--chrome-bg);
+  border: 0;
   background: var(--chrome-bg);
   box-shadow: var(--shadow-md);
   z-index: 6;
@@ -153,7 +154,7 @@
   min-height: 52px;
   padding: 0 18px;
   border: 0;
-  border-left: 2px solid var(--chrome-rule);
+  border-left: var(--rule-chrome);
   background: transparent;
   color: var(--chrome-text);
   font: 600 14px var(--font-heading);
@@ -166,7 +167,7 @@
 }
 .selection-actions button:not(:first-child):hover { background: var(--chrome-rule); }
 .selection-size {
-  border-left: 2px solid var(--chrome-rule);
+  border-left: var(--rule-chrome);
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -174,14 +175,16 @@
   color: var(--chrome-dim);
 }
 
-/* Edge toggles */
+/* Edge toggles.
+   Anchored below the tool rail rather than at dead centre: the rail is six
+   items tall and a centred toggle collided with its last button. */
 .edge-toggle {
   position: absolute;
-  top: 50%;
+  top: max(50%, 480px);
   transform: translateY(-50%);
   width: 26px;
   height: 88px;
-  border: 2px solid var(--chrome-bg);
+  border: 0;
   background: var(--chrome-bg);
   color: var(--chrome-text);
   display: flex;
@@ -196,7 +199,7 @@
 /* Terminal drawer */
 .terminal {
   flex: none;
-  border-top: 2px solid var(--chrome-rule);
+  border-top: var(--rule-chrome);
   background: var(--chrome-bg);
 }
 .terminal-toggle {
@@ -213,9 +216,11 @@
   font-weight: 600;
 }
 .terminal-body {
+  /* Starting height; the divider above writes an inline height over this. */
   height: 186px;
+  min-height: 80px;
   overflow: auto;
-  border-top: 1px solid var(--chrome-rule);
+  border-top: var(--rule-chrome);
   padding: 12px 16px 16px;
 }
 .terminal-line {
@@ -238,7 +243,19 @@
 .terminal-level.info { color: var(--color-neutral-500); }
 .terminal-level.warn { color: var(--color-accent-400); }
 .terminal-level.error { color: var(--color-accent); }
-.terminal-message { color: var(--color-neutral-300); white-space: pre-wrap; }
+.terminal-message {
+  color: var(--color-neutral-300);
+  white-space: pre-wrap;
+  /* Data URLs and stack frames are single unbreakable tokens; without this
+     they run off the edge instead of wrapping. */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* Console output is read and copied, so it uses the code face and stays
+   selectable even though the shell around it does not. */
+.terminal-line { font-family: var(--font-mono); }
+.terminal-body { user-select: text; -webkit-user-select: text; }
 
 /* Play mode hides the chrome the spec says closes. */
 .editor.play-mode .side-panel,

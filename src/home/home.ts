@@ -213,7 +213,7 @@ function openCardMenu(
 }
 
 function item(
-  path: string,
+  path: string | readonly string[],
   label: string,
   onClick: () => void,
   danger = false,

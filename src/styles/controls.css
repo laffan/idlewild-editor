@@ -1,0 +1,160 @@
+/* Resize handles and the colour picker. */
+
+/* ── draggable dividers ──────────────────────────────────────────────────── */
+
+.resize-handle {
+  flex: none;
+  background: transparent;
+  position: relative;
+  z-index: 7;
+  touch-action: none;
+}
+.resize-handle.collapsed { display: none; }
+
+.resize-handle.vertical {
+  width: var(--handle);
+  margin: 0 calc(var(--handle) / -2);
+  cursor: col-resize;
+}
+.resize-handle.horizontal {
+  height: var(--handle);
+  margin: calc(var(--handle) / -2) 0;
+  cursor: row-resize;
+}
+
+/* The visible hairline sits inside the wider touch target. */
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  background: var(--chrome-rule);
+  transition: background 120ms ease;
+}
+.resize-handle.vertical::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+.resize-handle.horizontal::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.resize-handle:hover::after,
+.resize-handle:focus-visible::after,
+.resize-handle.dragging::after {
+  background: var(--color-accent);
+}
+.resize-handle.vertical:hover::after,
+.resize-handle.vertical.dragging::after { width: 2px; }
+.resize-handle.horizontal:hover::after,
+.resize-handle.horizontal.dragging::after { height: 2px; }
+
+.resize-handle:focus-visible { outline: none; }
+
+/* ── colour picker ───────────────────────────────────────────────────────── */
+
+.cp {
+  display: grid;
+  grid-template-columns: 1fr 24px;
+  grid-template-areas:
+    "field hue"
+    "row   row"
+    "recent recent";
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cp-field {
+  grid-area: field;
+  position: relative;
+  height: 132px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.cp-side { grid-area: hue; }
+
+.cp-hue {
+  position: relative;
+  height: 132px;
+  touch-action: none;
+  cursor: ns-resize;
+  background: linear-gradient(
+    to bottom,
+    #f00 0%,
+    #ff0 17%,
+    #0f0 33%,
+    #0ff 50%,
+    #00f 67%,
+    #f0f 83%,
+    #f00 100%
+  );
+}
+
+.cp-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(32, 30, 29, 0.5);
+  pointer-events: none;
+}
+.cp-thumb-hue {
+  left: 50%;
+  width: 100%;
+  height: 6px;
+  margin: -3px 0 0 -50%;
+  background: transparent;
+}
+
+.cp-row {
+  grid-area: row;
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.cp-preview {
+  flex: none;
+  width: 96px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.cp-hex {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: inherit;
+  font: 400 13px var(--font-mono);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.cp-hex:focus { border-color: var(--color-accent); outline: none; }
+
+.cp-recent {
+  grid-area: recent;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cp-recent:empty { display: none; }
+
+.cp-swatch {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-neutral-700);
+  padding: 0;
+}
+.cp-swatch:hover { border-color: var(--color-accent); }

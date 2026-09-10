@@ -16,7 +16,7 @@
   width: 100%;
   max-width: 600px;
   max-height: 100%;
-  border: 2px solid var(--color-accent);
+  border: 1px solid var(--color-accent);
   background: var(--chrome-panel);
   color: var(--chrome-text);
   display: flex;
@@ -30,7 +30,7 @@
 
 .sheet-head {
   padding: 20px 24px;
-  border-bottom: 2px solid var(--chrome-rule);
+  border-bottom: var(--rule-chrome);
   flex: none;
 }
 .sheet.light .sheet-head { border-bottom-color: var(--color-neutral-300); }
@@ -52,11 +52,11 @@
   flex-wrap: wrap;
 }
 
-.sheet .btn { border-color: var(--chrome-bg); color: var(--chrome-text); }
+.sheet .btn { border-color: var(--color-neutral-700); color: var(--chrome-text); }
 .sheet .btn:hover { background: var(--chrome-rule); }
 .sheet .btn-ghost { border-color: var(--color-neutral-700); }
-.sheet .btn-primary { background: var(--color-accent); color: #fff; }
-.sheet.light .btn { border-color: var(--color-text); color: var(--color-text); }
+.sheet .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+.sheet.light .btn { border-color: var(--color-neutral-400); color: var(--color-text); }
 .sheet.light .btn:hover { background: var(--color-neutral-200); }
 
 /* Fields */
@@ -73,7 +73,7 @@
   width: 100%;
   min-height: var(--hit);
   padding: 0 14px;
-  border: 2px solid var(--color-neutral-700);
+  border: 1px solid var(--color-neutral-700);
   background: transparent;
   font: 500 16px var(--font-body);
   color: inherit;
@@ -81,12 +81,12 @@
 .input:focus { border-color: var(--color-accent); outline: none; }
 
 /* Segmented choice — template and grid scale */
-.seg { display: flex; border: 2px solid var(--color-neutral-700); width: max-content; max-width: 100%; flex-wrap: wrap; }
+.seg { display: flex; border: 1px solid var(--color-neutral-700); width: max-content; max-width: 100%; flex-wrap: wrap; }
 .seg-opt {
   min-height: var(--hit);
   padding: 0 20px;
   border: 0;
-  border-left: 2px solid var(--color-neutral-700);
+  border-left: 1px solid var(--color-neutral-700);
   background: transparent;
   color: inherit;
   font: 600 15px var(--font-heading);

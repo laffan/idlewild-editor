@@ -18,6 +18,7 @@ import { SelectionActions } from "./selection-actions";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
+import { createResizer } from "./resizer";
 import {
   openAddImage,
   openExportSelection,
@@ -77,7 +78,7 @@ export async function mountEditor(
   });
 
   const actions = new SelectionActions({
-    onFill: () => handle?.scene.fillSelection("#ec3013", false),
+    onFill: () => handle?.scene.fillSelection(inspector.fillColor, false),
     onAddImage: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;
@@ -86,7 +87,7 @@ export async function mountEditor(
         cy: Math.min(selection.from.cy, selection.to.cy),
       };
       openAddImage(meta.id, (result) => {
-        void handle?.scene.placePsd(result.key, result.width, result.height, anchor);
+        void handle?.scene.placePsd(result.key, result.manifest, anchor);
       });
     },
     onExport: () => {
@@ -142,24 +143,68 @@ export async function mountEditor(
     rightToggle,
   );
 
+  // Draggable dividers on both sidebars and the console drawer. Sizes are a
+  // per-viewer convenience, so they live in localStorage rather than the doc.
+  const leftResizer = createResizer({
+    target: layers.root,
+    axis: "width",
+    edge: "end",
+    min: 200,
+    max: 560,
+    storageKey: "leftWidth",
+  });
+  const rightResizer = createResizer({
+    target: inspector.root,
+    axis: "width",
+    edge: "start",
+    min: 240,
+    max: 620,
+    storageKey: "rightWidth",
+  });
+  const consoleResizer = createResizer({
+    target: terminal.body,
+    axis: "height",
+    edge: "start",
+    min: 80,
+    max: 620,
+    storageKey: "consoleHeight",
+  });
+  terminal.mountResizeHandle(consoleResizer.handle);
+
   const shell = h(
     "div",
     { class: "editor" },
-    h("div", { class: "editor-main" }, layers.root, canvasWrap, inspector.root),
+    h(
+      "div",
+      { class: "editor-main" },
+      layers.root,
+      leftResizer.handle,
+      canvasWrap,
+      rightResizer.handle,
+      inspector.root,
+    ),
     terminal.root,
   );
 
   clear(container);
   container.appendChild(shell);
+  leftResizer.restore();
+  rightResizer.restore();
+  consoleResizer.restore();
 
   handle = await bootGame(canvasWrap, {
     store,
     assetBase: base,
     onSelectionChange: (selection) => onSelection(selection),
-    onCameraChange: () => actions.update(
-      handle?.scene.getSelection() ?? { kind: "none" },
-      handle?.scene.selectionScreenAnchor() ?? null,
-    ),
+    onCameraChange: () =>
+      actions.update(
+        handle?.scene.getSelection() ?? { kind: "none" },
+        handle?.scene.selectionScreenAnchor() ?? null,
+      ),
+    onDragStateChange: (dragging) => {
+      inspector.setSuspended(dragging);
+      layers.setSuspended(dragging);
+    },
   });
   handle.scene.activeLayerId = activeLayerId;
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
@@ -213,8 +258,10 @@ export async function mountEditor(
 
   function toggleSide(side: "left" | "right"): void {
     const panel = side === "left" ? layers : inspector;
+    const resizer = side === "left" ? leftResizer : rightResizer;
     const collapsed = panel.root.classList.contains("collapsed");
     panel.setCollapsed(!collapsed);
+    resizer.handle.classList.toggle("collapsed", !collapsed);
   }
 
   function setMode(next: EditorMode): void {
@@ -261,6 +308,9 @@ export async function mountEditor(
     await store.flush();
     codeModal?.destroy();
     terminal.destroy();
+    leftResizer.destroy();
+    rightResizer.destroy();
+    consoleResizer.destroy();
     handle?.destroy();
     handle = null;
   }
