@@ -13,6 +13,12 @@ import * as log from "../lib/log";
 
 const DEPTH_STRIDE = 1000;
 
+/** What a hit-test returns: the document record, not the rendered object. */
+export interface PickResult {
+  layerId: string;
+  placement: Placement;
+}
+
 export interface PlacementView {
   placement: Placement;
   layerId: string;
@@ -142,31 +148,9 @@ export class DocRenderer {
     this.syncPlacements();
   }
 
-  view(placementId: string): PlacementView | undefined {
-    return this.placements.get(placementId);
-  }
-
-  /** Hit-test placed objects, front to back. Locked layers are inert. */
-  pick(worldX: number, worldY: number): PlacementView | undefined {
-    const locked = new Set(
-      this.store.layers.filter((l) => l.locked || !l.visible).map((l) => l.id),
-    );
-    const candidates = [...this.placements.values()]
-      .filter((v) => !locked.has(v.layerId))
-      .sort((a, b) => depthOf(b.object) - depthOf(a.object));
-
-    for (const view of candidates) {
-      const { x, y, width, height } = view.placement;
-      if (
-        worldX >= x &&
-        worldX <= x + width &&
-        worldY >= y &&
-        worldY <= y + height
-      ) {
-        return view;
-      }
-    }
-    return undefined;
+  /** Hit-test placements front to back. See `pickPlacement`. */
+  pick(worldX: number, worldY: number): PickResult | undefined {
+    return pickPlacement(this.store.layers, worldX, worldY);
   }
 
   destroy(): void {
@@ -177,11 +161,6 @@ export class DocRenderer {
   }
 }
 
-function depthOf(object: unknown): number {
-  const depth = (object as { depth?: unknown }).depth;
-  return typeof depth === "number" ? depth : 0;
-}
-
 export function hexToNumber(hex: string): number {
   return Number.parseInt(hex.replace("#", ""), 16) || 0;
 }
@@ -189,4 +168,38 @@ export function hexToNumber(hex: string): number {
 export function layerDepth(layers: readonly Layer[], layerId: string): number {
   const index = layers.findIndex((l) => l.id === layerId);
   return index < 0 ? 0 : (layers.length - index) * DEPTH_STRIDE;
+}
+
+/**
+ * Find the front-most placement under a world point.
+ *
+ * This reads the document rather than the rendered Phaser objects: a
+ * placement whose texture failed to load still has bounds, and has to stay
+ * selectable so it can be inspected or removed.
+ *
+ * Layers are stored top-first and, within a layer, a later placement draws
+ * over an earlier one — so the front-most candidate is the earliest layer's
+ * final placement. Locked and hidden layers are inert to the pointer, the
+ * same rule Hush applies to its own pick paths.
+ */
+export function pickPlacement(
+  layers: readonly Layer[],
+  worldX: number,
+  worldY: number,
+): PickResult | undefined {
+  for (const layer of layers) {
+    if (layer.locked || !layer.visible) continue;
+    for (let i = layer.placements.length - 1; i >= 0; i--) {
+      const placement = layer.placements[i];
+      if (
+        worldX >= placement.x &&
+        worldX <= placement.x + placement.width &&
+        worldY >= placement.y &&
+        worldY <= placement.y + placement.height
+      ) {
+        return { layerId: layer.id, placement };
+      }
+    }
+  }
+  return undefined;
 }

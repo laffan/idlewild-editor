@@ -34,7 +34,8 @@ remaining pieces are wired to real slots rather than mocked.
 - Drag placed images and fills, snapped to the grid
 - Resizable sidebars and console drawer, persisted per install
 - Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed
-- Layers: reorder, rename, lock, hide, with live counts
+- Layers: reorder, rename, lock, hide, with live counts and an expandable
+  list of what is on each one — selecting there selects on the canvas
 - Inspector for layers, selections, fills, placed images and boundaries
 - Export a selection as a transparent PNG (save or copy)
 - Play mode: a character, a following camera, tap-to-walk over A*

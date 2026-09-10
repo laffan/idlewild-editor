@@ -17,10 +17,29 @@ export interface GameHandle {
   destroy: () => void;
 }
 
+/**
+ * psd-to-phaser reaches for a global `Phaser`.
+ *
+ * Its sources use the ambient namespace in value positions — `instanceof
+ * Phaser.GameObjects.Group`, `Phaser.Math.Clamp`, `Phaser.Geom.Polygon` —
+ * without importing it, so those survive into the build as bare global
+ * references. Under a `<script src="phaser.min.js">` that is fine, because
+ * Phaser assigns itself to `window`; that is how the exported games and
+ * Phaser Bench run it. The editor imports Phaser as an ES module, so nothing
+ * ever sets the global and every placement dies on `Can't find variable:
+ * Phaser`. Publish the global before the plugin is constructed.
+ */
+function exposePhaserGlobal(): void {
+  const scope = globalThis as typeof globalThis & { Phaser?: unknown };
+  if (!scope.Phaser) scope.Phaser = Phaser;
+}
+
 export function bootGame(
   parent: HTMLElement,
   config: WorldSceneConfig,
 ): Promise<GameHandle> {
+  exposePhaserGlobal();
+
   return new Promise((resolve) => {
     const scene = new WorldScene();
 

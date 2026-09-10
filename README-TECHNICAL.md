@@ -209,6 +209,15 @@ path: root*, and returns an empty group — a selection box with no image in it.
 top-level layer, each keeping its offset inside the PSD canvas. Documents
 written by earlier builds are repointed on open.
 
+**It needs a global `Phaser`.** Its sources use the ambient namespace in
+value positions — `instanceof Phaser.GameObjects.Group`, `Phaser.Math.Clamp`,
+`Phaser.Geom.Polygon` — without importing it, so those survive into the build
+as bare global references. Under a `<script src="phaser.min.js">` that is
+fine, because Phaser assigns itself to `window`; that is how the exported
+games and Phaser Bench run it. The editor imports Phaser as an ES module, so
+nothing sets the global and every placement dies on `Can't find variable:
+Phaser`. `game/boot.ts` publishes it before the plugin is constructed.
+
 **Wait on `psdLoadComplete`, not the loader.** P2P loads `data.json` first and
 only queues sprites once it has parsed it, so Phaser's loader can complete a
 whole pass before a single image has been requested. The plugin emits
@@ -249,6 +258,24 @@ headless harness for the Phaser scene yet; the canvas needs a device.
 
 ---
 
+## Selection
+
+Hit-testing reads the **document**, not the rendered Phaser objects
+(`pickPlacement` in `game/doc-renderer.ts`). A placement whose texture failed
+to load still has bounds, and has to stay selectable so it can be inspected or
+removed — otherwise a broken import is also an unfixable one.
+
+Order follows the draw order: layers are top-first and, within a layer, a
+later placement draws over an earlier one, so the front-most candidate is the
+earliest layer's final placement. Locked and hidden layers are inert to the
+pointer, the same rule Hush applies to its own pick paths.
+
+The same items are listed under each layer in the left panel
+(`editor/layer-items.ts`), and selecting one there is equivalent to picking it
+on the canvas — which is how you reach something off-screen, underneath
+something else, or not rendering. Selecting on the canvas expands the owning
+layer so the two views stay in step.
+
 ## Console
 
 `lib/log.ts` wraps `console.*` and interprets format directives rather than
@@ -268,6 +295,8 @@ on chrome never highlights it.
   yet sampled into the fill.
 - Two PSDs with a same-named layer collide in Phaser's texture cache: P2P
   keys textures on the layer name unless loaded via `loadMultiple`.
+- Strokes are listed under a layer as a count rather than individually; they
+  get their own selection model with the drawing engine port.
 - The code modal edits and saves the project's real files but does not yet
   drive the canvas, and has none of phaser-bench's Phaser-aware completions.
 - Placed images and fills drag with grid snapping, and images resize from the

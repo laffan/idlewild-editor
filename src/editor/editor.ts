@@ -49,11 +49,25 @@ export async function mountEditor(
 
   const layers = new LayersPanel(store, {
     getActiveLayerId: () => activeLayerId,
+    getSelection: () => handle?.scene.getSelection() ?? { kind: "none" },
     onSelectLayer: (layerId) => {
       activeLayerId = layerId;
       if (handle) handle.scene.activeLayerId = layerId;
       layers.render();
       handle?.scene.setSelection({ kind: "layer", layerId });
+    },
+    onSelectItem: (selection) => {
+      // Selecting something inside a layer makes that layer the active one,
+      // so the next Fill or Add Image lands where the user is looking.
+      const layerId =
+        selection.kind === "placement" ||
+        selection.kind === "fill" ||
+        selection.kind === "zone"
+          ? selection.layerId
+          : activeLayerId;
+      activeLayerId = layerId;
+      if (handle) handle.scene.activeLayerId = layerId;
+      handle?.scene.setSelection(selection);
     },
   });
 
@@ -207,15 +221,32 @@ export async function mountEditor(
     },
   });
   handle.scene.activeLayerId = activeLayerId;
+  if (import.meta.env.DEV) {
+    // Handle for the browser harness in scratchpad/; dev builds only.
+    (window as unknown as Record<string, unknown>).__idlewildScene = handle.scene;
+  }
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
 
   function onSelection(selection: Selection): void {
     inspector.setSelection(selection);
     actions.update(selection, handle?.scene.selectionScreenAnchor() ?? null);
+
     if (selection.kind === "layer") {
       activeLayerId = selection.layerId;
       layers.render();
+      return;
     }
+
+    // Picking something on the canvas reveals it in the layer list too.
+    if (
+      selection.kind === "placement" ||
+      selection.kind === "fill" ||
+      selection.kind === "zone"
+    ) {
+      activeLayerId = selection.layerId;
+      layers.expand(selection.layerId);
+    }
+    layers.render();
   }
 
   function applyFillColour(color: string): void {

@@ -5,11 +5,15 @@
 
 import { clear, h, ICONS, icon } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
-import type { Layer } from "../lib/types";
+import type { Layer, Selection } from "../lib/types";
+import { isSelected, layerItems, renderLayerItem } from "./layer-items";
 
 export interface LayersPanelCallbacks {
   onSelectLayer: (layerId: string) => void;
+  /** Selecting a placement, fill or boundary from the list under a layer. */
+  onSelectItem: (selection: Selection) => void;
   getActiveLayerId: () => string;
+  getSelection: () => Selection;
 }
 
 export class LayersPanel {
@@ -18,6 +22,8 @@ export class LayersPanel {
   private readonly store: DocStore;
   private readonly callbacks: LayersPanelCallbacks;
   private suspended = false;
+  /** Layers whose contents are shown. Expansion is per-session UI state. */
+  private readonly expanded = new Set<string>();
 
   constructor(store: DocStore, callbacks: LayersPanelCallbacks) {
     this.store = store;
@@ -69,10 +75,47 @@ export class LayersPanel {
 
   render(): void {
     const active = this.callbacks.getActiveLayerId();
+    const selection = this.callbacks.getSelection();
+
     clear(this.body);
     this.store.layers.forEach((layer, index) => {
       this.body.appendChild(this.row(layer, index, layer.id === active));
+
+      if (!this.expanded.has(layer.id)) return;
+      const items = layerItems(layer);
+      if (items.length === 0 && layer.strokes.length === 0) {
+        this.body.appendChild(
+          h("div", { class: "layer-item empty m", text: "Nothing on this layer" }),
+        );
+        return;
+      }
+
+      for (const item of items) {
+        this.body.appendChild(
+          renderLayerItem(item, isSelected(item, selection), (next) => {
+            this.callbacks.onSelectItem(next);
+          }),
+        );
+      }
+
+      // Strokes are listed as a count until the drawing layer's own
+      // selection model arrives; there is nothing to point at yet.
+      if (layer.strokes.length > 0) {
+        this.body.appendChild(
+          h("div", {
+            class: "layer-item empty m",
+            text: `${layer.strokes.length} strokes`,
+          }),
+        );
+      }
     });
+  }
+
+  /** Show a layer's contents, e.g. after selecting something inside it. */
+  expand(layerId: string): void {
+    if (this.expanded.has(layerId)) return;
+    this.expanded.add(layerId);
+    this.render();
   }
 
   private row(layer: Layer, index: number, active: boolean): HTMLElement {
@@ -131,6 +174,23 @@ export class LayersPanel {
           },
           icon(ICONS.chevronDown, 12),
         ),
+      ),
+      h(
+        "button",
+        {
+          class: this.expanded.has(layer.id)
+            ? "layer-disclose open"
+            : "layer-disclose",
+          title: this.expanded.has(layer.id) ? "Hide contents" : "Show contents",
+          "aria-expanded": String(this.expanded.has(layer.id)),
+          onClick: (event: Event) => {
+            event.stopPropagation();
+            if (this.expanded.has(layer.id)) this.expanded.delete(layer.id);
+            else this.expanded.add(layer.id);
+            this.render();
+          },
+        },
+        icon(ICONS.chevronRight, 13),
       ),
       h(
         "div",
