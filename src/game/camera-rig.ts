@@ -53,7 +53,16 @@ export interface RigEvents {
   ) => boolean;
   onDragMove: (screenX: number, screenY: number) => void;
   onDragEnd: () => void;
-  onMarqueeStart: (screenX: number, screenY: number) => void;
+  /**
+   * A selection box has started.
+   *
+   * `fromHold` says which of the two ways it began: a finger held still, or a
+   * drag under the Select tool. They produce the same selection, and the
+   * difference is what the editor makes of it — a held selection is somebody
+   * asking for this much space and gets the action bar, a dragged one is
+   * somebody reaching for what is inside it and does not.
+   */
+  onMarqueeStart: (screenX: number, screenY: number, fromHold: boolean) => void;
   onMarqueeMove: (screenX: number, screenY: number) => void;
   onMarqueeEnd: () => void;
   onPan: (dxScreen: number, dyScreen: number) => void;
@@ -190,7 +199,7 @@ export class CameraRig {
       this.holdTimer = window.setTimeout(() => {
         this.holdTimer = null;
         this.phase = "marquee";
-        this.events.onMarqueeStart(this.startX, this.startY);
+        this.events.onMarqueeStart(this.startX, this.startY, true);
       }, HOLD_MS);
     }
   };
@@ -239,7 +248,7 @@ export class CameraRig {
         // from where it is now — otherwise the first few pixels of every
         // marquee are lost and a small one selects nothing.
         this.phase = "marquee";
-        this.events.onMarqueeStart(this.startX, this.startY);
+        this.events.onMarqueeStart(this.startX, this.startY, false);
         this.events.onMarqueeMove(event.clientX, event.clientY);
         this.lastX = event.clientX;
         this.lastY = event.clientY;

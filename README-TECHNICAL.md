@@ -194,7 +194,7 @@ contract:
 | One finger, moved, under **Pan** | Pan |
 | Space held | Borrow Pan until it is released |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
-| Hold ~320 ms, still | Begin a grid selection where the finger is |
+| Hold ~320 ms, still | Begin a grid selection where the finger is, with its action bar |
 | Tap | Pick the image under the finger, else the boundary, else the fill, else clear |
 | Double-tap a placed PSD | Open it up into its own layers |
 | Ctrl/⌘ + wheel | Zoom (WebKit reports a trackpad pinch this way) |
@@ -205,6 +205,13 @@ which made Select and Pan the same tool with a delay between them and left no
 way to rubber-band over several things at once. The mode takes effect on the
 next pointer-down rather than immediately, so a pan never turns into a
 marquee halfway across the canvas.
+
+Under Pan — picked from the rail or borrowed with space — the canvas shows a
+hand, closed while the drag is under way. A class on the canvas wrapper
+rather than an inline style, so the drawing layer's own crosshair still wins
+where it is up, and `canvas:active` for the closed hand rather than a pair of
+pointer listeners: the canvas keeps its activation state even though every
+pointer handler over it calls `preventDefault`.
 
 Space borrows Pan for as long as it is held (`editor/shortcuts.ts`), which is
 what makes a Select tool that no longer pans bearable — the camera is one
@@ -249,6 +256,16 @@ decided by what is under it when it is released rather than by a modifier
 nobody would find. Over images it selects them — a `placements` selection,
 which drags and deletes as a group. Over empty grid it stays a `region`,
 which is what Fill, Add Image and Generate PSD act on.
+
+**How the marquee began decides whether the action bar appears.** A finger
+held still means *this much space*, and the bar's three actions are what that
+is for. A drag under the Select tool means *whatever is in here* — putting a
+bar of things to make over it interrupts a gesture that was about picking
+things up, and it appeared even when the box caught images and the bar had
+nothing to do with the selection that resulted. So `onMarqueeStart` carries
+`fromHold`, the scene remembers it, and `selectionScreenAnchor` returns null
+for a region that was dragged rather than asked for — the same null it
+already returned for a selection the bar has nothing to say about.
 
 `pickPlacementsIn` takes the marquee's **own outline**, not the box around it.
 Under an isometric template the marquee is a diamond and the box around that

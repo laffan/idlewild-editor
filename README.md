@@ -40,6 +40,8 @@ remaining pieces are wired to real slots rather than mocked.
 - Infinite grid, two-finger zoom, tap-to-pick. Select drags a box around
   things — several images at once, or a patch of grid; Pan drags the camera,
   and holding space borrows it from wherever you are
+- Press and hold to ask for a patch of grid, and get Fill, Add Image and
+  Generate PSD over it
 - Fill a selection with any colour, from a full picker with recent swatches
 - Generate PSD makes an empty file the size and shape of the selected grid
   area, already marked and anchored — somewhere to go and paint

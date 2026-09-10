@@ -187,6 +187,10 @@ export async function mountEditor(
       tool === "pencil" || tool === "eraser" || tool === "lasso" ? tool : null;
     handle?.scene.suspendGestures(drawingTool !== null);
     handle?.scene.setGestureMode(tool === "pan" ? "pan" : "select");
+    // A hand over the canvas, whether Pan was picked from the rail or
+    // borrowed with the space bar. The class carries it rather than an inline
+    // style so the drawing layer's own crosshair still wins where it is up.
+    canvasWrap.classList.toggle("panning", tool === "pan");
     drawing?.setTool(drawingTool);
     inspector.setDrawingTool(drawingTool, drawing?.style ?? null);
     if (!announce) return;

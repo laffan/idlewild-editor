@@ -35,6 +35,13 @@
   touch-action: none;
 }
 
+/* The Pan tool, and the space bar standing in for it. On the canvas rather
+   than on the wrapper so the drawing layer's own crosshair still wins where
+   it is active, and closed while the drag is under way — a hand that stays
+   open while it is dragging looks like a hand that missed. */
+.editor-canvas-wrap.panning canvas { cursor: grab; }
+.editor-canvas-wrap.panning canvas:active { cursor: grabbing; }
+
 /* The header. A row of the shell rather than a floating toolbar, spanning
    the window and standing the same height as the console bar at the bottom,
    so the canvas sits between two rules instead of under a hovering bar. */

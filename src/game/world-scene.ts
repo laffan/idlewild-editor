@@ -67,6 +67,16 @@ export class WorldScene extends Phaser.Scene {
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
   private marqueeAnchor: Cell | null = null;
+  /**
+   * Whether the region selected was *asked for*, rather than dragged through.
+   *
+   * A finger held still means "this much space" — Fill, Add Image and
+   * Generate PSD are what it is for, and the action bar offers them. A drag
+   * under the Select tool means "whatever is in here", and its region is only
+   * what is left when the box caught nothing: putting a bar of things to make
+   * over it interrupts a gesture that was about picking things up.
+   */
+  private held = false;
   private drag!: DragController;
   private psds!: PsdPlacements;
   /** Set once the camera is where it should stay — restored, or user-moved. */
@@ -144,7 +154,7 @@ export class WorldScene extends Phaser.Scene {
         this.mode !== "play" && this.drag.begin(x, y, modifiers),
       onDragMove: (x, y) => this.drag.move(x, y),
       onDragEnd: () => this.drag.end(),
-      onMarqueeStart: (x, y) => this.beginMarquee(x, y),
+      onMarqueeStart: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
       onMarqueeMove: (x, y) => this.extendMarquee(x, y),
       onMarqueeEnd: () => this.endMarquee(),
       onPan: (dx, dy) => this.pan(dx, dy),
@@ -343,10 +353,15 @@ export class WorldScene extends Phaser.Scene {
     this.setSelection({ kind: "none" });
   }
 
-  private beginMarquee(screenX: number, screenY: number): void {
+  private beginMarquee(
+    screenX: number,
+    screenY: number,
+    fromHold: boolean,
+  ): void {
     if (this.mode === "play") return;
     const cell = this.grid.worldToCell(this.worldAt(screenX, screenY));
     this.marqueeAnchor = cell;
+    this.held = fromHold;
     this.setSelection({ kind: "region", from: cell, to: cell });
   }
 
@@ -504,7 +519,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** Screen position for the floating action bar over a region selection. */
   selectionScreenAnchor(): { x: number; y: number; width: number } | null {
-    if (this.selection.kind !== "region") return null;
+    if (this.selection.kind !== "region" || !this.held) return null;
     const bounds = this.grid.rangeBounds(this.selection.from, this.selection.to);
     const camera = this.cameras.main;
     const rect = this.game.canvas.getBoundingClientRect();
