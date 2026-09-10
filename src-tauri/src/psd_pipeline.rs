@@ -6,6 +6,7 @@
 //! `P2P.load(scene, key, 'assets/<key>')` expects.
 
 use crate::project::{ImportResult, OutputFile};
+use crate::psd_write::AnchorMarks;
 use crate::store;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -130,10 +131,11 @@ pub fn import_and_process(
     project_id: &str,
     source: &Path,
     stem_override: Option<&str>,
+    marks: Option<&AnchorMarks>,
     emit_log: impl Fn(&str),
 ) -> Result<ImportResult, String> {
     let psd_dir = store::psd_dir(project_id)?;
-    let dest = crate::psd_write::import_file_as_psd(source, &psd_dir, stem_override)?;
+    let dest = crate::psd_write::import_file_as_psd(source, &psd_dir, stem_override, marks)?;
     let key = dest
         .file_stem()
         .and_then(|s| s.to_str())
@@ -171,7 +173,10 @@ pub fn reimport_and_process(
     let psd_dir = store::psd_dir(project_id)?;
     // Forcing the stem to the existing key is what overwrites `<key>.psd`
     // instead of adding a second file named after whatever was picked.
-    let dest = crate::psd_write::import_file_as_psd(source, &psd_dir, Some(key))?;
+    // No marks on a re-import: the file coming back is the one the artist
+    // has been working in, and it already carries whatever the first import
+    // put there — or whatever they moved it to, which is the point.
+    let dest = crate::psd_write::import_file_as_psd(source, &psd_dir, Some(key), None)?;
     let (width, height) = psd_dimensions(&dest)?;
     let manifest = process(project_id, key, &ProcessOptions::default(), emit_log)?;
 

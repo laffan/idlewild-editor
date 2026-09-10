@@ -8,7 +8,7 @@ import { readImage } from "@tauri-apps/plugin-clipboard-manager";
 import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
 import { psd, publish } from "../lib/ipc";
-import type { ImportResult } from "../lib/ipc";
+import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import type { ProjectMeta } from "../lib/types";
 import * as log from "../lib/log";
 
@@ -20,6 +20,7 @@ import * as log from "../lib/log";
 export function openAddImage(
   projectId: string,
   onImported: (result: ImportResult) => void,
+  marks?: AnchorMarks,
 ): void {
   const sheet = openSheet({
     title: "Add Image",
@@ -51,11 +52,11 @@ export function openAddImage(
           ],
         });
         if (typeof picked !== "string") return null;
-        return psd.importPath(projectId, picked);
+        return psd.importPath(projectId, picked, undefined, marks);
       }),
     ),
     option("Paste from clipboard", "⌘V", () =>
-      run(() => pasteFromClipboard(projectId)),
+      run(() => pasteFromClipboard(projectId, marks)),
     ),
     option("Import from Photos", "iPad", () =>
       run(async () => {
@@ -64,7 +65,7 @@ export function openAddImage(
           filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg"] }],
         });
         if (typeof picked !== "string") return null;
-        return psd.importPath(projectId, picked);
+        return psd.importPath(projectId, picked, undefined, marks);
       }),
     ),
   );
@@ -216,12 +217,18 @@ export function openProjectOptions(meta: ProjectMeta, layerCount: number): void 
  * hands back encoded bytes and is what iPadOS actually serves. Try the plugin
  * first and fall back rather than failing the paste.
  */
-async function pasteFromClipboard(projectId: string): Promise<ImportResult> {
+async function pasteFromClipboard(
+  projectId: string,
+  marks?: AnchorMarks,
+): Promise<ImportResult> {
   const name = `pasted-${Date.now().toString(36)}`;
   try {
     const image = await readImage();
     const { width, height } = await image.size();
     const rgba = await image.rgba();
+    // Raw pixels rather than an encoded file, so this route goes through the
+    // RGBA command — which takes no marks, and a paste has no grid selection
+    // to describe anyway when it arrives this way.
     return await psd.fromRgba(projectId, name, width, height, toBase64(rgba));
   } catch (pluginError) {
     log.info("Clipboard plugin unavailable, trying the webview clipboard");
@@ -231,7 +238,7 @@ async function pasteFromClipboard(projectId: string): Promise<ImportResult> {
       if (!type) continue;
       const blob = await item.getType(type);
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      return psd.importBytes(projectId, name, toBase64(bytes));
+      return psd.importBytes(projectId, name, toBase64(bytes), marks);
     }
     throw pluginError;
   }

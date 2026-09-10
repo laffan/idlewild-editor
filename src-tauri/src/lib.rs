@@ -3,6 +3,7 @@
 
 mod file_server;
 mod project;
+mod psd_marks;
 mod psd_pipeline;
 mod psd_write;
 mod publish;
@@ -14,6 +15,7 @@ mod tests;
 
 use project::{GameFile, ImportResult, OutputFile, ProjectMeta, Projection};
 use psd_pipeline::ProcessOptions;
+use psd_write::AnchorMarks;
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
@@ -135,11 +137,13 @@ fn import_image(
     id: String,
     source_path: String,
     name: Option<String>,
+    marks: Option<AnchorMarks>,
 ) -> Result<ImportResult, String> {
     psd_pipeline::import_and_process(
         &id,
         std::path::Path::new(&source_path),
         name.as_deref(),
+        marks.as_ref(),
         logger(&app),
     )
 }
@@ -152,6 +156,7 @@ fn import_image_bytes(
     id: String,
     name: String,
     data_base64: String,
+    marks: Option<AnchorMarks>,
 ) -> Result<ImportResult, String> {
     use base64::Engine;
     let payload = data_base64
@@ -163,7 +168,7 @@ fn import_image_bytes(
         .map_err(|e| format!("Bad image data: {e}"))?;
 
     let key = psd_write::sanitise_stem(&name);
-    let psd_bytes = psd_write::psd_from_image_bytes(&key, &bytes)?;
+    let psd_bytes = psd_write::psd_from_image_bytes_marked(&key, &bytes, marks.as_ref())?;
     let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
     std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
 

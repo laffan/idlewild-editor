@@ -36,7 +36,12 @@ remaining pieces are wired to real slots rather than mocked.
 - Drag placed images and fills, snapped to the grid; resize images from
   their corner handles, or freely from the inspector
 - Resizable sidebars and console drawer, persisted per install
-- Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed
+- Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed,
+  at half size because everything drawn on a retina machine is 2×
+- Every import carries its grid space into the PSD as two marks a game never
+  sees: a red dot on the space it is anchored to, and the outline of the
+  selection it was dropped into. Move the dot in Photoshop and the artwork
+  re-anchors to it — which is how you make something stand on its tile
 - Layers: drag by the grip to reorder, rename, lock, hide, with live counts
   and an expandable list of what is on each one — selecting there selects on
   the canvas

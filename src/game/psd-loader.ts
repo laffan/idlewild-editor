@@ -11,7 +11,8 @@
 import Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
-import type { Manifest } from "../lib/manifest";
+import { placedPosition, type Manifest } from "../lib/manifest";
+import type { Grid } from "../lib/grid";
 import * as log from "../lib/log";
 
 /** How long to wait on psd-to-phaser before placing anyway. */
@@ -101,12 +102,19 @@ export function evictPsd(
  *
  * A placement whose layer is gone from the new file is removed: there is
  * nothing left to draw, and a placement that can never render is worse than
- * an honest gap. Everything else keeps its position and the size the user
- * gave it *relative to* what the manifest exported, so a deliberately shrunk
- * image stays shrunk against new artwork.
+ * an honest gap.
+ *
+ * Everything else keeps two things. Its size *relative to* what the manifest
+ * exported, so a deliberately shrunk image stays shrunk against new artwork.
+ * And its grid space — the position is recomputed from the anchor cell it
+ * was placed on and the PSD's own anchor mark, rather than being left where
+ * it was. That is what lets an artist resize the canvas, move the artwork
+ * inside it, or redraw the whole thing: as long as the mark stays on the
+ * spot that should sit on that grid space, the artwork comes back lined up.
  */
 export function reconcilePlacements(
   store: DocStore,
+  grid: Grid,
   key: string,
   manifest: Manifest,
 ): void {
@@ -127,7 +135,12 @@ export function reconcilePlacements(
       const scaleY = placement.height / (placement.naturalHeight || placement.height);
       const width = entry.width || manifest.width;
       const height = entry.height || manifest.height;
+
+      const world = grid.cellToWorld(placement.anchor);
+      const at = placedPosition(world, manifest, entry, scaleX, scaleY);
       store.updatePlacement(layer.id, placement.id, {
+        x: at.x,
+        y: at.y,
         width: width * scaleX,
         height: height * scaleY,
         naturalWidth: width,

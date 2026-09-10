@@ -27,6 +27,25 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     case "read_document": return JSON.stringify(DOC);
     case "write_document": return undefined;
     case "read_thumbnail": return null;
+    case "import_image": {
+      // Stands in for the marked PSD Rust writes: a 200x160 sprite centred
+      // on the anchor, with the grid footprint and the anchor point beside
+      // it. Canvas is the union, so the anchor sits at (100, 80).
+      (window as any).__lastMarks = (args as any)?.marks ?? null;
+      return {
+        key: "hut",
+        width: 200,
+        height: 160,
+        manifest: JSON.stringify({
+          name: "hut", width: 200, height: 160,
+          layers: [
+            { name: "hut", category: "sprite", x: 0, y: 0, width: 200, height: 160 },
+            { name: "grid", category: "zone", x: 68, y: 64, width: 64, height: 32 },
+            { name: "anchor", category: "point", x: 100, y: 80, width: 12, height: 12 },
+          ],
+        }),
+      };
+    }
     case "list_projects": return [];
     case "list_game_files":
       return [
@@ -54,6 +73,18 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       };
     }
     case "read_psd_bytes": return "AAAA";
+    case "reprocess_psd":
+      // Stands in for the artist having edited hut.psd in place: the canvas
+      // grew by 80px on the left and 40 on top, the artwork moved with it,
+      // and the anchor dot went along — so the mark is at (180, 120) now.
+      return (window as any).__reparsedManifest ?? JSON.stringify({
+        name: "hut", width: 280, height: 200,
+        layers: [
+          { name: "hut", category: "sprite", x: 80, y: 40, width: 200, height: 160 },
+          { name: "grid", category: "zone", x: 148, y: 104, width: 64, height: 32 },
+          { name: "anchor", category: "point", x: 180, y: 120, width: 12, height: 12 },
+        ],
+      });
     case "reimport_psd":
       return {
         key: "tower",

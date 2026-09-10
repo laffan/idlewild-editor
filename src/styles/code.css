@@ -1,14 +1,16 @@
 /* Code modal — the file column and editor column, floating over the canvas
    or pinned as a full-width row above the console. */
 
+/* Floating, it fills the canvas: a code editor wants the room, and the
+   canvas underneath it is not what you are looking at while you are in it.
+   Pin is how you get both at once. */
 .code-backdrop {
   position: absolute;
   inset: 0;
   z-index: 20;
-  background: rgba(32, 30, 29, 0.34);
+  background: var(--chrome-bg);
   display: flex;
-  justify-content: flex-end;
-  padding: 24px;
+  padding: 0;
 }
 
 /* Pinned: a row of the shell rather than an overlay, so the canvas keeps
@@ -26,27 +28,19 @@
   min-height: 140px;
   border-top: var(--rule-chrome);
 }
-.code-backdrop.docked .code-panel {
-  width: 100%;
-  max-width: none;
-  height: 100%;
-  border: 0;
-  box-shadow: none;
-}
 /* Docked, the chrome competes with the editor for a much shorter box. */
 .code-backdrop.docked .code-head { min-height: var(--bar-h); }
 .code-backdrop.docked .code-foot { min-height: 40px; }
 .code-backdrop.docked .code-files { width: 200px; }
 
 .code-panel {
-  width: 820px;
-  max-width: 100%;
-  border: 1px solid var(--color-accent);
+  width: 100%;
+  height: 100%;
+  border: 0;
   background: var(--chrome-bg);
   color: var(--chrome-text);
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-lg);
 }
 
 .code-head {
@@ -138,7 +132,3 @@
   color: var(--chrome-dim);
 }
 .code-foot .btn { min-height: 40px; padding: 0 16px; font-size: 13px; }
-
-@media (max-width: 900px) {
-  .code-backdrop { padding: 12px; }
-}

@@ -168,6 +168,11 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
 | Game tree | `list_game_files`, `read_game_file`, `write_game_file` |
 | PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+
+`import_image` and `import_image_bytes` take an optional `marks` describing
+the grid selection the image was dropped into, as an anchor-relative polygon.
+The editor computes it because the editor owns the projection; Rust only ever
+sees a polygon. See **The marks an import writes** below.
 | Publish | `publish_zip`, `save_bytes` |
 | Server | `get_server_port`, `platform` |
 
@@ -238,6 +243,55 @@ Files / Photos / clipboard / drawn strokes
 The `S | ` prefix is load-bearing: psd-to-json classifies by the pipe
 convention and silently ignores layers without it, so a converted image
 without the prefix would process to nothing.
+
+### The marks an import writes
+
+A converted image gets two more layers, which is `src-tauri/src/psd_marks.rs`:
+
+```
+S | <key>    the artwork, centred on the anchor
+P | anchor   a red dot on the grid space it is anchored to
+Z | grid     the outline of the grid selection it was dropped into
+```
+
+Neither mark reaches the game. psd-to-json exports pixels only for sprites
+and tilesets — a point becomes the centre of its layer, a zone its bounds —
+so both are visible to whoever opens the PSD to work on the artwork and
+invisible in the running game. That is what makes them safe to draw *over*
+it. `placeableLayers` drops both for the same reason from the other end:
+placing a point yields an empty group nobody asked for.
+
+The point is the useful half, because it is recorded in **canvas
+coordinates**. `placedPosition` puts it on the grid space's world point and
+steps out to each layer from there, so what stays fixed across a re-import is
+the mark, not the canvas. An artist can grow the canvas, move the artwork
+inside it, or redraw the file, and the artwork comes back lined up as long as
+the dot stayed on the spot that should sit on that space. Moving the dot is
+therefore the interface: put it at the artwork's bottom-left and the thing
+stands on its tile instead of floating centred over it.
+
+The zone is the orienting half. It is drawn from the polygon the editor
+sends rather than a rectangle, so an isometric selection is the diamond it
+really is; the canvas is the union of the artwork and that footprint, so a
+tall sprite dropped on one tile keeps its own size and simply has the tile
+marked underneath it. The dot's diameter is even on purpose — psd-to-json
+reports a point as its layer's centre, and an odd one lands half a pixel off.
+
+A `.psd` imported as a `.psd` is left exactly as its author built it. Adding
+marks would mean rewriting someone else's layer stack to say something it may
+already say, and a re-import never re-marks for the same reason: the file
+coming back is the one being worked in.
+
+### Why an import lands at half size
+
+Everything anyone draws on a retina machine comes out at 2×: a screenshot, a
+Photoshop export at the default resolution, a photo. Placed at one world
+pixel per image pixel, all of it arrives twice the size it was meant to be.
+So `IMPORT_SCALE` is 0.5 (`editor/import-anchor.ts`) and `naturalWidth` keeps
+the pixels the file really has, which is what the inspector's width and
+height are measured against and what a re-import reconciles through. It is a
+default, not a conversion — nothing about the file changes, and a genuinely
+1× asset is two taps from full size.
 
 `P2P.load` is a module object, not a function — the call is `P2P.load.load(…)`.
 The README on `psd-to-phaser` shows `P2P.load(…)`; the shipped typings
@@ -487,8 +541,15 @@ on chrome never highlights it.
   boundaries they become, and play mode hides them for the same reason.
 - The code modal edits and saves the project's real files but does not yet
   drive the canvas, and has none of phaser-bench's Phaser-aware completions.
+  Unpinned it covers the whole shell; Pin docks it above the console.
 - Re-import replaces a whole PSD. There is no diff against the previous
   parse, so a placement is matched to the new file only by its layer path.
+- The anchor mark is written on import and read on every parse after, but
+  there is no way to move it from inside the editor — that is Photoshop's
+  job, which is the point, but it does mean a PSD imported from elsewhere
+  anchors on its canvas centre until someone adds one.
+- `IMPORT_SCALE` is a constant rather than a per-project setting. A 1× asset
+  arrives at half size and has to be resized once.
 - Play mode's character is a placeholder rectangle, not a sprite from the
   template.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both

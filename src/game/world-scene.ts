@@ -9,7 +9,7 @@ import Phaser from "phaser";
 import PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, cellsInRange } from "../lib/grid";
-import { parseManifest, placeableLayers } from "../lib/manifest";
+import { parseManifest, placeableLayers, placedPosition } from "../lib/manifest";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig } from "./camera-rig";
@@ -497,8 +497,22 @@ export class WorldScene extends Phaser.Scene {
    * within the PSD so a multi-layer document arrives as the composition its
    * author built. There is no "root" path — `place()` resolves by walking
    * the manifest's layers by name, so it must be given a real one.
+   *
+   * The PSD's `P | anchor` mark is what lands on the anchor cell. A file
+   * without one falls back to its canvas centre, which is where an import
+   * has always gone; a file with one keeps its position through the artist
+   * resizing the canvas or moving the artwork inside it, because the mark
+   * moves with them and the centre does not.
+   *
+   * `scale` is how big the artwork is displayed against its own pixels —
+   * see `editor/import-anchor.ts` for why an import arrives at a half of it.
    */
-  async placePsd(key: string, manifestJson: string, at: Cell): Promise<void> {
+  async placePsd(
+    key: string,
+    manifestJson: string,
+    at: Cell,
+    scale = 1,
+  ): Promise<void> {
     const layer = this.store.layer(this.activeLayerId);
     if (!layer || layer.locked) {
       log.warn("The active layer is locked");
@@ -512,25 +526,23 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    // Centre the PSD's own canvas on the anchor cell, then offset each layer
-    // by where it sits inside that canvas.
     const world = this.grid.cellToWorld(at);
-    const originX = world.x - manifest.width / 2;
-    const originY = world.y - manifest.height / 2;
-
     await this.loadPsd(key);
 
     let last: Placement | null = null;
     for (const entry of layers) {
       const width = entry.width || manifest.width;
       const height = entry.height || manifest.height;
+      const at2 = placedPosition(world, manifest, entry, scale, scale);
       const placement = this.store.addPlacement(layer.id, {
         psdKey: key,
         layerPath: entry.path,
-        x: originX + entry.x,
-        y: originY + entry.y,
-        width,
-        height,
+        x: at2.x,
+        y: at2.y,
+        width: width * scale,
+        height: height * scale,
+        // The size the manifest exported at, which the displayed size is
+        // measured against — so a re-import can keep this scale.
         naturalWidth: width,
         naturalHeight: height,
         anchor: at,
@@ -557,7 +569,12 @@ export class WorldScene extends Phaser.Scene {
    * artwork was standing.
    */
   async reloadPsd(key: string, manifestJson: string): Promise<void> {
-    reconcilePlacements(this.store, key, parseManifest(manifestJson));
+    reconcilePlacements(
+      this.store,
+      this.grid,
+      key,
+      parseManifest(manifestJson),
+    );
 
     this.docRenderer.detachKey(key);
     evictPsd(this, this.plugin(), key);

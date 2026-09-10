@@ -7,11 +7,12 @@
  * autocomplete and its live preview reload are the next increment; the spec
  * asks only for a dockable modal for now.
  *
- * Pin docks it. Left and right were two ways of covering the canvas with the
- * same floating panel, which is not what pinning is for — pinned, it becomes
- * a full-width row above the console, resizable on the same divider, and the
- * canvas keeps whatever is left. Where it lives in the DOM is the editor
- * shell's business, so pinning is reported rather than acted on here.
+ * Unpinned it covers the whole shell — a code editor wants the room, and the
+ * canvas underneath is not what you are looking at while you are in it. Pin
+ * is how you get both at once: it becomes a full-width row above the console,
+ * resizable on the same divider, and the canvas keeps whatever is left. Where
+ * it lives in the DOM is the editor shell's business, so pinning is reported
+ * rather than acted on here.
  */
 
 import { EditorState, Compartment } from "@codemirror/state";

@@ -54,7 +54,7 @@ fn png_bytes_convert_to_psd() {
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
         .expect("PNG should encode");
 
-    let psd_bytes = psd_write::psd_from_image_bytes("imported", &png)
+    let psd_bytes = psd_write::psd_from_image_bytes_marked("imported", &png, None)
         .expect("PNG should convert");
     let parsed = psd::Psd::from_bytes(&psd_bytes).expect("converted PSD should parse");
     assert_eq!((parsed.width(), parsed.height()), (4, 4));
@@ -301,6 +301,105 @@ fn reimporting_replaces_the_file_behind_a_key() {
             psd_pipeline::reimport_and_process(&meta.id, "absent", &inbox, |_| {}).is_err(),
             "re-importing an unknown key should fail"
         );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// The orienting marks an import writes into its PSD.
+///
+/// Both have to survive psd-to-json as *metadata*: the anchor as a point at
+/// exactly the spot the editor put it, the grid footprint as a zone with the
+/// selection's bounds — and neither as an image, or the game would render a
+/// red dot and a tile outline over every imported sprite.
+#[test]
+fn an_import_marks_its_anchor_and_grid_footprint() {
+    use crate::psd_write::{AnchorMarks, MarkPoint};
+
+    let meta = store::create_project("Marks", Projection::Orthogonal, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        // One orthogonal grid space at the anchor: a 32 px square whose
+        // top-left corner is the anchor itself.
+        let marks = AnchorMarks {
+            outline: vec![
+                MarkPoint { x: 0.0, y: 0.0 },
+                MarkPoint { x: 32.0, y: 0.0 },
+                MarkPoint { x: 32.0, y: 32.0 },
+                MarkPoint { x: 0.0, y: 32.0 },
+            ],
+            cols: 1,
+            rows: 1,
+        };
+
+        let bytes = psd_write::psd_from_rgba_marked(
+            "hut",
+            64,
+            64,
+            swatch(64, 64, [40, 40, 40, 255]),
+            Some(&marks),
+        )
+        .expect("marked PSD should be written");
+
+        // The artwork is centred on the anchor and the footprint sits where
+        // the grid selection was, so the canvas is the union of the two.
+        let parsed = psd::Psd::from_bytes(&bytes).expect("marked PSD should parse");
+        assert_eq!((parsed.width(), parsed.height()), (64, 64));
+
+        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
+        std::fs::write(psd_dir.join("hut.psd"), &bytes).expect("PSD should save");
+        let manifest = psd_pipeline::process(
+            &meta.id,
+            "hut",
+            &psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("psd-to-json should process the marked file");
+
+        let parsed: serde_json::Value =
+            serde_json::from_str(&manifest).expect("manifest should be JSON");
+        let layers = parsed["layers"].as_array().expect("layers should be an array");
+
+        let find = |category: &str| {
+            layers
+                .iter()
+                .find(|l| l["category"] == category)
+                .unwrap_or_else(|| panic!("no {category} in {layers:?}"))
+        };
+
+        // The point lands on the anchor exactly: psd-to-json reports a point
+        // as its layer's centre, which is what the even dot diameter is for.
+        let point = find("point");
+        assert_eq!(point["name"], "anchor");
+        assert_eq!(point["x"], 32.0);
+        assert_eq!(point["y"], 32.0);
+
+        // The zone carries the grid selection's own bounds.
+        let zone = find("zone");
+        assert_eq!(zone["name"], "grid");
+        assert_eq!(zone["x"], 32);
+        assert_eq!(zone["y"], 32);
+        assert_eq!(zone["width"], 32);
+        assert_eq!(zone["height"], 32);
+
+        // And only the artwork becomes pixels.
+        let sprite = find("sprite");
+        assert_eq!(sprite["name"], "hut");
+        assert!(sprite["filePath"].is_string(), "the sprite should export");
+        assert!(point["filePath"].is_null(), "a point must not export an image");
+        assert!(zone["filePath"].is_null(), "a zone must not export an image");
+
+        let images: Vec<String> = psd_pipeline::list_output_files(&meta.id, "hut")
+            .expect("outputs should list")
+            .into_iter()
+            .filter(|f| !f.is_json)
+            .map(|f| f.filename)
+            .collect();
+        assert_eq!(images.len(), 1, "one image expected, got {images:?}");
     });
 
     store::delete_project(&meta.id).ok();

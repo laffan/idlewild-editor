@@ -15,6 +15,19 @@ export interface OutputFile {
   isJson: boolean;
 }
 
+/**
+ * Where an import was dropped on the grid, written into the PSD as the
+ * `P | anchor` and `Z | grid` marks. Omitted when there was no grid
+ * selection behind it — a pasted screenshot, a rasterised sketch — and the
+ * PSD then carries no marks. See `editor/import-anchor.ts`.
+ */
+export interface AnchorMarks {
+  /** The selection's outline in world pixels, relative to the anchor cell. */
+  outline: Array<{ x: number; y: number }>;
+  cols: number;
+  rows: number;
+}
+
 export interface ImportResult {
   key: string;
   width: number;
@@ -73,11 +86,19 @@ export const gameFiles = {
 
 export const psd = {
   /** Import from an OS path — Files, the share sheet, a deep link. */
-  importPath: (id: string, sourcePath: string, name?: string) =>
-    invoke<ImportResult>("import_image", { id, sourcePath, name }),
+  importPath: (
+    id: string,
+    sourcePath: string,
+    name?: string,
+    marks?: AnchorMarks,
+  ) => invoke<ImportResult>("import_image", { id, sourcePath, name, marks }),
   /** Import bytes already in hand — clipboard, photo picker, a canvas blob. */
-  importBytes: (id: string, name: string, dataBase64: string) =>
-    invoke<ImportResult>("import_image_bytes", { id, name, dataBase64 }),
+  importBytes: (
+    id: string,
+    name: string,
+    dataBase64: string,
+    marks?: AnchorMarks,
+  ) => invoke<ImportResult>("import_image_bytes", { id, name, dataBase64, marks }),
   /** Build a PSD straight from pixels — the route drawn strokes take. */
   fromRgba: (
     id: string,

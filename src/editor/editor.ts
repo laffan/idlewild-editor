@@ -22,6 +22,7 @@ import { exportSelectionPng } from "./export-selection";
 import { createResizer } from "./resizer";
 import { openPsdExternally, refreshPsd } from "./psd-actions";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
+import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import {
   openAddImage,
   openExportSelection,
@@ -110,13 +111,21 @@ export async function mountEditor(
     onAddImage: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;
-      const anchor = {
-        cx: Math.min(selection.from.cx, selection.to.cx),
-        cy: Math.min(selection.from.cy, selection.to.cy),
-      };
-      openAddImage(meta.id, (result) => {
-        void handle?.scene.placePsd(result.key, result.manifest, anchor);
-      });
+      const anchor = anchorCell(selection.from, selection.to);
+      // The selection travels into the PSD as its orienting marks, and the
+      // anchor mark that comes back out is what the placement lines up on.
+      openAddImage(
+        meta.id,
+        (result) => {
+          void handle?.scene.placePsd(
+            result.key,
+            result.manifest,
+            anchor,
+            IMPORT_SCALE,
+          );
+        },
+        marksForSelection(grid, selection.from, selection.to),
+      );
     },
     onExport: () => {
       const selection = handle?.scene.getSelection();
@@ -397,7 +406,7 @@ export async function mountEditor(
       () => closeCode(),
       (pinned) => setCodePinned(pinned),
     );
-    canvasWrap.appendChild(codeModal.root);
+    shell.appendChild(codeModal.root);
   }
 
   function closeCode(): void {
@@ -418,7 +427,7 @@ export async function mountEditor(
     if (!pinned) {
       codeResizer?.destroy();
       codeResizer = null;
-      canvasWrap.appendChild(codeModal.root);
+      shell.appendChild(codeModal.root);
       return;
     }
 

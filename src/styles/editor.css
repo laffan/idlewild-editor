@@ -6,6 +6,9 @@
   display: flex;
   flex-direction: column;
   background: var(--chrome-bg);
+  /* The containing block for the unpinned code panel, which covers the whole
+     shell — header included. It carries its own Close and Pin. */
+  position: relative;
 }
 
 .editor-main {
