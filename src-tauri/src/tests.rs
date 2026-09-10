@@ -5,18 +5,21 @@
 //! write half of the psd fork and the read half of psd-to-json ever disagree,
 //! it shows up here rather than on an iPad.
 //!
-//! `scaffolds` is the other half: what a *project* is made of — the starter
-//! document, the runnable game each template selection writes, and the tree
-//! the code modal edits. Split from this file to keep both under the
-//! 700-line rule, and because neither ever reads the other.
+//! Two neighbours split off for the 700-line rule, sharing only the store
+//! they create projects in and `swatch`. `marks` is the orienting marks an
+//! import writes and psd-to-json reports back. `scaffolds` is what a
+//! *project* is made of — the starter document, the runnable game each
+//! template selection writes, what an export carries, and the tree the code
+//! modal edits.
 
+mod marks;
 mod scaffolds;
 
 use crate::project::{Genre, Projection};
 use crate::{psd_pipeline, psd_write, publish, store};
 
 /// Solid-colour RGBA, so a round trip can be checked pixel by pixel.
-fn swatch(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+pub(super) fn swatch(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
     let mut out = Vec::with_capacity((width * height * 4) as usize);
     for _ in 0..width * height {
         out.extend_from_slice(&rgba);
@@ -88,6 +91,62 @@ fn psd_bytes_pass_through_instead_of_being_decoded() {
         .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
         .expect("PNG should encode");
     assert!(!psd_write::is_psd(&png));
+
+    // A paste sends marks, and a pasted *document* still ignores them: adding
+    // our two layers would mean rebuilding someone else's stack, which is the
+    // same reason a `.psd` imported from Files is copied rather than written.
+    let marks = crate::psd_write::AnchorMarks {
+        outline: vec![
+            crate::psd_write::MarkPoint { x: 0.0, y: 0.0 },
+            crate::psd_write::MarkPoint { x: 64.0, y: 0.0 },
+            crate::psd_write::MarkPoint { x: 64.0, y: 64.0 },
+            crate::psd_write::MarkPoint { x: 0.0, y: 64.0 },
+        ],
+        lines: vec![],
+        art: None,
+        cols: 1,
+        rows: 1,
+    };
+    let marked = psd_write::psd_from_image_bytes_marked("pasted", &original, Some(&marks))
+        .expect("a PSD should still be taken as it is");
+    assert_eq!(marked, original);
+}
+
+/// The bug this pins: the iPadOS document picker resolves `NSURL`s, which
+/// reach the frontend as `file://` strings, so every re-import from Files
+/// failed with "No such file or directory" the moment the Files browser
+/// started opening at all.
+#[test]
+fn a_picked_source_may_arrive_as_a_file_url() {
+    use std::path::PathBuf;
+    let path = |s: &str| PathBuf::from(s);
+
+    // What macOS hands back, unchanged — including a literal % in a name,
+    // which is not an escape when it is not in a URL.
+    assert_eq!(psd_write::source_path("/Users/me/tower.psd"), path("/Users/me/tower.psd"));
+    assert_eq!(psd_write::source_path("/tmp/100%25.psd"), path("/tmp/100%25.psd"));
+
+    // What iPadOS hands back.
+    assert_eq!(
+        psd_write::source_path("file:///private/var/mobile/Inbox/tower.psd"),
+        path("/private/var/mobile/Inbox/tower.psd")
+    );
+    // Percent escapes, including a multi-byte character split across two.
+    assert_eq!(
+        psd_write::source_path("file:///tmp/my%20sketch.psd"),
+        path("/tmp/my sketch.psd")
+    );
+    assert_eq!(
+        psd_write::source_path("file:///tmp/caf%C3%A9.psd"),
+        path("/tmp/café.psd")
+    );
+    // An authority, which names the same local file.
+    assert_eq!(
+        psd_write::source_path("file://localhost/tmp/tower.psd"),
+        path("/tmp/tower.psd")
+    );
+    // A truncated escape is left as it stands rather than eaten.
+    assert_eq!(psd_write::source_path("file:///tmp/a%2.psd"), path("/tmp/a%2.psd"));
 }
 
 #[test]
@@ -342,177 +401,6 @@ fn renaming_a_psd_moves_its_file_and_its_assets() {
     if let Err(payload) = result {
         std::panic::resume_unwind(payload);
     }
-}
-
-/// The orienting marks an import writes into its PSD.
-///
-/// Both have to survive psd-to-json as *metadata*: the anchor as a point at
-/// exactly the spot the editor put it, the grid footprint as a zone with the
-/// selection's bounds — and neither as an image, or the game would render a
-/// red dot and a tile outline over every imported sprite.
-#[test]
-fn an_import_marks_its_anchor_and_grid_footprint() {
-    use crate::psd_write::{AnchorMarks, MarkPoint};
-
-    let meta = store::create_project("Marks", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
-
-    let result = std::panic::catch_unwind(|| {
-        // One orthogonal grid space at the anchor: a 32 px square whose
-        // top-left corner is the anchor itself.
-        let marks = AnchorMarks {
-            outline: vec![
-                MarkPoint { x: 0.0, y: 0.0 },
-                MarkPoint { x: 32.0, y: 0.0 },
-                MarkPoint { x: 32.0, y: 32.0 },
-                MarkPoint { x: 0.0, y: 32.0 },
-            ],
-            // One space has nothing to divide.
-            lines: vec![],
-            // An image import has no opinion; it gets centred.
-            art: None,
-            cols: 1,
-            rows: 1,
-        };
-
-        let bytes = psd_write::psd_from_rgba_marked(
-            "hut",
-            64,
-            64,
-            swatch(64, 64, [40, 40, 40, 255]),
-            Some(&marks),
-        )
-        .expect("marked PSD should be written");
-
-        // The artwork is centred on the anchor and the footprint sits where
-        // the grid selection was, so the canvas is the union of the two.
-        let parsed = psd::Psd::from_bytes(&bytes).expect("marked PSD should parse");
-        assert_eq!((parsed.width(), parsed.height()), (64, 64));
-
-        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
-        std::fs::write(psd_dir.join("hut.psd"), &bytes).expect("PSD should save");
-        let manifest = psd_pipeline::process(
-            &meta.id,
-            "hut",
-            &psd_pipeline::ProcessOptions::default(),
-            |_| {},
-        )
-        .expect("psd-to-json should process the marked file");
-
-        let parsed: serde_json::Value =
-            serde_json::from_str(&manifest).expect("manifest should be JSON");
-        let layers = parsed["layers"].as_array().expect("layers should be an array");
-
-        let find = |category: &str| {
-            layers
-                .iter()
-                .find(|l| l["category"] == category)
-                .unwrap_or_else(|| panic!("no {category} in {layers:?}"))
-        };
-
-        // The point lands on the anchor exactly: psd-to-json reports a point
-        // as its layer's centre, which is what the even dot diameter is for.
-        let point = find("point");
-        assert_eq!(point["name"], "anchor");
-        assert_eq!(point["x"], 32.0);
-        assert_eq!(point["y"], 32.0);
-
-        // The zone carries the grid selection's own bounds.
-        let zone = find("zone");
-        assert_eq!(zone["name"], "grid");
-        assert_eq!(zone["x"], 32);
-        assert_eq!(zone["y"], 32);
-        assert_eq!(zone["width"], 32);
-        assert_eq!(zone["height"], 32);
-
-        // And only the artwork becomes pixels.
-        let sprite = find("sprite");
-        assert_eq!(sprite["name"], "hut");
-        assert!(sprite["filePath"].is_string(), "the sprite should export");
-        assert!(point["filePath"].is_null(), "a point must not export an image");
-        assert!(zone["filePath"].is_null(), "a zone must not export an image");
-
-        let images: Vec<String> = psd_pipeline::list_output_files(&meta.id, "hut")
-            .expect("outputs should list")
-            .into_iter()
-            .filter(|f| !f.is_json)
-            .map(|f| f.filename)
-            .collect();
-        assert_eq!(images.len(), 1, "one image expected, got {images:?}");
-    });
-
-    store::delete_project(&meta.id).ok();
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
-}
-
-/// A footprint spanning several spaces draws the divisions between them.
-///
-/// The outline alone says how much room the artwork has; the divisions say
-/// where each space in it begins, which is what an artist lines a
-/// multi-space sprite up against. This reads the pixels back out of the PSD
-/// rather than trusting the drawing code, because the whole value of the
-/// mark is that it is visible.
-#[test]
-fn a_multi_space_footprint_draws_its_divisions() {
-    use crate::psd_write::{AnchorMarks, MarkLine, MarkPoint};
-
-    let at = |x: f32, y: f32| MarkPoint { x, y };
-    // Two orthogonal 32 px spaces side by side, anchored on the left one.
-    let marks = AnchorMarks {
-        outline: vec![at(0.0, 0.0), at(64.0, 0.0), at(64.0, 32.0), at(0.0, 32.0)],
-        lines: vec![MarkLine {
-            a: at(32.0, 0.0),
-            b: at(32.0, 32.0),
-        }],
-        art: None,
-        cols: 2,
-        rows: 1,
-    };
-
-    let bytes = psd_write::psd_from_rgba_marked(
-        "pair",
-        64,
-        32,
-        swatch(64, 32, [0, 0, 0, 255]),
-        Some(&marks),
-    )
-    .expect("marked PSD should be written");
-
-    let doc = psd::Psd::from_bytes(&bytes).expect("marked PSD should parse");
-    let zone = doc
-        .layers()
-        .iter()
-        .find(|l| l.name().starts_with("Z |"))
-        .expect("a zone layer should exist");
-    assert_eq!(zone.name(), "Z | grid-2x1", "the name carries the span");
-
-    assert_eq!((zone.width(), zone.height()), (64, 32));
-    assert_eq!((zone.layer_left(), zone.layer_top()), (32, 16));
-
-    // `rgba()` hands back the layer composited onto the whole canvas, not
-    // its own rect, so read it in canvas coordinates.
-    let canvas_w = doc.width() as usize;
-    let rgba = zone.rgba();
-    let alpha_at = |x: i32, y: i32| {
-        let cx = (zone.layer_left() + x) as usize;
-        let cy = (zone.layer_top() + y) as usize;
-        rgba[(cy * canvas_w + cx) * 4 + 3]
-    };
-
-    // Down the middle of the footprint: the division, drawn but lighter than
-    // the boundary so the two read differently.
-    let division = alpha_at(32, 16);
-    let outline = alpha_at(0, 16);
-    let wash = alpha_at(16, 16);
-    assert!(division > wash, "the division should be visible: {division} vs {wash}");
-    assert!(
-        division < outline,
-        "the division should be lighter than the outline: {division} vs {outline}"
-    );
-    // And the interior between the lines is only a wash, not solid.
-    assert!(wash > 0 && wash < 60, "the interior should be a wash, got {wash}");
 }
 
 /// Reading and rewriting a PSD's layer stack from the inspector.

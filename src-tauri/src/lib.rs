@@ -2,6 +2,7 @@
 //! hold the actual work.
 
 mod file_server;
+mod game_config;
 mod project;
 mod psd_layers;
 mod psd_marks;
@@ -183,7 +184,7 @@ fn import_image(
 ) -> Result<ImportResult, String> {
     psd_pipeline::import_and_process(
         &id,
-        std::path::Path::new(&source_path),
+        &psd_write::source_path(&source_path),
         name.as_deref(),
         marks.as_ref(),
         logger(&app),
@@ -291,7 +292,7 @@ fn reimport_psd(
     psd_pipeline::reimport_and_process(
         &id,
         &key,
-        std::path::Path::new(&source_path),
+        &psd_write::source_path(&source_path),
         logger(&app),
     )
 }
@@ -415,6 +416,10 @@ fn publish_zip(id: String) -> Result<String, String> {
 }
 
 /// Write bytes the frontend produced to a path the user picked.
+///
+/// The path comes from a save dialog, which on iPadOS hands back a `file://`
+/// URL rather than a path — the same thing that broke re-import, and the
+/// reason `source_path` is applied here too.
 #[tauri::command]
 fn save_bytes(path: String, data_base64: String) -> Result<(), String> {
     use base64::Engine;
@@ -425,10 +430,11 @@ fn save_bytes(path: String, data_base64: String) -> Result<(), String> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(payload)
         .map_err(|e| format!("Bad payload: {e}"))?;
-    if let Some(parent) = std::path::Path::new(&path).parent() {
+    let dest = psd_write::source_path(&path);
+    if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&path, bytes).map_err(|e| format!("Cannot write {path}: {e}"))
+    std::fs::write(&dest, bytes).map_err(|e| format!("Cannot write {}: {e}", dest.display()))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

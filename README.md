@@ -48,7 +48,8 @@ remaining pieces are wired to real slots rather than mocked.
 - Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed,
   at half size because everything drawn on a retina machine is 2×
 - Paste an image or a PSD straight onto the canvas: it is imported like any
-  other file and lands in the middle of the view, on the layer you are on
+  other file — marks and all — and lands in the middle of the view, on the
+  layer you are on
 - Every import carries its grid space into the PSD as two marks a game never
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork
@@ -99,7 +100,8 @@ remaining pieces are wired to real slots rather than mocked.
   column with a divider of its own
 - Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
   by psd-to-json's own progress
-- Publish: a zipped project carrying both runtimes
+- Publish: a zipped project carrying both runtimes and the document, so the
+  exported game opens showing what the editor showed
 
 **Next**
 

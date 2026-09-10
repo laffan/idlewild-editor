@@ -64,6 +64,7 @@ export class WorldScene extends Phaser.Scene {
         const object = this.P2P.place(this, placement.psdKey, placement.layerPath);
         if (object && object.setPosition) {
           object.setPosition(placement.x, placement.y);
+          applyScale(object, placement);
           object.setDepth(depth * 1000 + placement.y);
         }
       }
@@ -143,6 +144,24 @@ function contains(box, p) {
     p.y >= box.y &&
     p.y < box.y + box.height
   );
+}
+
+/**
+ * Scale a placed object to the size the editor displays it at.
+ *
+ * Shared with the editor's own `applyScale`. An import lands at half size, so
+ * a placement's `width` is half the `naturalWidth` the manifest exported and
+ * their ratio is the scale; a placement written before resizing existed has
+ * no natural size and is already at 1. `setScale` is forwarded by the plugin
+ * to the group's children, and a sprite placed with `setOrigin(0, 0)` scales
+ * away from its top-left — the corner the placement's x/y describes, so the
+ * image lands exactly where the editor drew it.
+ */
+function applyScale(object, placement) {
+  const naturalWidth = placement.naturalWidth ?? placement.width;
+  const naturalHeight = placement.naturalHeight ?? placement.height;
+  if (!naturalWidth || !naturalHeight || !object.setScale) return;
+  object.setScale(placement.width / naturalWidth, placement.height / naturalHeight);
 }
 
 function pointsToVectors(flat) {

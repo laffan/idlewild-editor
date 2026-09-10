@@ -17,6 +17,7 @@ import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
 import { listenForPaste } from "./paste";
+import { importPasted } from "./paste-actions";
 import { PlayPad } from "./play-pad";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
@@ -263,16 +264,27 @@ export async function mountEditor(
     terminal.root,
   );
 
-  // A paste is an import: the bytes become a PSD and land in the middle of
-  // the view, on the layer being worked on. Bound to the document rather than
-  // the canvas, which never holds focus — every pointer handler over it calls
-  // preventDefault, so nothing in the scene is ever the focused element.
-  const stopPaste = listenForPaste(meta.id, {
+  // A paste is an import: the bytes become a PSD, marked with the grid spaces
+  // they landed on, and placed in the middle of the view on the layer being
+  // worked on. Bound to the document rather than the canvas, which never
+  // holds focus — every pointer handler over it calls preventDefault, so
+  // nothing in the scene is ever the focused element.
+  const stopPaste = listenForPaste({
     enabled: () => mode === "edit",
-    onImported: (result) => {
-      const at = handle?.scene.centreCell();
-      if (!at) return;
-      void handle?.scene.placePsd(result.key, result.manifest, at, IMPORT_SCALE);
+    onImage: (name, file) => {
+      const scene = handle?.scene;
+      if (!scene) return;
+      void importPasted(
+        meta.id,
+        {
+          grid,
+          centreCell: () => scene.centreCell(),
+          placePsd: (key, manifest, at, scale) =>
+            scene.placePsd(key, manifest, at, scale),
+        },
+        name,
+        file,
+      );
     },
   });
 

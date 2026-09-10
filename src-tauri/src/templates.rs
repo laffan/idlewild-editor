@@ -78,16 +78,9 @@ pub fn scaffold_game(
         Genre::Platformer => (PLATFORMER_SCENE_JS, ("js/physics.js", PHYSICS_JS)),
     };
 
-    let config = json!({
-        "projection": projection.as_str(),
-        "genre": genre.as_str(),
-        "grid": grid_size,
-        "gridSpan": 24,
-        "spawn": { "cx": 0, "cy": 0 },
-        "psdKeys": [],
-        "layers": [],
-        "psdPipeline": "psd-to-json@tauri"
-    });
+    // Empty, because nothing has been drawn yet. Publish rewrites it from
+    // the live document on the way out — see `game_config`.
+    let config = crate::game_config::empty(projection, genre, grid_size);
 
     let files: Vec<(&str, String)> = vec![
         ("index.html", INDEX_HTML.replace("__PROJECT_NAME__", project_name)),

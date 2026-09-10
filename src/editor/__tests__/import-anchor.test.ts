@@ -18,10 +18,12 @@ import {
   EXPORT_SCALE,
   footprintForBox,
   IMPORT_SCALE,
+  marksForBox,
   marksForCells,
   marksForSelection,
   scaleMarks,
 } from "../import-anchor";
+import { planFor } from "../paste-actions";
 
 describe("anchorCell", () => {
   it("takes the lowest corner however the selection was dragged", () => {
@@ -240,5 +242,86 @@ describe("marksForCells", () => {
     expect(marksForCells(grid, [{ cx: 0, cy: 0 }], { cx: 0, cy: 0 }, art).art).toEqual(
       art,
     );
+  });
+});
+
+describe("marksForBox", () => {
+  // A blank project's spaces are single world pixels, so the footprint that
+  // means anything is the box itself.
+  const grid = new Grid("blank", 64);
+
+  it("marks the box as one space, with nothing to divide", () => {
+    const box = { x: 100, y: 60, width: 128, height: 96 };
+    const anchor = grid.worldToCell({ x: box.x, y: box.y });
+    const marks = marksForBox(grid, box, anchor);
+
+    expect(marks.outline).toEqual([
+      { x: 0, y: 0 },
+      { x: 128, y: 0 },
+      { x: 128, y: 96 },
+      { x: 0, y: 96 },
+    ]);
+    expect(marks.lines).toEqual([]);
+    expect(marks.art).toEqual({ x: 0, y: 0 });
+    expect(marks.cols).toBe(1);
+    expect(marks.rows).toBe(1);
+  });
+});
+
+describe("planFor", () => {
+  const image = { width: 128, height: 96 };
+
+  it("centres the artwork on the space in the middle of the view", () => {
+    const grid = new Grid("orthogonal", 32);
+    const { anchor, marks } = planFor(grid, { cx: 0, cy: 0 }, image);
+
+    // 128×96 lands at half size — 64×48 world pixels — centred on the origin,
+    // so it covers the four spaces around it.
+    expect(marks.cols).toBe(2);
+    expect(marks.rows).toBe(2);
+    expect(anchor).toEqual({ cx: -1, cy: -1 });
+
+    // Marks are in the PSD's own pixels, which are twice the world pixels an
+    // import is displayed at: a 2×2 footprint of 32-pixel spaces is 64 world
+    // pixels across and 128 in the file.
+    expect(pointsBounds(marks.outline)).toEqual({
+      x: 0,
+      y: 0,
+      width: 128,
+      height: 128,
+    });
+    // The artwork fills the footprint's width and is centred in its height.
+    expect(marks.art).toEqual({ x: 0, y: 16 });
+  });
+
+  it("keeps the whole footprint scaled by exactly EXPORT_SCALE", () => {
+    const grid = new Grid("isometric", 64);
+    const { marks } = planFor(grid, { cx: 2, cy: -1 }, image);
+    const box = pointsBounds(marks.outline);
+
+    // Whatever the projection makes of it, the file's pixels are the world's
+    // doubled — the invariant every conversion in here shares.
+    expect(box.width % EXPORT_SCALE).toBe(0);
+    expect(box.height % EXPORT_SCALE).toBe(0);
+    expect(marks.lines.length).toBeGreaterThan(0);
+  });
+
+  it("makes the box its own footprint where nothing snaps", () => {
+    // The bug this pins: asking a one-pixel grid which spaces a screenshot
+    // covers enumerates every pixel in it.
+    const grid = new Grid("blank", 64);
+    const { anchor, marks } = planFor(grid, { cx: 10, cy: 20 }, image);
+
+    expect(marks.lines).toEqual([]);
+    expect(marks.cols).toBe(1);
+    expect(marks.rows).toBe(1);
+    expect(pointsBounds(marks.outline)).toEqual({
+      x: 0,
+      y: 0,
+      width: image.width,
+      height: image.height,
+    });
+    // Anchored on the box's own top-left, which is where the artwork starts.
+    expect(anchor).toEqual({ cx: 10 - image.width / 4, cy: 20 - image.height / 4 });
   });
 });

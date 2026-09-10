@@ -42,6 +42,7 @@ Extension of [README.md](README.md).
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
 │  templates.rs    per-genre scaffolds, per-projection grid      │
 │  publish.rs      zip export, both runtimes included            │
+│  game_config.rs  the document, as the exported game reads it   │
 │  file_server.rs  tiny_http over the project store              │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -310,6 +311,22 @@ needs no new command: importing bytes under a key that already exists
 overwrites that key's PSD and re-runs the pipeline, which is precisely a
 replacement — and a clipboard image never carries layers to lose.
 
+**And what the picker hands back is not a path.** Opening the Files browser
+only revealed the next problem: the iOS document picker resolves `NSURL`s, and
+a `FilePath::Url` crosses the bridge as its absolute string, so every
+re-import failed with *No such file or directory* on
+`file:///private/var/…/tower.psd`. The URL form is percent-encoded too, so a
+file anyone actually named arrives as `my%20sketch.psd`. `psd_write::
+source_path` resolves both at the command boundary — `import_image`,
+`reimport_psd` and `save_bytes`, which takes a path from the *save* dialog and
+has the same problem. Decoding is confined to the URL branch: a `%` in a
+filename on disk is a `%`.
+
+Backing out is not failure. Swiping the share sheet away rejects
+`navigator.share` with an `AbortError`, which was logged in red every time
+somebody changed their mind; a cancelled pick already resolved to null, and
+now a cancelled share does the same.
+
 Three caches then hold the *old* PSD and all three have to go, or the reload
 quietly shows the previous artwork: psd-to-phaser's parsed manifest, Phaser's
 JSON cache entry for `data.json`, and every texture the plugin built. The
@@ -470,7 +487,36 @@ everything else.
 no permission prompt and nothing to fall back on; reading the clipboard *cold*
 is what the Add Image sheet does, because there no paste has happened. The
 listener stands down whenever the caret is in a field — a layer name, a
-numeric input, the code editor — where a paste means paste.
+numeric input, the code editor — where a paste means paste. It knows only
+about the clipboard; what happens to the file is `editor/paste-actions.ts`,
+beside the other verbs the editor has.
+
+**A paste is marked like every other import.** The two orienting marks are the
+whole reason a PSD is worth opening in Photoshop, and a paste with neither has
+nothing to draw against — so the artwork's size is measured *before* the
+import, because the marks travel with it. `createImageBitmap` is what measures
+it, which also settles the other question for free: it decodes every raster
+format a clipboard can carry and no PSD at all, so the null it returns is the
+frontend reaching the same conclusion Rust reaches from the `8BPS` signature,
+from the only evidence each side has. A pasted PSD is therefore unmarked and
+untouched — as a `.psd` imported from Files is, and for the same reason:
+adding our layers would mean rebuilding someone else's stack.
+
+`planFor` works out where it lands. The artwork goes at half size, centred on
+the space in the middle of the view, and the spaces that box covers become the
+footprint — `footprintForBox`, so an isometric paste marks the diamonds it
+actually sits on rather than the much larger range around them. `art` is sent
+rather than left to Rust's default centring, because the anchor a footprint
+hangs from is its *top-left* space and is only its middle by accident. The
+whole thing then scales by `EXPORT_SCALE`, since marks are in the file's
+pixels and the box is in world pixels.
+
+The exception is a grid that does not snap. A blank project's spaces are
+single world pixels, so asking which of them a screenshot covers enumerates
+every pixel in it — a hundred thousand separating-axis tests for a footprint
+nobody can read. There the box *is* the space: `marksForBox` marks it as one,
+with nothing to divide, which is what a selection in a blank project already
+is.
 
 Two details of the clipboard itself are worth naming. A PSD arrives with
 whatever type its platform invented for it (`image/vnd.adobe.photoshop` on
@@ -760,16 +806,73 @@ and `__tests__/geometry.test.ts` pins the cut to the disc's edge.
 
 ---
 
+## Publish, and what the exported game reads
+
+An export is the project's `game/` tree, its processed `assets/`, the two
+vendored runtimes, and one file the export writes rather than copies:
+`game.config.json`.
+
+That file is the document, in the shape `WorldScene.js` reads it. Everything
+else in `game/` is the user's source — the code modal edits it, and an export
+must not overwrite what someone typed — but the config is *generated*, and
+shipping the empty one the scaffold wrote is what made an export run and start
+empty. `src-tauri/src/game_config.rs` owns its shape and both writers go
+through it: `empty()` at scaffold time, `from_document()` on the way out. The
+zip skips `js/game.config.json` when copying the tree and writes the generated
+one in its place, because two entries under one name in an archive is not
+something to rely on a reader resolving.
+
+The config is a *projection* of the document, not a second copy. Rust
+deserialises only the fields the scenes read, every one of them optional, so a
+document written before zones or rectangle fills or instances existed still
+exports. What it carries:
+
+| field | what the scene does with it |
+| --- | --- |
+| `psdKeys` | `P2P.load.load` in `preload()`, one per key |
+| `layers[]` | in order, top-first; the index becomes the depth |
+| `fills[]` | painted, and a non-walkable one is an obstacle or the ground |
+| `placements[]` | `P2P.place`, positioned, scaled, given a depth |
+| `zones[]` | a blocking one is ground in a platformer |
+| `gridSpan` | how far the grid is drawn and the character may walk |
+
+A placement carries the size it is *displayed* at beside the size the manifest
+exported, and the scene divides them — the same `applyScale` the editor's own
+renderer does. Sending the ratio ready-made would hide where it comes from in
+a file whose whole job is to be read. Without it every import drew at twice
+its size, since an import lands at `IMPORT_SCALE`.
+
+`gridSpan` is measured from the content rather than fixed at 24: fills on a
+snapping grid are addressed in cells already, and everything else — a
+placement, a rectangle fill, a boundary's outline — is in world pixels and
+divides by the grid size. It is clamped, because the scenes draw `(2n+1)²`
+cell outlines and an unbounded span is a stall.
+
+**A document that will not parse is not a reason to fail the export.** The zip
+is still a runnable game, just an empty one, so a corrupt document falls back
+to `empty()` rather than aborting with a half-written archive.
+
+**The load is not racy, and the templates do not treat it as one.** P2P queues
+its sprites from inside the handler that parses `data.json`, so it is fair to
+wonder whether a scene that loads in `preload()` and places in `create()` can
+find no textures. It cannot: Phaser's loader picks up files added during a
+pass, and `create()` waits for the queue to drain — checked in a browser
+against the real plugin, with the manifest artificially delayed. The editor
+waits on `psdLoadComplete` because it loads at *runtime*, long after any
+`preload()`, which is a different situation.
+
 ## Testing
 
 `cargo test --lib` covers the load-bearing path: RGBA → PSD → psd-to-json →
-manifest → zip, plus the path-traversal guards and the project scaffold. It
-runs against the real store and cleans up after itself, including on failure.
+manifest → zip, plus the path-traversal guards, the project scaffold, what an
+export's config carries, and the shapes a file picker hands back. It runs
+against the real store and cleans up after itself, including on failure.
 
 `vitest` covers the pure halves — the grid projection, fill geometry,
 picking, resize geometry, the unit arithmetic behind a placed PSD, what the
-clipboard hands a paste, colour, the log's `%c` parsing, the manifest reader,
-the platformer's body step, and the drawing layer's ported maths.
+clipboard hands a paste and where that paste lands, colour, the log's `%c`
+parsing, the manifest reader, the platformer's body step, and the drawing
+layer's ported maths.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -1022,8 +1125,11 @@ on chrome never highlights it.
   nominal unit rather than on what was actually drawn. A* over single pixels
   would neither finish nor mean anything, but a coarse lattice over free-form
   geometry is a compromise, not an answer.
-- `game.config.json` is scaffolded with empty `layers` and `psdKeys` and is
-  not yet rewritten from the live document on publish, so an exported project
-  runs but starts empty. Both template scenes read the fields already.
+- An export ships the `game/` tree as it stands on disk, which is what makes
+  it the user's source — so a project scaffolded before a fix to the template
+  keeps its own copy of the old scene. `game.config.json` is the exception:
+  it is generated, and the export rewrites it every time.
+- Pattern fills export as a flat colour, matching what the editor draws, and
+  a pattern's PSD key is not among the `psdKeys` an export loads.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both
   need a machine with the platform SDKs.

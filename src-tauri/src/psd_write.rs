@@ -96,6 +96,72 @@ pub fn psd_from_rgba_marked(
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
 }
 
+/// Turn whatever a file picker handed back into a path that can be opened.
+///
+/// On macOS the dialog plugin returns a filesystem path and this is the
+/// identity. On iPadOS it returns an `NSURL`, which crosses the bridge as its
+/// absolute string — `file:///private/var/…/sketch.psd` — and a `Path` built
+/// from that names no file: re-importing an edited PSD failed with "No such
+/// file or directory" the moment the Files browser started opening, which is
+/// the bug this exists for.
+///
+/// The URL form is also percent-encoded, so a file anyone actually named
+/// arrives as `my%20sketch.psd`. Decoding is confined to that branch: a plain
+/// path is taken verbatim, because a `%` in a filename on disk is a `%`.
+pub fn source_path(raw: &str) -> std::path::PathBuf {
+    let Some(rest) = raw.strip_prefix("file://") else {
+        return std::path::PathBuf::from(raw);
+    };
+    // What follows the scheme is an authority then the path. Both `file:///p`
+    // (empty authority) and `file://localhost/p` name `/p`.
+    let path = match rest.strip_prefix('/') {
+        Some(_) => rest,
+        None => match rest.find('/') {
+            Some(at) => &rest[at..],
+            None => return std::path::PathBuf::from(raw),
+        },
+    };
+    std::path::PathBuf::from(percent_decode(path))
+}
+
+/// Decode `%XX` escapes, leaving anything that is not one alone.
+///
+/// Bytes rather than chars, because a percent escape encodes a byte and a
+/// multi-byte character arrives as several of them. A sequence that does not
+/// decode to UTF-8 is handed back as it came: a name this cannot read is
+/// better passed to the filesystem unchanged than replaced with question
+/// marks.
+fn percent_decode(raw: &str) -> String {
+    if !raw.contains('%') {
+        return raw.to_string();
+    }
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Some(byte) = hex_pair(bytes[i + 1], bytes[i + 2]) {
+                out.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| raw.to_string())
+}
+
+fn hex_pair(high: u8, low: u8) -> Option<u8> {
+    let digit = |c: u8| match c {
+        b'0'..=b'9' => Some(c - b'0'),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        b'A'..=b'F' => Some(c - b'A' + 10),
+        _ => None,
+    };
+    Some(digit(high)? * 16 + digit(low)?)
+}
+
 /// A PSD's file signature. Four bytes, and the only thing that distinguishes
 /// bytes to be wrapped from bytes that are already a document.
 const PSD_SIGNATURE: &[u8; 4] = b"8BPS";

@@ -191,6 +191,32 @@ export function marksForCells(
 }
 
 /**
+ * The footprint of a box on a grid that does not snap.
+ *
+ * A blank project's spaces are single world pixels, so "the spaces under this
+ * box" is a hundred thousand of them for anything the size of a screenshot,
+ * and the footprint that means something is the box itself — one space of
+ * exactly the size that landed, which is what every selection in a blank
+ * project already is. There is nothing to divide, so no lines.
+ */
+export function marksForBox(grid: Grid, box: Rect, anchor: Cell): AnchorMarks {
+  const world = grid.cellToWorld(anchor);
+  const corners = [
+    { x: box.x, y: box.y },
+    { x: box.x + box.width, y: box.y },
+    { x: box.x + box.width, y: box.y + box.height },
+    { x: box.x, y: box.y + box.height },
+  ];
+  return {
+    outline: corners.map((p) => ({ x: p.x - world.x, y: p.y - world.y })),
+    lines: [],
+    art: { x: box.x - world.x, y: box.y - world.y },
+    cols: 1,
+    rows: 1,
+  };
+}
+
+/**
  * The divisions between the spaces a selection covers.
  *
  * A footprint that is only an outline says how much room the artwork has;

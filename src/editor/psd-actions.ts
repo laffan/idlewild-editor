@@ -66,12 +66,36 @@ export async function openPsdExternally(
   // it will accept files, and a share it refuses throws after the sheet has
   // already been dismissed.
   if (navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], title: `${key}.psd` });
-    log.info(`Shared ${key}.psd — Re-import it when you have saved your edits`);
-    return;
+    try {
+      await navigator.share({ files: [file], title: `${key}.psd` });
+      log.info(`Shared ${key}.psd — Re-import it when you have saved your edits`);
+      return;
+    } catch (err) {
+      // Swiping the share sheet away rejects the promise, and backing out of
+      // a sheet is not a failure — it was logged as one, in red, every time.
+      if (isAbort(err)) return;
+      throw err;
+    }
   }
 
   await savePsdCopy(projectId, key);
+}
+
+/**
+ * Whether a rejection is the user dismissing something.
+ *
+ * `AbortError` is what both the share sheet and the file pickers throw when
+ * they are backed out of. It arrives as a `DOMException` on iPadOS and as a
+ * plain object across the Tauri bridge, so the name is read off whatever it
+ * is rather than matched on a class.
+ */
+function isAbort(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "name" in err &&
+    (err as { name?: unknown }).name === "AbortError"
+  );
 }
 
 /**

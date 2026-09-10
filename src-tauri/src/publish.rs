@@ -5,11 +5,11 @@
 //! processed `assets/`, and the two runtime libraries — the exact builds the
 //! editor itself runs, since both are vendored into this binary.
 //!
-//! What it does *not* yet do is rewrite `game.config.json` from the live
-//! document on the way out, so an export runs but starts empty. Both template
-//! scenes read `layers` and `psdKeys` already; the writer is the missing half,
-//! and it belongs here rather than in the frontend because this is the only
-//! place that sees the document and the archive at the same time.
+//! `game.config.json` is the one file the export does not copy: the scaffold
+//! wrote an empty one, and what belongs in the zip is the live document. It
+//! is rewritten here rather than in the frontend because this is the only
+//! place that sees the document and the archive at the same time — see
+//! `game_config`.
 
 use crate::store;
 use std::io::Write;
@@ -27,14 +27,33 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
 
         let root = sanitise_name(&meta.name);
 
-        // The editable project source.
+        // The editable project source, minus the generated config.
         let game = store::game_dir(project_id)?;
-        add_dir(&mut zip, &game, &format!("{root}/"), options)?;
+        add_dir(&mut zip, &game, &format!("{root}/"), options, &[CONFIG_REL])?;
+
+        // The document, in the shape `WorldScene.js` reads. A project whose
+        // document will not parse still exports — as the empty game the
+        // scaffold wrote, which is a runnable thing to hand back — rather
+        // than failing at the last step with a zip half written.
+        let config = match store::read_doc(project_id)
+            .and_then(|doc| crate::game_config::from_document(&meta, &doc))
+        {
+            Ok(config) => config,
+            Err(_) => crate::game_config::empty(meta.projection, meta.genre, meta.grid_size),
+        };
+        zip.start_file(format!("{root}/{CONFIG_REL}"), options)
+            .map_err(|e| e.to_string())?;
+        zip.write_all(
+            serde_json::to_string_pretty(&config)
+                .map_err(|e| e.to_string())?
+                .as_bytes(),
+        )
+        .map_err(|e| e.to_string())?;
 
         // Processed PSD output, at the path P2P.load expects.
         let assets = store::assets_dir(project_id)?;
         if assets.exists() {
-            add_dir(&mut zip, &assets, &format!("{root}/assets/"), options)?;
+            add_dir(&mut zip, &assets, &format!("{root}/assets/"), options, &[])?;
         }
 
         // Runtime libraries. Both are vendored into the binary, so an export
@@ -58,11 +77,20 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
+/// Where the generated config lives inside `game/`, and inside the zip.
+const CONFIG_REL: &str = "js/game.config.json";
+
+/// Copy a directory into the archive, skipping the relative paths in `skip`.
+///
+/// A zip may carry two entries with the same name and most readers take the
+/// last, which is not something to rely on — so the file this export
+/// generates is left out here and written once, deliberately.
 fn add_dir<W: Write + std::io::Seek>(
     zip: &mut zip::ZipWriter<W>,
     dir: &Path,
     prefix: &str,
     options: SimpleFileOptions,
+    skip: &[&str],
 ) -> Result<(), String> {
     let mut stack = vec![dir.to_path_buf()];
     while let Some(current) = stack.pop() {
@@ -77,6 +105,9 @@ fn add_dir<W: Write + std::io::Seek>(
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .replace('\\', "/");
+            if skip.contains(&rel.as_str()) {
+                continue;
+            }
             let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
             zip.start_file(format!("{prefix}{rel}"), options)
                 .map_err(|e| e.to_string())?;
