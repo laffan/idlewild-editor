@@ -99,8 +99,7 @@ export async function mountEditor(
     // travels with the manifest — see reconcilePlacements.
     createPsdLayers: (key) =>
       new PsdLayerEditor(meta.id, key, {
-        onWritten: (manifest, renames) =>
-          void handle?.scene.reloadPsd(key, manifest, renames),
+        onWritten: (manifest, renames) => void applyPsdLayers(key, manifest, renames),
       }),
     onStrokeStyle: (patch) => {
       if (!drawing) return;
@@ -413,10 +412,27 @@ export async function mountEditor(
   async function refresh(key: string): Promise<void> {
     try {
       const manifest = await refreshPsd(meta.id, key, os);
-      if (manifest) await handle?.scene.reloadPsd(key, manifest);
+      if (!manifest) return;
+      await handle?.scene.reloadPsd(key, manifest);
+      // The file on disk has changed, and the inspector's list of its layers
+      // is built once and kept — so it has to be told, or it goes on showing
+      // the stack from before the edit.
+      inspector.reloadPsdLayers(key);
     } catch (err) {
       log.error(`Could not refresh ${key}:`, err);
     }
+  }
+
+  /** The inspector rewrote the PSD's own layer stack; take the result back. */
+  async function applyPsdLayers(
+    key: string,
+    manifest: string,
+    renames: Map<string, string>,
+  ): Promise<void> {
+    await handle?.scene.reloadPsd(key, manifest, renames);
+    // Reordering renumbers every layer, so the next edit has to be made
+    // against the file as it is now rather than as it was.
+    inspector.reloadPsdLayers(key);
   }
 
   /**

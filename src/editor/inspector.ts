@@ -113,6 +113,17 @@ export class Inspector {
   }
 
   /**
+   * A PSD has been re-parsed, so its layer stack is out of date.
+   *
+   * The list is deliberately kept across re-renders — it holds half-typed
+   * names — which means nothing about a document change reaches it. Only the
+   * shell knows the file itself has moved underneath.
+   */
+  reloadPsdLayers(key: string): void {
+    if (this.psdLayers?.key === key) this.psdLayers.reload();
+  }
+
+  /**
    * Hold re-rendering while the canvas is mid-drag. A drag writes to the
    * document on every pointer move, and rebuilding this panel per frame
    * would throw away the colour picker's state and any half-typed name.
@@ -443,16 +454,18 @@ export class Inspector {
       this.callbacks.onRenamePsd(placement.psdKey, next),
     );
 
-    // A placement shares its file with any other placement of the same key,
-    // which is what an option-drag makes. Say so before anything else: the
-    // consequence is that editing the PSD edits all of them.
-    const sharing = this.placementsOfKey(placement.psdKey);
+    // A copy of this placement — what an option-drag makes. Say so before
+    // anything else: the consequence is that editing the PSD edits all of
+    // them. Sibling *layers* of one file share the key too, but they are not
+    // copies of each other and giving one its own duplicate of the whole PSD
+    // would be nonsense, so the path has to match as well.
+    const sharing = this.copiesOf(placement);
     if (sharing > 1) {
       this.body.appendChild(
         h(
           "div",
           { class: "inspect-note" },
-          h("span", { text: `Reference · ${sharing} placements share this PSD` }),
+          h("span", { text: `Reference · ${sharing} copies of this layer` }),
           h("button", {
             class: "panel-btn",
             text: "Remove Reference",
@@ -572,12 +585,17 @@ export class Inspector {
     );
   }
 
-  /** How many placements in the whole document read one PSD. */
-  private placementsOfKey(key: string): number {
+  /** How many placements in the whole document draw this same PSD layer. */
+  private copiesOf(placement: Placement): number {
     let n = 0;
     for (const layer of this.store.layers) {
-      for (const placement of layer.placements) {
-        if (placement.psdKey === key) n++;
+      for (const other of layer.placements) {
+        if (
+          other.psdKey === placement.psdKey &&
+          other.layerPath === placement.layerPath
+        ) {
+          n++;
+        }
       }
     }
     return n;

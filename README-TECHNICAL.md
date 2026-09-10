@@ -352,6 +352,24 @@ against new artwork. A placement whose layer is gone from the new file is
 removed — there is nothing left to draw, and a placement that can never
 render is worse than an honest gap.
 
+And a layer that is *new* gets a placement of its own. Reconciliation used to
+only revise the placements the document already held, so adding a layer in
+Photoshop and re-parsing changed nothing anyone could see: the layer was
+parsed, exported and listed in the console, and never drawn. The file said one
+thing and the canvas another. A new layer is placed the way its siblings on
+that key were — their document layer, their grid space, their scale, and its
+own position through the PSD's anchor mark — because that is the only
+placement that can be inferred honestly. With no sibling to infer from,
+nothing is adopted.
+
+The inspector's list of the file's own layers has to be told too. It is built
+once and kept across the panel's re-renders, since it holds half-typed names
+and a pending reorder, so a document change never reaches it — only the shell
+knows the file itself has moved underneath. It also shows the PSD's canvas
+size, which is the number Photoshop opens with and not the one the placement
+reports: a converted sketch carries the grid it was drawn over beside the
+artwork, so the canvas is the union of the two.
+
 ---
 
 ## Editing a PSD's layer stack without leaving

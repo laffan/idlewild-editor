@@ -11,8 +11,9 @@
 import Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
-import { placedPosition, type Manifest } from "../lib/manifest";
+import { placeableLayers, placedPosition, type Manifest } from "../lib/manifest";
 import type { Grid } from "../lib/grid";
+import type { Placement } from "../lib/types";
 import * as log from "../lib/log";
 
 /** How long to wait on psd-to-phaser before placing anyway. */
@@ -73,10 +74,19 @@ export function loadPsd(
       resolve();
     };
 
-    // Logged, not fatal: one sprite that 404s should not cut short the others,
-    // and the loader going idle is what settles the wait either way.
+    /**
+     * A file did not arrive.
+     *
+     * Usually not fatal — one sprite that 404s should not cut short the
+     * others, and the loader going idle settles the wait either way. The
+     * exception is `data.json`, which the plugin queues under the PSD's own
+     * key: without it there is no manifest, nothing further will ever be
+     * asked for, and the idle check below cannot tell that apart from a
+     * manifest still in flight. So that one ends the wait where it stands.
+     */
     const onError = (file: Phaser.Loader.File) => {
       log.error(`Could not load ${file.key} for ${key}: ${file.url}`);
+      if (file.key === key && !p2p.getData(key)) finish();
     };
 
     /**
@@ -241,6 +251,11 @@ function walkSprites(layers: unknown, out: string[]): void {
  * Bring the document's placements for one key back in line with a manifest
  * that has just been rewritten by a re-import.
  *
+ * Three things can have happened to a layer since the last parse, and all
+ * three are answered here: it is still there and its placement is revised, it
+ * has gone and its placement goes with it, or it is new and gets a placement
+ * of its own — see `adoptNewLayers`.
+ *
  * A placement whose layer is gone from the new file is removed: there is
  * nothing left to draw, and a placement that can never render is worse than
  * an honest gap.
@@ -254,6 +269,80 @@ function walkSprites(layers: unknown, out: string[]): void {
  * spot that should sit on that grid space, the artwork comes back lined up.
  */
 export function reconcilePlacements(
+  store: DocStore,
+  grid: Grid,
+  key: string,
+  manifest: Manifest,
+  renames?: ReadonlyMap<string, string>,
+): void {
+  reviseExisting(store, grid, key, manifest, renames);
+  adoptNewLayers(store, grid, key, manifest);
+}
+
+/**
+ * Place the layers that have appeared since the last parse.
+ *
+ * Adding a layer in Photoshop and re-parsing used to change nothing anyone
+ * could see: reconciliation only ever *revised* the placements the document
+ * already had, so a layer with no placement pointing at it was parsed,
+ * exported, listed in the log — and never drawn. The file said one thing and
+ * the canvas another.
+ *
+ * A new layer is placed the way its siblings were: on their document layer,
+ * anchored to their grid space, at their scale, and positioned through the
+ * PSD's own anchor mark like everything else on that key. That means it lands
+ * exactly where the artist drew it relative to the artwork already there,
+ * which is the only placement that can be inferred honestly.
+ *
+ * With no sibling there is nothing to infer from — no layer, no grid space,
+ * no scale — so nothing is adopted. That only happens when every placement on
+ * the key has been deleted, and inventing one for a file nobody has placed
+ * would be worse than leaving it alone.
+ */
+function adoptNewLayers(
+  store: DocStore,
+  grid: Grid,
+  key: string,
+  manifest: Manifest,
+): void {
+  const taken = new Set<string>();
+  let sibling: { layerId: string; placement: Placement } | null = null;
+  for (const layer of store.layers) {
+    for (const placement of layer.placements) {
+      if (placement.psdKey !== key) continue;
+      taken.add(placement.layerPath);
+      sibling ??= { layerId: layer.id, placement };
+    }
+  }
+  if (!sibling) return;
+
+  const scale =
+    sibling.placement.width /
+    (sibling.placement.naturalWidth || sibling.placement.width);
+  const anchor = sibling.placement.anchor;
+  const world = grid.cellToWorld(anchor);
+
+  for (const entry of placeableLayers(manifest)) {
+    if (taken.has(entry.path)) continue;
+    const width = entry.width || manifest.width;
+    const height = entry.height || manifest.height;
+    const at = placedPosition(world, manifest, entry, scale, scale);
+    store.addPlacement(sibling.layerId, {
+      psdKey: key,
+      layerPath: entry.path,
+      x: at.x,
+      y: at.y,
+      width: width * scale,
+      height: height * scale,
+      naturalWidth: width,
+      naturalHeight: height,
+      anchor,
+    });
+    log.info(`${key}.psd gained "${entry.path}" — placed on the same layer`);
+  }
+}
+
+function reviseExisting(
   store: DocStore,
   grid: Grid,
   key: string,

@@ -248,6 +248,16 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       return psdManifest();
     }
     case "reprocess_psd":
+      // A layer the artist added in Photoshop before saving. Pushed onto the
+      // real stack, because the point of a re-parse is that the file on disk
+      // is not what it was — and `read_psd_layers` reads the file.
+      if ((window as any).__addedPsdLayer) {
+        PSD_LAYERS.push({
+          name: String((window as any).__addedPsdLayer),
+          x: 0, y: 0, width: 60, height: 40,
+        });
+        (window as any).__addedPsdLayer = null;
+      }
       // Stands in for the artist having edited hut.psd in place: the canvas
       // grew by 80px on the left and 40 on top, the artwork moved with it,
       // and the anchor dot went along — so the mark is at (180, 120) now.

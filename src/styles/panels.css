@@ -403,6 +403,16 @@
    the document's layer list on purpose: this is a property of the selection,
    not the panel's subject. */
 .psd-layers { padding-bottom: 14px; }
+/* The file's own size, above its stack. A converted sketch carries the grid
+   it was drawn over beside the artwork, so the canvas Photoshop opens is
+   bigger than the image the editor draws — this is where the two numbers are
+   reconciled. */
+.psd-layers-canvas {
+  font-size: 10px;
+  color: var(--color-neutral-600);
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
 .psd-layers-status {
   font-size: 10px;
   color: var(--chrome-dim);

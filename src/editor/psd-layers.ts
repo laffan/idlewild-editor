@@ -53,6 +53,7 @@ export class PsdLayerEditor {
   private readonly projectId: string;
   private readonly callbacks: PsdLayerEditorCallbacks;
   private readonly status: HTMLElement;
+  private readonly canvas: HTMLElement;
   private readonly list: HTMLElement;
   private readonly foot: HTMLElement;
   private stack: PsdLayerList | null = null;
@@ -72,10 +73,16 @@ export class PsdLayerEditor {
     this.status = h("div", { class: "psd-layers-status m" });
     this.list = h("div", { class: "psd-layer-list" });
     this.foot = h("div", { class: "psd-layers-foot" });
+    // The file's own size, which is not the placement's: a converted sketch
+    // carries the grid it was drawn over beside the artwork, so the canvas
+    // Photoshop opens is bigger than the image the canvas shows. Saying so
+    // here is what stops the two numbers looking like a bug.
+    this.canvas = h("div", { class: "psd-layers-canvas m" });
     this.root = h(
       "div",
       { class: "inspect-section psd-layers" },
-      h("div", { class: "inspect-section-title m", text: "Layers" }),
+      h("div", { class: "inspect-section-title m", text: "PSD" }),
+      this.canvas,
       this.status,
       this.list,
       this.foot,
@@ -86,6 +93,23 @@ export class PsdLayerEditor {
 
   destroy(): void {
     this.endDrag(false);
+  }
+
+  /**
+   * Read the file again.
+   *
+   * The list is built once and kept across the inspector's re-renders,
+   * because it holds half-typed names and a pending reorder. That is right
+   * for a re-render and wrong for a *re-parse*: the file on disk has just
+   * changed, and a stack listed from the old one shows neither the layer
+   * someone added in Photoshop nor the indices an edit would now be against.
+   * A drag in flight is dropped rather than reconciled — the rows it was
+   * moving may not exist any more.
+   */
+  reload(): void {
+    if (this.busy) return;
+    this.endDrag(false);
+    void this.load();
   }
 
   // ── loading ───────────────────────────────────────────────────────────────
@@ -106,6 +130,9 @@ export class PsdLayerEditor {
     }
     this.stack = stack;
     this.rows = stack.layers.map((source) => ({ source, name: source.name }));
+    this.canvas.textContent =
+      `${this.key}.psd · ${stack.width} × ${stack.height} canvas · ` +
+      `${stack.layers.length} ${stack.layers.length === 1 ? "layer" : "layers"}`;
     this.render();
   }
 
