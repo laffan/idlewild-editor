@@ -1,0 +1,248 @@
+/* Editor — the dark half. Chrome floats over a full-bleed game canvas. */
+
+.editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome-bg);
+}
+
+.editor-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.editor-canvas-wrap {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas-bg);
+}
+
+.editor-canvas-wrap canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* Top bar floats; only its controls take pointer events. */
+.editor-topbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  gap: 12px;
+  pointer-events: none;
+  flex-wrap: wrap;
+}
+.editor-topbar > * { pointer-events: auto; }
+
+.topbar-group {
+  display: flex;
+  align-items: center;
+  background: var(--chrome-bg);
+  border: 2px solid var(--chrome-bg);
+  min-height: 48px;
+}
+
+.topbar-project { padding-right: 14px; gap: 6px; }
+.topbar-name { font: 600 15px var(--font-heading); color: var(--chrome-text); }
+.topbar-grid {
+  font-size: 10px;
+  color: var(--chrome-dim);
+  border-left: 2px solid var(--chrome-rule);
+  padding-left: 12px;
+  margin-left: 6px;
+}
+
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.icon-btn:hover { background: var(--chrome-rule); }
+
+.mode-toggle { display: flex; }
+.mode-btn {
+  min-height: 44px;
+  min-width: 88px;
+  padding: 0 20px;
+  border: 0;
+  border-left: 2px solid var(--chrome-rule);
+  background: transparent;
+  color: var(--chrome-dim);
+  font: 600 15px var(--font-heading);
+  text-align: left;
+}
+.mode-btn:first-child { border-left: 0; }
+.mode-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
+.mode-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
+
+.chrome-btn {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 2px solid var(--chrome-bg);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  font: 600 15px var(--font-heading);
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.chrome-btn:hover { background: var(--chrome-rule); }
+
+/* Tool rail */
+.tool-rail {
+  position: absolute;
+  left: 16px;
+  top: 100px;
+  border: 2px solid var(--chrome-bg);
+  background: var(--chrome-bg);
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+.tool-btn {
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-top: 1px solid var(--chrome-rule);
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tool-btn:first-child { border-top: 0; }
+.tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
+.tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
+.tool-btn[disabled] { opacity: 0.45; }
+
+.tool-name {
+  position: absolute;
+  left: 84px;
+  top: 112px;
+  font-size: 10px;
+  color: var(--color-neutral-700);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Floating action bar over a grid selection */
+.selection-actions {
+  position: absolute;
+  display: flex;
+  border: 2px solid var(--chrome-bg);
+  background: var(--chrome-bg);
+  box-shadow: var(--shadow-md);
+  z-index: 6;
+}
+.selection-actions button {
+  min-height: 52px;
+  padding: 0 18px;
+  border: 0;
+  border-left: 2px solid var(--chrome-rule);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 14px var(--font-heading);
+  text-align: left;
+}
+.selection-actions button:first-child {
+  border-left: 0;
+  background: var(--color-accent);
+  color: #fff;
+}
+.selection-actions button:not(:first-child):hover { background: var(--chrome-rule); }
+.selection-size {
+  border-left: 2px solid var(--chrome-rule);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 10px;
+  color: var(--chrome-dim);
+}
+
+/* Edge toggles */
+.edge-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 88px;
+  border: 2px solid var(--chrome-bg);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 6;
+}
+.edge-toggle.left { left: 0; border-left: 0; }
+.edge-toggle.right { right: 0; border-right: 0; }
+
+/* Terminal drawer */
+.terminal {
+  flex: none;
+  border-top: 2px solid var(--chrome-rule);
+  background: var(--chrome-bg);
+}
+.terminal-toggle {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  color: var(--chrome-dim);
+  font-size: 11px;
+  font-weight: 600;
+}
+.terminal-body {
+  height: 186px;
+  overflow: auto;
+  border-top: 1px solid var(--chrome-rule);
+  padding: 12px 16px 16px;
+}
+.terminal-line {
+  display: flex;
+  gap: 12px;
+  padding: 5px 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.terminal-time { color: var(--color-neutral-600); flex: none; }
+.terminal-level {
+  flex: none;
+  width: 52px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  padding-top: 1px;
+}
+.terminal-level.info { color: var(--color-neutral-500); }
+.terminal-level.warn { color: var(--color-accent-400); }
+.terminal-level.error { color: var(--color-accent); }
+.terminal-message { color: var(--color-neutral-300); white-space: pre-wrap; }
+
+/* Play mode hides the chrome the spec says closes. */
+.editor.play-mode .side-panel,
+.editor.play-mode .tool-rail,
+.editor.play-mode .tool-name,
+.editor.play-mode .edge-toggle,
+.editor.play-mode .selection-actions { display: none; }

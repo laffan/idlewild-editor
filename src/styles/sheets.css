@@ -1,0 +1,136 @@
+/* Modals — "sheets" in the design canvas. One backdrop, one panel, 2px accent
+   border, actions flush left. Shared by home and editor. */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(32, 30, 29, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 600px;
+  max-height: 100%;
+  border: 2px solid var(--color-accent);
+  background: var(--chrome-panel);
+  color: var(--chrome-text);
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet.light {
+  background: var(--color-neutral-100);
+  color: var(--color-text);
+}
+
+.sheet-head {
+  padding: 20px 24px;
+  border-bottom: 2px solid var(--chrome-rule);
+  flex: none;
+}
+.sheet.light .sheet-head { border-bottom-color: var(--color-neutral-300); }
+
+.sheet-title { font: 800 22px/1 var(--font-heading); }
+.sheet-sub {
+  font-size: 10px;
+  color: var(--chrome-dim);
+  margin-top: 8px;
+}
+.sheet.light .sheet-sub { color: var(--color-neutral-700); }
+
+.sheet-body { padding: 20px 24px; overflow: auto; }
+.sheet-actions {
+  padding: 20px 24px;
+  display: flex;
+  gap: 12px;
+  flex: none;
+  flex-wrap: wrap;
+}
+
+.sheet .btn { border-color: var(--chrome-bg); color: var(--chrome-text); }
+.sheet .btn:hover { background: var(--chrome-rule); }
+.sheet .btn-ghost { border-color: var(--color-neutral-700); }
+.sheet .btn-primary { background: var(--color-accent); color: #fff; }
+.sheet.light .btn { border-color: var(--color-text); color: var(--color-text); }
+.sheet.light .btn:hover { background: var(--color-neutral-200); }
+
+/* Fields */
+.field { margin-bottom: 20px; }
+.field-label {
+  font-size: 10px;
+  color: var(--chrome-dim);
+  display: block;
+  margin-bottom: 10px;
+}
+.sheet.light .field-label { color: var(--color-neutral-700); }
+
+.input {
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 2px solid var(--color-neutral-700);
+  background: transparent;
+  font: 500 16px var(--font-body);
+  color: inherit;
+}
+.input:focus { border-color: var(--color-accent); outline: none; }
+
+/* Segmented choice — template and grid scale */
+.seg { display: flex; border: 2px solid var(--color-neutral-700); width: max-content; max-width: 100%; flex-wrap: wrap; }
+.seg-opt {
+  min-height: var(--hit);
+  padding: 0 20px;
+  border: 0;
+  border-left: 2px solid var(--color-neutral-700);
+  background: transparent;
+  color: inherit;
+  font: 600 15px var(--font-heading);
+  text-align: left;
+}
+.seg-opt:first-child { border-left: 0; }
+.seg-opt[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
+.seg-opt:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
+.sheet.light .seg-opt:not([aria-pressed="true"]):hover { background: var(--color-neutral-200); }
+
+/* A list of choices, as in Add Image */
+.sheet-list { display: flex; flex-direction: column; }
+.sheet-list-item {
+  min-height: 68px;
+  border: 0;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: transparent;
+  color: inherit;
+  font: 600 16px var(--font-heading);
+  text-align: left;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sheet-list-item:hover { background: var(--chrome-rule); }
+.sheet-list-hint {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--chrome-dim);
+}
+
+.sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--chrome-rule);
+}
+.sheet-row-key {
+  font-size: 10px;
+  color: var(--chrome-dim);
+  flex: none;
+  width: 150px;
+}
+.sheet-row-value { font: 500 15px var(--font-body); flex: 1; }

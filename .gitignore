@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.p2p-src/
+src-tauri/target/
+src-tauri/gen/
+*.local
+.DS_Store

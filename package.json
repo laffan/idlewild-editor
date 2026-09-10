@@ -1,0 +1,44 @@
+{
+  "name": "idlewild-editor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Tauri + Phaser game editor and publisher for iPad and macOS, built around PSD-to-Phaser.",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run check && vite build",
+    "check": "npm run check:types && npm run check:lines",
+    "check:types": "tsc --noEmit",
+    "check:lines": "bash scripts/check-line-limits.sh",
+    "vendor:p2p": "node scripts/vendor-p2p.mjs",
+    "tauri": "tauri",
+    "build:macos": "tauri build",
+    "ios:init": "tauri ios init && node scripts/patch-ios-plist.mjs",
+    "build:ios": "tauri ios build --debug"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.18.4",
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/state": "^6.6.0",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@codemirror/view": "^6.40.0",
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
+    "@tauri-apps/plugin-deep-link": "^2.4.8",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@tauri-apps/plugin-fs": "^2.4.5",
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "codemirror": "^6.0.2",
+    "jszip": "^3.10.1",
+    "phaser": "^4.2.1",
+    "thememirror": "^2.0.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.5.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.0"
+  }
+}

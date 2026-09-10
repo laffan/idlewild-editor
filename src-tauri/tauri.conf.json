@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Idlewild",
+  "version": "0.1.0",
+  "identifier": "com.idlewild.editor",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build && node scripts/patch-ios-plist.mjs"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Idlewild",
+        "width": 1366,
+        "height": 1024,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["psd"],
+        "mimeType": "image/vnd.adobe.photoshop",
+        "name": "Photoshop Document",
+        "role": "Viewer"
+      },
+      {
+        "ext": ["png"],
+        "mimeType": "image/png",
+        "name": "PNG Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": ["jpg", "jpeg"],
+        "mimeType": "image/jpeg",
+        "name": "JPEG Image",
+        "role": "Viewer"
+      }
+    ],
+    "iOS": {
+      "minimumSystemVersion": "15.0"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": []
+    }
+  }
+}

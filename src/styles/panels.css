@@ -1,0 +1,185 @@
+/* Left (layers) and right (inspector) sidebars. */
+
+.side-panel {
+  width: 280px;
+  flex: none;
+  background: var(--chrome-panel);
+  display: flex;
+  flex-direction: column;
+  color: var(--chrome-text);
+}
+.side-panel.left { border-right: 2px solid var(--chrome-rule); }
+.side-panel.right { width: 300px; border-left: 2px solid var(--chrome-rule); }
+.side-panel.collapsed { display: none; }
+
+.panel-head {
+  min-height: 60px;
+  flex: none;
+  border-bottom: 2px solid var(--chrome-rule);
+  display: flex;
+  align-items: center;
+  padding: 0 12px 0 16px;
+  gap: 8px;
+}
+.panel-title { font-size: 11px; font-weight: 600; color: var(--chrome-text); }
+.panel-add {
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.panel-add:hover { background: var(--chrome-rule); }
+.panel-body { flex: 1; }
+
+/* Layer rows */
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 4px;
+  min-height: 60px;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: transparent;
+}
+.layer-row.active { background: var(--chrome-rule); }
+.layer-row.locked .layer-name { color: var(--chrome-dim); }
+
+.layer-order { display: flex; flex-direction: column; }
+.layer-order button {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: var(--color-neutral-500);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.layer-order button:hover { background: var(--chrome-rule); }
+
+.layer-main { flex: 1; min-width: 0; }
+.layer-name {
+  width: 100%;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font: 600 14px var(--font-heading);
+  color: var(--chrome-text);
+  outline: none;
+}
+.layer-name:focus { background: var(--chrome-bg); }
+.layer-meta { font-size: 10px; color: var(--chrome-dim); margin-top: 4px; }
+
+.layer-toggle {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.layer-toggle:hover { background: var(--chrome-rule); }
+.layer-toggle.off { opacity: 0.35; }
+.layer-toggle.on { background: var(--color-accent); color: #fff; }
+
+/* Inspector */
+.inspect-head {
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid var(--chrome-rule);
+}
+.inspect-kicker { font-size: 10px; color: var(--color-neutral-600); }
+.inspect-title {
+  font: 600 19px/1.2 var(--font-heading);
+  color: var(--chrome-text);
+  margin-top: 6px;
+}
+
+.inspect-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  min-height: 40px;
+}
+.inspect-key {
+  font-size: 10px;
+  color: var(--color-neutral-600);
+  flex: none;
+  width: 106px;
+}
+.inspect-value {
+  font: 500 14px var(--font-body);
+  color: var(--chrome-text);
+  text-align: right;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspect-section {
+  padding: 18px 16px;
+  border-top: 1px solid var(--chrome-rule);
+}
+.inspect-section-title {
+  font-size: 10px;
+  color: var(--chrome-dim);
+  margin-bottom: 12px;
+}
+
+.swatches { display: flex; border: 2px solid var(--color-neutral-700); width: max-content; }
+.swatch {
+  width: 56px;
+  height: 48px;
+  border: 0;
+  border-left: 2px solid var(--color-neutral-700);
+  padding: 0;
+}
+.swatch:first-child { border-left: 0; }
+.swatch[aria-pressed="true"] { outline: 3px solid var(--chrome-text); outline-offset: -6px; }
+
+.panel-btn {
+  width: 100%;
+  min-height: 48px;
+  border: 2px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 14px var(--font-heading);
+  text-align: left;
+  padding: 0 14px;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.panel-btn:hover { background: var(--chrome-rule); }
+.panel-btn.primary {
+  background: var(--color-accent);
+  border-color: var(--chrome-bg);
+  color: #fff;
+}
+.panel-btn.primary:hover { background: var(--color-accent-600); }
+
+.inspect-empty {
+  padding: 18px 16px;
+  font-size: 13px;
+  color: var(--chrome-dim);
+  line-height: 1.5;
+}
+
+/* Narrow windows: sidebars overlay the canvas instead of squeezing it. */
+@media (max-width: 900px) {
+  .side-panel { position: absolute; top: 0; bottom: 0; z-index: 8; box-shadow: var(--shadow-lg); }
+  .side-panel.left { left: 0; }
+  .side-panel.right { right: 0; }
+}

@@ -1,0 +1,54 @@
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=Archivo+Narrow:wght@500;600&display=swap");
+@import "./tokens.css";
+@import "./home.css";
+@import "./sheets.css";
+@import "./editor.css";
+@import "./panels.css";
+@import "./code.css";
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  /* iPad: kill pinch-zoom and double-tap zoom on the shell. The game canvas
+     and the drawing layer read raw pointer events and do their own zoom. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+}
+
+body { -webkit-user-select: none; user-select: none; }
+
+#app { height: 100%; display: flex; flex-direction: column; }
+
+button, input, textarea { font-family: inherit; color: inherit; }
+button { cursor: pointer; border-radius: 0; }
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+::selection { background: var(--color-accent-200); }
+
+/* The uppercase micro-label used throughout both screens. */
+.m {
+  font-family: var(--font-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.hidden { display: none !important; }
+
+/* Scrollable panel regions keep momentum scrolling on iPad but never
+   rubber-band the whole shell. */
+.scroll {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}

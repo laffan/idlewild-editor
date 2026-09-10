@@ -1,0 +1,114 @@
+/* Code modal — the file column and editor column, dockable to either side. */
+
+.code-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: rgba(32, 30, 29, 0.34);
+  display: flex;
+  padding: 24px;
+}
+.code-backdrop.pin-left { justify-content: flex-start; }
+.code-backdrop.pin-right { justify-content: flex-end; }
+
+.code-panel {
+  width: 820px;
+  max-width: 100%;
+  border: 2px solid var(--color-accent);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+
+.code-head {
+  min-height: 60px;
+  flex: none;
+  border-bottom: 2px solid var(--chrome-rule);
+  display: flex;
+  align-items: center;
+  padding: 0 12px 0 20px;
+  gap: 14px;
+}
+.code-title { font: 800 18px/1 var(--font-heading); }
+.code-project { font-size: 10px; color: var(--chrome-dim); }
+.code-head-right {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 10px;
+  color: var(--chrome-dim);
+}
+
+.code-pin { display: flex; border: 2px solid var(--color-neutral-700); }
+.code-pin-btn {
+  width: 44px;
+  height: 40px;
+  border: 0;
+  border-left: 2px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.code-pin-btn:first-child { border-left: 0; }
+.code-pin-btn:hover { background: var(--chrome-rule); }
+
+.code-body { flex: 1; min-height: 0; display: flex; }
+
+.code-files {
+  width: 248px;
+  flex: none;
+  border-right: 2px solid var(--chrome-rule);
+}
+.code-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--chrome-panel);
+  color: var(--color-neutral-300);
+  font: 500 14px var(--font-mono);
+  cursor: pointer;
+}
+.code-file:hover { background: var(--chrome-panel); }
+.code-file.active { background: var(--chrome-rule); color: var(--chrome-text); }
+.code-file.dir { color: var(--color-neutral-500); cursor: default; }
+
+.code-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.code-bar {
+  min-height: 44px;
+  flex: none;
+  border-bottom: 1px solid var(--chrome-rule);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+}
+.code-filename { font-size: 10px; color: var(--chrome-text); }
+.code-dirty { margin-left: auto; font-size: 10px; color: var(--color-accent); }
+
+.code-editor { flex: 1; min-height: 0; overflow: hidden; }
+.code-editor .cm-editor { height: 100%; }
+
+.code-foot {
+  min-height: 56px;
+  flex: none;
+  border-top: 2px solid var(--chrome-rule);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--chrome-dim);
+}
+.code-foot .btn { min-height: 40px; padding: 0 16px; font-size: 13px; }
+
+@media (max-width: 900px) {
+  .code-backdrop { padding: 12px; }
+}

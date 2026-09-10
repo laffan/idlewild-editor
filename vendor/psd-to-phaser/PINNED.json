@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/laffan/psd-to-phaser",
+  "ref": "main",
+  "commit": "78717c9c1d5a9b8423ea112543abc80af846a739",
+  "note": "Built from source by scripts/vendor-p2p.mjs. main publishes no dist/, and the registry copy (0.0.5) is the Phaser 3 line."
+}

@@ -1,0 +1,337 @@
+//! Tauri command surface. Every frontend call lands here; the modules below
+//! hold the actual work.
+
+mod file_server;
+mod project;
+mod psd_pipeline;
+mod psd_write;
+mod publish;
+mod store;
+mod templates;
+
+#[cfg(test)]
+mod tests;
+
+use project::{GameFile, ImportResult, OutputFile, ProjectMeta, Projection};
+use psd_pipeline::ProcessOptions;
+use tauri::{Emitter, Manager};
+
+/// The port the asset server bound to, so the frontend can build P2P base URLs.
+struct ServerPort(u16);
+
+#[tauri::command]
+fn get_server_port(state: tauri::State<'_, ServerPort>) -> u16 {
+    state.0
+}
+
+// ── projects ────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn list_projects() -> Result<Vec<ProjectMeta>, String> {
+    store::list_projects()
+}
+
+#[tauri::command]
+fn create_project(
+    name: String,
+    projection: String,
+    grid_size: u32,
+) -> Result<ProjectMeta, String> {
+    let projection = match projection.as_str() {
+        "isometric" => Projection::Isometric,
+        "orthogonal" => Projection::Orthogonal,
+        other => return Err(format!("Unknown template: {other}")),
+    };
+    store::create_project(&name, projection, grid_size)
+}
+
+#[tauri::command]
+fn rename_project(id: String, name: String) -> Result<ProjectMeta, String> {
+    store::rename_project(&id, &name)
+}
+
+#[tauri::command]
+fn delete_project(id: String) -> Result<(), String> {
+    store::delete_project(&id)
+}
+
+#[tauri::command]
+fn duplicate_project(id: String) -> Result<ProjectMeta, String> {
+    store::duplicate_project(&id)
+}
+
+#[tauri::command]
+fn read_project_meta(id: String) -> Result<ProjectMeta, String> {
+    store::read_meta(&id)
+}
+
+#[tauri::command]
+fn read_document(id: String) -> Result<String, String> {
+    store::read_doc(&id)
+}
+
+#[tauri::command]
+fn write_document(id: String, doc: String) -> Result<(), String> {
+    store::write_doc(&id, &doc)
+}
+
+#[tauri::command]
+fn read_thumbnail(id: String) -> Result<Option<String>, String> {
+    store::read_thumbnail(&id)
+}
+
+/// The editor renders its own thumbnail from the live canvas and posts the
+/// PNG back here as base64.
+#[tauri::command]
+fn write_thumbnail(id: String, png_base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let data = png_base64
+        .split_once(",")
+        .map(|(_, rest)| rest)
+        .unwrap_or(&png_base64);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| format!("Bad thumbnail data: {e}"))?;
+    store::write_thumbnail(&id, &bytes)
+}
+
+// ── the editable game/ tree ─────────────────────────────────────────────────
+
+#[tauri::command]
+fn list_game_files(id: String) -> Result<Vec<GameFile>, String> {
+    store::list_game_files(&id)
+}
+
+#[tauri::command]
+fn read_game_file(id: String, path: String) -> Result<String, String> {
+    store::read_game_file(&id, &path)
+}
+
+#[tauri::command]
+fn write_game_file(id: String, path: String, content: String) -> Result<(), String> {
+    store::write_game_file(&id, &path, &content)
+}
+
+// ── PSD pipeline ────────────────────────────────────────────────────────────
+
+/// Stream psd-to-json's progress to the frontend terminal.
+fn logger(app: &tauri::AppHandle) -> impl Fn(&str) + '_ {
+    move |line: &str| {
+        let _ = app.emit("psd-log-line", line.to_string());
+    }
+}
+
+#[tauri::command]
+fn import_image(
+    app: tauri::AppHandle,
+    id: String,
+    source_path: String,
+    name: Option<String>,
+) -> Result<ImportResult, String> {
+    psd_pipeline::import_and_process(
+        &id,
+        std::path::Path::new(&source_path),
+        name.as_deref(),
+        logger(&app),
+    )
+}
+
+/// Import from bytes the frontend already holds — a clipboard paste, a photo
+/// picked on iPad, or a rasterised selection of drawn strokes.
+#[tauri::command]
+fn import_image_bytes(
+    app: tauri::AppHandle,
+    id: String,
+    name: String,
+    data_base64: String,
+) -> Result<ImportResult, String> {
+    use base64::Engine;
+    let payload = data_base64
+        .split_once(",")
+        .map(|(_, rest)| rest)
+        .unwrap_or(&data_base64);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .map_err(|e| format!("Bad image data: {e}"))?;
+
+    let key = psd_write::sanitise_stem(&name);
+    let psd_bytes = psd_write::psd_from_image_bytes(&key, &bytes)?;
+    let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
+    std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
+
+    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
+    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+    use image::GenericImageView;
+    let (width, height) = img.dimensions();
+    Ok(ImportResult {
+        key,
+        width,
+        height,
+        manifest,
+    })
+}
+
+/// Build a PSD directly from an RGBA buffer — the path drawn strokes take.
+#[tauri::command]
+fn create_psd_from_rgba(
+    app: tauri::AppHandle,
+    id: String,
+    name: String,
+    width: u32,
+    height: u32,
+    rgba_base64: String,
+) -> Result<ImportResult, String> {
+    use base64::Engine;
+    let rgba = base64::engine::general_purpose::STANDARD
+        .decode(&rgba_base64)
+        .map_err(|e| format!("Bad pixel data: {e}"))?;
+
+    let key = psd_write::sanitise_stem(&name);
+    let psd_bytes = psd_write::psd_from_rgba(&key, width, height, rgba)?;
+    let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
+    std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
+
+    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
+    Ok(ImportResult {
+        key,
+        width,
+        height,
+        manifest,
+    })
+}
+
+#[tauri::command]
+fn reprocess_psd(
+    app: tauri::AppHandle,
+    id: String,
+    key: String,
+    options: Option<ProcessOptions>,
+) -> Result<String, String> {
+    let options = options.unwrap_or_default();
+    psd_pipeline::process(&id, &key, &options, logger(&app))
+}
+
+#[tauri::command]
+fn read_psd_manifest(id: String, key: String) -> Result<String, String> {
+    psd_pipeline::read_manifest(&id, &key)
+}
+
+#[tauri::command]
+fn is_psd_processed(id: String, key: String) -> bool {
+    psd_pipeline::is_processed(&id, &key)
+}
+
+#[tauri::command]
+fn list_psd_outputs(id: String, key: String) -> Result<Vec<OutputFile>, String> {
+    psd_pipeline::list_output_files(&id, &key)
+}
+
+#[tauri::command]
+fn psd_thumbnail(path: String, max_size: u32) -> Result<String, String> {
+    psd_pipeline::thumbnail(&path, max_size)
+}
+
+#[tauri::command]
+fn psd_preview(id: String, key: String) -> Result<String, String> {
+    psd_write::preview_data_url(&psd_pipeline::psd_path(&id, &key)?)
+}
+
+/// Serve a processed asset back to the editor as a data URL. The editor runs
+/// Phaser in the app's own webview, so it loads textures this way rather than
+/// through a local HTTP server.
+#[tauri::command]
+fn read_asset_data_url(id: String, relative: String) -> Result<String, String> {
+    let path = store::assets_dir(&id)?.join(store::safe_relative(&relative)?);
+    let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {relative}: {e}"))?;
+    let mime = match path.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("json") => "application/json",
+        _ => "application/octet-stream",
+    };
+    use base64::Engine;
+    Ok(format!(
+        "data:{mime};base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(&bytes)
+    ))
+}
+
+// ── export & publish ────────────────────────────────────────────────────────
+
+/// Zip the project and return it as base64 for the frontend to save or share.
+#[tauri::command]
+fn publish_zip(id: String) -> Result<String, String> {
+    let bytes = publish::build_zip(&id)?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
+/// Write bytes the frontend produced to a path the user picked.
+#[tauri::command]
+fn save_bytes(path: String, data_base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let payload = data_base64
+        .split_once(",")
+        .map(|(_, rest)| rest)
+        .unwrap_or(&data_base64);
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .map_err(|e| format!("Bad payload: {e}"))?;
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, bytes).map_err(|e| format!("Cannot write {path}: {e}"))
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .setup(|app| {
+            #[cfg(desktop)]
+            {
+                let _ = app.handle().plugin(tauri_plugin_deep_link::init());
+            }
+            // Block until the listener thread is up: the frontend asks for the
+            // port during boot, and a port that is not yet accepting would
+            // fail the first PSD load.
+            let (port, ready) = file_server::start()
+                .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
+            let _ = ready.recv();
+            app.manage(ServerPort(port));
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_server_port,
+            list_projects,
+            create_project,
+            rename_project,
+            delete_project,
+            duplicate_project,
+            read_project_meta,
+            read_document,
+            write_document,
+            read_thumbnail,
+            write_thumbnail,
+            list_game_files,
+            read_game_file,
+            write_game_file,
+            import_image,
+            import_image_bytes,
+            create_psd_from_rgba,
+            reprocess_psd,
+            read_psd_manifest,
+            is_psd_processed,
+            list_psd_outputs,
+            psd_thumbnail,
+            psd_preview,
+            read_asset_data_url,
+            publish_zip,
+            save_bytes,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running Idlewild");
+}
