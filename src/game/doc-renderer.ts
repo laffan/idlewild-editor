@@ -19,16 +19,27 @@ export interface PickResult {
   placement: Placement;
 }
 
+/**
+ * What `P2P.place()` hands back.
+ *
+ * For every layer category it is a `Phaser.GameObjects.Group` holding the
+ * real display objects, with `setPosition` grafted on by the plugin's
+ * `attachMethods`. It is not a `GameObject`, so it is typed structurally.
+ */
+export interface PlacedObject {
+  setPosition(x: number, y: number): unknown;
+  setScale(x: number, y: number): unknown;
+  setDepth(v: number): unknown;
+  setVisible(v: boolean): unknown;
+  destroy(destroyChildren?: boolean): void;
+  /** Present on a Group, which is what `place()` always returns. */
+  getChildren?: () => unknown[];
+}
+
 export interface PlacementView {
   placement: Placement;
   layerId: string;
-  object: Phaser.GameObjects.GameObject & {
-    x: number;
-    y: number;
-    setPosition(x: number, y: number): unknown;
-    setDepth(v: number): unknown;
-    setVisible(v: boolean): unknown;
-  };
+  object: PlacedObject;
 }
 
 export class DocRenderer {
@@ -119,6 +130,7 @@ export class DocRenderer {
         if (!view) continue;
         view.placement = placement;
         view.object.setPosition(placement.x, placement.y);
+        applyScale(view.object, placement);
         // Isometric scenes sort on screen Y so nearer objects draw in front.
         view.object.setDepth(
           this.grid.projection === "isometric" ? depth + placement.y : depth,
@@ -129,7 +141,7 @@ export class DocRenderer {
 
     for (const [id, view] of this.placements) {
       if (seen.has(id)) continue;
-      view.object.destroy();
+      destroyPlaced(view.object);
       this.placements.delete(id);
     }
   }
@@ -139,7 +151,7 @@ export class DocRenderer {
    * owns the P2P call; this owns where the result sits.
    */
   attach(layerId: string, placement: Placement, object: unknown): void {
-    const candidate = object as PlacementView["object"] | null;
+    const candidate = object as PlacedObject | null;
     if (!candidate || typeof candidate.setPosition !== "function") {
       log.warn(`psd-to-phaser returned nothing placeable for ${placement.psdKey}`);
       return;
@@ -156,9 +168,53 @@ export class DocRenderer {
   destroy(): void {
     this.fillGraphics.destroy();
     this.zoneGraphics.destroy();
-    for (const view of this.placements.values()) view.object.destroy();
+    for (const view of this.placements.values()) destroyPlaced(view.object);
     this.placements.clear();
   }
+}
+
+/**
+ * Destroy what `place()` returned, children included.
+ *
+ * A Phaser Group is not a display container: its children live on the
+ * scene's own display list, and `Group.destroy()` defaults to
+ * `destroyChildren = false`. Destroying the group alone therefore removed the
+ * record but left the sprite on screen — a deleted image that would not go
+ * away. Anything else gets the plain no-argument destroy, because
+ * `GameObject.destroy(fromScene)` reads its first argument entirely
+ * differently and passing `true` there would skip removing it from the
+ * display list.
+ */
+export function destroyPlaced(object: PlacedObject): void {
+  // Detected structurally rather than with `instanceof`, so this module stays
+  // free of a runtime Phaser import and its pure helpers remain testable
+  // outside a browser. `getChildren` is Group's defining method.
+  if (typeof object.getChildren === "function") {
+    object.destroy(true);
+    return;
+  }
+  object.destroy();
+}
+
+/**
+ * Scale a placed object to its displayed size.
+ *
+ * `setScale` is forwarded by the plugin to the group's children, and a sprite
+ * placed with `setOrigin(0, 0)` scales away from its top-left — which is the
+ * corner the placement's x/y describes, so the box and the image agree.
+ *
+ * A group holding several sprites scales each one about its own origin, so
+ * their relative offsets do not grow with it. Scaling a multi-layer
+ * composition as a unit needs a Container, and `place()` returns a Group.
+ */
+function applyScale(object: PlacedObject, placement: Placement): void {
+  const naturalWidth = placement.naturalWidth ?? placement.width;
+  const naturalHeight = placement.naturalHeight ?? placement.height;
+  if (!naturalWidth || !naturalHeight) return;
+  object.setScale(
+    placement.width / naturalWidth,
+    placement.height / naturalHeight,
+  );
 }
 
 export function hexToNumber(hex: string): number {

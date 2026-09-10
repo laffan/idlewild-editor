@@ -31,7 +31,8 @@ remaining pieces are wired to real slots rather than mocked.
 - New Game: template (isometric, orthogonal) and grid scale (32–256 px)
 - Infinite grid, one-finger pan, two-finger zoom, hold-to-select, tap-to-pick
 - Fill a selection with any colour, from a full picker with recent swatches
-- Drag placed images and fills, snapped to the grid
+- Drag placed images and fills, snapped to the grid; resize images from
+  their corner handles, or freely from the inspector
 - Resizable sidebars and console drawer, persisted per install
 - Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed
 - Layers: reorder, rename, lock, hide, with live counts and an expandable

@@ -258,6 +258,15 @@ headless harness for the Phaser scene yet; the canvas needs a device.
 
 ---
 
+**`place()` returns a Group, and a Group is not a display container.** Its
+children live on the scene's own display list, and `Group.destroy()` defaults
+to `destroyChildren = false` — so destroying the group removed the record and
+left the sprite on screen. `destroyPlaced()` passes `true` for a Group and
+nothing for anything else, because `GameObject.destroy(fromScene)` reads its
+first argument completely differently. The plugin's `attachMethods` grafts
+`setPosition`, `setScale` and the rest onto the Group, forwarding them to its
+children.
+
 ## Selection
 
 Hit-testing reads the **document**, not the rendered Phaser objects
@@ -269,6 +278,20 @@ Order follows the draw order: layers are top-first and, within a layer, a
 later placement draws over an earlier one, so the front-most candidate is the
 earliest layer's final placement. Locked and hidden layers are inert to the
 pointer, the same rule Hush applies to its own pick paths.
+
+Placed images resize from their corner handles. The geometry is in
+`game/resize.ts`, kept pure so the awkward cases — dragging a corner past its
+anchor, the aspect lock, the minimum size — are tested without a canvas. The
+opposite corner stays fixed, and the aspect ratio is locked: a stretched
+sprite is almost always a mistake, and the inspector's width and height fields
+are there for the times it is not. Handles are drawn and hit-tested at a
+constant *screen* size, so the world-space target divides by the camera zoom
+and stays reachable however far out you are.
+
+Resizing writes a displayed `width`/`height` against the `naturalWidth`/
+`naturalHeight` the manifest exported, and their ratio becomes a `setScale`.
+A sprite placed with `setOrigin(0, 0)` scales away from its top-left, which is
+the corner the placement's x/y describes, so box and image agree.
 
 The same items are listed under each layer in the left panel
 (`editor/layer-items.ts`), and selecting one there is equivalent to picking it
@@ -295,13 +318,14 @@ on chrome never highlights it.
   yet sampled into the fill.
 - Two PSDs with a same-named layer collide in Phaser's texture cache: P2P
   keys textures on the layer name unless loaded via `loadMultiple`.
+- Resizing a placement that holds a *group* of sprites scales each child
+  about its own origin, so their relative offsets do not grow with it.
+  Scaling a composition as a unit needs a Container, and `place()` returns a
+  Group. Single-sprite placements — every converted image — are exact.
 - Strokes are listed under a layer as a count rather than individually; they
   get their own selection model with the drawing engine port.
 - The code modal edits and saves the project's real files but does not yet
   drive the canvas, and has none of phaser-bench's Phaser-aware completions.
-- Placed images and fills drag with grid snapping, and images resize from the
-  inspector's numeric fields; the on-canvas resize handles are drawn but not
-  yet draggable.
 - Play mode's character is a placeholder rectangle, not a sprite from the
   template.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both

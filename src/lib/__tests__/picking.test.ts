@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickPlacement } from "../../game/doc-renderer";
+import { destroyPlaced, pickPlacement } from "../../game/doc-renderer";
 import { layerItems } from "../../editor/layer-items";
 import type { Layer, Placement } from "../types";
 
@@ -124,5 +124,42 @@ describe("layerItems", () => {
 
   it("is empty for an empty layer", () => {
     expect(layerItems(layer("l1"))).toEqual([]);
+  });
+});
+
+describe("destroyPlaced", () => {
+  /**
+   * `place()` returns a Phaser Group, which is not a display container: its
+   * children live on the scene's own display list. `Group.destroy()` defaults
+   * to `destroyChildren = false`, so destroying the group alone removed the
+   * record but left the sprite on screen.
+   */
+  it("takes a group's children down with it", () => {
+    const calls: unknown[][] = [];
+    const group = {
+      setPosition: () => {},
+      setScale: () => {},
+      setDepth: () => {},
+      setVisible: () => {},
+      getChildren: () => [{}],
+      destroy: (...args: unknown[]) => calls.push(args),
+    };
+    destroyPlaced(group);
+    expect(calls).toEqual([[true]]);
+  });
+
+  it("passes nothing to a plain game object", () => {
+    // GameObject.destroy(fromScene) reads its first argument completely
+    // differently; passing true there would skip the display-list removal.
+    const calls: unknown[][] = [];
+    const sprite = {
+      setPosition: () => {},
+      setScale: () => {},
+      setDepth: () => {},
+      setVisible: () => {},
+      destroy: (...args: unknown[]) => calls.push(args),
+    };
+    destroyPlaced(sprite);
+    expect(calls).toEqual([[]]);
   });
 });

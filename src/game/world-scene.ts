@@ -17,6 +17,15 @@ import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { PlayController } from "./play-controller";
+import {
+  boxToPlacement,
+  handleAt,
+  HANDLE_SCREEN_PX,
+  placementBox,
+  resizeBox,
+  type Box,
+  type Corner,
+} from "./resize";
 
 export interface WorldSceneConfig {
   store: DocStore;
@@ -48,6 +57,14 @@ type DragState =
       id: string;
       grabCell: Cell;
       cells: Cell[];
+    }
+  | {
+      kind: "resize";
+      layerId: string;
+      id: string;
+      corner: Corner;
+      /** The box as it was at pointer-down, so the drag never compounds. */
+      original: Box;
     };
 
 const MIN_ZOOM = 0.1;
@@ -133,7 +150,7 @@ export class WorldScene extends Phaser.Scene {
   /** Repaint from the document. Cheap: everything here is retained state. */
   refresh(): void {
     this.docRenderer.render();
-    this.overlay.render(this.selection, this.store);
+    this.overlay.render(this.selection, this.store, this.cameras.main.zoom);
   }
 
   // ── camera ────────────────────────────────────────────────────────────────
@@ -155,6 +172,8 @@ export class WorldScene extends Phaser.Scene {
     camera.scrollX += before.x - after.x;
     camera.scrollY += before.y - after.y;
     this.gridRenderer.invalidate();
+    // Selection chrome is sized against the zoom, so it has to be redrawn.
+    this.overlay.render(this.selection, this.store, camera.zoom);
   }
 
   /** Re-centre on the origin while the viewport is still settling. */
@@ -261,6 +280,27 @@ export class WorldScene extends Phaser.Scene {
         (p) => p.id === selection.placementId,
       );
       if (!placement) return false;
+
+      // A corner handle resizes; the body moves. Handles are drawn at a
+      // constant screen size, so the world-space target scales with zoom.
+      const box = placementBox(placement);
+      const corner = handleAt(
+        box,
+        world,
+        HANDLE_SCREEN_PX / this.cameras.main.zoom,
+      );
+      if (corner) {
+        this.drag = {
+          kind: "resize",
+          layerId: layer.id,
+          id: placement.id,
+          corner,
+          original: box,
+        };
+        this.config.onDragStateChange(true);
+        return true;
+      }
+
       if (
         world.x < placement.x ||
         world.x > placement.x + placement.width ||
@@ -311,7 +351,23 @@ export class WorldScene extends Phaser.Scene {
     const drag = this.drag;
     if (!drag) return;
 
-    const cell = this.grid.worldToCell(this.worldAt(screenX, screenY));
+    const world = this.worldAt(screenX, screenY);
+
+    if (drag.kind === "resize") {
+      // Resizing works in pixels, not cells: an image's size is a property of
+      // the image, and the grid has nothing to say about it.
+      const box = resizeBox(drag.original, drag.corner, world);
+      this.store.updatePlacement(drag.layerId, drag.id, {
+        ...boxToPlacement(box),
+        anchor: this.grid.worldToCell({
+          x: box.x + box.width / 2,
+          y: box.y + box.height / 2,
+        }),
+      });
+      return;
+    }
+
+    const cell = this.grid.worldToCell(world);
     const dx = cell.cx - drag.grabCell.cx;
     const dy = cell.cy - drag.grabCell.cy;
 
@@ -322,11 +378,11 @@ export class WorldScene extends Phaser.Scene {
         cx: drag.originCell.cx + dx,
         cy: drag.originCell.cy + dy,
       };
-      const world = this.grid.cellToWorld(anchor);
+      const anchorWorld = this.grid.cellToWorld(anchor);
       this.store.updatePlacement(drag.layerId, drag.id, {
         anchor,
-        x: world.x + drag.offsetX,
-        y: world.y + drag.offsetY,
+        x: anchorWorld.x + drag.offsetX,
+        y: anchorWorld.y + drag.offsetY,
       });
     } else {
       this.store.updateFill(drag.layerId, drag.id, {
@@ -343,7 +399,7 @@ export class WorldScene extends Phaser.Scene {
 
   setSelection(selection: Selection): void {
     this.selection = selection;
-    this.overlay.render(selection, this.store);
+    this.overlay.render(selection, this.store, this.cameras.main.zoom);
     this.config.onSelectionChange(selection);
   }
 
@@ -415,13 +471,17 @@ export class WorldScene extends Phaser.Scene {
 
     let last: Placement | null = null;
     for (const entry of layers) {
+      const width = entry.width || manifest.width;
+      const height = entry.height || manifest.height;
       const placement = this.store.addPlacement(layer.id, {
         psdKey: key,
         layerPath: entry.path,
         x: originX + entry.x,
         y: originY + entry.y,
-        width: entry.width || manifest.width,
-        height: entry.height || manifest.height,
+        width,
+        height,
+        naturalWidth: width,
+        naturalHeight: height,
         anchor: at,
       });
       this.placeOne(layer.id, placement);

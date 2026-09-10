@@ -52,6 +52,14 @@ export interface Placement {
   y: number;
   width: number;
   height: number;
+  /**
+   * The size the manifest exported this layer at. `width`/`height` are the
+   * displayed size, so the two differ once the image has been resized and
+   * their ratio is the scale to apply. Optional: documents written before
+   * resizing existed fall back to their displayed size, i.e. scale 1.
+   */
+  naturalWidth?: number;
+  naturalHeight?: number;
   /** The cell the placement was anchored to, kept so a grid resize can follow. */
   anchor: Cell;
 }

@@ -7,6 +7,7 @@ import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import type { Selection } from "../lib/types";
+import { CORNERS, cornerPoint, HANDLE_SCREEN_PX, placementBox } from "./resize";
 
 const ACCENT = 0xec3013;
 const OVERLAY_DEPTH = 1_000_000;
@@ -21,7 +22,8 @@ export class SelectionOverlay {
     this.graphics.setDepth(OVERLAY_DEPTH);
   }
 
-  render(selection: Selection, store: DocStore): void {
+  /** @param zoom camera zoom, so handles stay a constant size on screen. */
+  render(selection: Selection, store: DocStore, zoom = 1): void {
     const g = this.graphics;
     g.clear();
 
@@ -49,24 +51,26 @@ export class SelectionOverlay {
           .layer(selection.layerId)
           ?.placements.find((p) => p.id === selection.placementId);
         if (!placement) break;
-        g.lineStyle(2, ACCENT, 1);
+        // Everything below is sized in world units but wants to look
+        // constant on screen, so divide through by the zoom.
+        const scale = 1 / zoom;
+        g.lineStyle(2 * scale, ACCENT, 1);
         g.strokeRect(
           placement.x,
           placement.y,
           placement.width,
           placement.height,
         );
+
         // The four resize handles of image edit mode.
-        for (const [hx, hy] of [
-          [placement.x, placement.y],
-          [placement.x + placement.width, placement.y],
-          [placement.x, placement.y + placement.height],
-          [placement.x + placement.width, placement.y + placement.height],
-        ]) {
+        const box = placementBox(placement);
+        const size = HANDLE_SCREEN_PX * scale;
+        for (const corner of CORNERS) {
+          const c = cornerPoint(box, corner);
           g.fillStyle(0xf3f2f2, 1);
-          g.fillRect(hx - 7, hy - 7, 14, 14);
-          g.lineStyle(2, ACCENT, 1);
-          g.strokeRect(hx - 7, hy - 7, 14, 14);
+          g.fillRect(c.x - size / 2, c.y - size / 2, size, size);
+          g.lineStyle(2 * scale, ACCENT, 1);
+          g.strokeRect(c.x - size / 2, c.y - size / 2, size, size);
         }
         break;
       }
