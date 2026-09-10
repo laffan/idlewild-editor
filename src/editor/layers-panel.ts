@@ -7,6 +7,12 @@
  * and `dragstart` never fires for touch. The row being dragged is moved
  * through the DOM as the finger passes each neighbour, so the list shows the
  * order it is about to commit; the document is written once, on release.
+ *
+ * A placed PSD listed under an expanded layer has a grip of its own, and
+ * dragging that carries the image to whichever layer the finger lets go over.
+ * Same gesture, different question: a layer takes a *position* in the list,
+ * an image takes a *layer*, so one moves through the DOM as it goes and the
+ * other lights up its destination.
  */
 
 import { clear, h, ICONS, icon } from "../lib/dom";
@@ -47,6 +53,16 @@ interface DragState {
   release: () => void;
 }
 
+/** A placement being carried from one layer to another. */
+interface ItemDragState {
+  layerId: string;
+  placementId: string;
+  pointerId: number;
+  /** The layer the pointer is currently over, if any. */
+  target: string | null;
+  release: () => void;
+}
+
 export class LayersPanel {
   readonly root: HTMLElement;
   private readonly body: HTMLElement;
@@ -54,6 +70,7 @@ export class LayersPanel {
   private readonly callbacks: LayersPanelCallbacks;
   private suspended = false;
   private drag: DragState | null = null;
+  private itemDrag: ItemDragState | null = null;
   /** Layers whose contents are shown. Expansion is per-session UI state. */
   private readonly expanded = new Set<string>();
 
@@ -106,9 +123,9 @@ export class LayersPanel {
   }
 
   render(): void {
-    // A reorder in flight owns the DOM until it is released; rebuilding under
+    // A drag in flight owns the DOM until it is released; rebuilding under
     // it would drop the element the pointer is holding.
-    if (this.drag) return;
+    if (this.drag || this.itemDrag) return;
 
     const active = this.callbacks.getActiveLayerId();
     const selection = this.callbacks.getSelection();
@@ -132,10 +149,22 @@ export class LayersPanel {
       }
 
       for (const item of items) {
+        // Only a placement is carried between layers. A fill is a run of grid
+        // spaces and a boundary is a polygon; both are addressed in world
+        // coordinates that no layer owns, so moving one is a change of draw
+        // order alone and the reorder above already covers it.
+        const draggable =
+          item.selection.kind === "placement" ? item.selection : null;
         group.appendChild(
-          renderLayerItem(item, isSelected(item, selection), (next) => {
-            this.callbacks.onSelectItem(next);
-          }),
+          renderLayerItem(
+            item,
+            isSelected(item, selection),
+            (next) => this.callbacks.onSelectItem(next),
+            draggable
+              ? (event) =>
+                  this.beginItemDrag(event, draggable.layerId, draggable.placementId)
+              : undefined,
+          ),
         );
       }
 
@@ -204,6 +233,7 @@ export class LayersPanel {
    */
   destroy(): void {
     this.endDrag(false);
+    this.endItemDrag(null);
   }
 
   /** Show a layer's contents, e.g. after selecting something inside it. */
@@ -288,6 +318,112 @@ export class LayersPanel {
     // and a real reflow, so nothing happens unless the order actually changes.
     if (before === group.nextElementSibling) return;
     this.body.insertBefore(group, before);
+  }
+
+  // ── carrying a placement to another layer ─────────────────────────────────
+
+  /**
+   * Start moving a placed PSD onto a different layer.
+   *
+   * Followed on `window` for the reason the layer reorder is: the panel
+   * rebuilds on every document change, and pointer capture is released the
+   * moment the capturing element leaves the document.
+   *
+   * Unlike a reorder the rows do not move as the finger travels. There is one
+   * legal drop per layer rather than a position in a list, so the layer under
+   * the pointer is marked instead — the same choice the code modal's file
+   * tree makes, for the same reason.
+   */
+  private beginItemDrag(
+    event: PointerEvent,
+    layerId: string,
+    placementId: string,
+  ): void {
+    if (this.drag || this.itemDrag) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const { pointerId } = event;
+    const onMove = (moved: PointerEvent) => {
+      if (moved.pointerId !== pointerId) return;
+      moved.preventDefault();
+      this.highlightLayer(this.layerAt(moved.clientY));
+    };
+    const onUp = (ended: PointerEvent) => {
+      if (ended.pointerId !== pointerId) return;
+      this.endItemDrag(this.layerAt(ended.clientY));
+    };
+    const onCancel = (ended: PointerEvent) => {
+      if (ended.pointerId === pointerId) this.endItemDrag(null);
+    };
+
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+
+    this.body.classList.add("carrying");
+    this.itemDrag = {
+      layerId,
+      placementId,
+      pointerId,
+      target: null,
+      release: () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+      },
+    };
+  }
+
+  /** Which layer's block of the panel a screen Y falls in. */
+  private layerAt(y: number): string | null {
+    for (const group of this.body.children) {
+      if (!(group instanceof HTMLElement)) continue;
+      const box = group.getBoundingClientRect();
+      if (y >= box.top && y <= box.bottom) return group.dataset.layerId ?? null;
+    }
+    return null;
+  }
+
+  private highlightLayer(layerId: string | null): void {
+    if (!this.itemDrag || this.itemDrag.target === layerId) return;
+    this.itemDrag.target = layerId;
+    for (const group of this.body.children) {
+      if (!(group instanceof HTMLElement)) continue;
+      // The layer it is already on is not a destination, so it is never lit.
+      group.classList.toggle(
+        "drop-into",
+        group.dataset.layerId === layerId && layerId !== this.itemDrag.layerId,
+      );
+    }
+  }
+
+  private endItemDrag(target: string | null): void {
+    const drag = this.itemDrag;
+    if (!drag) return;
+    this.itemDrag = null;
+
+    drag.release();
+    this.body.classList.remove("carrying");
+    for (const group of this.body.children) {
+      if (group instanceof HTMLElement) group.classList.remove("drop-into");
+    }
+
+    if (target && target !== drag.layerId) {
+      this.store.movePlacement(drag.layerId, drag.placementId, target);
+      // Follow it: the row the finger let go of is now under a different
+      // layer, and leaving the selection pointing at the old one would show
+      // the inspector an image that is no longer there.
+      this.expanded.add(target);
+      this.callbacks.onSelectItem({
+        kind: "placement",
+        layerId: target,
+        placementId: drag.placementId,
+      });
+    }
+    // A cancelled drop still has to put the list back the way it was: the
+    // store only re-renders when something actually changed.
+    this.render();
   }
 
   private endDrag(commit: boolean): void {
@@ -421,8 +557,13 @@ function describe(layer: Layer): string {
   const parts: string[] = [];
   if (layer.placements.length) parts.push(`${layer.placements.length} psd`);
   if (layer.fills.length) {
+    // Two kinds of fill in one count: a run of spaces contributes its spaces,
+    // a rectangle contributes itself. Counting only cells reported a blank
+    // project's fills as nothing at all.
     const cells = layer.fills.reduce((n, f) => n + f.cells.length, 0);
-    parts.push(count(cells, "cell"));
+    const rects = layer.fills.filter((f) => f.rect).length;
+    if (cells) parts.push(count(cells, "cell"));
+    if (rects) parts.push(count(rects, "fill"));
   }
   if (layer.zones.length) parts.push(count(layer.zones.length, "zone"));
   if (layer.strokes.length) parts.push(count(layer.strokes.length, "stroke"));

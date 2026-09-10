@@ -9,7 +9,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: calc(24px + var(--safe-top)) calc(24px + var(--safe-right))
+    calc(24px + var(--safe-bottom)) calc(24px + var(--safe-left));
 }
 
 .sheet {
@@ -69,6 +70,16 @@
 }
 .sheet.light .field-label { color: var(--color-neutral-700); }
 
+/* A line under a control saying what it means where that is not obvious —
+   the grid scale, which is a size on two templates and a unit on the third. */
+.field-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-neutral-600);
+  margin-top: 8px;
+  max-width: 46ch;
+}
+
 .input {
   width: 100%;
   min-height: var(--hit);
@@ -96,6 +107,12 @@
 .seg-opt[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .seg-opt:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
 .sheet.light .seg-opt:not([aria-pressed="true"]):hover { background: var(--color-neutral-200); }
+/* An option this template cannot have — an isometric platformer. Shown and
+   greyed rather than removed, so the row does not change shape under the
+   finger and it is clear the choice exists elsewhere. */
+.seg-opt[disabled] { opacity: 0.35; cursor: default; }
+.seg-opt[disabled]:hover { background: transparent; }
+.sheet.light .seg-opt[disabled]:hover { background: transparent; }
 
 /* A list of choices, as in Add Image */
 .sheet-list { display: flex; flex-direction: column; }

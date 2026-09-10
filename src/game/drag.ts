@@ -1,6 +1,6 @@
 /**
- * Dragging what is selected: a placed image, one of its corner handles, or a
- * filled run of grid spaces.
+ * Dragging what is selected: a placed image, one of its corner handles, a
+ * filled run of grid spaces, or a boundary.
  *
  * Split out of the scene because it is a small state machine with one job and
  * the scene has several. What it needs from the scene is narrow enough to
@@ -15,8 +15,18 @@
 
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
-import type { Cell, FillPatch, Placement, Point, Selection } from "../lib/types";
+import { rectContains } from "../lib/grid";
+import type {
+  Cell,
+  FillPatch,
+  Placement,
+  Point,
+  Rect,
+  Selection,
+  Zone,
+} from "../lib/types";
 import type { DragModifiers } from "./camera-rig";
+import { pointInPolygon } from "./doc-renderer";
 import {
   boxToPlacement,
   handleAt,
@@ -43,7 +53,17 @@ type DragState =
       layerId: string;
       id: string;
       grabCell: Cell;
+      /** As at pointer-down: a run of spaces, or the rectangle it is instead. */
       cells: Cell[];
+      rect?: Rect;
+    }
+  | {
+      kind: "zone";
+      layerId: string;
+      id: string;
+      grabCell: Cell;
+      /** The outline as it was at pointer-down, so the drag never compounds. */
+      points: Point[];
     }
   | {
       kind: "resize";
@@ -116,7 +136,10 @@ export class DragController {
     }
     if (selection.kind === "fill") {
       // A fill has no file behind it, so shift has nothing to detach.
-      return this.beginFill(selection, grabCell, modifiers.alt);
+      return this.beginFill(selection, world, grabCell, modifiers.alt);
+    }
+    if (selection.kind === "zone") {
+      return this.beginZone(selection, world, grabCell, modifiers.alt);
     }
     return false;
   }
@@ -162,8 +185,29 @@ export class DragController {
       return;
     }
 
-    store.updateFill(drag.layerId, drag.id, {
-      cells: drag.cells.map((c) => ({ cx: c.cx + dx, cy: c.cy + dy })),
+    if (drag.kind === "fill") {
+      if (drag.rect) {
+        const step = grid.cellToWorld({ cx: dx, cy: dy });
+        store.updateFill(drag.layerId, drag.id, {
+          rect: { ...drag.rect, x: drag.rect.x + step.x, y: drag.rect.y + step.y },
+        });
+        return;
+      }
+      store.updateFill(drag.layerId, drag.id, {
+        cells: drag.cells.map((c) => ({ cx: c.cx + dx, cy: c.cy + dy })),
+      });
+      return;
+    }
+
+    // A boundary is world pixels rather than cells, so the cell delta is
+    // projected back into world space before it is applied. `cellToWorld` is
+    // linear in both projections and has no offset term, which is what makes
+    // it usable on a difference as well as a position: the outline keeps its
+    // shape and whatever sub-cell offset it had, and moves a whole space at a
+    // time exactly as a placed image does.
+    const delta = grid.cellToWorld({ cx: dx, cy: dy });
+    store.updateZone(drag.layerId, drag.id, {
+      points: drag.points.map((p) => ({ x: p.x + delta.x, y: p.y + delta.y })),
     });
   }
 
@@ -178,7 +222,7 @@ export class DragController {
     this.state = null;
   }
 
-  // ── the two things that can be dragged ────────────────────────────────────
+  // ── the things that can be dragged ────────────────────────────────────────
 
   private beginPlacement(
     selection: Extract<Selection, { kind: "placement" }>,
@@ -240,6 +284,7 @@ export class DragController {
 
   private beginFill(
     selection: Extract<Selection, { kind: "fill" }>,
+    world: Point,
     grabCell: Cell,
     alt: boolean,
   ): boolean {
@@ -247,9 +292,11 @@ export class DragController {
     if (!layer || layer.locked) return false;
     const fill = layer.fills.find((f) => f.id === selection.fillId);
     if (!fill) return false;
-    if (!fill.cells.some((c) => c.cx === grabCell.cx && c.cy === grabCell.cy)) {
-      return false;
-    }
+
+    const inside = fill.rect
+      ? rectContains(fill.rect, world)
+      : fill.cells.some((c) => c.cx === grabCell.cx && c.cy === grabCell.cy);
+    if (!inside) return false;
 
     const dragged = alt ? this.copyFill(layer.id, fill) : fill;
     this.start({
@@ -258,6 +305,36 @@ export class DragController {
       id: dragged.id,
       grabCell,
       cells: dragged.cells,
+      rect: dragged.rect,
+    });
+    return true;
+  }
+
+  /**
+   * A boundary drags from anywhere inside its outline.
+   *
+   * Inside, not on the line: a zone is drawn as an outline but it describes
+   * the region it encloses, and asking someone to catch a 1.5px stroke with a
+   * finger would make the gesture unusable on the platform it is mostly for.
+   */
+  private beginZone(
+    selection: Extract<Selection, { kind: "zone" }>,
+    world: Point,
+    grabCell: Cell,
+    alt: boolean,
+  ): boolean {
+    const layer = this.host.store.layer(selection.layerId);
+    if (!layer || layer.locked) return false;
+    const zone = layer.zones.find((z) => z.id === selection.zoneId);
+    if (!zone || !pointInPolygon(world, zone.points)) return false;
+
+    const dragged = alt ? this.copyZone(layer.id, zone) : zone;
+    this.start({
+      kind: "zone",
+      layerId: layer.id,
+      id: dragged.id,
+      grabCell,
+      points: dragged.points,
     });
     return true;
   }
@@ -265,6 +342,13 @@ export class DragController {
   private start(state: DragState): void {
     this.state = state;
     this.host.onDragStateChange(true);
+  }
+
+  private copyZone(layerId: string, source: Zone): Zone {
+    const { id: _id, ...rest } = source;
+    const copy = this.host.store.addZone(layerId, rest);
+    this.host.setSelection({ kind: "zone", layerId, zoneId: copy.id });
+    return copy;
   }
 
   private copyFill(layerId: string, source: FillPatch): FillPatch {

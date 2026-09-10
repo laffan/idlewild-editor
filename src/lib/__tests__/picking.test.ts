@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { destroyPlaced, pickPlacement } from "../../game/doc-renderer";
+import {
+  destroyPlaced,
+  pickPlacement,
+  pickZone,
+  pointInPolygon,
+} from "../../game/doc-renderer";
 import { layerItems } from "../../editor/layer-items";
-import type { Layer, Placement } from "../types";
+import type { Layer, Placement, Zone } from "../types";
 
 function placement(id: string, x: number, y: number): Placement {
   return {
@@ -81,6 +86,76 @@ describe("pickPlacement", () => {
     // so a broken import stays selectable and removable.
     const layers = [layer("l1", { placements: [placement("broken", 0, 0)] })];
     expect(pickPlacement(layers, 10, 10)?.placement.id).toBe("broken");
+  });
+});
+
+describe("pickZone", () => {
+  const square = (id: string, x: number, y: number): Zone => ({
+    id,
+    name: id,
+    points: [
+      { x, y },
+      { x: x + 100, y },
+      { x: x + 100, y: y + 100 },
+      { x, y: y + 100 },
+    ],
+    blocking: true,
+  });
+
+  it("finds a boundary containing the point", () => {
+    const layers = [layer("l1", { zones: [square("wall", 0, 0)] })];
+    expect(pickZone(layers, 50, 50)?.zone.id).toBe("wall");
+  });
+
+  it("misses the empty part of a concave outline", () => {
+    // The point that makes a polygon test worth having: inside the bounding
+    // box, outside the shape.
+    const el: Zone = {
+      id: "el",
+      name: "el",
+      blocking: true,
+      points: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 60 },
+        { x: 100, y: 60 },
+        { x: 100, y: 100 },
+        { x: 0, y: 100 },
+      ],
+    };
+    const layers = [layer("l1", { zones: [el] })];
+    expect(pickZone(layers, 20, 80)?.zone.id).toBe("el");
+    expect(pickZone(layers, 80, 20)).toBeUndefined();
+  });
+
+  it("prefers the later boundary within one layer", () => {
+    const layers = [
+      layer("l1", { zones: [square("under", 0, 0), square("over", 0, 0)] }),
+    ];
+    expect(pickZone(layers, 50, 50)?.zone.id).toBe("over");
+  });
+
+  it("treats locked and hidden layers as inert", () => {
+    expect(
+      pickZone([layer("l1", { locked: true, zones: [square("a", 0, 0)] })], 50, 50),
+    ).toBeUndefined();
+    expect(
+      pickZone([layer("l1", { visible: false, zones: [square("a", 0, 0)] })], 50, 50),
+    ).toBeUndefined();
+  });
+
+  it("ignores a degenerate outline", () => {
+    const line: Zone = {
+      id: "line",
+      name: "line",
+      blocking: false,
+      points: [
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ],
+    };
+    expect(pickZone([layer("l1", { zones: [line] })], 50, 0)).toBeUndefined();
+    expect(pointInPolygon({ x: 50, y: 0 }, line.points)).toBe(false);
   });
 });
 

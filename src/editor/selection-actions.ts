@@ -4,7 +4,7 @@
  */
 
 import { h } from "../lib/dom";
-import { rangeSize } from "../lib/grid";
+import { describeRange, type Grid } from "../lib/grid";
 import type { Selection } from "../lib/types";
 
 export interface SelectionActionCallbacks {
@@ -16,8 +16,10 @@ export interface SelectionActionCallbacks {
 export class SelectionActions {
   readonly root: HTMLElement;
   private readonly size: HTMLElement;
+  private readonly grid: Grid;
 
-  constructor(callbacks: SelectionActionCallbacks) {
+  constructor(grid: Grid, callbacks: SelectionActionCallbacks) {
+    this.grid = grid;
     this.size = h("div", { class: "selection-size m" });
     this.root = h(
       "div",
@@ -39,8 +41,7 @@ export class SelectionActions {
       return;
     }
 
-    const { w, h: height } = rangeSize(selection.from, selection.to);
-    this.size.textContent = `${w} × ${height}`;
+    this.size.textContent = describeRange(this.grid, selection.from, selection.to);
     this.root.classList.remove("hidden");
 
     // Sit above the selection where there is room, below it where there is not.

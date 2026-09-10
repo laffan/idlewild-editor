@@ -8,11 +8,13 @@ Tauri 2 (Rust) + Phaser 4 + TypeScript, no frontend framework.
 
 ## What it is
 
-Idlewild is a prototyping environment. You pick a template — isometric or
-orthogonal — and get a light blue, effectively infinite grid you build on with
-your fingers: hold to select a run of spaces, fill them, drop images into them,
-export a patch as a transparent PNG. Every image that enters, including a
-pasted PNG, becomes a PSD and goes through
+Idlewild is a prototyping environment. You pick a template — isometric,
+orthogonal or blank — and a style — top down or platformer — and get a light
+blue, effectively infinite grid you build on with your fingers: hold to select
+a run of spaces, fill them, drop images into them, export a patch as a
+transparent PNG. On a blank canvas nothing snaps and a selection is exactly
+the rectangle you dragged. Every image that enters, including a pasted PNG,
+becomes a PSD and goes through
 [psd-to-json](https://github.com/laffan/psd-to-json-rust), so the
 psd-to-phaser integration is uniform: a screenshot and a hand-built Photoshop
 document arrive at the runtime the same way.
@@ -28,13 +30,17 @@ remaining pieces are wired to real slots rather than mocked.
 **Working**
 
 - Project list with thumbnails, long-press rename / duplicate / delete
-- New Game: template (isometric, orthogonal) and grid scale (32–256 px)
+- New Game: template (isometric, orthogonal, blank), style (top down,
+  platformer) and grid scale (32–256 px). Blank has no lattice: a selection is
+  the exact rectangle it was dragged across, and a fill on it is one rectangle
+  rather than a run of spaces
 - A full-width header carrying the project and the Edit/Play toggle, with
-  Code, Publish and Project Options behind its menu
+  Code, Publish and Project Options behind its menu. It insets itself out of
+  the iPad's status bar, as the console drawer does out of the home indicator
 - Infinite grid, one-finger pan, two-finger zoom, hold-to-select, tap-to-pick
 - Fill a selection with any colour, from a full picker with recent swatches
-- Drag placed images and fills, snapped to the grid; resize images from
-  their corner handles, or freely from the inspector
+- Drag placed images, fills and boundaries, snapped to the grid; resize images
+  from their corner handles, or freely from the inspector
 - Resizable sidebars and console drawer, persisted per install
 - Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed,
   at half size because everything drawn on a retina machine is 2×
@@ -44,7 +50,8 @@ remaining pieces are wired to real slots rather than mocked.
   re-anchors to it — which is how you make something stand on its tile
 - Layers: drag by the grip to reorder, rename, lock, hide, with live counts
   and an expandable list of what is on each one — selecting there selects on
-  the canvas
+  the canvas, and a placed PSD listed under a layer has a grip of its own that
+  carries it to whichever layer you let go over
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass
@@ -53,7 +60,9 @@ remaining pieces are wired to real slots rather than mocked.
   orienting marks an import does — the anchor dot and the grid the sketch was
   drawn over — so there is a grid under the ink when you open it to paint
 - Inspector for layers, selections, fills, placed images and boundaries, in
-  Info / Transform / Layers sections
+  Info / Transform / Layers sections. A placed image's title is its filename,
+  and retyping the part before `.psd` renames the file, moves its assets with
+  it, and repoints every placement on it
 - Option-drag a fill or an image to copy it. A copied image references the
   same PSD, which the inspector says so you know editing one edits both —
   and Remove Reference gives it a copy of its own. Option-shift-drag skips
@@ -69,12 +78,18 @@ remaining pieces are wired to real slots rather than mocked.
 - Delete removes whatever is selected
 - Export a selection as a transparent PNG (save or copy)
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
-  to the system editor on macOS and to the share sheet on iPadOS, Re-import
-  PSD replaces it under the same key and re-runs the pipeline
-- Play mode: a character, a following camera, tap-to-walk over A*
+  to the system editor on macOS and to the share sheet on iPadOS. Re-import
+  asks where the edited file came back from — Files, the photo library or the
+  clipboard — and replaces it under the same key, re-running the pipeline
+- Play mode, in the style the project was made in: top down is a character
+  that walks the grid over A*, side-on is one that runs and jumps with the
+  arrow keys or an on-screen pad. A platformer reads the same document from
+  the side — every non-walkable fill and blocking boundary is the ground it
+  stands on rather than an obstacle to route around
 - Code modal: the project's real file tree in CodeMirror 6, full-screen or
-  pinned above the console. New file and folder, rename, duplicate, delete,
-  and drag files between folders, in a column with a divider of its own
+  pinned above the console. New File and New Folder sit in its header; rename,
+  duplicate, delete and dragging files between folders are on the rows, in a
+  column with a divider of its own
 - Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
   by psd-to-json's own progress
 - Publish: a zipped project carrying both runtimes
@@ -87,6 +102,8 @@ remaining pieces are wired to real slots rather than mocked.
   wants too
 - Pattern fills rendering their PSD texture rather than a tint
 - Phaser-aware autocomplete in the code modal, and canvas ↔ code binding
+- Sloped ground for the platformer: a blocking boundary is currently taken as
+  its bounding box
 - rsync publish targets
 
 ## Development

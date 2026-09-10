@@ -15,14 +15,10 @@
  * wherever it lands, and has to be picked to come home.
  */
 
-import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { psd, publish } from "../lib/ipc";
 import * as log from "../lib/log";
-
-/** PSDs are the point, but the pipeline converts anything it can decode. */
-const REIMPORT_FILTERS = [
-  { name: "Images", extensions: ["psd", "png", "jpg", "jpeg"] },
-];
+import { openReplacePsd } from "./sheets";
 
 const MOBILE = new Set(["ios", "android"]);
 
@@ -102,10 +98,12 @@ async function savePsdCopy(projectId: string, key: string): Promise<void> {
 /**
  * Bring a PSD's edits back into the project and return the fresh manifest.
  *
- * Desktop re-parses the file in place. Mobile asks for the file that came
- * back from wherever the share sheet sent it, and returns null when the user
- * backs out of the picker — a cancelled pick is not an error and should not
- * be logged as one.
+ * Desktop re-parses the file in place: it never moved, so there is nothing
+ * to go and find. Mobile asks *where the file came back from* — Files, the
+ * photo library or the clipboard — rather than guessing, which is what it
+ * used to do, and it guessed the photo library every time. Returns null when
+ * the sheet or the picker is backed out of; a cancelled pick is not an error
+ * and should not be logged as one.
  */
 export async function refreshPsd(
   projectId: string,
@@ -117,17 +115,7 @@ export async function refreshPsd(
     log.info(`Re-parsed ${key}.psd`);
     return manifest;
   }
-
-  const picked = await openFileDialog({
-    multiple: false,
-    title: `Replace ${key}.psd`,
-    filters: REIMPORT_FILTERS,
-  });
-  if (typeof picked !== "string") return null;
-
-  const result = await psd.reimport(projectId, key, picked);
-  log.info(`Re-imported ${key}.psd (${result.width}×${result.height})`);
-  return result.manifest;
+  return openReplacePsd(projectId, key);
 }
 
 const PSD_MIME = "image/vnd.adobe.photoshop";

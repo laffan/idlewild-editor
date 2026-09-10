@@ -5,14 +5,31 @@
 
 const DOC = {
   version: 1,
-  projection: "isometric",
-  gridSize: 64,
+  // Overridable so the harness can be pointed at a blank or platformer
+  // project without a second fixture — see harness/main.ts.
+  projection: (window as any).__projection ?? "isometric",
+  genre: (window as any).__genre ?? "topdown",
+  gridSize: (window as any).__gridSize ?? 64,
   layers: [
     {
       id: "layer-1", name: "Foreground", locked: false, visible: true,
       fills: [{ id: "fill-1", cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }], kind: "color", color: "#ec3013", walkable: true }],
       placements: [{ id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 } }],
-      zones: [], strokes: [],
+      // A boundary, so selecting and dragging one can be driven here.
+      zones: [
+        {
+          id: "zone-1",
+          name: "Dock edge",
+          blocking: true,
+          points: [
+            { x: 160, y: 0 },
+            { x: 288, y: 64 },
+            { x: 160, y: 128 },
+            { x: 32, y: 64 },
+          ],
+        },
+      ],
+      strokes: [],
     },
     { id: "layer-2", name: "Ground", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
     { id: "layer-3", name: "Backdrop", locked: true, visible: false, fills: [], placements: [], zones: [], strokes: [] },
@@ -169,6 +186,21 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       return undefined;
     }
     case "open_psd": return undefined;
+    case "rename_psd": {
+      const a = args as Record<string, string>;
+      const key = String(a.name).toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+      return {
+        key, width: 200, height: 160,
+        manifest: JSON.stringify({
+          name: key, width: 200, height: 160,
+          layers: [
+            // The layer inside keeps its own name; only the file moved.
+            { name: a.key, category: "sprite", x: 0, y: 0, width: 200, height: 160 },
+            { name: "anchor", category: "point", x: 100, y: 80, width: 12, height: 12 },
+          ],
+        }),
+      };
+    }
     case "duplicate_psd": {
       const a = args as Record<string, string>;
       const key = `${a.key}-copy`;

@@ -7,7 +7,7 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { Grid } from "../lib/grid";
+import { Grid, fillShape } from "../lib/grid";
 import type { FillPatch, Layer, Placement, Zone } from "../lib/types";
 import * as log from "../lib/log";
 
@@ -17,6 +17,12 @@ const DEPTH_STRIDE = 1000;
 export interface PickResult {
   layerId: string;
   placement: Placement;
+}
+
+/** The same, for a boundary. */
+export interface ZonePickResult {
+  layerId: string;
+  zone: Zone;
 }
 
 /**
@@ -78,11 +84,12 @@ export class DocRenderer {
   private paintFill(g: Phaser.GameObjects.Graphics, fill: FillPatch): void {
     // Pattern fills carry a PSD texture; until it has loaded, and for colour
     // fills, a flat colour is what the grid shows.
+    const shape = fillShape(this.grid, fill);
+    if (!shape) return;
     const colour = hexToNumber(fill.color ?? "#ec3013");
     g.fillStyle(colour, fill.kind === "pattern" ? 0.35 : 1);
 
-    for (const cell of fill.cells) {
-      const points = this.grid.cellPolygon(cell);
+    for (const points of shape.polygons) {
       g.beginPath();
       g.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length; i++) g.lineTo(points[i].x, points[i].y);
@@ -129,6 +136,9 @@ export class DocRenderer {
         const view = this.placements.get(placement.id);
         if (!view) continue;
         view.placement = placement;
+        // A placement can be carried to another layer from the layer panel,
+        // and the view is what any later lookup by id reads.
+        view.layerId = layer.id;
         view.object.setPosition(placement.x, placement.y);
         applyScale(view.object, placement);
         // Isometric scenes sort on screen Y so nearer objects draw in front.
@@ -186,6 +196,11 @@ export class DocRenderer {
     return pickPlacement(this.store.layers, worldX, worldY);
   }
 
+  /** The same for boundaries. See `pickZone`. */
+  pickZone(worldX: number, worldY: number): ZonePickResult | undefined {
+    return pickZone(this.store.layers, worldX, worldY);
+  }
+
   destroy(): void {
     this.fillGraphics.destroy();
     this.zoneGraphics.destroy();
@@ -240,6 +255,57 @@ function applyScale(object: PlacedObject, placement: Placement): void {
 
 export function hexToNumber(hex: string): number {
   return Number.parseInt(hex.replace("#", ""), 16) || 0;
+}
+
+/**
+ * Find the front-most boundary under a world point.
+ *
+ * The same rules as `pickPlacement` — the document rather than the rendered
+ * graphics, top-first layers, the last zone on a layer drawing over the ones
+ * before it, locked and hidden layers inert — with the box test replaced by a
+ * polygon test, because a boundary is a shape rather than a rectangle and
+ * selecting one by its bounding box would catch the empty corners of every
+ * L-shaped wall in the project.
+ */
+export function pickZone(
+  layers: readonly Layer[],
+  worldX: number,
+  worldY: number,
+): ZonePickResult | undefined {
+  for (const layer of layers) {
+    if (layer.locked || !layer.visible) continue;
+    for (let i = layer.zones.length - 1; i >= 0; i--) {
+      const zone = layer.zones[i];
+      if (pointInPolygon({ x: worldX, y: worldY }, zone.points)) {
+        return { layerId: layer.id, zone };
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Even-odd containment. Shared with play mode's navigation, which asks the
+ * same question of the same polygons from the other end.
+ */
+export function pointInPolygon(
+  point: { x: number; y: number },
+  polygon: readonly { x: number; y: number }[],
+): boolean {
+  if (polygon.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i];
+    const b = polygon[j];
+    const straddles = a.y > point.y !== b.y > point.y;
+    if (
+      straddles &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 export function layerDepth(layers: readonly Layer[], layerId: string): number {

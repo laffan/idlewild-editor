@@ -8,14 +8,15 @@
  */
 
 import { clear, h } from "../lib/dom";
-import { BRUSHES, strokesBox, type DrawingTool, type StrokeStyle } from "../drawing";
+import { strokesBox, type DrawingTool, type StrokeStyle } from "../drawing";
+import { brushPanel } from "./inspect-brush";
 import { count } from "./layers-panel";
 import { openPsdLabel, refreshPsdLabel } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
 import type { DocStore } from "../lib/doc-store";
-import { Grid, rangeSize } from "../lib/grid";
-import type { FillPatch, Placement, Selection } from "../lib/types";
+import { describeRange, Grid } from "../lib/grid";
+import { describeFill, type FillPatch, type Placement, type Selection } from "../lib/types";
 
 export interface InspectorCallbacks {
   onFillColor: (color: string) => void;
@@ -24,6 +25,8 @@ export interface InspectorCallbacks {
   onOpenPsd: (key: string) => void;
   /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
   onRefreshPsd: (key: string) => void;
+  /** Rename the file behind a placement. `name` is the stem, without ".psd". */
+  onRenamePsd: (key: string, name: string) => void;
   onDeleteSelection: () => void;
   onUsePatternImage: () => void;
   /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
@@ -150,6 +153,7 @@ export class Inspector {
   }
 
   render(): void {
+    const editing = this.captureName();
     clear(this.body);
     this.current = this.body;
     switch (this.selection.kind) {
@@ -176,6 +180,37 @@ export class Inspector {
         this.renderStrokes(this.selection.layerId, this.selection.ids);
         break;
     }
+    this.restoreName(editing);
+  }
+
+  /**
+   * The filename being typed when the panel was rebuilt under it.
+   *
+   * The same problem the layer panel has, for the same reason: this panel
+   * rebuilds on every document change, a name commits on Enter or blur rather
+   * than per keystroke, and anything that touches the document while the
+   * caret is in the field would otherwise throw away what has been typed.
+   */
+  private captureName(): { value: string; start: number; end: number } | null {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLInputElement) || !this.body.contains(el)) return null;
+    if (!el.classList.contains("inspect-name")) return null;
+    return {
+      value: el.value,
+      start: el.selectionStart ?? el.value.length,
+      end: el.selectionEnd ?? el.value.length,
+    };
+  }
+
+  private restoreName(
+    memo: { value: string; start: number; end: number } | null,
+  ): void {
+    if (!memo) return;
+    const input = this.body.querySelector(".inspect-name");
+    if (!(input instanceof HTMLInputElement)) return;
+    input.value = memo.value;
+    input.focus();
+    input.setSelectionRange(memo.start, memo.end);
   }
 
   private head(kicker: string, title: string): void {
@@ -185,6 +220,62 @@ export class Inspector {
         { class: "inspect-head" },
         h("div", { class: "inspect-kicker m", text: kicker }),
         h("div", { class: "inspect-title", text: title }),
+      ),
+    );
+    this.current = this.body;
+  }
+
+  /**
+   * A head whose title is the thing itself, and can be retyped.
+   *
+   * Borderless until it is focused, like the layer names in the left panel:
+   * the panel is a column of facts and one of them happens to be editable,
+   * which a box drawn round it all the time would overstate. `suffix` is
+   * shown beside the field rather than in it — the extension is not part of
+   * the name and retyping it would only be a way to get it wrong.
+   */
+  private editableHead(
+    kicker: string,
+    value: string,
+    suffix: string,
+    onCommit: (next: string) => void,
+  ): void {
+    const input = h("input", {
+      class: "inspect-name",
+      value,
+      spellcheck: "false",
+      "aria-label": `${kicker} name`,
+      onChange: (event: Event) => {
+        const next = (event.target as HTMLInputElement).value.trim();
+        if (!next || next === value) {
+          // Cleared or unchanged: put the real name back rather than
+          // committing a rename that says nothing.
+          (event.target as HTMLInputElement).value = value;
+          return;
+        }
+        onCommit(next);
+      },
+      onKeyDown: (event: KeyboardEvent) => {
+        const field = event.target as HTMLInputElement;
+        if (event.key === "Enter") field.blur();
+        if (event.key === "Escape") {
+          field.value = value;
+          field.blur();
+        }
+      },
+    });
+
+    this.body.appendChild(
+      h(
+        "div",
+        { class: "inspect-head" },
+        h("div", { class: "inspect-kicker m", text: kicker }),
+        h(
+          "div",
+          { class: "inspect-title inspect-name-row" },
+          input,
+          h("span", { class: "inspect-ext", text: suffix }),
+        ),
       ),
     );
     this.current = this.body;
@@ -228,113 +319,15 @@ export class Inspector {
   }
 
   /**
-   * The pencil's own controls. Hush puts these in four brush slots with an
-   * edit flyout each; here there is one brush at a time, because the editor's
-   * pencil is for sketching a game object rather than for finished drawing.
+   * The drawing tools' own panel — see `inspect-brush.ts`. It inspects
+   * nothing, so it is a function of what the tool rail last said rather than
+   * a method with the document behind it.
    */
   private renderBrush(): void {
-    const style = this.strokeStyle;
-    if (!style) return this.renderEmpty();
-
-    if (this.drawingTool === "eraser") {
-      this.head("Eraser", "Slice");
-      this.body.appendChild(
-        h("div", {
-          class: "inspect-empty",
-          text:
-            "Drag across a stroke to cut it where the disc passes. A stroke " +
-            "cut through the middle becomes two.",
-        }),
-      );
-      return;
-    }
-
-    if (this.drawingTool === "lasso") {
-      this.head("Lasso", "Select strokes");
-      this.body.appendChild(
-        h("div", {
-          class: "inspect-empty",
-          text:
-            "Sweep a loop around a sketch to select it, then hand it to this " +
-            "layer as a PSD or as a boundary.",
-        }),
-      );
-      return;
-    }
-
-    const name = h("div", {
-      class: "inspect-title",
-      text: BRUSHES.find((b) => b.id === style.brushId)?.name ?? "Ink",
-    });
-    this.body.appendChild(
-      h(
-        "div",
-        { class: "inspect-head" },
-        h("div", { class: "inspect-kicker m", text: "Pencil" }),
-        name,
-      ),
-    );
-
-    const brushes = h("div", { class: "brush-row" });
-    for (const brush of BRUSHES) {
-      const button = h("button", {
-        class: "brush-btn",
-        title: brush.name,
-        text: String(brush.id),
-        "aria-pressed": String(brush.id === style.brushId),
-        onClick: () => {
-          for (const other of brushes.children) {
-            other.setAttribute("aria-pressed", String(other === button));
-          }
-          name.textContent = brush.name;
-          this.callbacks.onStrokeStyle({ brushId: brush.id });
-        },
-      });
-      brushes.appendChild(button);
-    }
-
-    const readout = h("div", { class: "inspect-value", text: `${style.size} px` });
-    const size = h("input", {
-      class: "brush-size",
-      type: "range",
-      min: "1",
-      max: "48",
-      step: "1",
-      value: String(style.size),
-      // `input` rather than `change`: the ink should follow the slider.
-      onInput: (event: Event) => {
-        const next = Number((event.target as HTMLInputElement).value);
-        if (!Number.isFinite(next)) return;
-        readout.textContent = `${next} px`;
-        this.callbacks.onStrokeStyle({ size: next });
-      },
-    });
-
-    const picker = createColorPicker({
-      value: style.color,
-      onChange: (hex) => this.callbacks.onStrokeStyle({ color: hex }),
-      onCommit: (hex) => this.callbacks.onStrokeStyle({ color: hex }),
-    });
-
+    if (!this.drawingTool || !this.strokeStyle) return this.renderEmpty();
     this.body.append(
-      h(
-        "div",
-        { class: "inspect-section" },
-        h("div", { class: "inspect-section-title m", text: "Brush" }),
-        brushes,
-        h(
-          "div",
-          { class: "inspect-row brush-row-size" },
-          h("div", { class: "inspect-key m", text: "Size" }),
-          size,
-          readout,
-        ),
-      ),
-      h(
-        "div",
-        { class: "inspect-section" },
-        h("div", { class: "inspect-section-title m", text: "Colour" }),
-        picker.root,
+      ...brushPanel(this.drawingTool, this.strokeStyle, (patch) =>
+        this.callbacks.onStrokeStyle(patch),
       ),
     );
   }
@@ -356,14 +349,15 @@ export class Inspector {
     from: { cx: number; cy: number },
     to: { cx: number; cy: number },
   ): void {
-    const { w, h: height } = rangeSize(from, to);
     const bounds = this.grid.rangeBounds(from, to);
-    this.head("Selection", `${w} × ${height} spaces`);
+    this.head("Selection", describeRange(this.grid, from, to));
     this.section("Info");
     this.row("Origin", `${Math.min(from.cx, to.cx)}, ${Math.min(from.cy, to.cy)}`);
     this.row("Pixels", `${Math.round(bounds.width)} × ${Math.round(bounds.height)}`);
-    this.row("Projection", this.grid.projection);
-    this.row("Grid", `${this.grid.size} px`);
+    this.row("Template", this.grid.projection);
+    // A blank project has a nominal unit but does not round to it, and a row
+    // that said "Grid: 64 px" over a selection that ignored it would lie.
+    this.row("Grid", this.grid.snaps ? `${this.grid.size} px` : "no snapping");
     this.fillSection(undefined);
   }
 
@@ -371,9 +365,12 @@ export class Inspector {
     const fill = this.store.layer(layerId)?.fills.find((f) => f.id === fillId);
     if (!fill) return this.renderEmpty();
 
-    this.head("Filled space", `${fill.cells.length} spaces`);
+    this.head("Filled space", describeFill(fill));
     this.section("Info");
     this.row("Kind", fill.kind === "pattern" ? "Pattern" : "Colour");
+    if (fill.rect) {
+      this.row("Origin", `${Math.round(fill.rect.x)}, ${Math.round(fill.rect.y)}`);
+    }
     this.row("Colour", fill.color ?? "—");
     this.row("Pattern", fill.patternKey ?? "—");
     this.row("Walkable", fill.walkable ? "Yes" : "No");
@@ -439,7 +436,12 @@ export class Inspector {
       ?.placements.find((p) => p.id === placementId);
     if (!placement) return this.renderEmpty();
 
-    this.head("Image", `${placement.psdKey}.psd`);
+    // The title is the file's name, and the file's name is worth changing:
+    // an import arrives called `pasted-m2k9f1` and stays that way through
+    // every list that mentions it until someone can rename it here.
+    this.editableHead("Image", placement.psdKey, ".psd", (next) =>
+      this.callbacks.onRenamePsd(placement.psdKey, next),
+    );
 
     // A placement shares its file with any other placement of the same key,
     // which is what an option-drag makes. Say so before anything else: the

@@ -49,11 +49,9 @@
   border-bottom: var(--rule-chrome);
   display: flex;
   align-items: center;
-  padding: 0 12px 0 20px;
+  padding: 0 12px 0 12px;
   gap: 14px;
 }
-.code-title { font: 800 18px/1 var(--font-heading); }
-.code-project { font-size: 10px; color: var(--chrome-dim); }
 .code-head-right {
   margin-left: auto;
   display: flex;
@@ -62,6 +60,19 @@
   font-size: 10px;
   color: var(--chrome-dim);
 }
+
+/* Floating, the panel covers the whole shell — the editor header included —
+   so it is the thing standing under the iPad's status bar and it owns the
+   inset. Docked it is a row between two rows, and insets nothing. */
+.code-backdrop:not(.docked) .code-head {
+  min-height: calc(60px + var(--safe-top));
+  padding-top: var(--safe-top);
+}
+.code-backdrop:not(.docked) .code-panel {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+.code-backdrop:not(.docked) .code-foot { padding-bottom: var(--safe-bottom); }
 
 .code-pin-btn {
   min-height: 32px;
@@ -84,7 +95,8 @@
 
 .code-body { flex: 1; min-height: 0; display: flex; }
 
-/* The file column: its own header of create buttons, then the tree. */
+/* The file column: the tree, and nothing above it. Its two create buttons
+   live in the modal's header — see .code-new-row. */
 .code-column {
   width: 248px;
   flex: none;
@@ -93,26 +105,31 @@
   flex-direction: column;
   min-height: 0;
 }
-.code-column-head {
-  flex: none;
+
+/* New File and New Folder, in the header where the title used to be. */
+.code-new-row {
   display: flex;
-  border-bottom: var(--rule-chrome);
+  min-width: 0;
+  border: 1px solid var(--color-neutral-700);
 }
 .code-new {
-  flex: 1;
-  min-height: 36px;
+  min-height: 32px;
+  padding: 0 12px;
   border: 0;
-  border-left: var(--rule-chrome);
+  border-left: 1px solid var(--color-neutral-700);
   background: transparent;
-  color: var(--chrome-dim);
+  color: var(--chrome-text);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font: 600 11px var(--font-heading);
+  font: 600 12px var(--font-heading);
+  white-space: nowrap;
 }
 .code-new:first-child { border-left: 0; }
-.code-new:hover { background: var(--chrome-panel); color: var(--chrome-text); }
+.code-new:hover { background: var(--chrome-rule); }
+.code-new svg { flex: none; color: var(--chrome-dim); }
+.code-new:hover svg { color: var(--chrome-text); }
 
 .code-files { flex: 1; min-height: 0; }
 .code-file {

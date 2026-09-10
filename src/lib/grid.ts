@@ -1,12 +1,21 @@
-import type { Cell, Point, Projection } from "./types";
+import type { Cell, FillPatch, Point, Projection, Rect } from "./types";
 
 /**
- * Grid projection. Both templates share one integer cell space; only the
+ * Grid projection. All three templates share one integer cell space; only the
  * cell -> world mapping differs, so everything downstream (selection, fills,
  * A*, export bounds) is written once against `Grid`.
  *
  * Isometric tiles are the usual 2:1 diamond: a `size` of 64 means a tile
  * 64px wide and 32px tall. Orthogonal tiles are square at `size`.
+ *
+ * The blank template is the orthogonal mapping with a cell of one world
+ * pixel. That is what "no snapping" means here rather than a second code
+ * path: a selection dragged across it covers exactly the pixels it was
+ * dragged across, an image dropped on it lands where it was dropped, and
+ * every projection-aware call site above keeps working unchanged. `size` is
+ * still the project's nominal unit — play mode's character is measured in it,
+ * and so is the lattice its navigation walks — it simply is not what the
+ * editor rounds to.
  */
 export class Grid {
   readonly projection: Projection;
@@ -17,12 +26,22 @@ export class Grid {
     this.size = size;
   }
 
+  /** Whether cells are a lattice the editor rounds to. */
+  get snaps(): boolean {
+    return this.projection !== "blank";
+  }
+
+  /** The side of one addressable cell: the grid unit, or a single pixel. */
+  get cell(): number {
+    return this.snaps ? this.size : 1;
+  }
+
   get tileWidth(): number {
-    return this.size;
+    return this.cell;
   }
 
   get tileHeight(): number {
-    return this.projection === "isometric" ? this.size / 2 : this.size;
+    return this.projection === "isometric" ? this.size / 2 : this.cell;
   }
 
   /** World position of a cell. Iso returns the diamond's centre, ortho its
@@ -34,7 +53,7 @@ export class Grid {
         y: (cell.cx + cell.cy) * (this.tileHeight / 2),
       };
     }
-    return { x: cell.cx * this.size, y: cell.cy * this.size };
+    return { x: cell.cx * this.cell, y: cell.cy * this.cell };
   }
 
   /** The cell containing a world point. */
@@ -48,9 +67,24 @@ export class Grid {
       };
     }
     return {
-      cx: Math.floor(p.x / this.size),
-      cy: Math.floor(p.y / this.size),
+      cx: Math.floor(p.x / this.cell),
+      cy: Math.floor(p.y / this.cell),
     };
+  }
+
+  /**
+   * The middle of a cell.
+   *
+   * Not the same as `cellToWorld`, which returns each shape's natural anchor:
+   * an isometric diamond is addressed by its centre, but an orthogonal square
+   * is addressed by its top-left corner. Anything asking "is this cell inside
+   * that shape" has to test a point that is unambiguously *in* the cell, and
+   * a corner is shared with three neighbours.
+   */
+  cellCentre(cell: Cell): Point {
+    const c = this.cellToWorld(cell);
+    if (this.projection === "isometric") return c;
+    return { x: c.x + this.cell / 2, y: c.y + this.cell / 2 };
   }
 
   /** The tile outline, in world pixels, ready to hand to a Phaser polygon. */
@@ -68,9 +102,9 @@ export class Grid {
     }
     return [
       { x: c.x, y: c.y },
-      { x: c.x + this.size, y: c.y },
-      { x: c.x + this.size, y: c.y + this.size },
-      { x: c.x, y: c.y + this.size },
+      { x: c.x + this.cell, y: c.y },
+      { x: c.x + this.cell, y: c.y + this.cell },
+      { x: c.x, y: c.y + this.cell },
     ];
   }
 
@@ -109,7 +143,7 @@ export class Grid {
     const y0 = Math.min(from.cy, to.cy);
     const y1 = Math.max(from.cy, to.cy);
 
-    if (this.projection === "orthogonal") {
+    if (this.projection !== "isometric") {
       const a = this.cellToWorld({ cx: x0, cy: y0 });
       const b = this.cellToWorld({ cx: x1 + 1, cy: y1 + 1 });
       return [
@@ -153,10 +187,84 @@ export function rangeSize(from: Cell, to: Cell): { w: number; h: number } {
   };
 }
 
+/**
+ * A selection's size in the units the project actually uses.
+ *
+ * Grid spaces where there are grid spaces, world pixels where a cell is one —
+ * "3 × 2 spaces" and "418 × 260 px" are the same sentence about two
+ * templates, and every readout of a selection wants the right one.
+ */
+export function describeRange(grid: Grid, from: Cell, to: Cell): string {
+  const { w, h } = rangeSize(from, to);
+  return grid.snaps ? `${w} × ${h} spaces` : `${w} × ${h} px`;
+}
+
 export function cellKey(cell: Cell): string {
   return `${cell.cx},${cell.cy}`;
 }
 
 export function cellsEqual(a: Cell, b: Cell): boolean {
   return a.cx === b.cx && a.cy === b.cy;
+}
+
+/** The inclusive cell range a set of cells spans. */
+export function cellsBounds(cells: readonly Cell[]): { from: Cell; to: Cell } {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const cell of cells) {
+    minX = Math.min(minX, cell.cx);
+    minY = Math.min(minY, cell.cy);
+    maxX = Math.max(maxX, cell.cx);
+    maxY = Math.max(maxY, cell.cy);
+  }
+  return { from: { cx: minX, cy: minY }, to: { cx: maxX, cy: maxY } };
+}
+
+/**
+ * What a fill covers, in world pixels: the outlines to paint, and the box
+ * around them.
+ *
+ * A fill is stored one of two ways and everything that draws one — the
+ * canvas, the selection overlay, the PNG export, the conversion to a PSD —
+ * wants the same answer from both. On a snapping project it is a run of grid
+ * spaces, so each space contributes its own outline and an irregular shape
+ * stays irregular. On a blank one it is a single rectangle. Null for a fill
+ * that covers nothing, which nothing downstream can draw.
+ */
+export function fillShape(
+  grid: Grid,
+  fill: FillPatch,
+): { polygons: Point[][]; bounds: Rect } | null {
+  if (fill.rect) {
+    const { x, y, width, height } = fill.rect;
+    return {
+      polygons: [
+        [
+          { x, y },
+          { x: x + width, y },
+          { x: x + width, y: y + height },
+          { x, y: y + height },
+        ],
+      ],
+      bounds: fill.rect,
+    };
+  }
+  if (fill.cells.length === 0) return null;
+  const { from, to } = cellsBounds(fill.cells);
+  return {
+    polygons: fill.cells.map((cell) => grid.cellPolygon(cell)),
+    bounds: grid.rangeBounds(from, to),
+  };
+}
+
+/** Whether a world point falls inside a rectangle, edges included. */
+export function rectContains(rect: Rect, p: Point): boolean {
+  return (
+    p.x >= rect.x &&
+    p.x <= rect.x + rect.width &&
+    p.y >= rect.y &&
+    p.y <= rect.y + rect.height
+  );
 }

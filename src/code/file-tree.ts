@@ -34,6 +34,15 @@ const DRAG_THRESHOLD = 6;
 
 export class FileTree {
   readonly root: HTMLElement;
+  /**
+   * New File and New Folder, as a row the modal mounts where it likes.
+   *
+   * They belong to the tree — they create into it, and they read which file
+   * is open to decide where — but they are shown in the modal's header rather
+   * than above the column, which on an iPad is the difference between two
+   * rows of chrome and one.
+   */
+  readonly controls: HTMLElement;
 
   private readonly projectId: string;
   private readonly callbacks: FileTreeCallbacks;
@@ -47,35 +56,31 @@ export class FileTree {
     this.callbacks = callbacks;
 
     this.list = h("div", { class: "code-files scroll" });
-    this.root = h(
+    this.controls = h(
       "div",
-      { class: "code-column" },
+      { class: "code-new-row" },
       h(
-        "div",
-        { class: "code-column-head" },
-        h(
-          "button",
-          {
-            class: "code-new",
-            title: "New file",
-            onClick: () => void this.create(false),
-          },
-          icon(ICONS.file, 14),
-          h("span", { text: "File" }),
-        ),
-        h(
-          "button",
-          {
-            class: "code-new",
-            title: "New folder",
-            onClick: () => void this.create(true),
-          },
-          icon(ICONS.folder, 14),
-          h("span", { text: "Folder" }),
-        ),
+        "button",
+        {
+          class: "code-new",
+          title: "New file",
+          onClick: () => void this.create(false),
+        },
+        icon(ICONS.file, 14),
+        h("span", { text: "New File" }),
       ),
-      this.list,
+      h(
+        "button",
+        {
+          class: "code-new",
+          title: "New folder",
+          onClick: () => void this.create(true),
+        },
+        icon(ICONS.folder, 14),
+        h("span", { text: "New Folder" }),
+      ),
     );
+    this.root = h("div", { class: "code-column" }, this.list);
   }
 
   /** Which file the editor is showing, so the row can say so. */

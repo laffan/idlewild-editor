@@ -14,7 +14,7 @@ mod templates;
 #[cfg(test)]
 mod tests;
 
-use project::{GameFile, ImportResult, OutputFile, ProjectMeta, Projection};
+use project::{GameFile, Genre, ImportResult, OutputFile, ProjectMeta, Projection};
 use psd_pipeline::ProcessOptions;
 use psd_write::AnchorMarks;
 use tauri::{Emitter, Manager};
@@ -42,18 +42,32 @@ fn list_projects() -> Result<Vec<ProjectMeta>, String> {
     store::list_projects()
 }
 
+/// `genre` is optional so a caller that predates the choice still works; it
+/// means top down, which is what every project made before it was.
 #[tauri::command]
 fn create_project(
     name: String,
     projection: String,
     grid_size: u32,
+    genre: Option<String>,
 ) -> Result<ProjectMeta, String> {
     let projection = match projection.as_str() {
         "isometric" => Projection::Isometric,
         "orthogonal" => Projection::Orthogonal,
+        "blank" => Projection::Blank,
         other => return Err(format!("Unknown template: {other}")),
     };
-    store::create_project(&name, projection, grid_size)
+    let genre = match genre.as_deref() {
+        None | Some("topdown") => Genre::Topdown,
+        Some("platformer") => Genre::Platformer,
+        Some(other) => return Err(format!("Unknown style: {other}")),
+    };
+    // Gravity has no direction on a diamond grid seen from above, and there
+    // is no scaffold that could honestly be written for the pair.
+    if projection == Projection::Isometric && genre == Genre::Platformer {
+        return Err("An isometric project cannot be a platformer".into());
+    }
+    store::create_project(&name, projection, genre, grid_size)
 }
 
 #[tauri::command]
@@ -281,6 +295,23 @@ fn reimport_psd(
     )
 }
 
+/// Rename `<key>.psd` to `<name>.psd` and run the pipeline over it again.
+///
+/// `name` is whatever the inspector's title field was left holding, so it is
+/// put through the same sanitiser an import uses and the key that actually
+/// resulted comes back — the caller repoints its placements at that, not at
+/// what was typed.
+#[tauri::command]
+fn rename_psd(
+    app: tauri::AppHandle,
+    id: String,
+    key: String,
+    name: String,
+) -> Result<ImportResult, String> {
+    let to = psd_write::sanitise_stem(&name);
+    psd_pipeline::rename_and_process(&id, &key, &to, logger(&app))
+}
+
 /// Hand a project's PSD to whatever the OS opens PSDs with — Photoshop or
 /// Affinity on macOS, the document provider on iPadOS.
 ///
@@ -447,6 +478,7 @@ pub fn run() {
             reprocess_psd,
             reimport_psd,
             duplicate_psd,
+            rename_psd,
             open_psd,
             read_psd_bytes,
             read_psd_layers,

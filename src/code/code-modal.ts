@@ -47,7 +47,6 @@ export class CodeModal {
 
   constructor(
     projectId: string,
-    projectName: string,
     onClose: () => void,
     onPinChange: (pinned: boolean) => void,
   ) {
@@ -100,8 +99,12 @@ export class CodeModal {
       h(
         "div",
         { class: "code-head" },
-        h("div", { class: "code-title", text: "Code" }),
-        h("div", { class: "code-project m", text: projectName }),
+        // Where the word "Code" and the project name used to sit. Neither
+        // said anything the user did not already know — they opened this
+        // modal from that project a moment ago — and the header is the one
+        // full-width row in here, so it goes to the two actions the file
+        // column needs and cannot fit above itself on an iPad.
+        this.tree.controls,
         h(
           "div",
           { class: "code-head-right" },
@@ -147,6 +150,13 @@ export class CodeModal {
     if (pinned === this.pinned) return;
     this.pinned = pinned;
     this.root.classList.toggle("docked", pinned);
+    // Docked, the divider writes an inline height on this element. Floating,
+    // the panel is `position: absolute; inset: 0` — and an absolutely
+    // positioned box given top, bottom *and* a height is over-constrained, so
+    // the browser drops `bottom` and the panel hangs from the top of the
+    // shell at whatever height it was docked at. Unpinning therefore has to
+    // take the docked height off again, or it does not look unpinned.
+    if (!pinned) this.root.style.removeProperty("height");
     this.pinButton.setAttribute("aria-pressed", String(pinned));
     this.pinButton.title = pinned
       ? "Float over the canvas"

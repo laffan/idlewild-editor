@@ -1,9 +1,20 @@
-//! Starter templates. "Isometric" and "Orthogonal" are, as the spec puts it,
-//! codebase template selections: each scaffolds a real runnable Phaser 4
-//! project into the project's `game/` directory, which is what the code modal
-//! edits and what Publish zips.
+//! Starter templates. As the spec puts it, these are codebase template
+//! selections: each combination scaffolds a real runnable Phaser 4 project
+//! into the project's `game/` directory, which is what the code modal edits
+//! and what Publish zips.
+//!
+//! Two axes. The *projection* is the shape of the space — isometric diamonds,
+//! orthogonal squares, or a blank canvas whose cells are single pixels — and
+//! it does not need a scene of its own: the difference lives entirely in
+//! `grid.js`, which reads it out of `game.config.json`. The *genre* does need
+//! one, because a character that walks a floor plan and a character that runs
+//! along a cross-section are different programs.
+//!
+//! That is why there is one scene per genre rather than one per pair. The
+//! isometric and orthogonal scenes used to be separate files that differed
+//! only in a comment.
 
-use crate::project::Projection;
+use crate::project::{Genre, Projection};
 use serde_json::json;
 use std::fs;
 use std::path::Path;
@@ -11,12 +22,13 @@ use std::path::Path;
 const INDEX_HTML: &str = include_str!("../templates/common/index.html");
 const STYLES_CSS: &str = include_str!("../templates/common/css/styles.css");
 const GRID_JS: &str = include_str!("../templates/common/js/grid.js");
-const NAVIGATION_JS: &str = include_str!("../templates/common/js/navigation.js");
+const MAIN_JS: &str = include_str!("../templates/common/js/main.js");
 
-const ISO_MAIN_JS: &str = include_str!("../templates/isometric/js/main.js");
-const ISO_SCENE_JS: &str = include_str!("../templates/isometric/js/WorldScene.js");
-const ORTHO_MAIN_JS: &str = include_str!("../templates/orthogonal/js/main.js");
-const ORTHO_SCENE_JS: &str = include_str!("../templates/orthogonal/js/WorldScene.js");
+const NAVIGATION_JS: &str = include_str!("../templates/common/js/navigation.js");
+const TOPDOWN_SCENE_JS: &str = include_str!("../templates/topdown/js/WorldScene.js");
+
+const PHYSICS_JS: &str = include_str!("../templates/platformer/js/physics.js");
+const PLATFORMER_SCENE_JS: &str = include_str!("../templates/platformer/js/WorldScene.js");
 
 /// The psd-to-phaser UMD build, vendored by scripts/vendor-p2p.mjs. Exports
 /// carry it verbatim — it is the only non-Phaser dependency they ship.
@@ -27,10 +39,11 @@ pub const P2P_UMD: &str = include_str!("../vendor/psd-to-phaser.umd.js");
 pub const PHASER: &str = include_str!("../vendor/phaser.min.js");
 
 /// The document a fresh project opens with: one empty terrain layer.
-pub fn starter_doc(projection: Projection, grid_size: u32) -> String {
+pub fn starter_doc(projection: Projection, genre: Genre, grid_size: u32) -> String {
     let doc = json!({
         "version": 1,
         "projection": projection.as_str(),
+        "genre": genre.as_str(),
         "gridSize": grid_size,
         "layers": [
             {
@@ -49,19 +62,25 @@ pub fn starter_doc(projection: Projection, grid_size: u32) -> String {
 }
 
 /// Write the runnable project source into `game/`.
+///
+/// Each genre carries only the module it uses — A\* for top down, the body
+/// step for a platformer — so what lands in `game/` is the program the
+/// project actually runs rather than a library of alternatives to read past.
 pub fn scaffold_game(
     dir: &Path,
     project_name: &str,
     projection: Projection,
+    genre: Genre,
     grid_size: u32,
 ) -> Result<(), String> {
-    let (main_js, scene_js) = match projection {
-        Projection::Isometric => (ISO_MAIN_JS, ISO_SCENE_JS),
-        Projection::Orthogonal => (ORTHO_MAIN_JS, ORTHO_SCENE_JS),
+    let (scene_js, helper) = match genre {
+        Genre::Topdown => (TOPDOWN_SCENE_JS, ("js/navigation.js", NAVIGATION_JS)),
+        Genre::Platformer => (PLATFORMER_SCENE_JS, ("js/physics.js", PHYSICS_JS)),
     };
 
     let config = json!({
         "projection": projection.as_str(),
+        "genre": genre.as_str(),
         "grid": grid_size,
         "gridSpan": 24,
         "spawn": { "cx": 0, "cy": 0 },
@@ -73,10 +92,10 @@ pub fn scaffold_game(
     let files: Vec<(&str, String)> = vec![
         ("index.html", INDEX_HTML.replace("__PROJECT_NAME__", project_name)),
         ("css/styles.css", STYLES_CSS.to_string()),
-        ("js/main.js", main_js.to_string()),
+        ("js/main.js", MAIN_JS.to_string()),
         ("js/WorldScene.js", scene_js.to_string()),
         ("js/grid.js", GRID_JS.to_string()),
-        ("js/navigation.js", NAVIGATION_JS.to_string()),
+        (helper.0, helper.1.to_string()),
         (
             "js/game.config.json",
             serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?,

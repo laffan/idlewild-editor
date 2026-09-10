@@ -6,7 +6,7 @@
  */
 
 import { h, ICONS, icon } from "../lib/dom";
-import type { Layer, Selection } from "../lib/types";
+import { describeFill, type Layer, type Selection } from "../lib/types";
 
 export interface LayerItem {
   /** What selecting this row means. */
@@ -45,7 +45,7 @@ export function layerItems(layer: Layer): LayerItem[] {
     items.push({
       selection: { kind: "fill", layerId: layer.id, fillId: fill.id },
       label: fill.kind === "pattern" ? "Pattern fill" : "Colour fill",
-      detail: `${fill.cells.length} ${fill.cells.length === 1 ? "space" : "spaces"}`,
+      detail: describeFill(fill),
       path: ICONS.fill,
       swatch: fill.color ?? "#ec3013",
     });
@@ -63,15 +63,28 @@ export function layerItems(layer: Layer): LayerItem[] {
   return items;
 }
 
+/**
+ * One row.
+ *
+ * `onGrip` makes it draggable: the panel supplies it for placements, which
+ * can be carried to another layer. A grip rather than the row itself, for the
+ * reason the layer rows have one — the panel scrolls, and a row that took
+ * the pointer outright would take the scroll with it.
+ */
 export function renderLayerItem(
   item: LayerItem,
   active: boolean,
   onSelect: (selection: Selection) => void,
+  onGrip?: (event: PointerEvent) => void,
 ): HTMLElement {
-  return h(
+  const classes = ["layer-item"];
+  if (active) classes.push("active");
+  if (onGrip) classes.push("has-grip");
+
+  const row = h(
     "button",
     {
-      class: active ? "layer-item active" : "layer-item",
+      class: classes.join(" "),
       onClick: (event: Event) => {
         event.stopPropagation();
         onSelect(item.selection);
@@ -83,6 +96,28 @@ export function renderLayerItem(
     h("span", { class: "layer-item-label", text: item.label }),
     h("span", { class: "layer-item-detail m", text: item.detail }),
   );
+
+  if (onGrip) {
+    // A button inside a button is not legal HTML, so the grip is a span with
+    // the role spelled out — which is also what keeps a tap on it from
+    // selecting the row underneath.
+    row.insertBefore(
+      h(
+        "span",
+        {
+          class: "layer-item-grip",
+          role: "button",
+          "aria-label": `Move ${item.label} to another layer`,
+          title: "Drag to another layer",
+          onPointerDown: onGrip,
+          onClick: (event: Event) => event.stopPropagation(),
+        },
+        icon(ICONS.grip, 13),
+      ),
+      row.firstChild,
+    );
+  }
+  return row;
 }
 
 /** Whether a selection points at this item, so the row can show as current. */

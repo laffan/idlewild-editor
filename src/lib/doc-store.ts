@@ -11,6 +11,7 @@ import type {
   Cell,
   FillPatch,
   GameDoc,
+  Genre,
   Layer,
   Placement,
   Projection,
@@ -56,6 +57,11 @@ export class DocStore extends EventTarget {
 
   get gridSize(): number {
     return this.state.gridSize;
+  }
+
+  /** Top down unless the document says otherwise — see `Genre`. */
+  get genre(): Genre {
+    return this.state.genre ?? "topdown";
   }
 
   /** Layers, top-first — the order the left panel shows them in. */
@@ -164,11 +170,25 @@ export class DocStore extends EventTarget {
     }));
   }
 
-  /** The fill covering a cell on a layer, if any. */
+  /**
+   * The fill covering a cell on a layer, if any.
+   *
+   * A `rect` fill exists only on a project whose grid does not snap, and
+   * there a cell *is* a world pixel — so its coordinates are the point to
+   * test the rectangle against, with no projection in between.
+   */
   fillAt(layerId: string, cell: Cell): FillPatch | undefined {
-    return this.layer(layerId)?.fills.find((f) =>
-      f.cells.some((c) => c.cx === cell.cx && c.cy === cell.cy),
-    );
+    return this.layer(layerId)?.fills.find((f) => {
+      if (f.rect) {
+        return (
+          cell.cx >= f.rect.x &&
+          cell.cx <= f.rect.x + f.rect.width &&
+          cell.cy >= f.rect.y &&
+          cell.cy <= f.rect.y + f.rect.height
+        );
+      }
+      return f.cells.some((c) => c.cx === cell.cx && c.cy === cell.cy);
+    });
   }
 
   addPlacement(layerId: string, placement: Omit<Placement, "id">): Placement {
@@ -193,6 +213,35 @@ export class DocStore extends EventTarget {
     }));
   }
 
+  /**
+   * Carry a placement from one layer to another, keeping its geometry.
+   *
+   * A layer is draw order and visibility, not position — so the only thing
+   * that changes is which list the record lives in, and it lands at the end
+   * of the destination's, drawing over what was already there. That is what a
+   * drop onto a layer means everywhere else in this editor.
+   */
+  movePlacement(fromLayerId: string, placementId: string, toLayerId: string): void {
+    if (fromLayerId === toLayerId) return;
+    const placement = this.layer(fromLayerId)?.placements.find(
+      (p) => p.id === placementId,
+    );
+    if (!placement) return;
+
+    this.commit({
+      ...this.state,
+      layers: this.state.layers.map((l) => {
+        if (l.id === fromLayerId) {
+          return { ...l, placements: l.placements.filter((p) => p.id !== placementId) };
+        }
+        if (l.id === toLayerId) {
+          return { ...l, placements: [...l.placements, placement] };
+        }
+        return l;
+      }),
+    });
+  }
+
   removePlacement(layerId: string, placementId: string): void {
     this.replaceLayer(layerId, (l) => ({
       ...l,
@@ -209,6 +258,13 @@ export class DocStore extends EventTarget {
     const created: Zone = { ...zone, id: makeId("zone") };
     this.replaceLayer(layerId, (l) => ({ ...l, zones: [...l.zones, created] }));
     return created;
+  }
+
+  updateZone(layerId: string, zoneId: string, patch: Partial<Zone>): void {
+    this.replaceLayer(layerId, (l) => ({
+      ...l,
+      zones: l.zones.map((z) => (z.id === zoneId ? { ...z, ...patch } : z)),
+    }));
   }
 
   removeZone(layerId: string, zoneId: string): void {

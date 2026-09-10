@@ -2,9 +2,14 @@
 //! rsync targets are explicitly deferred.
 //!
 //! The zip is a self-contained runnable game: the project's `game/` tree, its
-//! processed `assets/`, and the two runtime libraries. `game.config.json` is
-//! rewritten from the live document on the way out, so what you publish is
-//! what the canvas currently shows.
+//! processed `assets/`, and the two runtime libraries — the exact builds the
+//! editor itself runs, since both are vendored into this binary.
+//!
+//! What it does *not* yet do is rewrite `game.config.json` from the live
+//! document on the way out, so an export runs but starts empty. Both template
+//! scenes read `layers` and `psdKeys` already; the writer is the missing half,
+//! and it belongs here rather than in the frontend because this is the only
+//! place that sees the document and the archive at the same time.
 
 use crate::store;
 use std::io::Write;

@@ -16,7 +16,9 @@ import { CameraRig } from "./camera-rig";
 import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
-import { PlayController } from "./play-controller";
+import { PlayController, type PlayMode } from "./play-controller";
+import { PlatformerController } from "./play-platformer";
+import type { PlayInput } from "./platformer";
 import { DragController } from "./drag";
 import { evictPsd, loadPsd, reconcilePlacements } from "./psd-loader";
 import type { Viewport } from "../drawing";
@@ -59,7 +61,9 @@ export class WorldScene extends Phaser.Scene {
   private gridRenderer!: GridRenderer;
   private docRenderer!: DocRenderer;
   private overlay!: SelectionOverlay;
-  private play!: PlayController;
+  private play!: PlayMode;
+  /** Held movement, written by the editor's play pad and its keyboard. */
+  private playInput: PlayInput = { left: false, right: false, jump: false };
 
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
@@ -89,7 +93,12 @@ export class WorldScene extends Phaser.Scene {
     this.gridRenderer = new GridRenderer(this.add.graphics(), this.grid);
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
-    this.play = new PlayController(this, this.store, this.grid);
+    // Which play mode this project has is a property of the project, decided
+    // when it was created and carried in the document ever since.
+    this.play =
+      this.store.genre === "platformer"
+        ? new PlatformerController(this, this.store, this.grid)
+        : new PlayController(this, this.store, this.grid);
     this.drag = new DragController({
       store: this.store,
       grid: this.grid,
@@ -135,10 +144,21 @@ export class WorldScene extends Phaser.Scene {
     this.refresh();
   }
 
-  override update(): void {
+  override update(_time: number, delta: number): void {
     this.gridRenderer.update(this.cameras.main);
     this.publishViewport();
-    if (this.mode === "play") this.play.update();
+    if (this.mode === "play") this.play.update(delta, this.playInput);
+  }
+
+  /**
+   * Take the movement currently held down.
+   *
+   * The editor shell owns the play pad and the keyboard, because both are
+   * chrome rather than scene content — see `editor/play-pad.ts`. A top-down
+   * project has nothing to do with it and ignores it.
+   */
+  setPlayInput(input: PlayInput): void {
+    this.playInput = input;
   }
 
   /** How the world maps onto the screen right now. */
@@ -248,7 +268,7 @@ export class WorldScene extends Phaser.Scene {
     const world = this.worldAt(screenX, screenY);
 
     if (this.mode === "play") {
-      this.play.moveTo(this.grid.worldToCell(world));
+      this.play.tap(world);
       return;
     }
 
@@ -259,6 +279,20 @@ export class WorldScene extends Phaser.Scene {
         kind: "placement",
         layerId: hit.layerId,
         placementId: hit.placement.id,
+      });
+      return;
+    }
+
+    // Then a boundary. Ahead of fills because a boundary is a thing someone
+    // made and a fill is the ground it was made over — and behind images
+    // because a boundary is usually drawn around them and would otherwise
+    // swallow every tap meant for what is standing inside it.
+    const zone = this.docRenderer.pickZone(world.x, world.y);
+    if (zone) {
+      this.setSelection({
+        kind: "zone",
+        layerId: zone.layerId,
+        zoneId: zone.zone.id,
       });
       return;
     }
@@ -323,9 +357,18 @@ export class WorldScene extends Phaser.Scene {
       log.warn("The active layer is locked");
       return;
     }
-    const cells = [...cellsInRange(this.selection.from, this.selection.to)];
+    // A snapping project fills the spaces it covers, so an irregular run of
+    // them stays irregular. A blank one fills the rectangle that was dragged:
+    // its cells are single pixels, and one record per covered pixel would put
+    // a hundred thousand of them in a document that means "this box".
+    const shape = this.grid.snaps
+      ? { cells: [...cellsInRange(this.selection.from, this.selection.to)] }
+      : {
+          cells: [],
+          rect: this.grid.rangeBounds(this.selection.from, this.selection.to),
+        };
     const fill = this.store.addFill(layer.id, {
-      cells,
+      ...shape,
       kind: "color",
       color,
       walkable,
@@ -438,6 +481,38 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     this.docRenderer.render();
+  }
+
+  /**
+   * Move every placement on one PSD key over to another.
+   *
+   * The file behind the key has been renamed, not changed: the same bytes
+   * under a new name, re-run through psd-to-json. So the geometry is left
+   * exactly as it is — there is nothing to reconcile — and all this has to do
+   * is take the rendered objects down, forget the caches under the *old* key,
+   * rewrite the key on each placement, and load and place the new one.
+   */
+  async renamePsd(from: string, to: string): Promise<void> {
+    this.docRenderer.detachKey(from);
+    evictPsd(this, this.plugin(), from);
+
+    const moved: Array<{ layerId: string; placement: Placement }> = [];
+    for (const layer of this.store.layers) {
+      for (const placement of layer.placements) {
+        if (placement.psdKey !== from) continue;
+        this.store.updatePlacement(layer.id, placement.id, { psdKey: to });
+        moved.push({ layerId: layer.id, placement: { ...placement, psdKey: to } });
+      }
+    }
+
+    await this.loadPsd(to);
+    for (const { layerId, placement } of moved) this.placeOne(layerId, placement);
+    this.docRenderer.render();
+
+    // The selection still names a placement id, which has not changed — but
+    // the inspector reads the key off the document, so it has to be told to
+    // look again now the document says something different.
+    this.setSelection(this.selection);
   }
 
   /**

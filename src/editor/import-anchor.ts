@@ -121,8 +121,16 @@ export function marksForSelection(
     y: p.y - anchor.y,
   });
 
+  const outline = grid.rangePolygon(from, to).map(relative);
+
+  // A blank selection is one space of an arbitrary size, not a run of them,
+  // so there is nothing between its spaces to divide — and its cells are
+  // single pixels, which would otherwise put six hundred one-pixel lines
+  // into the PSD as a footprint nobody can read.
+  if (!grid.snaps) return { outline, lines: [], cols: 1, rows: 1 };
+
   return {
-    outline: grid.rangePolygon(from, to).map(relative),
+    outline,
     lines: internalLines(grid, from, to).map((line) => ({
       a: relative(line.a),
       b: relative(line.b),

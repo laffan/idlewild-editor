@@ -14,7 +14,7 @@
 //!       game/              the editable project source the code modal shows
 //! ```
 
-use crate::project::{now_ms, GameFile, ProjectMeta, Projection};
+use crate::project::{now_ms, GameFile, Genre, ProjectMeta, Projection};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -101,16 +101,20 @@ pub fn list_projects() -> Result<Vec<ProjectMeta>, String> {
 pub fn create_project(
     name: &str,
     projection: Projection,
+    genre: Genre,
     grid_size: u32,
 ) -> Result<ProjectMeta, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let dir = project_dir(&id)?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let meta = ProjectMeta::new(id.clone(), name.to_string(), projection, grid_size);
+    let meta = ProjectMeta::new(id.clone(), name.to_string(), projection, genre, grid_size);
     write_meta(&meta)?;
-    write_doc(&id, &crate::templates::starter_doc(projection, grid_size))?;
-    crate::templates::scaffold_game(&game_dir(&id)?, name, projection, grid_size)?;
+    write_doc(
+        &id,
+        &crate::templates::starter_doc(projection, genre, grid_size),
+    )?;
+    crate::templates::scaffold_game(&game_dir(&id)?, name, projection, genre, grid_size)?;
     Ok(meta)
 }
 

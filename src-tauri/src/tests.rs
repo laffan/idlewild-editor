@@ -4,9 +4,16 @@
 //! PSD, and psd-to-json turns it into the folder psd-to-phaser loads. If the
 //! write half of the psd fork and the read half of psd-to-json ever disagree,
 //! it shows up here rather than on an iPad.
+//!
+//! `scaffolds` is the other half: what a *project* is made of — the starter
+//! document, the runnable game each template selection writes, and the tree
+//! the code modal edits. Split from this file to keep both under the
+//! 700-line rule, and because neither ever reads the other.
 
-use crate::project::Projection;
-use crate::{psd_pipeline, psd_write, publish, store, templates};
+mod scaffolds;
+
+use crate::project::{Genre, Projection};
+use crate::{psd_pipeline, psd_write, publish, store};
 
 /// Solid-colour RGBA, so a round trip can be checked pixel by pixel.
 fn swatch(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
@@ -67,41 +74,11 @@ fn stems_are_safe_for_paths_and_keys() {
     assert_eq!(psd_write::sanitise_stem("///"), "image");
 }
 
-#[test]
-fn relative_paths_cannot_escape_the_project() {
-    assert!(store::safe_relative("js/WorldScene.js").is_ok());
-    assert!(store::safe_relative("../../../etc/passwd").is_err());
-    assert!(store::safe_relative("/etc/passwd").is_err());
-}
-
-#[test]
-fn project_ids_are_validated_before_they_reach_the_filesystem() {
-    assert!(store::project_dir("../escape").is_err());
-    assert!(store::project_dir("").is_err());
-    assert!(store::project_dir("a1b2-c3d4").is_ok());
-}
-
-#[test]
-fn publish_names_survive_awkward_project_titles() {
-    assert_eq!(publish::sanitise_name("Nine Roads"), "nine-roads");
-    assert_eq!(publish::sanitise_name("  "), "idlewild-game");
-    assert_eq!(publish::sanitise_name("a/b:c"), "a-b-c");
-}
-
-#[test]
-fn starter_documents_carry_the_chosen_projection_and_grid() {
-    let doc = templates::starter_doc(Projection::Isometric, 128);
-    let value: serde_json::Value = serde_json::from_str(&doc).expect("valid JSON");
-    assert_eq!(value["projection"], "isometric");
-    assert_eq!(value["gridSize"], 128);
-    assert_eq!(value["layers"].as_array().map(Vec::len), Some(1));
-}
-
 /// The whole path a dropped image takes: convert, process, and land in the
 /// folder shape `P2P.load.load(scene, key, 'assets/<key>')` expects.
 #[test]
 fn a_project_round_trips_an_image_through_psd_to_json() {
-    let meta = store::create_project("Pipeline test", Projection::Isometric, 64)
+    let meta = store::create_project("Pipeline test", Projection::Isometric, Genre::Topdown, 64)
         .expect("project should be created");
 
     // Everything below runs against the real store, so clean up whatever
@@ -157,7 +134,7 @@ fn a_project_round_trips_an_image_through_psd_to_json() {
 /// otherwise every import places an empty group.
 #[test]
 fn a_converted_image_names_its_layer_after_the_key() {
-    let meta = store::create_project("Naming", Projection::Isometric, 64)
+    let meta = store::create_project("Naming", Projection::Isometric, Genre::Topdown, 64)
         .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
@@ -198,50 +175,6 @@ fn a_converted_image_names_its_layer_after_the_key() {
     }
 }
 
-#[test]
-fn a_new_project_scaffolds_a_runnable_game() {
-    let meta = store::create_project("Scaffold test", Projection::Orthogonal, 32)
-        .expect("project should be created");
-
-    let result = std::panic::catch_unwind(|| {
-        let files = store::list_game_files(&meta.id).expect("files should list");
-        let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-        for expected in [
-            "index.html",
-            "js/main.js",
-            "js/WorldScene.js",
-            "js/grid.js",
-            "js/navigation.js",
-            "js/game.config.json",
-            "css/styles.css",
-        ] {
-            assert!(paths.contains(&expected), "{expected} missing from {paths:?}");
-        }
-
-        let index = store::read_game_file(&meta.id, "index.html").expect("index should read");
-        assert!(
-            index.contains("Scaffold test"),
-            "the project name should reach the page title"
-        );
-        assert!(
-            !index.contains("__PROJECT_NAME__"),
-            "the placeholder should have been substituted"
-        );
-
-        let config: serde_json::Value = serde_json::from_str(
-            &store::read_game_file(&meta.id, "js/game.config.json").expect("config should read"),
-        )
-        .expect("config should be JSON");
-        assert_eq!(config["projection"], "orthogonal");
-        assert_eq!(config["grid"], 32);
-    });
-
-    store::delete_project(&meta.id).ok();
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
-}
-
 /// PSD keys reach the pipeline from the document — a file on disk — and now
 /// name a path the shell is asked to hand to another application, so a key
 /// that could climb out of the project must never resolve to a path.
@@ -261,7 +194,7 @@ fn psd_keys_cannot_escape_the_project() {
 /// placement in the document points at it.
 #[test]
 fn reimporting_replaces_the_file_behind_a_key() {
-    let meta = store::create_project("Re-import", Projection::Orthogonal, 32)
+    let meta = store::create_project("Re-import", Projection::Orthogonal, Genre::Topdown, 32)
         .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
@@ -309,6 +242,85 @@ fn reimporting_replaces_the_file_behind_a_key() {
     }
 }
 
+/// Renaming a PSD moves the file, the assets under it, and nothing else.
+///
+/// The key names three things at once — the file's stem, the directory
+/// psd-to-json writes into, and what psd-to-phaser registers the file under —
+/// so a rename has to leave all three agreeing. What it must *not* touch is
+/// the layer inside the file: a placement points at its layer by name, and
+/// the point of renaming a file is not to claim anything about its contents.
+#[test]
+fn renaming_a_psd_moves_its_file_and_its_assets() {
+    let meta = store::create_project("Rename", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
+        let bytes = psd_write::psd_from_rgba_marked(
+            "pasted-m2k9f1",
+            12,
+            20,
+            swatch(12, 20, [9, 9, 9, 255]),
+            None,
+        )
+        .expect("PSD should be written");
+        std::fs::write(psd_dir.join("pasted-m2k9f1.psd"), bytes).expect("PSD should save");
+        psd_pipeline::process(
+            &meta.id,
+            "pasted-m2k9f1",
+            &psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("the first parse should succeed");
+
+        let renamed = psd_pipeline::rename_and_process(&meta.id, "pasted-m2k9f1", "hero", |_| {})
+            .expect("rename should succeed");
+        assert_eq!(renamed.key, "hero");
+        assert_eq!((renamed.width, renamed.height), (12, 20));
+
+        assert!(psd_dir.join("hero.psd").exists(), "the file should have moved");
+        assert!(
+            !psd_dir.join("pasted-m2k9f1.psd").exists(),
+            "the old file should be gone, not copied"
+        );
+        assert!(psd_pipeline::is_processed(&meta.id, "hero"));
+        assert!(
+            !psd_pipeline::is_processed(&meta.id, "pasted-m2k9f1"),
+            "the old asset directory should have gone with it"
+        );
+
+        // The layer keeps its own name, which is what every existing
+        // placement's `layerPath` still points at.
+        let manifest: serde_json::Value =
+            serde_json::from_str(&renamed.manifest).expect("manifest should be JSON");
+        assert_eq!(manifest["layers"][0]["name"], "pasted-m2k9f1");
+
+        // A rename onto a name already in use would silently eat a file.
+        let other = psd_write::psd_from_rgba_marked("hero", 4, 4, swatch(4, 4, [0, 0, 0, 255]), None)
+            .expect("PSD should be written");
+        std::fs::write(psd_dir.join("second.psd"), other).expect("PSD should save");
+        assert!(
+            psd_pipeline::rename_and_process(&meta.id, "second", "hero", |_| {}).is_err(),
+            "renaming onto an existing key should fail"
+        );
+        assert!(psd_dir.join("second.psd").exists(), "the refused rename must not move it");
+
+        assert!(
+            psd_pipeline::rename_and_process(&meta.id, "absent", "anything", |_| {}).is_err(),
+            "renaming a key with no file behind it should fail"
+        );
+        assert!(
+            psd_pipeline::rename_and_process(&meta.id, "hero", "../escape", |_| {}).is_err(),
+            "a key that could climb out of the project should be refused"
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 /// The orienting marks an import writes into its PSD.
 ///
 /// Both have to survive psd-to-json as *metadata*: the anchor as a point at
@@ -319,7 +331,7 @@ fn reimporting_replaces_the_file_behind_a_key() {
 fn an_import_marks_its_anchor_and_grid_footprint() {
     use crate::psd_write::{AnchorMarks, MarkPoint};
 
-    let meta = store::create_project("Marks", Projection::Orthogonal, 32)
+    let meta = store::create_project("Marks", Projection::Orthogonal, Genre::Topdown, 32)
         .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
@@ -480,89 +492,6 @@ fn a_multi_space_footprint_draws_its_divisions() {
     assert!(wash > 0 && wash < 60, "the interior should be a wash, got {wash}");
 }
 
-/// Managing the game tree from the code modal.
-///
-/// The guards matter more than the happy paths: the modal has no undo, so a
-/// move that silently overwrote, or a folder dragged into itself, would take
-/// work with it.
-#[test]
-fn the_game_tree_can_be_managed_without_losing_files() {
-    let meta = store::create_project("Files", Projection::Orthogonal, 32)
-        .expect("project should be created");
-
-    let result = std::panic::catch_unwind(|| {
-        let id = &meta.id;
-        let listing = || {
-            let mut paths: Vec<String> = store::list_game_files(id)
-                .expect("files should list")
-                .into_iter()
-                .map(|f| f.path)
-                .collect();
-            paths.sort();
-            paths
-        };
-
-        // Create, and refuse to create over something that is already there.
-        store::create_game_dir(id, "js/systems").expect("folder should be created");
-        store::create_game_file(id, "js/systems/spawn.js").expect("file should be created");
-        assert!(listing().contains(&"js/systems/spawn.js".to_string()));
-        assert!(
-            store::create_game_file(id, "js/systems/spawn.js").is_err(),
-            "creating over an existing file should fail"
-        );
-
-        // Move, and refuse to move onto something that is already there.
-        store::move_game_path(id, "js/systems/spawn.js", "js/spawn.js")
-            .expect("move should succeed");
-        assert!(listing().contains(&"js/spawn.js".to_string()));
-        assert!(!listing().contains(&"js/systems/spawn.js".to_string()));
-        assert!(
-            store::move_game_path(id, "js/spawn.js", "js/main.js").is_err(),
-            "moving onto an existing file should fail"
-        );
-
-        // A folder cannot be moved inside itself: the destination would go
-        // with it, and the whole subtree would be lost.
-        assert!(
-            store::move_game_path(id, "js", "js/nested").is_err(),
-            "moving a folder into itself should fail"
-        );
-
-        // Copy names itself the way a file manager does, extension kept.
-        let copy = store::copy_game_path(id, "js/main.js").expect("copy should succeed");
-        assert_eq!(copy, "js/main copy.js");
-        let second = store::copy_game_path(id, "js/main.js").expect("second copy");
-        assert_eq!(second, "js/main copy 2.js");
-        assert!(listing().contains(&"js/main.js".to_string()), "the original stays");
-
-        // A copied folder brings its contents.
-        let folder = store::copy_game_path(id, "js").expect("folder copy");
-        assert_eq!(folder, "js copy");
-        assert!(listing().contains(&"js copy/main.js".to_string()));
-
-        // Delete takes a folder whole, and is quiet about what is not there.
-        store::delete_game_path(id, "js copy").expect("delete should succeed");
-        assert!(!listing().iter().any(|p| p.starts_with("js copy")));
-        store::delete_game_path(id, "js/never-existed.js")
-            .expect("deleting nothing should not be an error");
-
-        // And none of it can climb out of game/.
-        for bad in ["../meta.json", "js/../../doc.json"] {
-            assert!(store::create_game_file(id, bad).is_err(), "{bad} should be refused");
-            assert!(store::delete_game_path(id, bad).is_err(), "{bad} should be refused");
-            assert!(
-                store::move_game_path(id, "js/main.js", bad).is_err(),
-                "{bad} should be refused as a destination"
-            );
-        }
-    });
-
-    store::delete_project(&meta.id).ok();
-    if let Err(payload) = result {
-        std::panic::resume_unwind(payload);
-    }
-}
-
 /// Reading and rewriting a PSD's layer stack from the inspector.
 ///
 /// The order round trip is the load-bearing part: `layers()` reads top-first
@@ -573,7 +502,7 @@ fn psd_layers_can_be_reordered_and_renamed() {
     use crate::psd_layers::{self, LayerEdit};
     use crate::psd_write::{AnchorMarks, MarkPoint};
 
-    let meta = store::create_project("Layers", Projection::Orthogonal, 32)
+    let meta = store::create_project("Layers", Projection::Orthogonal, Genre::Topdown, 32)
         .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {

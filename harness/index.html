@@ -1,5 +1,32 @@
 <!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8" /><title>Idlewild harness</title></head>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Idlewild harness</title>
+    <script>
+      // Which fixture to open, from the query string, before the app boots:
+      //   ?template=blank&style=platformer&grid=32
+      // Both the stub document and main.ts read these, and both run as
+      // modules — so they have to be set from a classic script up here.
+      var q = new URLSearchParams(location.search);
+      window.__projection = q.get("template") || "isometric";
+      window.__genre = q.get("style") || "topdown";
+      window.__gridSize = Number(q.get("grid")) || 64;
+      // Stand-in insets, so the iPad's safe area can be looked at on a Mac:
+      //   ?safe=1  or  ?safe=44
+      var safe = q.get("safe");
+      if (safe) {
+        // Not `top`: that names window.top in global scope, and assigning to
+        // it silently does nothing.
+        var inset = safe === "1" ? 24 : Number(safe);
+        document.documentElement.style.setProperty("--safe-top", inset + "px");
+        document.documentElement.style.setProperty("--safe-bottom", "20px");
+      }
+    </script>
+  </head>
   <body><div id="app"></div><script type="module" src="./main.ts"></script></body>
 </html>

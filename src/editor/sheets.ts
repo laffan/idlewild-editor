@@ -1,6 +1,6 @@
 /**
- * The editor's modal sheets: Add Image, Export selection, Publish and
- * Project Options.
+ * The editor's modal sheets: Add Image, Replace PSD, Export selection,
+ * Publish and Project Options.
  */
 
 import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -11,6 +11,32 @@ import { psd, publish } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import type { ProjectMeta } from "../lib/types";
 import * as log from "../lib/log";
+
+/** What the document picker will take. The media picker ignores extensions. */
+const IMAGE_EXTENSIONS = ["psd", "png", "jpg", "jpeg"];
+
+/**
+ * Pick a file through the *document* picker.
+ *
+ * `pickerMode` is load-bearing on iPadOS. Left to itself the dialog plugin
+ * chooses between the Files browser and the photo library by looking at the
+ * filters: a set that is nothing but image and video types gets the photo
+ * library. Every filter this app has is an image type, so "Import from
+ * Files" and "Re-import" both opened Photos — which is not where a PSD is.
+ * Saying which picker is wanted is the only way to have both.
+ */
+function pickDocument(): Promise<string | null> {
+  return openFileDialog({
+    multiple: false,
+    pickerMode: "document",
+    filters: [{ name: "Images", extensions: IMAGE_EXTENSIONS }],
+  });
+}
+
+/** And the other half of that pair: the photo library, deliberately. */
+function pickPhoto(): Promise<string | null> {
+  return openFileDialog({ multiple: false, pickerMode: "image" });
+}
 
 /**
  * Add Image. Every route ends in the same place: bytes reach Rust, become a
@@ -45,28 +71,20 @@ export function openAddImage(
   list.append(
     option("Import from Files", "PSD, PNG, JPEG", () =>
       run(async () => {
-        const picked = await openFileDialog({
-          multiple: false,
-          filters: [
-            { name: "Images", extensions: ["psd", "png", "jpg", "jpeg"] },
-          ],
-        });
+        const picked = await pickDocument();
+        if (typeof picked !== "string") return null;
+        return psd.importPath(projectId, picked, undefined, marks);
+      }),
+    ),
+    option("Import from Photos", "Photo library", () =>
+      run(async () => {
+        const picked = await pickPhoto();
         if (typeof picked !== "string") return null;
         return psd.importPath(projectId, picked, undefined, marks);
       }),
     ),
     option("Paste from clipboard", "⌘V", () =>
-      run(() => pasteFromClipboard(projectId, marks)),
-    ),
-    option("Import from Photos", "iPad", () =>
-      run(async () => {
-        const picked = await openFileDialog({
-          multiple: false,
-          filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg"] }],
-        });
-        if (typeof picked !== "string") return null;
-        return psd.importPath(projectId, picked, undefined, marks);
-      }),
+      run(() => importClipboard(projectId, marks)),
     ),
   );
 
@@ -74,6 +92,103 @@ export function openAddImage(
   sheet.actions.appendChild(
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
   );
+}
+
+/**
+ * Replace the file behind an existing PSD key, and hand back the manifest
+ * the pipeline produced.
+ *
+ * The same three routes as Add Image, because "the edited file came back"
+ * arrives by whichever of them the user sent it out through — Files if it
+ * went to a document provider, Photos if it came back as a flattened image,
+ * the clipboard if it was copied out of another app. The button used to go
+ * straight to one of the three, and on iPadOS it went to the wrong one.
+ *
+ * Every route writes over `<project>/psd/<key>.psd` and re-runs psd-to-json,
+ * which is what makes it a replacement rather than a second import: the key
+ * does not move, so every placement already pointing at it still does.
+ * Resolves to null when the sheet is dismissed or a picker is cancelled —
+ * backing out is not an error.
+ */
+export function openReplacePsd(
+  projectId: string,
+  key: string,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (manifest: string | null) => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", onEscape);
+      resolve(manifest);
+    };
+    // The sheet closes itself on Escape and on a tap outside, and neither
+    // goes through a button — so both have to be heard here as well, or a
+    // dismissed sheet leaves this promise pending for the rest of the session.
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") settle(null);
+    };
+    document.addEventListener("keydown", onEscape);
+
+    const sheet = openSheet({
+      title: `Re-import ${key}.psd`,
+      subtitle: "Replaces the file and re-runs the pipeline",
+      width: 560,
+    });
+
+    const run = async (task: () => Promise<ImportResult | null>) => {
+      sheet.close();
+      try {
+        const result = await task();
+        if (!result) return settle(null);
+        log.info(`Re-imported ${key}.psd (${result.width}×${result.height})`);
+        settle(result.manifest);
+      } catch (err) {
+        log.error(`Could not re-import ${key}.psd:`, err);
+        settle(null);
+      }
+    };
+
+    const list = h("div", { class: "sheet-list" });
+    list.append(
+      option("Replace from Files", "PSD, PNG, JPEG", () =>
+        run(async () => {
+          const picked = await pickDocument();
+          if (typeof picked !== "string") return null;
+          return psd.reimport(projectId, key, picked);
+        }),
+      ),
+      option("Replace from Photos", "Photo library", () =>
+        run(async () => {
+          const picked = await pickPhoto();
+          if (typeof picked !== "string") return null;
+          return psd.reimport(projectId, key, picked);
+        }),
+      ),
+      option("Replace from clipboard", "⌘V", () =>
+        // Importing under a key that already exists overwrites that key's
+        // PSD and re-runs the pipeline over it, which is precisely a
+        // replacement — there is nothing a separate command would do
+        // differently, and a clipboard image never carries layers to lose.
+        run(() => importClipboard(projectId, undefined, key)),
+      ),
+    );
+
+    sheet.body.appendChild(list);
+    sheet.actions.appendChild(
+      h("button", {
+        class: "btn btn-ghost",
+        text: "Cancel",
+        onClick: () => {
+          sheet.close();
+          settle(null);
+        },
+      }),
+    );
+    // Dismissing by the backdrop or Escape has to resolve too, or the caller
+    // waits forever for a sheet that is no longer on screen.
+    sheet.root.addEventListener("click", () => settle(null));
+  });
 }
 
 function option(label: string, hint: string, onClick: () => void): HTMLElement {
@@ -185,7 +300,13 @@ export function openProjectOptions(meta: ProjectMeta, layerCount: number): void 
 
   const rows: Array<[string, string]> = [
     ["Template", meta.projection],
-    ["Grid scale", `${meta.gridSize} px`],
+    ["Style", meta.genre === "platformer" ? "Platformer" : "Top Down"],
+    [
+      "Grid scale",
+      meta.projection === "blank"
+        ? `${meta.gridSize} px · nothing snaps`
+        : `${meta.gridSize} px`,
+    ],
     ["Layers", String(layerCount)],
     ["Created", new Date(meta.createdAt).toLocaleString()],
     ["Last edited", new Date(meta.updatedAt).toLocaleString()],
@@ -210,18 +331,23 @@ export function openProjectOptions(meta: ProjectMeta, layerCount: number): void 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Read an image from the clipboard.
+ * Read an image from the clipboard and put it through the pipeline.
  *
  * Two routes, because neither is reliable everywhere: the Tauri plugin hands
  * back raw RGBA and works on desktop, while the webview's own clipboard API
  * hands back encoded bytes and is what iPadOS actually serves. Try the plugin
  * first and fall back rather than failing the paste.
+ *
+ * `key` names the PSD to write. Omitted, the paste gets a fresh key of its
+ * own; given an existing one, it overwrites that file — which is how the
+ * clipboard replaces a PSD as well as adding one.
  */
-async function pasteFromClipboard(
+async function importClipboard(
   projectId: string,
   marks?: AnchorMarks,
+  key?: string,
 ): Promise<ImportResult> {
-  const name = `pasted-${Date.now().toString(36)}`;
+  const name = key ?? `pasted-${Date.now().toString(36)}`;
   try {
     const image = await readImage();
     const { width, height } = await image.size();

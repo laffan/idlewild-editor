@@ -5,7 +5,7 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { Grid } from "../lib/grid";
+import { Grid, fillShape } from "../lib/grid";
 import type { Selection } from "../lib/types";
 import { CORNERS, cornerPoint, HANDLE_SCREEN_PX, placementBox } from "./resize";
 import { strokesBox } from "../drawing";
@@ -41,10 +41,10 @@ export class SelectionOverlay {
           .layer(selection.layerId)
           ?.fills.find((f) => f.id === selection.fillId);
         if (!fill) break;
+        const shape = fillShape(this.grid, fill);
+        if (!shape) break;
         g.lineStyle(2, ACCENT, 1);
-        for (const cell of fill.cells) {
-          polygon(g, this.grid.cellPolygon(cell), false);
-        }
+        for (const points of shape.polygons) polygon(g, points, false);
         break;
       }
       case "placement": {
@@ -89,8 +89,13 @@ export class SelectionOverlay {
           .layer(selection.layerId)
           ?.zones.find((z) => z.id === selection.zoneId);
         if (!zone || zone.points.length < 2) break;
-        g.lineStyle(2, ACCENT, 1);
-        polygon(g, zone.points, false);
+        // Filled, faintly, rather than outlined twice over what the document
+        // renderer already draws: the fill is what says the whole region is
+        // the selection, which is also the region a drag picks it up from.
+        const scale = 1 / zoom;
+        g.fillStyle(ACCENT, 0.12);
+        g.lineStyle(2 * scale, ACCENT, 1);
+        polygon(g, zone.points, true);
         break;
       }
       case "strokes": {

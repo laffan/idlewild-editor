@@ -42,8 +42,12 @@ export function renderHome(
               choice.name,
               choice.projection,
               choice.gridSize,
+              choice.genre,
             );
-            log.info(`Created ${meta.name} (${meta.projection}, ${meta.gridSize}px)`);
+            log.info(
+              `Created ${meta.name} (${meta.projection}, ${choice.genre}, ` +
+                `${meta.gridSize}px)`,
+            );
             callbacks.onOpenProject(meta);
           } catch (err) {
             log.error("Could not create project:", err);
@@ -135,7 +139,9 @@ function projectCard(
       h("div", { class: "project-name", text: meta.name }),
       h("div", {
         class: "project-meta m",
-        text: `${meta.projection} · ${meta.gridSize} px · ${describeEdited(meta.updatedAt)}`,
+        text:
+          `${meta.projection} · ${meta.genre ?? "topdown"} · ` +
+          `${meta.gridSize} px · ${describeEdited(meta.updatedAt)}`,
       }),
     ),
   );

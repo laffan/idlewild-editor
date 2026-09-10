@@ -135,6 +135,36 @@
 }
 .layer-item.empty:hover { background: transparent; color: var(--color-neutral-600); }
 
+/* A placed PSD is carried to another layer by its own grip. The row keeps
+   the indent it had — the grip takes the first 22px of the 52px gutter and
+   the icon lands exactly where it did without one. */
+.layer-item.has-grip { padding-left: 30px; }
+.layer-item-grip {
+  flex: none;
+  width: 22px;
+  align-self: stretch;
+  margin-left: -22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-neutral-600);
+  cursor: grab;
+  /* What makes a drag on the iPad a move rather than a scroll of the panel. */
+  touch-action: none;
+}
+.layer-item:hover .layer-item-grip { color: var(--chrome-text); }
+
+/* Carrying one. The rows do not move as the finger travels — there is one
+   legal drop per layer rather than a position in a list — so the destination
+   is marked instead, the way the code modal's file tree marks a folder. */
+.panel-body.carrying { cursor: grabbing; }
+.panel-body.carrying .layer-item,
+.panel-body.carrying .layer-row > * { pointer-events: none; }
+.layer-group.drop-into {
+  background: var(--chrome-rule);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
 .layer-item-label {
   flex: 1;
   min-width: 0;
@@ -197,6 +227,27 @@
   color: var(--chrome-text);
   margin-top: 6px;
 }
+
+/* An editable title: the field carries no box until it is focused, so the
+   head still reads as a heading rather than as a form. The same treatment
+   the layer names in the left panel get, at the size a title is set in. */
+.inspect-name-row { display: flex; align-items: baseline; gap: 1px; }
+.inspect-name {
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: none;
+  /* The shell suppresses selection globally; a field being typed into has to
+     opt back in, or WebKit will not place a caret in it. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+.inspect-name:focus { background: var(--chrome-bg); outline: 1px solid var(--color-accent); }
+.inspect-ext { flex: none; color: var(--chrome-dim); }
 
 .inspect-row {
   display: flex;

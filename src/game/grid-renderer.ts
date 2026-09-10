@@ -28,6 +28,9 @@ export class GridRenderer {
 
   /** Redraw if the visible cell range changed. Cheap to call every frame. */
   update(camera: Phaser.Cameras.Scene2D.Camera): void {
+    // The blank template has no lattice: its cells are single pixels, and a
+    // grid of those is neither drawable nor anything anyone asked for.
+    if (!this.grid.snaps) return;
     const range = this.visibleRange(camera);
     const signature = `${range.from.cx},${range.from.cy},${range.to.cx},${range.to.cy}`;
     if (signature === this.lastSignature) return;

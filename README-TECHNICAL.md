@@ -40,7 +40,7 @@ Extension of [README.md](README.md).
 │  store.rs        per-project directories on disk               │
 │  psd_write.rs    image / RGBA → PSD  (psd fork, write half)    │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
-│  templates.rs    isometric / orthogonal project scaffolds      │
+│  templates.rs    per-genre scaffolds, per-projection grid      │
 │  publish.rs      zip export, both runtimes included            │
 │  file_server.rs  tiny_http over the project store              │
 └───────────────────────────────────────────────────────────────┘
@@ -118,6 +118,58 @@ gets a directory and the document is written beside its assets.
   fills, A*, export bounds — is written once against `Grid`.
 - **The grid is never stored.** It is recomputed from the camera over exactly
   the cells the viewport can see. There is no world bound to hit.
+- **A project has two axes**, and they answer different questions.
+  `projection` is the shape of the space; `genre` is the program that comes
+  out of it. See the two sections below.
+
+### The three templates, and why blank is not a fourth code path
+
+Blank is the orthogonal mapping with a cell of **one world pixel**. That is
+the whole implementation of "nothing snaps": a marquee dragged across it
+covers exactly the pixels it was dragged across, an image dropped on it lands
+where it was dropped, and every projection-aware call site above `Grid` keeps
+working unchanged — a blank project is still addressed in integer cells, they
+are simply one pixel wide. `Grid.snaps` is what anything that needs to *say*
+so reads: the grid renderer draws nothing, the readouts count px rather than
+spaces, and an import's footprint marks one space of its own size rather than
+shipping six hundred one-pixel division lines into a PSD.
+
+`size` survives as the project's nominal unit even where nothing rounds to
+it — play mode's character is measured in it, and so is the lattice its
+navigation walks. That is what the New Game sheet's grid scale still means on
+a blank canvas, and what the line under the control says.
+
+The one place the substitution does not work is a **fill**. A fill stores the
+spaces it covers, and a 420 × 260 rectangle on a pixel lattice covers 109,200
+of them — a document that means "this box", written as a hundred thousand
+records. So `FillPatch` carries either `cells` *or* a `rect`, and
+`fillShape()` in `lib/grid.ts` is the one function that turns both into the
+outlines and bounds every consumer wants: the canvas, the selection overlay,
+the PNG export, the conversion to a PSD, and the platformer's ground.
+
+`cellCentre()` is the other thing a one-pixel cell made worth naming.
+`cellToWorld` returns each shape's natural anchor — a diamond's centre, but a
+square's *top-left corner* — and anything asking "is this cell inside that
+shape" has to test a point that is unambiguously in the cell. A corner is
+shared with three neighbours, so play mode's navigation was blocking a cell
+either side of every wall until this existed.
+
+### Two genres, one document
+
+`genre` decides the scene a project scaffolds and the play mode the editor
+runs, and nothing else. Both read the same document: a fill marked
+not-walkable and a boundary marked blocking are what a top-down character
+routes *around* and what a side-on character stands *on* — a floor plan or a
+cross-section, the same geometry either way.
+
+Isometric and platformer is the one pair not offered. Gravity has no
+direction on a diamond grid seen from above, so the New Game sheet greys the
+option out and `create_project` refuses it rather than scaffolding something
+that cannot work.
+
+Both fields are optional on disk (`#[serde(default)]` on the Rust side,
+`genre?:` on the TypeScript one) so every project written before the choice
+existed still loads, as top down — which is what it has always been.
 
 ### Autosave
 
@@ -140,7 +192,7 @@ contract:
 | One finger, moved | Pan |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
 | Hold ~320 ms, still | Begin a grid selection |
-| Tap | Pick the image under the finger, else the fill, else clear |
+| Tap | Pick the image under the finger, else the boundary, else the fill, else clear |
 | Ctrl/⌘ + wheel | Zoom (WebKit reports a trackpad pinch this way) |
 
 There is one arbiter at a time. A drawing tool calls `setSuspended(true)`,
@@ -148,6 +200,20 @@ which hands input over without tearing down camera state, and the drawing
 layer runs its own two-finger pan and pinch back into `panScreen` / `zoomAt`
 — so the two layers never both read the same gesture, and the camera works
 identically under either.
+
+Boundaries sit between images and fills for a reason. A boundary is a thing
+someone made and a fill is the ground it was made over, so it comes first of
+those two — but a boundary is usually drawn *around* the images inside it and
+would otherwise swallow every tap meant for one of them. It is hit-tested
+against its polygon rather than its bounding box (`pickZone`), because
+selecting an L-shaped wall by the empty corner of its box is not selecting
+the wall.
+
+A selected boundary drags like a placed image: the cell delta is projected
+back into world space with `cellToWorld`, which is linear and has no offset
+term in either projection — which is what makes it usable on a *difference*
+as well as on a position. The outline keeps its shape and whatever sub-cell
+offset it had, and moves a whole space at a time.
 
 Only the *current selection* is draggable. A pointer-down anywhere else still
 pans, which keeps the camera reachable everywhere and makes a drag always
@@ -167,7 +233,7 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 | Projects | `list_projects`, `create_project`, `rename_project`, `delete_project`, `duplicate_project`, `read_project_meta` |
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
 | Game tree | `list_game_files`, `read_game_file`, `write_game_file`, `create_game_file`, `create_game_dir`, `move_game_path`, `copy_game_path`, `delete_game_path` |
-| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `rename_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
 | Publish | `publish_zip`, `save_bytes` |
 | Server | `get_server_port`, `platform` |
 
@@ -179,6 +245,30 @@ sees a polygon. See **The marks an import writes** below.
 
 `psd-log-line` is emitted as an event during processing so the console drawer
 can stream psd-to-json's layer tree as it appears.
+
+`create_project` takes the genre as an optional string, and refuses the one
+pair that has no scaffold — isometric and platformer. Everything else about
+both axes is a label carried into `meta.json`, `doc.json` and the scaffolded
+`game.config.json`.
+
+### Renaming a PSD
+
+The key names three things at once: the file's stem, the directory
+psd-to-json writes into, and what psd-to-phaser registers the file under. So
+`rename_psd` is three moves rather than one — rename the file, drop the old
+output directory, run the pipeline again under the new name. Renaming
+`assets/<key>/` instead would be the cheaper-looking mistake: the manifest and
+the sprites beneath it are written with the key in them, and moving the folder
+leaves a directory whose contents disagree with its name.
+
+The layer *inside* the file keeps whatever it was called, which is why a
+rename does not disturb a single placement: a placement points at its layer by
+name, and renaming the file is not a claim about what is in it. The inspector
+therefore shows a `hero.psd` whose layer path is still `pasted-m2k9f1` until
+someone renames that too — which is what the PSD layer list right underneath
+is for, and it handles the manifest rename map properly. On the frontend,
+`WorldScene.renamePsd` evicts the caches under the *old* key, rewrites
+`psdKey` on every placement holding it, then loads and places the new one.
 
 ## Editing a PSD, and getting it back
 
@@ -203,6 +293,18 @@ picked to come home: `reimport_psd` writes it over
 `<project>/psd/<key>.psd` — the stem is forced to the existing key, which is
 what makes it an overwrite rather than a second import — and re-runs
 psd-to-json, which clears the old `assets/<key>/` first.
+
+**Which picker, and why it has to be said.** Re-import asks *where the file
+came back from* — Files, the photo library, or the clipboard — rather than
+guessing. Left to itself the dialog plugin picks between the Files browser and
+the photo library by looking at the filters: a set that is nothing but image
+and video types gets the photo library, and a PSD *is* an image type. Every
+filter this app has is one, so "Import from Files" and "Re-import" both opened
+Photos, which is not where a PSD is. `pickerMode: "document"` and
+`pickerMode: "image"` are what make both reachable. The clipboard route needs
+no new command: importing bytes under a key that already exists overwrites
+that key's PSD and re-runs the pipeline, which is precisely a replacement —
+and a clipboard image never carries layers to lose.
 
 Three caches then hold the *old* PSD and all three have to go, or the reload
 quietly shows the previous artwork: psd-to-phaser's parsed manifest, Phaser's
@@ -555,21 +657,28 @@ and `__tests__/geometry.test.ts` pins the cut to the disc's edge.
 manifest → zip, plus the path-traversal guards and the project scaffold. It
 runs against the real store and cleans up after itself, including on failure.
 
-`vitest` covers the pure halves — the grid projection, picking, resize
-geometry, colour, the log's `%c` parsing, the manifest reader, and the
-drawing layer's ported maths. That last one earns its place: a slice that
-cuts in the wrong spot or a lasso that misses is a tool that does not work,
-and neither shows up in a typecheck.
+`vitest` covers the pure halves — the grid projection, fill geometry,
+picking, resize geometry, colour, the log's `%c` parsing, the manifest
+reader, the platformer's body step, and the drawing layer's ported maths.
+The last two earn their place: a slice that cuts in the wrong spot or a lasso
+that misses is a tool that does not work, and a body that catches on the seam
+between two floor tiles is a game that does not work. Neither shows up in a
+typecheck, and the platformer's regression tests exist because both bugs were
+real — a body resting flush on its floor re-overlapped it by a rounding error
+on the next frame and was fired out of the side of the ground.
 
 The frontend's check is `tsc --noEmit` plus `vite build`.
 
 `npm run harness` serves the editor shell in a plain browser: `harness/` is
 the app's own entry with the Tauri modules aliased to stubs, so the layout,
 the panels and the sheets can be opened, driven and screenshotted without a
-Mac or an iPad. It boots a fixture document with three layers and one
-placement, and reads `window.__platform`, `window.__pick` and
+Mac or an iPad. It boots a fixture document with three layers, one placement
+and one boundary, and reads `window.__platform`, `window.__pick` and
 `window.__manifest` so the platform split and the re-import path can be
-exercised from a script. Drawing is drivable there too: CDP's
+exercised from a script. Its query string picks the fixture's template and
+style — `?template=blank&style=platformer&grid=32` — and `?safe=44` writes
+stand-in values over the safe-area tokens, which is the only way to look at
+the iPad's insets from a desktop browser. Drawing is drivable there too: CDP's
 `Input.dispatchMouseEvent` takes a `pointerType: "pen"` and a `force`, which
 is enough to lay a pressure-varying stroke, slice it, lasso it and read the
 ink back off the canvas. What it cannot stand in for is the pipeline: there
@@ -612,6 +721,21 @@ tree has one legal drop per row — into that folder, or beside it at that
 folder's level — rather than a position in a list, so the row under the
 pointer is highlighted instead of the dragged row being moved through the DOM.
 
+A placed PSD listed under an expanded layer has a grip of its own, and
+dragging it carries the image to whichever layer the finger lets go over. Same
+gesture, different question: a layer takes a *position* in the list, an image
+takes a *layer*, so one moves through the DOM as it goes and the other lights
+up its destination. The grip is there for the same reason it is on a layer
+row — the panel scrolls, and a row that took the pointer outright would take
+the scroll with it. `movePlacement` changes which list the record lives in and
+nothing else, because a layer is draw order and visibility, not position; the
+placement lands at the end of the destination's list, drawing over what was
+already there, which is what a drop onto a layer means everywhere else here.
+Only placements are carried: a fill is a run of grid spaces and a boundary is
+a polygon, both addressed in world coordinates no layer owns, so moving one
+between layers is a change of draw order and the reorder above already covers
+it.
+
 ## Selection
 
 Hit-testing reads the **document**, not the rendered Phaser objects
@@ -644,6 +768,45 @@ on the canvas — which is how you reach something off-screen, underneath
 something else, or not rendering. Selecting on the canvas expands the owning
 layer so the two views stay in step.
 
+A placed image's title in the inspector is its filename, and retyping the part
+before `.psd` renames the file — see *Renaming a PSD*. The field is borderless
+until it is focused, like the layer names in the left panel: the panel is a
+column of facts and one of them happens to be editable, which a box drawn
+round it all the time would overstate. The extension sits beside the field
+rather than in it, because it is not part of the name and retyping it would
+only be a way to get it wrong.
+
+## The iPad's safe area
+
+`viewport-fit=cover` hands the webview the whole screen, status bar and home
+indicator included, so every piece of chrome that touches an edge has to inset
+itself back out of them. `tokens.css` exposes the four `env(safe-area-inset-*)`
+values as custom properties, which is what lets a rule do arithmetic on them
+and gives a browser without them a zero to fall back to.
+
+The chrome grows *into* the inset rather than being pushed off it: the editor
+header stands `--bar-h` tall below the status bar and pads upward to cover it,
+so its own colour runs to the top of the screen instead of leaving the light
+body showing through. The console drawer does the same downward past the home
+indicator, the home screen's bar does it at the top, and the code panel does it
+only while it is floating — docked it is a row between two rows and insets
+nothing.
+
+## Pinning and unpinning the code panel
+
+Docked, the panel is a row of the shell and its divider writes an inline
+`height` on it. Floating, it is `position: absolute; inset: 0` — and an
+absolutely positioned box given top, bottom *and* a height is over-constrained,
+so the browser drops `bottom` and the panel hangs from the top of the shell at
+whatever height it was docked at. Unpinning therefore has to take the docked
+height off again, in `setPinned`, or it does not look unpinned: it looks like
+the panel jumped to the top of the screen, which is exactly what it did.
+
+The header carries New File and New Folder rather than the word "Code" and
+the project name. Neither said anything the user did not already know a moment
+after opening the modal from that project, and on an iPad the header is the
+difference between two rows of chrome above the file column and one.
+
 ## Console
 
 `lib/log.ts` wraps `console.*` and interprets format directives rather than
@@ -667,7 +830,8 @@ on chrome never highlights it.
   about its own origin, so their relative offsets do not grow with it.
   Scaling a composition as a unit needs a Container, and `place()` returns a
   Group. Single-sprite placements — every converted image — are exact.
-- Strokes are listed under a layer as one row rather than individually. A
+- Strokes are listed under a layer as one row rather than individually, and
+  are the one thing that cannot be carried to another layer from the panel. A
   sketch is a few hundred strokes and each is a stroke of a pen, not an
   object; the row selects the lot, which is the granularity both conversions
   work at anyway.
@@ -692,6 +856,19 @@ on chrome never highlights it.
   its middle rather than sending an `art` offset, so it can land up to half a
   space from where it was drawn. A fill conversion is exact.
 - Play mode's character is a placeholder rectangle, not a sprite from the
-  template.
+  template, in both styles.
+- A platformer takes a blocking boundary as its bounding box. Resolving
+  against the polygon — sloped ground — is a different feature.
+- Renaming a PSD moves the file, not the layer inside it, so a renamed file
+  keeps the layer path it was imported under. That is what makes the rename
+  safe for every placement on it; the inspector's PSD layer list is where the
+  layer's own name is changed.
+- A blank project's play mode navigates on a square lattice of the project's
+  nominal unit rather than on what was actually drawn. A* over single pixels
+  would neither finish nor mean anything, but a coarse lattice over free-form
+  geometry is a compromise, not an answer.
+- `game.config.json` is scaffolded with empty `layers` and `psdKeys` and is
+  not yet rewritten from the live document on publish, so an exported project
+  runs but starts empty. Both template scenes read the fields already.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both
   need a machine with the platform SDKs.

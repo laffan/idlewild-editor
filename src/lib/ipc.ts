@@ -1,7 +1,7 @@
 /** Typed wrappers over the Tauri command surface in src-tauri/src/lib.rs. */
 
 import { invoke } from "@tauri-apps/api/core";
-import type { ProjectMeta, Projection } from "./types";
+import type { Genre, ProjectMeta, Projection } from "./types";
 
 export interface GameFile {
   path: string;
@@ -108,8 +108,12 @@ export async function assetBase(projectId: string): Promise<string> {
 
 export const projects = {
   list: () => invoke<ProjectMeta[]>("list_projects"),
-  create: (name: string, projection: Projection, gridSize: number) =>
-    invoke<ProjectMeta>("create_project", { name, projection, gridSize }),
+  create: (
+    name: string,
+    projection: Projection,
+    gridSize: number,
+    genre: Genre,
+  ) => invoke<ProjectMeta>("create_project", { name, projection, gridSize, genre }),
   rename: (id: string, name: string) =>
     invoke<ProjectMeta>("rename_project", { id, name }),
   remove: (id: string) => invoke<void>("delete_project", { id }),
@@ -198,6 +202,13 @@ export const psd = {
    */
   duplicate: (id: string, key: string) =>
     invoke<ImportResult>("duplicate_psd", { id, key }),
+  /**
+   * Rename a PSD and re-run the pipeline under the new key. `name` is raw
+   * user input; the key that actually resulted comes back on the result, so
+   * the caller repoints its placements at that rather than at what was typed.
+   */
+  rename: (id: string, key: string, name: string) =>
+    invoke<ImportResult>("rename_psd", { id, key, name }),
   /** Hand the PSD to whatever the OS opens PSDs with. */
   openExternally: (id: string, key: string) =>
     invoke<void>("open_psd", { id, key }),

@@ -29,9 +29,12 @@ export function exportSelectionPng(
   ctx.scale(SCALE, SCALE);
   ctx.translate(-bounds.x, -bounds.y);
 
-  const selected = new Set(
-    [...cellsInRange(from, to)].map((c) => `${c.cx},${c.cy}`),
-  );
+  // Which spaces the selection covers, so a fill only exports the part of
+  // itself that is inside it. A blank project has no spaces — its cells are
+  // pixels — so its fills are drawn whole and the canvas does the clipping.
+  const selected = grid.snaps
+    ? new Set([...cellsInRange(from, to)].map((c) => `${c.cx},${c.cy}`))
+    : null;
 
   // Bottom-up: layers are stored top-first, so paint the list in reverse.
   const layers = [...store.layers].reverse();
@@ -40,8 +43,12 @@ export function exportSelectionPng(
     for (const fill of layer.fills) {
       ctx.fillStyle = fill.color ?? "#ec3013";
       ctx.globalAlpha = fill.kind === "pattern" ? 0.35 : 1;
+      if (fill.rect) {
+        ctx.fillRect(fill.rect.x, fill.rect.y, fill.rect.width, fill.rect.height);
+        continue;
+      }
       for (const cell of fill.cells) {
-        if (!selected.has(`${cell.cx},${cell.cy}`)) continue;
+        if (selected && !selected.has(`${cell.cx},${cell.cy}`)) continue;
         const points = grid.cellPolygon(cell);
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);

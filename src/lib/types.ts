@@ -1,12 +1,35 @@
 /** Shared document + project types. Mirrored by src-tauri/src/project.rs. */
 
-export type Projection = "isometric" | "orthogonal";
+/**
+ * The three templates.
+ *
+ * Isometric and orthogonal are lattices: cells are diamonds or squares of the
+ * project's grid size, and everything the user draws snaps to one. Blank is
+ * not — it addresses world pixels, so a selection is exactly the rectangle
+ * that was dragged. `Grid.snaps` is what the rest of the editor reads.
+ */
+export type Projection = "isometric" | "orthogonal" | "blank";
+
+/**
+ * What kind of game the project scaffolds, and how play mode behaves.
+ *
+ * Top down is the original: a character walks the grid over A*, and the
+ * camera follows it. A platformer is side-on — gravity, ground, a jump — and
+ * reads the same document, taking non-walkable fills and blocking zones as
+ * the solid ground rather than as obstacles to route around.
+ *
+ * Projects written before this existed carry no genre and are top down, which
+ * is what they have always been.
+ */
+export type Genre = "topdown" | "platformer";
 
 /** What the home screen lists. Cheap to load — no document body. */
 export interface ProjectMeta {
   id: string;
   name: string;
   projection: Projection;
+  /** Absent on projects created before the choice existed: they are top down. */
+  genre?: Genre;
   gridSize: number;
   createdAt: number;
   updatedAt: number;
@@ -24,6 +47,14 @@ export interface Point {
   y: number;
 }
 
+/** An axis-aligned box in world pixels. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /**
  * A contiguous run of filled cells. Fills give grid space properties: a
  * colour or a pattern to draw, and whether a character may cross it.
@@ -31,6 +62,13 @@ export interface Point {
 export interface FillPatch {
   id: string;
   cells: Cell[];
+  /**
+   * Set instead of `cells` on a project whose grid does not snap, where the
+   * fill is the exact rectangle that was selected. A blank template's cells
+   * are single world pixels, so storing one per covered pixel would put a
+   * hundred thousand of them in a document that means "this box".
+   */
+  rect?: Rect;
   kind: "color" | "pattern";
   /** Set when kind is "color". */
   color?: string;
@@ -77,6 +115,20 @@ export interface Zone {
   blocking: boolean;
 }
 
+/**
+ * What a fill covers, in the units it is stored in.
+ *
+ * A run of grid spaces counts spaces; a rectangle on a blank project has no
+ * spaces to count and reports its size, because "0 spaces" is what a fill
+ * that covers 420 by 260 pixels was saying before this existed.
+ */
+export function describeFill(fill: FillPatch): string {
+  if (fill.rect) {
+    return `${Math.round(fill.rect.width)} × ${Math.round(fill.rect.height)} px`;
+  }
+  return `${fill.cells.length} ${fill.cells.length === 1 ? "space" : "spaces"}`;
+}
+
 /** A freehand stroke from the drawing layer. */
 export interface Stroke {
   id: string;
@@ -115,6 +167,8 @@ export interface CameraState {
 export interface GameDoc {
   version: 1;
   projection: Projection;
+  /** Absent on documents written before the choice existed: top down. */
+  genre?: Genre;
   gridSize: number;
   layers: Layer[];
   camera?: CameraState;

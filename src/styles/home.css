@@ -12,12 +12,16 @@
 }
 
 .home-bar {
-  height: 84px;
+  /* Same trick as the editor header: the bar grows upward under the status
+     bar so its ground runs to the top of the screen, and its contents stay
+     at 84px below it. */
+  height: calc(84px + var(--safe-top));
   flex: none;
   border-bottom: var(--rule);
   display: flex;
   align-items: center;
-  padding: 0 32px;
+  padding: var(--safe-top) calc(32px + var(--safe-right)) 0
+    calc(32px + var(--safe-left));
   gap: 18px;
 }
 
@@ -33,7 +37,8 @@
 
 .home-body {
   flex: 1;
-  padding: 28px 32px 40px;
+  padding: 28px calc(32px + var(--safe-right)) calc(40px + var(--safe-bottom))
+    calc(32px + var(--safe-left));
 }
 
 .home-hint {

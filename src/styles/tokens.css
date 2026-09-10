@@ -77,4 +77,15 @@
 
   /* How wide a draggable divider is to the finger. */
   --handle: 10px;
+
+  /* The iPad's safe area.
+     `viewport-fit=cover` in index.html hands the webview the whole screen,
+     status bar and home indicator included, so every piece of chrome that
+     touches an edge has to inset itself back out of them. These are the
+     insets as four tokens rather than raw `env()` calls, so a rule can do
+     arithmetic on them and a browser without them falls back to zero. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }

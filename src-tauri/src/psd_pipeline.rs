@@ -188,6 +188,58 @@ pub fn reimport_and_process(
     })
 }
 
+/// Rename a PSD, and everything named after it, to a new key.
+///
+/// The key is the file's stem, and it is also the directory psd-to-json
+/// writes into and the name psd-to-phaser registers the file under. So a
+/// rename is three moves rather than one: the file, then the old output
+/// directory out of the way, then a fresh run of the pipeline under the new
+/// name. Re-running rather than renaming `assets/<key>/` is the cheaper
+/// mistake to avoid — the manifest and the sprites beneath it are written
+/// with the key in them, and moving the folder would leave a directory whose
+/// contents disagree with its name.
+///
+/// The layer *inside* the file keeps whatever it was called. A placement
+/// points at its layer by name, and renaming the file is not a claim about
+/// what is in it — so every placement on the old key survives the move by
+/// having its key rewritten and nothing else.
+pub fn rename_and_process(
+    project_id: &str,
+    key: &str,
+    to: &str,
+    emit_log: impl Fn(&str),
+) -> Result<ImportResult, String> {
+    let key = safe_key(key)?;
+    let to = safe_key(to)?;
+    if key == to {
+        return Err("That is already its name".into());
+    }
+
+    let source = psd_path(project_id, key)?;
+    if !source.exists() {
+        return Err(format!("No PSD named {key} in this project"));
+    }
+    let dest = psd_path(project_id, to)?;
+    if dest.exists() {
+        return Err(format!("This project already has a {to}.psd"));
+    }
+
+    std::fs::rename(&source, &dest).map_err(|e| format!("Cannot rename {key}.psd: {e}"))?;
+    let old_output = output_dir(project_id, key)?;
+    if old_output.exists() {
+        let _ = std::fs::remove_dir_all(&old_output);
+    }
+
+    let (width, height) = psd_dimensions(&dest)?;
+    let manifest = process(project_id, to, &ProcessOptions::default(), emit_log)?;
+    Ok(ImportResult {
+        key: to.to_string(),
+        width,
+        height,
+        manifest,
+    })
+}
+
 /// Copy a PSD to the next free key beside it and process that.
 ///
 /// The new key is the old one plus `-copy`, then `-copy-2` and so on — a

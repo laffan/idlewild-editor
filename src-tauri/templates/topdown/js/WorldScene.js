@@ -2,8 +2,13 @@ import { createGrid } from "./grid.js";
 import { findPath } from "./navigation.js";
 import config from "./game.config.json" with { type: "json" };
 
-// The orthogonal template. Cells are squares anchored at their top-left
-// corner, and depth follows layer order alone.
+// The top-down template. One scene serves all three projections: the
+// difference between diamonds, squares and bare pixels lives in grid.js, and
+// the projection reaches it through the config the editor wrote.
+//
+// A blank project has no lattice to draw and none to walk, so it draws no
+// grid and navigates on a square lattice of the project's nominal unit —
+// the same substitution the editor's own play mode makes.
 export class WorldScene extends Phaser.Scene {
   constructor() {
     super("World");
@@ -11,6 +16,7 @@ export class WorldScene extends Phaser.Scene {
 
   preload() {
     this.grid = createGrid(config.projection, config.grid);
+    this.nav = this.grid.snaps ? this.grid : createGrid("orthogonal", config.grid);
     for (const key of config.psdKeys ?? []) {
       this.P2P.load.load(this, key, `assets/${key}`);
     }
@@ -23,11 +29,12 @@ export class WorldScene extends Phaser.Scene {
 
     this.input.on("pointerup", (pointer) => {
       const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
-      this.moveTo(this.grid.worldToCell(world.x, world.y));
+      this.moveTo(this.nav.worldToCell(world.x, world.y));
     });
   }
 
   drawGrid() {
+    if (!this.grid.snaps) return;
     const g = this.add.graphics().setDepth(-1000);
     g.lineStyle(1, 0xa9c2d3, 1);
     const span = config.gridSpan ?? 24;
@@ -69,6 +76,11 @@ export class WorldScene extends Phaser.Scene {
       fill.color ?? "#ec3013",
     ).color;
     g.fillStyle(color, 1);
+
+    if (fill.rect) {
+      g.fillRect(fill.rect.x, fill.rect.y, fill.rect.width, fill.rect.height);
+      return;
+    }
     for (const cell of fill.cells ?? []) {
       g.fillPoints(
         pointsToVectors(this.grid.cellPolygon(cell.cx, cell.cy)),
@@ -80,7 +92,7 @@ export class WorldScene extends Phaser.Scene {
 
   spawnCharacter() {
     const start = config.spawn ?? { cx: 0, cy: 0 };
-    const world = this.grid.cellToWorld(start.cx, start.cy);
+    const world = this.nav.cellToWorld(start.cx, start.cy);
     this.character = this.add
       .rectangle(world.x, world.y, this.grid.size * 0.3, this.grid.size * 0.5, 0x201e1d)
       .setDepth(1e6);
@@ -98,7 +110,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.tweens.killTweensOf(this.character);
     const steps = path.slice(1).map((cell) => {
-      const world = this.grid.cellToWorld(cell.cx, cell.cy);
+      const world = this.nav.cellToWorld(cell.cx, cell.cy);
       return { x: world.x, y: world.y, duration: 180 };
     });
     this.tweens.chain({ targets: this.character, tweens: steps });
@@ -108,14 +120,29 @@ export class WorldScene extends Phaser.Scene {
   isWalkable(cx, cy) {
     const span = config.gridSpan ?? 24;
     if (Math.abs(cx) > span || Math.abs(cy) > span) return false;
+
+    const centre = this.nav.cellCentre(cx, cy);
     for (const layer of config.layers ?? []) {
       for (const fill of layer.fills ?? []) {
         if (fill.walkable) continue;
-        if ((fill.cells ?? []).some((c) => c.cx === cx && c.cy === cy)) return false;
+        for (const box of this.grid.fillBoxes(fill)) {
+          if (contains(box, centre)) return false;
+        }
       }
     }
     return true;
   }
+}
+
+function contains(box, p) {
+  // Half-open, so a point on a shared edge belongs to one box rather than to
+  // both — otherwise a run of adjacent fills blocks a cell either side of it.
+  return (
+    p.x >= box.x &&
+    p.x < box.x + box.width &&
+    p.y >= box.y &&
+    p.y < box.y + box.height
+  );
 }
 
 function pointsToVectors(flat) {

@@ -5,7 +5,7 @@
 
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
-import { Grid, rangeSize } from "../lib/grid";
+import { describeRange, Grid } from "../lib/grid";
 import { assetBase, platform, projects, psd } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
@@ -16,6 +16,7 @@ import { Inspector } from "./inspector";
 import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
+import { PlayPad } from "./play-pad";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
@@ -89,6 +90,7 @@ export async function mountEditor(
     },
     onOpenPsd: (key) => void openPsd(key),
     onRefreshPsd: (key) => void refresh(key),
+    onRenamePsd: (key, name) => void renamePsd(key, name),
     onStrokesToPsd: () => void strokesToPsd(),
     onStrokesToZone: () => strokesToZone(),
     onFillToPsd: () => void fillToPsd(),
@@ -117,7 +119,7 @@ export async function mountEditor(
       }),
   });
 
-  const actions = new SelectionActions({
+  const actions = new SelectionActions(grid, {
     onFill: () => handle?.scene.fillSelection(inspector.fillColor, false),
     onAddImage: () => {
       const selection = handle?.scene.getSelection();
@@ -141,9 +143,9 @@ export async function mountEditor(
     onExport: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;
-      const { w, h: height } = rangeSize(selection.from, selection.to);
-      openExportSelection(`${w} × ${height} spaces`, async () =>
-        exportSelectionPng(store, grid, selection.from, selection.to),
+      openExportSelection(
+        describeRange(grid, selection.from, selection.to),
+        async () => exportSelectionPng(store, grid, selection.from, selection.to),
       );
     },
   });
@@ -192,9 +194,20 @@ export async function mountEditor(
     },
   );
 
+  // Movement controls for a platformer's play mode. Built for every project
+  // and shown for the ones that can use them — see setMode.
+  const playPad = new PlayPad((input) => handle?.scene.setPlayInput(input));
+
   // The header is a row of the shell, not chrome floating over the canvas, so
   // only the tools and the selection bar are inside the canvas wrapper.
-  canvasWrap.append(rail.root, rail.label, actions.root, leftToggle, rightToggle);
+  canvasWrap.append(
+    rail.root,
+    rail.label,
+    actions.root,
+    leftToggle,
+    rightToggle,
+    playPad.root,
+  );
 
   // Draggable dividers on both sidebars and the console drawer. Sizes are a
   // per-viewer convenience, so they live in localStorage rather than the doc.
@@ -406,6 +419,26 @@ export async function mountEditor(
     }
   }
 
+  /**
+   * Rename a PSD, then carry every placement on it over to the new key.
+   *
+   * Rust decides the key: what the field holds is raw text and goes through
+   * the same sanitiser an import uses, so the name that lands can differ from
+   * the name that was typed. On failure the panel is redrawn, which is what
+   * puts the real name back in the field.
+   */
+  async function renamePsd(key: string, name: string): Promise<void> {
+    try {
+      const result = await psd.rename(meta.id, key, name);
+      if (result.key === key) return;
+      await handle?.scene.renamePsd(key, result.key);
+      log.info(`${key}.psd → ${result.key}.psd`);
+    } catch (err) {
+      log.error(`Could not rename ${key}.psd:`, err);
+      inspector.render();
+    }
+  }
+
   /** Hand a stroke selection to a layer as a placed PSD. */
   async function strokesToPsd(): Promise<void> {
     const selection = handle?.scene.getSelection();
@@ -477,8 +510,17 @@ export async function mountEditor(
     header.setMode(next);
     shell.classList.toggle("play-mode", next === "play");
     handle?.scene.setMode(next);
+
+    // A top-down character walks where it is told and has no use for a pad;
+    // a platformer is nothing but held controls.
+    const platformer = store.genre === "platformer";
+    playPad.setActive(next === "play" && platformer);
     if (next === "play") {
-      log.info("Play mode — tap the canvas to walk there");
+      log.info(
+        platformer
+          ? "Play mode — arrow keys or the pad to move, up to jump"
+          : "Play mode — tap the canvas to walk there",
+      );
     }
   }
 
@@ -489,7 +531,6 @@ export async function mountEditor(
     }
     codeModal = new CodeModal(
       meta.id,
-      meta.name,
       () => closeCode(),
       (pinned) => setCodePinned(pinned),
     );
@@ -554,6 +595,7 @@ export async function mountEditor(
     header.destroy();
     layers.destroy();
     inspector.destroy();
+    playPad.destroy();
     drawing?.destroy();
     drawing = null;
     closeCode();

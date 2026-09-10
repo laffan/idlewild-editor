@@ -15,6 +15,8 @@
   flex: 1;
   min-height: 0;
   display: flex;
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
   /* The containing block for the narrow-window sidebars, which overlay this
      row rather than the whole window — the header is above it. */
   position: relative;
@@ -38,7 +40,14 @@
    so the canvas sits between two rules instead of under a hovering bar. */
 .editor-header {
   flex: none;
-  height: var(--bar-h);
+  /* The bar stands its own height *below* the status bar, and grows upward to
+     cover it: padding rather than a margin, so the chrome's colour runs to
+     the top of the screen instead of leaving the light body showing through
+     the notch. Its children stretch into what is left, which is --bar-h. */
+  height: calc(var(--bar-h) + var(--safe-top));
+  padding-top: var(--safe-top);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
   display: flex;
   align-items: stretch;
   background: var(--chrome-bg);
@@ -242,6 +251,12 @@
   flex: none;
   border-top: var(--rule-chrome);
   background: var(--chrome-bg);
+  /* The bottom edge is the home indicator's. The drawer keeps its own height
+     and pads underneath it, so the last line of output is never under the
+     bar the finger swipes. */
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
 }
 .terminal-toggle {
   width: 100%;
@@ -304,6 +319,48 @@
 .editor.play-mode .tool-name,
 .editor.play-mode .edge-toggle,
 .editor.play-mode .selection-actions { display: none; }
+
+/* The platformer's movement pad. Over the canvas rather than in the scene:
+   the gesture arbiter owns the canvas's pointer events, so a Phaser button
+   there would be a fourth claimant on the same finger. See editor/play-pad.ts.
+
+   Left and right sit together under the left thumb and jump under the right,
+   which is where both are on every platformer anyone has played. It insets
+   itself out of the home indicator, since the bottom edge is where it lives. */
+.play-pad {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(20px + var(--safe-bottom));
+  padding: 0 calc(24px + var(--safe-left)) 0 calc(24px + var(--safe-right));
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  z-index: 7;
+  /* The gaps between the buttons are canvas, and the camera is reachable
+     through them. */
+  pointer-events: none;
+}
+.play-pad-side { display: flex; gap: 12px; }
+
+.play-btn {
+  width: 84px;
+  height: 84px;
+  border: 0;
+  background: color-mix(in srgb, var(--chrome-bg) 55%, transparent);
+  color: var(--chrome-text);
+  font-size: 30px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  pointer-events: auto;
+  /* A held button must not scroll, select or fire a long-press menu. */
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+.play-btn.down { background: var(--color-accent); color: #fff; }
 
 /* ── the drawing layer ────────────────────────────────────────────────────
    Hush's ink, superimposed over the game canvas. The stage is a
