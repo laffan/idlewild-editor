@@ -85,7 +85,46 @@ concatenation breaks. `file_server.rs` serves the project store over
 `http://127.0.0.1:<port>/<project-id>/assets/<key>`.
 
 Requests are resolved with `canonicalize()` and checked against the store
-root, so a `..` cannot climb out.
+root, so a `..` cannot climb out. The port is **bound**, not picked: the
+listener asks for port 0 and reads back what the kernel gave it, where
+choosing a free port and then binding it leaves a gap for something else to
+take it first.
+
+### The iPad needs to be told this is allowed
+
+App Transport Security refuses plain HTTP from web content, and
+`NSAllowsArbitraryLoadsInWebContent` is NO unless the Info.plist says
+otherwise — it is the key that governs WKWebView's own traffic rather than
+the app's. There is no ATS on macOS, so this is invisible there and fatal on
+an iPad: every PSD imports, parses and writes its `data.json`, and then every
+placement is an empty selection box because the one request that would have
+fetched the manifest never left the webview. `scripts/patch-ios-plist.mjs`
+adds the exception, scoped to web content rather than to the whole app, since
+the only plain-HTTP traffic here is the webview reading loopback.
+
+That script runs from `beforeBuildCommand`, so `tauri ios build` applies it
+and `tauri ios dev` does not. Run it by hand once after `tauri ios init` if
+you only ever run dev; the generated plist is kept between builds.
+
+### Saying so when it does not work
+
+A local server that cannot be reached is invisible in the worst way: the
+import succeeds, the pipeline logs its progress, and the only sign is one
+load failure per PSD that reads like a problem with the PSD. So two things
+say otherwise.
+
+The server answers its own root with a line naming itself, and the editor
+asks it once at boot — `checkAssetServer` — which puts either *Asset server
+ready at …* or the reason it is not in the console before anything is
+imported. And when a manifest does fail to load, `psd-loader.ts` re-requests
+the same URL with `fetch` and reports what came back: an HTTP status, a body
+that is not JSON, or no answer at all. Phaser's `loaderror` cannot tell those
+three apart, and they want three different fixes.
+
+The CORS header is on every answer including the 404s, which is what makes
+that second request able to report a status at all: without it a cross-origin
+`fetch` of a missing file rejects as an opaque network error, which looks
+exactly like a server that is not there.
 
 ---
 
@@ -1100,7 +1139,11 @@ waits on `psdLoadComplete` because it loads at *runtime*, long after any
 
 `cargo test --lib` covers the load-bearing path: RGBA → PSD → psd-to-json →
 manifest → zip, plus the path-traversal guards, the project scaffold, what an
-export's config carries, and the shapes a file picker hands back. It runs
+export's config carries, and the shapes a file picker hands back. The asset
+server is tested over a real loopback socket — the request psd-to-phaser makes,
+byte for byte, and what comes back parsed as an HTTP response rather than
+inspected as a `PathBuf`, because the mapping from URL to file is the one
+place where a wrong answer looks like a PSD with nothing in it. It runs
 against the real store and cleans up after itself, including on failure.
 
 The pasteboard is split so that most of it is testable anywhere: which type to

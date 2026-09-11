@@ -172,6 +172,29 @@ export async function assetBase(projectId: string): Promise<string> {
   return `http://127.0.0.1:${port}/${projectId}`;
 }
 
+/**
+ * Whether the asset server is answering the page at all.
+ *
+ * psd-to-phaser reads the project store over HTTP and by no other route, so a
+ * webview that cannot reach `file_server.rs` is a project where every image
+ * places as an empty selection box — and the only symptom is one load failure
+ * per PSD, which reads like a problem with the PSD. The server answers its
+ * own root, so one request at boot separates "the server is not reachable
+ * from here" from "that one file is not there".
+ *
+ * Resolves to null when it answered, and to what went wrong when it did not.
+ */
+export async function checkAssetServer(base: string): Promise<string | null> {
+  try {
+    const response = await fetch(new URL(base).origin + "/", { cache: "no-store" });
+    return response.ok ? null : `it answered HTTP ${response.status}`;
+  } catch (err) {
+    // A rejected fetch to loopback is the interesting case: the request never
+    // arrived, so the webview refused to make it or nothing was listening.
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
 export const projects = {
   list: () => invoke<ProjectMeta[]>("list_projects"),
   create: (

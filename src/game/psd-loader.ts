@@ -86,7 +86,12 @@ export function loadPsd(
      */
     const onError = (file: Phaser.Loader.File) => {
       log.error(`Could not load ${file.key} for ${key}: ${file.url}`);
-      if (file.key === key && !p2p.getData(key)) finish();
+      if (file.key !== key || p2p.getData(key)) return;
+      // The manifest is the one file worth chasing: without it the PSD
+      // places empty, and Phaser reports a request that never left, a 404
+      // and a body it could not parse as the same bare event.
+      void explain(String(file.url));
+      finish();
     };
 
     /**
@@ -117,6 +122,47 @@ export function loadPsd(
     // P2P starts the loader itself when it is not already running.
     p2p.load.load(scene, key, `${assetBase}/assets/${key}`);
   });
+}
+
+/**
+ * Ask the asset server the same question Phaser just failed to answer.
+ *
+ * Phaser's `loaderror` says only that a file did not arrive. The three
+ * reasons want three different fixes and are indistinguishable from the
+ * event: the request never left the webview, the server answered but had
+ * nothing there, or it served something that is not JSON. One `fetch` after
+ * the fact tells them apart, and it costs nothing on the path where
+ * everything worked.
+ */
+async function explain(url: string): Promise<void> {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    const body = await response.text();
+    if (!response.ok) {
+      log.error(`The asset server answered HTTP ${response.status} for ${url}`);
+      return;
+    }
+    try {
+      JSON.parse(body);
+      log.error(
+        `The asset server served ${body.length} bytes of valid JSON for ${url}, ` +
+          "so it was the loader that refused it rather than the file that was missing.",
+      );
+    } catch {
+      log.error(
+        `The asset server served ${body.length} bytes that are not JSON: ` +
+          body.slice(0, 120),
+      );
+    }
+  } catch (err) {
+    // Nothing arrived at all: the webview declined to make the request, or
+    // there is no listener on the other end. `checkAssetServer` says which
+    // at boot; this says it happened here too.
+    log.error(
+      `The asset server could not be reached at ${url} — ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**

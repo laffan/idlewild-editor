@@ -9,10 +9,21 @@
 use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
+/// Bind a loopback port and serve the store on it until the process ends.
+///
+/// Port **0** rather than a port chosen in advance: the kernel hands back one
+/// that is free at the moment it is bound, where picking first and binding
+/// second leaves a gap for something else to take it — and asking a picker
+/// meant that on a machine where a UDP bind is refused, the app could not
+/// start at all over a TCP port that was perfectly free.
 pub fn start() -> Result<(u16, Receiver<()>), String> {
-    let port = portpicker::pick_unused_port().ok_or("No free port for the asset server")?;
-    let server = tiny_http::Server::http(("127.0.0.1", port))
+    let server = tiny_http::Server::http(("127.0.0.1", 0))
         .map_err(|e| format!("Cannot start the asset server: {e}"))?;
+    let port = server
+        .server_addr()
+        .to_ip()
+        .ok_or("The asset server bound something that is not an IP port")?
+        .port();
 
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();
 
@@ -30,21 +41,45 @@ fn respond(request: tiny_http::Request) -> std::io::Result<()> {
     let raw = request.url().split('?').next().unwrap_or("").to_string();
     let decoded = percent_decode(raw.trim_start_matches('/'));
 
+    // The root answers for itself, so the editor can tell "the asset server
+    // is not there" apart from "that one file is not there". A page that
+    // cannot reach this at all is a project whose every image is a selection
+    // box with nothing in it, and that is worth naming as one line at boot
+    // rather than leaving to be deduced from a load failure per PSD.
+    if decoded.is_empty() {
+        return request.respond(reply(200, "idlewild asset server", "text/plain"));
+    }
+
     let Some(path) = resolve(&decoded) else {
-        return request.respond(text(404, "Not found"));
+        return request.respond(reply(404, "Not found", "text/plain"));
     };
 
     let Ok(bytes) = std::fs::read(&path) else {
-        return request.respond(text(404, "Not found"));
+        return request.respond(reply(404, "Not found", "text/plain"));
     };
 
     let mime = mime_for(&path);
     let mut response = tiny_http::Response::from_data(bytes);
-    response.add_header(header("Content-Type", mime));
-    // Assets are rewritten in place on every re-import, so nothing may cache.
-    response.add_header(header("Cache-Control", "no-store"));
-    response.add_header(header("Access-Control-Allow-Origin", "*"));
+    for (name, value) in common_headers(mime) {
+        response.add_header(header(name, value));
+    }
     request.respond(response)
+}
+
+/// What every answer carries, whatever its status.
+///
+/// The CORS header is on the failures as well as the successes on purpose:
+/// the page is served from another origin, and without it a `fetch` of a
+/// missing file rejects as an opaque network error rather than reporting the
+/// 404 — which is the difference between "the server said no" and "there is
+/// no server", the two things a diagnosis has to tell apart.
+fn common_headers(mime: &str) -> [(&'static str, &str); 3] {
+    [
+        ("Content-Type", mime),
+        // Assets are rewritten in place on every re-import, so nothing may cache.
+        ("Cache-Control", "no-store"),
+        ("Access-Control-Allow-Origin", "*"),
+    ]
 }
 
 /// Map a request path onto a file inside the project store, refusing anything
@@ -98,8 +133,16 @@ fn header(name: &str, value: &str) -> tiny_http::Header {
         .expect("static header is well formed")
 }
 
-fn text(status: u16, body: &str) -> tiny_http::Response<std::io::Cursor<Vec<u8>>> {
-    tiny_http::Response::from_string(body).with_status_code(status)
+fn reply(
+    status: u16,
+    body: &str,
+    mime: &str,
+) -> tiny_http::Response<std::io::Cursor<Vec<u8>>> {
+    let mut response = tiny_http::Response::from_string(body).with_status_code(status);
+    for (name, value) in common_headers(mime) {
+        response.add_header(header(name, value));
+    }
+    response
 }
 
 /// Enough percent-decoding for the paths we generate — keys are sanitised to

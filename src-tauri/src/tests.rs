@@ -14,6 +14,7 @@
 
 mod marks;
 mod scaffolds;
+mod server;
 
 use crate::project::{Genre, Projection};
 use crate::{psd_pipeline, psd_write, publish, store};

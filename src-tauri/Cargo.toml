@@ -17,7 +17,6 @@ dirs = "6"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tiny_http = "0.12"
-portpicker = "0.1"
 
 # The PSD pipeline, shared with Phaser Bench.
 psd-to-json = { git = "https://github.com/laffan/psd-to-json-rust" }

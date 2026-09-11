@@ -6,7 +6,7 @@
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { describeRange, Grid } from "../lib/grid";
-import { assetBase, platform, projects, psd } from "../lib/ipc";
+import { assetBase, checkAssetServer, platform, projects, psd } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
@@ -362,6 +362,18 @@ export async function mountEditor(
     (window as unknown as Record<string, unknown>).__idlewildScene = handle.scene;
   }
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
+  // Not awaited: it is a loopback request that says whether images can arrive
+  // at all, and the editor is usable either way.
+  void checkAssetServer(base).then((trouble) => {
+    if (trouble) {
+      log.error(
+        `The asset server at ${base} is not answering this page — ${trouble}. ` +
+          "Every PSD will import and then place empty.",
+      );
+    } else {
+      log.info(`Asset server ready at ${base}`);
+    }
+  });
 
   /** New strokes land on the layer the rest of the editor is working on. */
   function setActiveLayer(layerId: string): void {
