@@ -29,13 +29,11 @@ import {
   IMPORT_SCALE,
   marksForCells,
   marksForSelection,
+  psdMargin,
   scaleMarks,
 } from "./import-anchor";
 
 type FillSelection = Extract<Selection, { kind: "fill" }>;
-
-/** No margin: the fill's own spaces are exactly what it covers. */
-const PADDING = 0;
 
 /**
  * A ceiling on a generated PSD, in pixels.
@@ -87,10 +85,16 @@ export async function convertFillToPsd(
       // Marks and pixels are both in the file's own space, so both are taken
       // up together — and the placement scales back down by the same factor.
       scaleMarks(
-        marksForFill(grid, fill, shape.bounds, anchor, {
-          x: raster.x - anchorWorld.x,
-          y: raster.y - anchorWorld.y,
-        }),
+        {
+          ...marksForFill(grid, fill, shape.bounds, anchor, {
+            x: raster.x - anchorWorld.x,
+            y: raster.y - anchorWorld.y,
+          }),
+          // A space of clear canvas around it. The pixels and the footprint
+          // are unchanged, so the block-out lands exactly where it was and
+          // blocks exactly what it did; what grows is the room to paint in.
+          margin: psdMargin(grid),
+        },
         EXPORT_SCALE,
       ),
     );
@@ -192,8 +196,11 @@ function rasteriseFill(
   colour: string,
 ): { rgba: Uint8ClampedArray; width: number; height: number; x: number; y: number } | null {
   const { bounds } = shape;
-  const width = Math.max(1, Math.ceil((bounds.width + PADDING * 2) * EXPORT_SCALE));
-  const height = Math.max(1, Math.ceil((bounds.height + PADDING * 2) * EXPORT_SCALE));
+  // Cropped to the fill exactly. The room to paint in is the *canvas's*, not
+  // the artwork's — see `psdMargin` — so nothing here grows and the pixels
+  // that arrive on the grid are the fill and only the fill.
+  const width = Math.max(1, Math.ceil(bounds.width * EXPORT_SCALE));
+  const height = Math.max(1, Math.ceil(bounds.height * EXPORT_SCALE));
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -202,7 +209,7 @@ function rasteriseFill(
   if (!ctx) return null;
 
   ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
-  ctx.translate(PADDING - bounds.x, PADDING - bounds.y);
+  ctx.translate(-bounds.x, -bounds.y);
   ctx.fillStyle = colour;
   for (const points of shape.polygons) {
     ctx.beginPath();
@@ -216,8 +223,8 @@ function rasteriseFill(
     rgba: ctx.getImageData(0, 0, width, height).data,
     width,
     height,
-    x: bounds.x - PADDING,
-    y: bounds.y - PADDING,
+    x: bounds.x,
+    y: bounds.y,
   };
 }
 

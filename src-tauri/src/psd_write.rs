@@ -48,6 +48,11 @@ pub struct AnchorMarks {
     /// knows exactly which pixels belong over which spaces.
     #[serde(default)]
     pub art: Option<MarkPoint>,
+    /// Empty room to leave around the artwork and the footprint, in the
+    /// file's own pixels. It grows the canvas and moves nothing: what it
+    /// buys is somewhere to paint past the edge of what is already there.
+    #[serde(default)]
+    pub margin: Option<MarkPoint>,
     /// How many grid spaces it covers, which names the zone layer.
     #[serde(default)]
     pub cols: u32,

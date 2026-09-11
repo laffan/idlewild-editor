@@ -73,7 +73,10 @@ remaining pieces are wired to real slots rather than mocked.
   it. The artwork goes in as a **group** — `G | extrude-…` holding
   `S | lines-…`, `S | shading-…` and `S | shape-…` — so the silhouette, the
   shading that makes it read as a solid, and the lines between its spaces are
-  three things you can take separately in Photoshop. The shape outlives every
+  three things you can take separately in Photoshop. Each is true on its own:
+  the silhouette is solid, with no ghost of the lattice printed into it, and
+  the lines are the lines you can actually see — an overhang hides the edges
+  of what is behind it there exactly as it does on the canvas. The shape outlives every
   edit to the file — a re-parse, a re-import, a layer stack rewritten in the
   inspector — so the way back in is always there. And applying again
   **rewrites** the file rather than replacing it: the group's contents and both
@@ -165,6 +168,10 @@ remaining pieces are wired to real slots rather than mocked.
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail
+- A fill or an extrusion written out as a PSD gets a **grid space of clear
+  canvas** around it, so there is somewhere to paint the eaves that hang past
+  the wall. It is the canvas that grows and nothing else: the artwork keeps
+  its size and its place on the grid, and blocks exactly what it did
 - Delete removes whatever is selected
 - Export a selection as a transparent PNG (save or copy), from the inspector
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file

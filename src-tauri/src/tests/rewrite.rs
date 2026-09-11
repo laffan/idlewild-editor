@@ -156,6 +156,7 @@ fn rewriting_refuses_a_file_it_would_flatten() {
         outline: vec![at(0.0, 0.0), at(8.0, 0.0), at(8.0, 8.0), at(0.0, 8.0)],
         lines: vec![],
         art: Some(at(0.0, 0.0)),
+        margin: None,
         cols: 1,
         rows: 1,
     };
@@ -280,6 +281,7 @@ fn square(side: f32) -> psd_write::AnchorMarks {
         outline: vec![at(0.0, 0.0), at(side, 0.0), at(side, side), at(0.0, side)],
         lines: vec![],
         art: Some(at(0.0, 0.0)),
+        margin: None,
         cols: 1,
         rows: 1,
     }

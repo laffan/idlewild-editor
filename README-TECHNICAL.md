@@ -1861,6 +1861,35 @@ places a group as a Phaser Group and resizing one scales each child about its
 own origin, so children with different origins would drift apart. Identical
 geometry makes that operation exact.
 
+**Two of the three have to earn on their own what the composite gets for
+free**, and neither did at first.
+
+The *shape* is stroked as well as filled, in its own tone. A silhouette
+assembled out of dozens of separately filled quads is not a solid shape: two
+antialiased boundaries meeting on a shared edge come to about three quarters
+of full coverage between them, so the whole lattice was ghosted into the layer
+that is meant to be the flat ground under it — the lines layer, printed into
+the shape. And the silhouette stopped half a line short of the drawing at its
+outer edge, because a stroke straddles the boundary it is drawn on. One stroke
+in the fill's own colour answers both.
+
+The *lines* rub out before they draw. On the canvas every face is filled
+opaque and then stroked, so a face in front hides the edges of whatever is
+behind it. A layer with no fills in it has nothing to hide them with, so every
+occluded edge came through and the lines read as a wireframe: an overhang's
+own edges and, straight through it, the edges of the ground it stands over. So
+each face clears its own polygon out of what is already there — one
+`destination-out` fill — before stroking its edges. Same order, same result,
+nothing opaque left behind.
+
+Neither is testable from node: both are facts about how Canvas2D composites,
+and there is no canvas in vitest. They were checked by rendering a solid with
+an overhang in the browser harness and comparing the three layers stacked
+against a single-pass render of the same faces. Every remaining difference is
+one pixel wide and lies along an edge — the antialiasing that layering costs —
+and no differing pixel has a differing neighbour on all sides, which is what
+would say a whole region had come out wrong.
+
 The group is named after the key, which is also what the lone sprite was
 called — so a document written before this keeps working, because a
 placement's `layerPath` still resolves.
@@ -1871,6 +1900,32 @@ from, which is where it has to come back down. `shapeBounds` is taken from
 every voxel rather than from the visible faces, because the underside of the
 lowest layer is never drawn and a box that stopped at what is drawn would clip
 it off the bottom of the file.
+
+### Room around what a conversion writes
+
+A canvas cropped exactly to a block-out is a file with nowhere to draw the
+eaves that hang past the wall. So Apply and the fill conversion both ask for a
+**margin** — one grid space, in the grid's own shape, which is a tile's width
+across and a tile's height down on a diamond — and `psd_marks::layout` grows
+the canvas by it on every side.
+
+The margin is a fact about the *canvas* and nothing else, which is the whole
+of why it is safe. Every position in that layout is relative to the anchor,
+the anchor moves out with the canvas, and the artwork keeps its offset from
+it — so the picture does not move on the grid, its placement is not rewritten,
+and its collider, which is derived from what the artwork covers, never sees
+it. Padding the raster instead would have done all three: transparent pixels
+in the exported sprite, a bigger box for `defaultCollider` to read, and a
+converted fill blocking a ring of spaces around itself.
+
+A blank project's cell is one pixel, so there the margin is the nominal grid
+size the New Game sheet set — the same fallback `size` serves everywhere else
+nothing rounds to it.
+
+Generate PSD and the sketch conversion do not ask for one. The first is
+defined as the size and shape of the selection, and the second as the ink plus
+the spaces the ink covers; both would be saying something less true about
+themselves with a margin on.
 
 Nothing reaches the document until Apply. The shape lives in the mode object,
 so Cancel is dropping it and entering play mode drops it too.

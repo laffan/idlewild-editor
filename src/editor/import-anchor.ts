@@ -56,6 +56,29 @@ export const IMPORT_SCALE = 0.5;
 export const EXPORT_SCALE = 1 / IMPORT_SCALE;
 
 /**
+ * Room to leave around a generated PSD's contents, in world pixels.
+ *
+ * One grid space, in the grid's own shape: a diamond template gets a tile's
+ * width across and a tile's height down, a square one gets its cell either
+ * way. A canvas cropped exactly to a block-out is a file with nowhere to draw
+ * the eaves that hang past the wall, and resizing a canvas in Photoshop
+ * without moving the anchor dot off its space is fiddlier than it sounds.
+ *
+ * It is the *canvas* that grows and nothing else — see `margin` on
+ * `AnchorMarks`. The artwork keeps its size and its offset from the anchor,
+ * so the thing on the grid does not move, and its collider, which is derived
+ * from what the artwork covers, does not change either.
+ *
+ * A blank project's cell is one pixel, which is no margin at all, so it takes
+ * the nominal unit the New Game sheet set instead — the same fallback `size`
+ * serves everywhere else nothing rounds to it.
+ */
+export function psdMargin(grid: Grid): { x: number; y: number } {
+  if (!grid.snaps) return { x: grid.size, y: grid.size };
+  return { x: grid.tileWidth, y: grid.tileHeight };
+}
+
+/**
  * Take marks from world pixels into a PSD's own pixels.
  *
  * Rust lays the artwork out against the marks in the file's own pixel space,
@@ -73,6 +96,7 @@ export function scaleMarks(marks: AnchorMarks, factor: number): AnchorMarks {
     outline: marks.outline.map(at),
     lines: marks.lines.map((line) => ({ a: at(line.a), b: at(line.b) })),
     art: marks.art ? at(marks.art) : undefined,
+    margin: marks.margin ? at(marks.margin) : undefined,
   };
 }
 

@@ -60,6 +60,13 @@ pub struct Layout {
 /// The footprint sits wherever the grid selection actually was relative to
 /// the anchor, and the canvas grows to hold both — a tall sprite dropped on
 /// one tile keeps its own size and simply has the tile marked underneath it.
+///
+/// `marks.margin` is empty room around the lot. It is the one thing here that
+/// changes the canvas without changing where anything sits *on the grid*:
+/// every position below is relative to the anchor, the anchor moves out with
+/// the canvas, and the artwork keeps its offset from it. What the margin buys
+/// is somewhere to paint — a canvas cropped exactly to a block-out has no
+/// room for the eaves that hang past the wall.
 pub fn layout(image_width: u32, image_height: u32, marks: &AnchorMarks) -> Layout {
     let (art_x, art_y) = match marks.art {
         Some(p) => (p.x, p.y),
@@ -69,10 +76,15 @@ pub fn layout(image_width: u32, image_height: u32, marks: &AnchorMarks) -> Layou
 
     let zone = outline_box(marks).unwrap_or(art);
 
-    let min_x = art.0.min(zone.0).floor();
-    let min_y = art.1.min(zone.1).floor();
-    let max_x = (art.0 + art.2).max(zone.0 + zone.2).ceil();
-    let max_y = (art.1 + art.3).max(zone.1 + zone.3).ceil();
+    let (margin_x, margin_y) = match marks.margin {
+        Some(p) => (p.x.max(0.0), p.y.max(0.0)),
+        None => (0.0, 0.0),
+    };
+
+    let min_x = (art.0.min(zone.0) - margin_x).floor();
+    let min_y = (art.1.min(zone.1) - margin_y).floor();
+    let max_x = ((art.0 + art.2).max(zone.0 + zone.2) + margin_x).ceil();
+    let max_y = ((art.1 + art.3).max(zone.1 + zone.3) + margin_y).ceil();
 
     Layout {
         canvas_width: (max_x - min_x).max(1.0) as u32,

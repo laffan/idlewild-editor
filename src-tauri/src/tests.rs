@@ -109,6 +109,7 @@ fn psd_bytes_pass_through_instead_of_being_decoded() {
         ],
         lines: vec![],
         art: None,
+        margin: None,
         cols: 1,
         rows: 1,
     };
@@ -492,6 +493,7 @@ fn psd_layers_can_be_reordered_and_renamed() {
             outline: vec![at(0.0, 0.0), at(32.0, 0.0), at(32.0, 32.0), at(0.0, 32.0)],
             lines: vec![],
             art: None,
+            margin: None,
             cols: 1,
             rows: 1,
         };

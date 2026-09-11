@@ -68,6 +68,16 @@ export interface AnchorMarks {
    * pixels belong over which spaces.
    */
   art?: { x: number; y: number };
+  /**
+   * Empty room to leave around everything else, in the same pixels.
+   *
+   * The canvas is otherwise exactly the artwork and the footprint, edge to
+   * edge, which is a file with nowhere to draw the eaves that hang past the
+   * wall. A margin grows the *canvas* and nothing else: the artwork keeps its
+   * size, its position relative to the anchor and therefore its position on
+   * the grid — see `editor/import-anchor.ts`.
+   */
+  margin?: { x: number; y: number };
   cols: number;
   rows: number;
 }

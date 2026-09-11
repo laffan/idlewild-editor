@@ -42,6 +42,7 @@ fn a_pasted_image_carries_its_anchor_and_footprint() {
             // height — a paste says where it goes rather than being centred
             // on the anchor, which is the footprint's top-left corner.
             art: Some(MarkPoint { x: 0.0, y: 16.0 }),
+            margin: None,
             cols: 2,
             rows: 2,
         };
@@ -131,6 +132,7 @@ fn an_import_marks_its_anchor_and_grid_footprint() {
             lines: vec![],
             // An image import has no opinion; it gets centred.
             art: None,
+            margin: None,
             cols: 1,
             rows: 1,
         };
@@ -227,6 +229,7 @@ fn a_multi_space_footprint_draws_its_divisions() {
             b: at(32.0, 32.0),
         }],
         art: None,
+        margin: None,
         cols: 2,
         rows: 1,
     };
@@ -273,4 +276,75 @@ fn a_multi_space_footprint_draws_its_divisions() {
     );
     // And the interior between the lines is only a wash, not solid.
     assert!(wash > 0 && wash < 60, "the interior should be a wash, got {wash}");
+}
+
+/// A margin grows the canvas and moves nothing on it.
+///
+/// Extrude and the fill conversion ask for a space of clear canvas around
+/// what they write, so there is somewhere to paint the eaves that hang past
+/// the wall. The whole value of it depends on one thing: the artwork must
+/// keep its offset from the anchor, because that offset is what puts the
+/// picture on its grid space. A margin that shifted the art relative to the
+/// dot would move every placement of the file the next time it was read.
+///
+/// So this writes the same PSD twice, with and without, and compares.
+#[test]
+fn a_margin_grows_the_canvas_without_moving_the_artwork() {
+    use crate::psd_marks;
+    use crate::psd_write::{AnchorMarks, MarkPoint};
+
+    let at = |x: f32, y: f32| MarkPoint { x, y };
+    // One orthogonal 32 px space, with the artwork sitting exactly on it.
+    let plain = AnchorMarks {
+        outline: vec![at(0.0, 0.0), at(32.0, 0.0), at(32.0, 32.0), at(0.0, 32.0)],
+        lines: vec![],
+        art: Some(at(0.0, 0.0)),
+        margin: None,
+        cols: 1,
+        rows: 1,
+    };
+    let roomy = AnchorMarks {
+        margin: Some(at(32.0, 16.0)),
+        ..AnchorMarks {
+            outline: plain.outline.clone(),
+            lines: vec![],
+            art: Some(at(0.0, 0.0)),
+            margin: None,
+            cols: 1,
+            rows: 1,
+        }
+    };
+
+    let tight = psd_marks::layout(32, 32, &plain);
+    let padded = psd_marks::layout(32, 32, &roomy);
+
+    assert_eq!(padded.canvas_width, tight.canvas_width + 64);
+    assert_eq!(padded.canvas_height, tight.canvas_height + 32);
+
+    // The artwork and the anchor both move out with the canvas by the same
+    // amount, so where the picture sits on the grid is unchanged.
+    assert_eq!(padded.art_left - padded.anchor_x, tight.art_left - tight.anchor_x);
+    assert_eq!(padded.art_top - padded.anchor_y, tight.art_top - tight.anchor_y);
+    assert_eq!(padded.art_left, tight.art_left + 32);
+    assert_eq!(padded.art_top, tight.art_top + 16);
+
+    // And it is real room, not a bigger picture: the layer written into the
+    // file is still the 32 × 32 the caller handed over.
+    let bytes = psd_write::psd_from_rgba_marked(
+        "roomy",
+        32,
+        32,
+        swatch(32, 32, [0, 0, 0, 255]),
+        Some(&roomy),
+    )
+    .expect("marked PSD should be written");
+    let doc = psd::Psd::from_bytes(&bytes).expect("marked PSD should parse");
+    assert_eq!((doc.width(), doc.height()), (96, 64));
+    let art = doc
+        .layers()
+        .iter()
+        .find(|l| l.name().starts_with("S |"))
+        .expect("the artwork layer should exist");
+    assert_eq!((art.width(), art.height()), (32, 32));
+    assert_eq!((art.layer_left(), art.layer_top()), (32, 16));
 }

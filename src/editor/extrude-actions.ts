@@ -55,6 +55,7 @@ import {
   EXPORT_SCALE,
   IMPORT_SCALE,
   marksForCells,
+  psdMargin,
   scaleMarks,
 } from "./import-anchor";
 
@@ -134,7 +135,17 @@ export async function applyExtrusion(
     // The footprint marks the spaces the solid *stands on*, not the ones its
     // walls reach across on screen: a tall block is anchored to the ground it
     // was built from, which is where it has to come back down.
-    const marks = scaleMarks(marksForCells(grid, cells, anchor, art), EXPORT_SCALE);
+    //
+    // The margin is a space of clear canvas around the lot. A greybox is
+    // exactly its own silhouette, and painting over one means painting past
+    // it — an overhanging roof, a rim of grass — with nowhere to put the
+    // pixels. It grows the canvas alone: the artwork keeps its size and its
+    // offset from the anchor, so nothing on the grid moves and the collider,
+    // which comes from the voxels, never sees it.
+    const marks = scaleMarks(
+      { ...marksForCells(grid, cells, anchor, art), margin: psdMargin(grid) },
+      EXPORT_SCALE,
+    );
 
     // Carrying one on **rewrites** the file rather than replacing it. Both
     // regenerate the group and both marks; only the rewrite keeps the rest of
@@ -189,6 +200,29 @@ function reanchor(store: DocStore, key: string, anchor: Cell): void {
  * All three are the same size and the same offset, which is what lets them be
  * stacked without arithmetic — and, once they are a group on the canvas, what
  * makes resizing that group exact.
+ *
+ * The three differ in more than which faces they paint, because two of them
+ * have to reproduce on their own something the composite gets for free.
+ *
+ * **The shape** is stroked as well as filled, in its own tone. A silhouette
+ * assembled out of dozens of separately filled quads is not a solid shape:
+ * every shared edge is two antialiased boundaries that come to about 75%
+ * between them, so the shape came out with the whole lattice ghosted into it
+ * — the lines layer's own drawing, printed into the layer that is meant to be
+ * the flat silhouette under it. And its outer edge stopped half a line short
+ * of the drawing, because on the canvas the stroke straddles the boundary.
+ * One stroke in the fill colour answers both: the seams close, and the
+ * silhouette reaches exactly as far as the composite does.
+ *
+ * **The lines** rub out before they draw. On the canvas each face is filled
+ * opaque and then stroked, so a face in front hides the edges of whatever is
+ * behind it — an arch's near pier hides the lines of the span behind it, and
+ * so does any overhang. A layer with no fills in it has nothing to hide them
+ * with, so every occluded edge came through and the lines read as a wireframe
+ * of the whole solid. Each face therefore clears its own polygon out of what
+ * is already there before stroking its edges, which is the painter's
+ * algorithm done in alpha: same order, same result, nothing opaque left
+ * behind.
  */
 function rasterise(
   grid: Grid,
@@ -215,12 +249,18 @@ function rasterise(
   for (const face of shapeFaces(grid, shape)) {
     trace(ctx, face.points);
     if (part === "lines") {
+      erase(ctx);
       ctx.stroke();
     } else if (part === "shape") {
       // The silhouette, in the one tone the top faces take: the shading
       // below paints the walls over it, so the two together are the drawing.
+      // Stroked in the fill's own colour, which is what closes the seams
+      // between separately filled quads and carries the silhouette out to
+      // where the composite's own edges reach.
       ctx.fillStyle = SHADE_COLORS.top;
+      ctx.strokeStyle = SHADE_COLORS.top;
       ctx.fill();
+      ctx.stroke();
     } else if (face.shade !== "top") {
       ctx.fillStyle = SHADE_COLORS[face.shade];
       ctx.fill();
@@ -228,6 +268,21 @@ function rasterise(
   }
 
   return ctx.getImageData(0, 0, width, height).data;
+}
+
+/**
+ * Clear the current path out of what has been drawn so far.
+ *
+ * What an opaque fill does to the layers under it on the canvas, done to a
+ * layer that has to stay transparent. The colour is irrelevant under
+ * `destination-out` — only the coverage is read — and the mode is put back
+ * immediately, because everything else here draws normally.
+ */
+function erase(ctx: CanvasRenderingContext2D): void {
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.fillStyle = "#000";
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
 }
 
 function trace(ctx: CanvasRenderingContext2D, points: readonly Point[]): void {
