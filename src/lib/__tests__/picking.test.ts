@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   destroyPlaced,
+  drawOrder,
   pickPlacement,
   pickPlacementsIn,
   pickZone,
@@ -322,5 +323,67 @@ describe("pickPlacementsIn", () => {
       layer("l1", { placements: [placement("a", corner.x - 90, corner.y - 90)] }),
     ];
     expect(pickPlacementsIn(outside, outline)).toBeNull();
+  });
+});
+
+/**
+ * What is drawn over what, on one document layer.
+ *
+ * The bug this pins: every placement on a layer was given the same depth, so
+ * a placed PSD's stacking fell to the order Phaser was handed its objects in
+ * — and that order was the manifest's, which is top-first. Every multi-layer
+ * PSD was drawn upside down, with its background over its foreground.
+ */
+describe("drawOrder", () => {
+  /** One PSD's worth: ground at the back, then walls, then the roof. */
+  function unit(id: string, y: number): Placement[] {
+    return [
+      { ...placement(`${id}-roof`, 0, y), instance: id, order: 2 },
+      { ...placement(`${id}-walls`, 0, y + 30), instance: id, order: 1 },
+      { ...placement(`${id}-ground`, 0, y + 70), instance: id, order: 0 },
+    ];
+  }
+
+  it("draws a PSD's layers in the order its author stacked them", () => {
+    const hut = unit("hut", 0);
+    expect(drawOrder(hut, false).map((p) => p.id)).toEqual([
+      "hut-ground",
+      "hut-walls",
+      "hut-roof",
+    ]);
+  });
+
+  it("keeps a unit together rather than sorting its layers against each other", () => {
+    // Isometric sorts on screen Y, and a roof sits higher up the screen than
+    // the tower under it — sorting the two would put the roof behind it.
+    const hut = unit("hut", 0);
+    expect(drawOrder(hut, true).map((p) => p.id)).toEqual([
+      "hut-ground",
+      "hut-walls",
+      "hut-roof",
+    ]);
+  });
+
+  it("sorts separate PSDs on their own Y, nearer in front", () => {
+    const far = unit("far", 0);
+    const near = unit("near", 200);
+    const order = drawOrder([...near, ...far], true).map((p) => p.id);
+    expect(order.slice(0, 3)).toEqual(["far-ground", "far-walls", "far-roof"]);
+    expect(order.slice(3)).toEqual(["near-ground", "near-walls", "near-roof"]);
+  });
+
+  it("leaves separate PSDs in the order they were placed where nothing snaps", () => {
+    const first = unit("first", 300);
+    const second = unit("second", 0);
+    const order = drawOrder([...first, ...second], false).map((p) => p.id);
+    expect(order[0]).toBe("first-ground");
+    expect(order[3]).toBe("second-ground");
+  });
+
+  it("takes a placement with no recorded stack as the back of its own", () => {
+    // A document written before the stack was recorded, opened before the
+    // scene's migration has run over it.
+    const loose = [placement("a", 0, 0), placement("b", 0, 0)];
+    expect(drawOrder(loose, false)).toHaveLength(2);
   });
 });

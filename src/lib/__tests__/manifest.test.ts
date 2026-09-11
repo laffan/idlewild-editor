@@ -4,6 +4,7 @@ import {
   parseManifest,
   placeableLayers,
   placedPosition,
+  stackOrder,
 } from "../manifest";
 
 /**
@@ -242,5 +243,49 @@ describe("re-anchoring after an edit", () => {
     );
     expect(placedPosition(WORLD, manifest, { x: 0, y: 0 }, HALF, HALF))
       .toEqual({ x: -50, y: -40 });
+  });
+});
+
+/**
+ * The stack a PSD was built in, which is the artwork.
+ *
+ * psd-to-json lists layers top-first, as Photoshop's own panel does, and
+ * numbers them `initialDepth` counting up from the back. A placement records
+ * the same number because nothing else in the document says which of two
+ * layers was above — and a re-import can restack the file.
+ */
+describe("stackOrder", () => {
+  /** A hut with a roof on it and the ground underneath, plus an import's marks. */
+  const HUT = JSON.stringify({
+    name: "hut",
+    width: 64,
+    height: 96,
+    layers: [
+      { name: "anchor", category: "point", x: 32, y: 80, width: 12, height: 12 },
+      { name: "grid", category: "zone", x: 0, y: 64, width: 64, height: 32 },
+      { name: "roof", category: "sprite", x: 0, y: 0, width: 64, height: 40, initialDepth: 2 },
+      { name: "walls", category: "sprite", x: 4, y: 30, width: 56, height: 50, initialDepth: 1 },
+      { name: "ground", category: "sprite", x: 0, y: 70, width: 64, height: 26, initialDepth: 0 },
+    ],
+  });
+
+  it("counts up from the back of the stack", () => {
+    const order = stackOrder(parseManifest(HUT));
+    expect(order.get("ground")).toBe(0);
+    expect(order.get("walls")).toBe(1);
+    expect(order.get("roof")).toBe(2);
+  });
+
+  it("numbers the layers that are placed, not the marks beside them", () => {
+    // The anchor and the grid are metadata with no pixels — they are not
+    // placed, so they take no room in the stack either.
+    const order = stackOrder(parseManifest(HUT));
+    expect(order.size).toBe(3);
+    expect(order.has("anchor")).toBe(false);
+    expect(order.has("grid")).toBe(false);
+  });
+
+  it("gives a one-layer PSD the only place there is", () => {
+    expect([...stackOrder(parseManifest(CONVERTED_PNG))]).toEqual([["build", 0]]);
   });
 });

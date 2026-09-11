@@ -2,12 +2,16 @@
  * Draws the document into the scene: fills, zones and PSD placements.
  *
  * Layers are stored top-first (Hush's convention), and Phaser depth counts
- * upward, so layer index N of M renders at depth (M - N).
+ * upward, so layer index N of M renders at depth (M - N) × `DEPTH_STRIDE`.
+ * The stride is what a document layer's own contents are ordered *within* —
+ * see `drawOrder`, which is where a placed PSD keeps the stacking its author
+ * gave it.
  */
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { convexOverlapsRect, Grid, fillShape } from "../lib/grid";
+import { instanceOf } from "./instance";
 import type { FillPatch, Layer, Placement, Point, Rect, Zone } from "../lib/types";
 import * as log from "../lib/log";
 
@@ -128,25 +132,28 @@ export class DocRenderer {
   private syncPlacements(): void {
     const seen = new Set<string>();
     const layers = this.store.layers;
+    const isometric = this.grid.projection === "isometric";
 
     layers.forEach((layer, index) => {
-      const depth = (layers.length - index) * DEPTH_STRIDE;
-      for (const placement of layer.placements) {
+      const base = (layers.length - index) * DEPTH_STRIDE;
+      // Back to front, once for the whole layer: every placement then takes
+      // the next depth up, so what is above what is decided here rather than
+      // by the order Phaser happened to be handed the objects in.
+      const order = drawOrder(layer.placements, isometric);
+
+      order.forEach((placement, step) => {
         seen.add(placement.id);
         const view = this.placements.get(placement.id);
-        if (!view) continue;
+        if (!view) return;
         view.placement = placement;
         // A placement can be carried to another layer from the layer panel,
         // and the view is what any later lookup by id reads.
         view.layerId = layer.id;
         view.object.setPosition(placement.x, placement.y);
         applyScale(view.object, placement);
-        // Isometric scenes sort on screen Y so nearer objects draw in front.
-        view.object.setDepth(
-          this.grid.projection === "isometric" ? depth + placement.y : depth,
-        );
+        view.object.setDepth(base + step);
         view.object.setVisible(layer.visible);
-      }
+      });
     });
 
     for (const [id, view] of this.placements) {
@@ -306,6 +313,49 @@ export function pointInPolygon(
     }
   }
   return inside;
+}
+
+/**
+ * Everything on one document layer, back to front.
+ *
+ * Two orderings, one inside the other.
+ *
+ * **Between placed PSDs.** An isometric scene sorts them on screen Y, so a
+ * thing standing nearer the viewer draws in front of one behind it. A unit
+ * sorts on its *own* Y rather than each of its layers separately: a roof sits
+ * higher up the screen than the tower under it, and sorting the two against
+ * each other would put the roof behind the building every time. Flat
+ * projections leave them in the order they were placed.
+ *
+ * **Within one placed PSD.** The author's stack, and nothing else. A PSD is a
+ * stack of layers and the order is the artwork — psd-to-json reports it,
+ * psd-to-phaser applies it to every object it creates, and this used to
+ * overwrite all of them with a single depth per document layer, which left
+ * the stacking to the order Phaser was handed the objects in. That order was
+ * top-first, so every multi-layer PSD was drawn upside down.
+ */
+export function drawOrder(
+  placements: readonly Placement[],
+  isometric: boolean,
+): Placement[] {
+  const units = new Map<string, Placement[]>();
+  for (const placement of placements) {
+    const unit = units.get(instanceOf(placement));
+    if (unit) unit.push(placement);
+    else units.set(instanceOf(placement), [placement]);
+  }
+
+  const sorted = [...units.values()];
+  if (isometric) {
+    // The top edge of the unit, which for a single-layer PSD is the one
+    // placement's own Y — so nothing about how separate things sort changes.
+    const key = (unit: Placement[]) => Math.min(...unit.map((p) => p.y));
+    sorted.sort((a, b) => key(a) - key(b));
+  }
+
+  return sorted.flatMap((unit) =>
+    [...unit].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+  );
 }
 
 export function layerDepth(layers: readonly Layer[], layerId: string): number {

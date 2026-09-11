@@ -13,10 +13,16 @@ import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
-import { parseManifest, placeableLayers, placedPosition } from "../lib/manifest";
+import {
+  parseManifest,
+  placeableLayers,
+  placedPosition,
+  stackOrder,
+} from "../lib/manifest";
 import type { Cell, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { DocRenderer } from "./doc-renderer";
+import { instanceOf } from "./instance";
 import { evictPsd, loadPsd, reconcilePlacements } from "./psd-loader";
 
 /** What placing a PSD needs from the scene around it. */
@@ -93,6 +99,11 @@ export class PsdPlacements {
     // once; the layers are reachable individually through a double-tap.
     const instance = makeId("psd");
 
+    // What the PSD says is on top of what. Kept on each placement because a
+    // re-import can restack the file, and once a placement is in the document
+    // there is nothing in it that says which of two layers was above.
+    const stack = stackOrder(manifest);
+
     let last: Placement | null = null;
     for (const entry of layers) {
       const width = entry.width || manifest.width;
@@ -111,6 +122,7 @@ export class PsdPlacements {
         naturalHeight: height,
         anchor: at,
         instance,
+        order: stack.get(entry.path) ?? 0,
       });
       this.placeOne(layer.id, placement);
       last = placement;
@@ -281,16 +293,20 @@ export class PsdPlacements {
   }
 
   /**
-   * Give the placements of a document written before units existed one each.
+   * Bring a document written by an earlier build up to date, on open.
    *
-   * They were made the way `placePsd` still makes them — one call per PSD,
-   * one placement per layer, all on the same document layer — so grouping by
+   * **Units.** Placements made before instances existed get one each. They
+   * were made the way `placePsd` still makes them — one call per PSD, one
+   * placement per layer, all on the same document layer — so grouping by
    * layer and key reconstructs what was placed together. An option-drag copy
    * of a multi-layer PSD joins its original's unit, which is the one case
    * this guesses wrong; a double-tap and a drag separates them, and the
    * alternative is every layer of every old project moving on its own.
+   *
+   * **Stacking.** Placements made before the PSD's own layer order was
+   * recorded get it from the order they are in, which was the manifest's.
    */
-  migrateInstances(): void {
+  migrate(): void {
     for (const layer of this.host.store.layers) {
       const assigned = new Map<string, string>();
       for (const placement of layer.placements) {
@@ -301,6 +317,27 @@ export class PsdPlacements {
           assigned.set(placement.psdKey, instance);
         }
         this.host.store.updatePlacement(layer.id, placement.id, { instance });
+      }
+    }
+
+    // A document written before stacking was recorded has its placements in
+    // the order they were made, which was the manifest's: top-first. So the
+    // first of a unit was its top layer, and counting down from there is the
+    // stack it should have had all along.
+    for (const layer of this.host.store.layers) {
+      const units = new Map<string, Placement[]>();
+      for (const placement of layer.placements) {
+        const unit = units.get(instanceOf(placement));
+        if (unit) unit.push(placement);
+        else units.set(instanceOf(placement), [placement]);
+      }
+      for (const unit of units.values()) {
+        if (unit.every((p) => p.order !== undefined)) continue;
+        unit.forEach((placement, index) => {
+          this.host.store.updatePlacement(layer.id, placement.id, {
+            order: unit.length - 1 - index,
+          });
+        });
       }
     }
   }

@@ -1142,7 +1142,9 @@ waits on `psdLoadComplete` because it loads at *runtime*, long after any
 
 `cargo test --lib` covers the load-bearing path: RGBA → PSD → psd-to-json →
 manifest → zip, plus the path-traversal guards, the project scaffold, what an
-export's config carries, and the shapes a file picker hands back. The asset
+export's config carries, the shapes a file picker hands back, and the order a
+manifest lists a PSD's layers in — which the frontend mirrors and cannot check
+for itself. The asset
 server is tested over a real loopback socket — the request psd-to-phaser makes,
 byte for byte, and what comes back parsed as an HTTP response rather than
 inspected as a `PathBuf`, because the mapping from URL to file is the one
@@ -1161,7 +1163,8 @@ Apple arms without a Mac; neither one links, and neither is a substitute for
 running it on a device.
 
 `vitest` covers the pure halves — the grid projection, fill geometry,
-picking (a point's and both marquees'), resize geometry, the unit arithmetic
+picking (a point's and both marquees'), what is drawn over what, resize
+geometry, the unit arithmetic
 behind a placed PSD, what the clipboard hands a paste and where that paste
 lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest
@@ -1353,6 +1356,51 @@ Carrying a placement to another layer in the left panel takes it out of its
 unit — `movePlacement` strips `instance` — because a unit is made together on
 one layer and a member that has moved away is no longer part of what the rest
 of them are.
+
+### What is drawn over what
+
+A PSD is a stack of layers and the order is the artwork: a roof over a tower
+is not the same picture as a tower over a roof. psd-to-json reports that
+order — the manifest lists layers top-first, as Photoshop's panel does, and
+numbers each `initialDepth` counting up from the back — and psd-to-phaser
+applies it to every object it creates.
+
+The editor then overwrote all of them. `syncPlacements` gave every placement
+on a document layer the same depth, so the stacking fell to the order Phaser
+happened to be handed the objects in, which was the manifest's: top-first. The
+result is that every multi-layer PSD was drawn **upside down**, background
+over foreground. Under an isometric template it was worse than arbitrary:
+depth was `layerDepth + placement.y`, which sorted a unit's own layers against
+each other by screen Y, so a roof — which sits higher up the screen than the
+tower under it — was pushed behind the building.
+
+So depth is now assigned from an explicit order. `drawOrder` sorts one
+document layer's placements back to front, and each takes the next depth up
+from the layer's base:
+
+- **Between placed PSDs**, an isometric scene still sorts on screen Y, so
+  nearer things draw in front. A unit sorts on its *own* Y — the topmost of
+  its members — rather than each layer separately, which for a single-layer
+  PSD is the same number it used before. Flat projections leave units in the
+  order they were placed.
+- **Within one placed PSD**, the author's stack and nothing else.
+
+The stack is recorded on each placement as `order`, because once a placement
+is in the document nothing in it says which of two layers was above — and it
+is not derivable from what is there. It comes off the manifest at import, is
+re-read on every re-import, and that last part is the point: reordering a
+PSD's layers in the inspector and pressing Apply rewrites the file, and the
+whole visible effect of that edit is which layer is now on top.
+
+`order` is optional on disk for the same reason `instance` is. A document
+written before it existed has its placements in the order they were made,
+which was the manifest's, so the scene's migration counts down from the first
+member of each unit and the file comes back up the right way.
+
+Since depth is now the position in an ordering rather than a world
+coordinate, a placement's Y no longer leaks into the number. It used to: at
+`DEPTH_STRIDE` of 1000, anything below y = 1000 on a lower document layer
+drew over a higher one.
 
 ## The iPad's safe area
 

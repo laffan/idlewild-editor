@@ -109,6 +109,19 @@ export interface Placement {
    * before it existed have none — see `game/instance.ts`.
    */
   instance?: string;
+  /**
+   * How high this layer sat in its PSD's stack, counting up from the back.
+   *
+   * A PSD is a stack of layers and the order is the artwork: a roof over a
+   * tower is not the same picture as a tower over a roof. psd-to-json reports
+   * it, psd-to-phaser applies it, and the editor needs it in the document
+   * because a re-import can restack the file — reordering a PSD's layers in
+   * the inspector is a supported edit, and the canvas has to follow it.
+   *
+   * Optional because documents written before it existed have none; the scene
+   * fills them in on open from the order their placements were made in.
+   */
+  order?: number;
 }
 
 /**

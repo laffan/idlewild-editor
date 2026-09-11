@@ -174,7 +174,7 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.store.addEventListener("change", () => this.refresh());
-    this.psds.migrateInstances();
+    this.psds.migrate();
     void this.psds.loadAll();
     this.refresh();
   }

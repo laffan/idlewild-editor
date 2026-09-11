@@ -11,7 +11,12 @@
 import Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
-import { placeableLayers, placedPosition, type Manifest } from "../lib/manifest";
+import {
+  placeableLayers,
+  placedPosition,
+  stackOrder,
+  type Manifest,
+} from "../lib/manifest";
 import type { Grid } from "../lib/grid";
 import type { Placement } from "../lib/types";
 import * as log from "../lib/log";
@@ -368,6 +373,7 @@ function adoptNewLayers(
   const anchor = sibling.placement.anchor;
   const world = grid.cellToWorld(anchor);
 
+  const stack = stackOrder(manifest);
   for (const entry of placeableLayers(manifest)) {
     if (taken.has(entry.path)) continue;
     const width = entry.width || manifest.width;
@@ -386,6 +392,7 @@ function adoptNewLayers(
       // Part of the same placed thing as the layers it arrived beside, so
       // the PSD still moves as one.
       instance: sibling.placement.instance,
+      order: stack.get(entry.path) ?? 0,
     });
     log.info(`${key}.psd gained "${entry.path}" — placed on the same layer`);
   }
@@ -398,6 +405,11 @@ function reviseExisting(
   manifest: Manifest,
   renames?: ReadonlyMap<string, string>,
 ): void {
+  // Re-read from the file rather than kept: reordering a PSD's layers in the
+  // inspector rewrites the stack, and it is the one edit whose whole visible
+  // effect is which layer is now on top.
+  const stack = stackOrder(manifest);
+
   for (const layer of store.layers) {
     for (const placement of [...layer.placements]) {
       if (placement.psdKey !== key) continue;
@@ -430,6 +442,7 @@ function reviseExisting(
         height: height * scaleY,
         naturalWidth: width,
         naturalHeight: height,
+        order: stack.get(path) ?? placement.order ?? 0,
       });
     }
   }

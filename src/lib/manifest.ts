@@ -172,3 +172,20 @@ export function placeableLayers(manifest: Manifest): ManifestLayer[] {
   );
   return placeable.length > 0 ? placeable : manifest.top;
 }
+
+/**
+ * How high each placeable layer sits in the PSD's stack, by path.
+ *
+ * Zero is the back. It is the one thing a placement cannot work out for
+ * itself later: the manifest's own order is the artwork's order, and once a
+ * placement is in the document there is nothing in it that says which of two
+ * layers was on top.
+ */
+export function stackOrder(manifest: Manifest): Map<string, number> {
+  const placeable = placeableLayers(manifest);
+  // The manifest lists layers top-first, as Photoshop's own panel does, so
+  // the last one is the back of the stack and gets height zero.
+  return new Map(
+    placeable.map((layer, index) => [layer.path, placeable.length - 1 - index]),
+  );
+}
