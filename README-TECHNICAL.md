@@ -1165,7 +1165,8 @@ picking (a point's and both marquees'), resize geometry, the unit arithmetic
 behind a placed PSD, what the clipboard hands a paste and where that paste
 lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest
-reader, the platformer's body step, and the drawing layer's ported maths.
+reader, the platformer's body step, the docs panel's markdown rendering and
+its two kinds of lookup, and the drawing layer's ported maths.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -1368,6 +1369,83 @@ body showing through. The console drawer does the same downward past the home
 indicator, the home screen's bar does it at the top, and the code panel does it
 only while it is floating — docked it is a row between two rows and insets
 nothing.
+
+## The reference along the bottom of the code modal
+
+Ported from phaser-bench, where it sits under the editor for the reason it
+sits under this one: the question *what does this method take?* arrives while
+you are typing the method, and an answer in another window is an answer you
+go and look up rather than read. Docs opens a fourth region of the modal on a
+divider of its own, remembered like the console's.
+
+Four references behind one toggle, and the panel knows none of them apart —
+`docs/types.ts` is the six questions it asks of whichever is selected, and
+everything else is a `DocsSource`.
+
+| Source | What it is | Where it comes from |
+|---|---|---|
+| Concepts | Phaser's prose guides, 48 pages | `public/data/phaser-concepts/` |
+| API | Phaser's own JSDoc, keyed by expression | `public/data/phaser-docs.json` |
+| JS / CSS / HTML | MDN's reference, ~2,800 pages | `public/data/web-docs/` + a generated index |
+| P2P | psd-to-phaser's docs, 18 pages | `public/data/p2p-docs/` |
+
+**Automatic follows the caret.** `code-modal.ts` reports every selection
+change into `panel.onCursor(lineText, col, path)`, and the source works out
+what is under it: `phaser-api.ts` matches the expression prefixes people
+actually type — `this.physics.add.`, `Phaser.Math.` — longest-first, since
+`this.` is a prefix of half the others and would otherwise answer for all of
+them. The word under the caret is read from both sides of it, so `setSc|ale`
+asks about `setScale`. The two written guides have nothing a caret could
+mean, so Automatic is hidden while one is up and the nav column takes its
+place — which is what `cursorMode` on the source is for.
+
+**MDN follows the file.** A caret in `styles.css` asks the CSS reference and
+one in `index.html` asks the HTML reference, so that one button changes its
+own label between JS, CSS and HTML as the editor moves between files. It is
+told even while the panel is closed, so the label is right before anyone
+looks at it rather than one keystroke later.
+
+**The index is loaded; the pages are not.** `web-docs-index.json` is 884 KB of
+title, description, path and page type, plus three maps from the thing you
+would type to the page about it. A page is fetched only when it is opened, and
+kept in a small cache — there are 2,806 of them and they are 38 MB together.
+For the same reason the Automatic mode shows the index's one-line description
+first and swaps the full page in behind it, guarded on the caret not having
+moved on.
+
+**The two guides were one module twice.** phaser-bench's `concepts-docs.js`
+and `p2p-docs.js` were the same two hundred lines with different constants, so
+`guide.ts` is a factory called twice. Their search is full text over an index
+built in the background on load: forty-odd small files, where a title-only
+search answers "tilemap" with nothing at all. A title match outscores a body
+match by two orders of magnitude, and body matches are capped per word so one
+page repeating a term cannot bury the page that is about it.
+
+**P2P is always there.** In phaser-bench that button appeared only for
+sketches that used the plugin, and it read `js/main.js` after every sketch
+switch to decide. Every Idlewild project is a psd-to-phaser project, so the
+check and the switching it hung off both go.
+
+**Markdown, not a markdown library.** `markdown.ts` reads the part of markdown
+this corpus uses — headings, lists, blockquotes, fenced code, links, inline
+emphasis — plus MDN's KumaScript macros, which are stripped or reduced to
+their first argument because there is nothing on the other end of them here.
+It renders to a string and the panel assigns it with `innerHTML`, which is
+safe on one condition the file states and the tests pin: every piece of text
+goes through `esc` before a tag is put near it, so the only HTML in the output
+is the HTML it wrote.
+
+### Where the data came from
+
+All of it is vendored, generated by phaser-bench's `scripts/build-phaser-docs.js`
+(which clones Phaser and reads its JSDoc) and `scripts/build-web-docs.js`
+(which indexes a checkout of `mdn/content`). The generators are not ported
+here: they are run once per upstream release, and the second one needs an MDN
+clone staged by hand first. Re-running them there and copying `public/data/`
+across is the way to move the pin.
+
+The MDN pages are CC BY-SA 2.5, which is why every page rendered from them
+carries a line saying so.
 
 ## Pinning and unpinning the code panel
 

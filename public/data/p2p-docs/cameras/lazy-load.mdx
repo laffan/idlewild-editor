@@ -1,0 +1,76 @@
+---
+layout: base.njk
+title: LazyLoad Camera
+---
+
+<Interactive outputPath="demos/output/lazyLoad" psdKey="p9_key" src="interactive/cameras/lazy-load.js" />
+
+## All Layers LazyLoad
+
+When ALL layers in your PSD are set to `lazyLoad`, layers that are directly under the camera will load immediately. This demo demonstrates this behavior - drag around to see more items load as they enter the viewport.
+
+<Interactive outputPath="demos/output/allLazyLoad" psdKey="all_lazy_key" src="interactive/cameras/all-lazy-load.js" />
+
+This camera works in conjunction with the `lazyLoad` attribute, which you can set to true on any sprite or tile layer. Sprite or tile layers that have been given the `lazyLoad` attribute will not loaded during load() but later, when they enter the camera. This gives you the ability to load assets only when they're needed, potentially keeping load times much (much) smaller.
+
+```js
+// Initialize a lazyLoad camera (applies to all PSDs by default)
+this.lazyCamera = this.P2P.createCamera(this.cameras.main, ["lazyLoad"], {
+  lazyLoad: {
+    extendPreloadBounds: 100, // distance outside camera to start loading
+    debug: {
+      shape: true, // outline lazyLoad items
+      label: false, // label with filename
+      console: false, // show file loading in console
+    },
+  },
+});
+
+```
+**Note:**  : Currently does _not_ work with multiple cameras. Also, there are some tradeoffs to using `lazyLoad`. The biggest difference is that you can't manually place lazily loaded items before the sprite texture has loaded. If the lazyLoad camera is on, they'll just show up when needed.
+
+The other tradeoff is that you MUST use the lazyLoad camera to see lazyLoaded items at all, as the plugin just leaves them out of the initial load sequence. If you do not use a lazyLoad camera and your PSD contains lazyLoad items you will get lots of "Texture not found" errors.
+
+```js
+
+// Target specific PSDs only
+this.lazyCamera = this.P2P.createCamera(this.cameras.main, ["lazyLoad"], {
+  lazyLoad: {
+    targetKeys: ["psd_01", "psd_02"], // only lazy load these PSDs
+    debug: { console: true },
+  },
+});
+
+// Use with camera zoom - creates boundary camera unaffected by zoom
+this.lazyCamera = this.P2P.createCamera(this.cameras.main, ["lazyLoad"], {
+  lazyLoad: {
+    extendPreloadBounds: 50,
+    createBoundaryCamera: true, // creates invisible camera for accurate boundaries when zoomed
+    debug: { shape: true },
+  },
+});
+```
+
+
+**Note on Zoom**: The lazyLoad camera now correctly handles camera zoom by default. The `createBoundaryCamera: true` option is still available if you need a separate camera for boundary calculations, but it's no longer required for zoom to work correctly.
+
+Now P2P is keeping track of where the camera is and whether there is any overlap with the location of sprites or tiles. If there is overlap, it will trigger a load sequence. When lazyLoad items load, they trigger loadProgress events, so you can listen for "lazyLoadStart", "lazyLoadProgress", "lazyLoadingComplete".
+
+```js
+// Simple lazyLoad camera for all PSDs
+this.lazyCamera = this.P2P.createCamera(this.cameras.main, ["lazyLoad"]);
+
+this.events.on("lazyLoadStart", (progress, currentlyLoading) => {
+  console.log(`Loading is ${progress} complete.`);
+  console.log(currentlyLoading); // Array of items currently loading
+});
+
+this.events.on("lazyLoadProgress", (progress, currentlyLoading) => {
+  console.log(`Loading is ${progress} complete.`);
+  console.log(currentlyLoading); // Array of items currently loading
+});
+
+this.events.on("lazyLoadingComplete", () => {
+  console.log(`Lazy loading is complete.`);
+});
+```

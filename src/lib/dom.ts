@@ -135,6 +135,8 @@ export const ICONS = {
   code: ["m9 8-5 4 5 4", "m15 8 5 4-5 4"],
   publish: ["M12 19V5", "M5 12l7-7 7 7"],
   menu: ["M4 7h16", "M4 12h16", "M4 17h16"],
+  /* An open book, for the reference along the bottom of the code modal. */
+  book: ["M12 7v13", "M12 7C9.5 5 6.5 4.6 4 5v13c2.5-.4 5.5 0 8 2", "M12 7c2.5-2 5.5-2.4 8-2v13c-2.5-.4-5.5 0-8 2"],
   pin: ["M9 4h6", "M10 4v6l-3 4v2h10v-2l-3-4V4", "M12 16v5"],
   /* Sliders — Project Options, which is settings rather than navigation. */
   sliders: ["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 5v4", "M9 15v4"],

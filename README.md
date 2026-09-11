@@ -113,6 +113,12 @@ remaining pieces are wired to real slots rather than mocked.
   pinned above the console. New File and New Folder sit in its header; rename,
   duplicate, delete and dragging files between folders are on the rows, in a
   column with a divider of its own
+- Docs, along the bottom of the code modal: Phaser's concept guides, Phaser's
+  own API, MDN's JavaScript, CSS and HTML reference, and psd-to-phaser's docs.
+  Automatic follows the caret — put it on `this.add.sprite` and the page for it
+  appears — and the MDN half follows the file, so a `.css` asks about CSS.
+  Search, and a table of contents for the written guides. All of it is on the
+  device, so it works on an iPad with no network
 - Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
   by psd-to-json's own progress
 - Publish: a zipped project carrying both runtimes and the document, so the
@@ -164,6 +170,10 @@ npm run vendor:p2p
 | [psd-to-json-rust](https://github.com/laffan/psd-to-json-rust) | PSD → game assets, in-process |
 | [psd](https://github.com/laffan/psd) | Reading PSDs, and the write half that turns images and sketches into them |
 | [hush](https://github.com/laffan/hush) | The drawing layer: stroke engine, infinite canvas, Apple Pencil |
+
+The reference in the code modal carries [MDN Web Docs](https://developer.mozilla.org)
+content, used under CC BY-SA 2.5, alongside Phaser's and psd-to-phaser's own
+documentation.
 
 See [README-TECHNICAL.md](README-TECHNICAL.md) for architecture.
 

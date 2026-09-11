@@ -6,6 +6,9 @@ const stub = (name: string) =>
 
 export default defineConfig({
   root: fileURLToPath(new URL(".", import.meta.url)),
+  // The vendored documentation, which lives beside the app rather than beside
+  // the harness — without this the docs panel opens here with nothing in it.
+  publicDir: fileURLToPath(new URL("../public", import.meta.url)),
   server: { port: 1421, strictPort: true },
   resolve: {
     alias: {

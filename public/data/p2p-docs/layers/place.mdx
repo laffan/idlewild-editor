@@ -1,0 +1,119 @@
+---
+layout: base.njk
+title: place()
+---
+
+<Interactive outputPath="demos/output/placement" psdKey="p1_key" src="interactive/layers/place-1.js" />
+
+If you're placing a layer group, all of the descendants will be placed by default. However, place() also lets you place specific descendants using a slash path format. An optional "options" object allows you to limit the recursion ("depth") and set debugging options ("debug").
+
+```js
+// Place a top level layer
+const psd = this.P2P.place(this, "psd_key", "root");
+
+// Place a nested layer
+const sprite = this.P2P.place(this, "psd_key", "root/spiteName");
+
+// Place all the children of a nested group with some optional overrides
+const item = this.P2P.place(
+  this,
+  "psd_key"
+  "groupName/nestedGroup",
+  {
+    depth: 1, // Only place top level items in this group, not the descendants
+    ignore: ["background", "sprites/sprite1"], // array of paths to ignore
+    debug: {
+      shape: true
+    },
+  }
+);
+```
+
+In the following example, click the PSD Layers button to see how the PSD layers are named and nested.
+
+
+### Default Methods
+
+Several sprite methods can be called on a placed group. This just applies the method to each sprite individually. Currently, the list of supported methods (somewhat arbitrarily) includes : 'setAlpha', 'setAngle', 'setBlendMode', 'setDepth', 'setDisplaySize', 'setFlip', 'setMask', 'setOrigin', 'setPipeline', 'setPosition', 'setRotation', 'setScale', 'setScrollFactor', 'setSize', 'setTint', 'setVisible', 'setX', 'setY', 'setZ'.
+
+<Interactive outputPath="demos/output/placement" psdKey="p2_key" id="place-methods" src="interactive/layers/place-2.js" />
+
+```js
+// Set the alpha and rotation of a group.
+const depthTest = this.P2P.place(this, "psd_key", "depthTest");
+depthTest.setAlpha(0.3);
+depthTest.setRotation(Math.PI / 4);
+```
+
+
+
+### Animations
+
+
+Animations automatically play when placed. However, you can override the default animation properties at several points.
+
+<Interactive outputPath="demos/output/placement" psdKey="p3_key" id="place-animations" src="interactive/layers/place-3.js" />
+
+1. Layer naming : In the PSD itself, the attributes of the layer name itself can control animation properties. If you pass valid animation parameters, they will be merged in when instantiating the animation.
+
+```
+S | bounce | animation | frameRate: 5, yoyo: true
+```
+
+2. Instantiation : When instantiating the sprite, you can also pass in animation parameters, so the same thing could be acheived like so :
+
+```js
+// For individual sprites
+this.P2P.place(this, "psd_key", "nested/bounce",   {
+    animationOptions: {
+      frameRate: 12,
+      yoyo: true,
+    }
+  });
+```
+
+If you have already placed the animation, you can also override the initial settings using the `updateAnimation` method.
+
+```js
+this.bounce = this.P2P.place(this, "psd_key", "nested/bounce");
+
+this.bounce.updateAnimation({
+  frameRate: 5,
+  yoyo: true,
+});
+```
+
+
+
+### Layer Masks
+
+Groups can have layer masks applied, which clip all children to a shape defined by a mask image. When a group with a mask is placed, the mask is automatically applied to all sprites within that group.
+
+<Interactive outputPath="demos/output/mask" psdKey="mask_key" id="place-mask" src="interactive/layers/place-mask.js" />
+
+In the demo above, notice how the moon and mountains move independently while the circular mask stays fixed. This is because Phaser's bitmap masks are positioned in global space - sprites move "underneath" the mask.
+
+In the PSD, a group layer with a mask will export with `mask: true`, position properties (`maskX`, `maskY`), and a `maskPath` pointing to the mask image. The mask uses Phaser's bitmap mask system - white areas are visible, black areas are hidden.
+
+```js
+// Place a group with a layer mask
+const maskedGroup = this.P2P.place(this, "psd_key", "maskedShape");
+
+// Sprites can be animated independently - the mask stays fixed
+const moon = maskedGroup.target('moon');
+this.tweens.add({
+  targets: moon,
+  x: '-=80',
+  duration: 3000,
+  yoyo: true,
+  repeat: -1
+});
+```
+
+The mask is applied automatically when the group is placed. All sprites within the masked group will be clipped to the mask shape. This is useful for creating:
+
+- Circular or custom-shaped viewports
+- Reveal effects with animated content
+- Parallax scenes within shaped windows
+- Complex clipping regions
+

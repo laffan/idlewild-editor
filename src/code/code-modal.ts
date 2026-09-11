@@ -13,6 +13,12 @@
  * resizable on the same divider, and the canvas keeps whatever is left. Where
  * it lives in the DOM is the editor shell's business, so pinning is reported
  * rather than acted on here.
+ *
+ * Docs opens a fourth region along the bottom, on a divider of its own: the
+ * Phaser reference, MDN's, and the two written guides, following the caret
+ * where they can. It is ported from phaser-bench, where it sits under the
+ * editor for the same reason — the question "what does this method take?"
+ * arrives while you are typing the method. See `docs/panel.ts`.
  */
 
 import { EditorState, Compartment } from "@codemirror/state";
@@ -26,6 +32,7 @@ import { h, ICONS, icon } from "../lib/dom";
 import { gameFiles } from "../lib/ipc";
 import * as log from "../lib/log";
 import { FileTree } from "./file-tree";
+import { DocsPanel } from "./docs/panel";
 import { createResizer, type Resizer } from "../editor/resizer";
 
 const languageCompartment = new Compartment();
@@ -42,8 +49,12 @@ export class CodeModal {
   private dirty = false;
   private pinned = false;
   private readonly pinButton: HTMLButtonElement;
+  private readonly docsButton: HTMLButtonElement;
   private readonly onPinChange: (pinned: boolean) => void;
   private readonly filesResizer: Resizer;
+  private readonly docs = new DocsPanel();
+  private readonly docsResizer: Resizer;
+  private docsOpen = false;
 
   constructor(
     projectId: string,
@@ -77,9 +88,34 @@ export class CodeModal {
       storageKey: "codeFilesWidth",
     });
 
+    // The docs panel is a row of the modal like the console is a row of the
+    // shell, and takes its height the same way — on a divider, remembered.
+    this.docsResizer = createResizer({
+      target: this.docs.root,
+      axis: "height",
+      edge: "start",
+      min: 120,
+      max: 620,
+      storageKey: "codeDocsHeight",
+    });
+    this.docsResizer.handle.hidden = true;
+    this.docs.root.hidden = true;
+
     this.filename = h("div", { class: "code-filename m", text: "No file open" });
     this.dirtyFlag = h("div", { class: "code-dirty m" });
     this.editorHost = h("div", { class: "code-editor" });
+
+    this.docsButton = h(
+      "button",
+      {
+        class: "code-pin-btn",
+        title: "Phaser, JavaScript and psd-to-phaser reference",
+        "aria-pressed": "false",
+        onClick: () => this.setDocsOpen(!this.docsOpen),
+      },
+      icon(ICONS.book, 15),
+      h("span", { text: "Docs" }),
+    ) as HTMLButtonElement;
 
     this.pinButton = h(
       "button",
@@ -108,6 +144,7 @@ export class CodeModal {
         h(
           "div",
           { class: "code-head-right" },
+          this.docsButton,
           this.pinButton,
           h(
             "button",
@@ -138,10 +175,13 @@ export class CodeModal {
           ),
         ),
       ),
+      this.docsResizer.handle,
+      this.docs.root,
     );
 
     this.root = h("div", { class: "code-backdrop" }, panel);
     this.filesResizer.restore();
+    this.docsResizer.restore();
     void this.reloadFiles();
   }
 
@@ -166,6 +206,18 @@ export class CodeModal {
 
   get isPinned(): boolean {
     return this.pinned;
+  }
+
+  /** Show or hide the reference along the bottom. */
+  setDocsOpen(open: boolean): void {
+    if (open === this.docsOpen) return;
+    this.docsOpen = open;
+    this.docs.root.hidden = !open;
+    this.docsResizer.handle.hidden = !open;
+    this.docsButton.setAttribute("aria-pressed", String(open));
+    // Opening it with the caret already somewhere should answer for where the
+    // caret already is, rather than waiting for the next keystroke.
+    if (open) this.reportCursor();
   }
 
   private async reloadFiles(): Promise<void> {
@@ -222,6 +274,9 @@ export class CodeModal {
         oneDark,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) this.setDirty(true);
+          // Automatic mode is the docs panel following the caret, so it wants
+          // every move of it — and a typed character moves it too.
+          if (update.docChanged || update.selectionSet) this.reportCursor();
         }),
         EditorView.theme({
           "&": { height: "100%" },
@@ -239,6 +294,23 @@ export class CodeModal {
     } else {
       this.view = new EditorView({ state, parent: this.editorHost });
     }
+    // A new file is a new language as far as the reference is concerned, even
+    // before the caret has moved in it.
+    this.reportCursor();
+  }
+
+  /**
+   * Tell the docs panel where the caret is.
+   *
+   * Sent whether or not the panel is open: the web reference's button carries
+   * the language of the file being edited, and it should be right by the time
+   * anyone looks at it rather than one keystroke later.
+   */
+  private reportCursor(): void {
+    if (!this.view) return;
+    const head = this.view.state.selection.main.head;
+    const line = this.view.state.doc.lineAt(head);
+    this.docs.onCursor(line.text, head - line.from, this.openPath);
   }
 
   private setDirty(dirty: boolean): void {
@@ -263,6 +335,8 @@ export class CodeModal {
 
   destroy(): void {
     this.filesResizer.destroy();
+    this.docsResizer.destroy();
+    this.docs.destroy();
     this.tree.destroy();
     this.view?.destroy();
     this.root.remove();

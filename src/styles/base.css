@@ -8,6 +8,7 @@
 @import "./editor.css";
 @import "./panels.css";
 @import "./code.css";
+@import "./docs.css";
 @import "./controls.css";
 
 * { box-sizing: border-box; }

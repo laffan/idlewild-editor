@@ -1,0 +1,342 @@
+/* The docs panel: a fourth region along the bottom of the code modal, on a
+   divider of its own. Ported from phaser-bench's docs.css and re-skinned to
+   this project's tokens — one accent, zero radius, the same rules as the rest
+   of the chrome. */
+
+.docs-panel {
+  flex: none;
+  height: 260px;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: var(--rule-chrome);
+  background: var(--chrome-bg);
+}
+.docs-panel[hidden] { display: none; }
+
+/* ── The header: which reference, and how it is being read ───────────────── */
+
+.docs-head {
+  flex: none;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: var(--rule-chrome);
+  flex-wrap: wrap;
+}
+
+/* Both toggles are one bordered run of buttons, as the file column's New
+   File / New Folder pair is. */
+.docs-toggle {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--color-neutral-700);
+}
+.docs-modes { margin-left: auto; }
+
+.docs-source,
+.docs-mode {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-dim);
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.docs-source:first-child,
+.docs-mode:first-child { border-left: 0; }
+.docs-source:hover,
+.docs-mode:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.docs-source.active,
+.docs-mode.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.docs-source[hidden],
+.docs-mode[hidden] { display: none; }
+
+.docs-search {
+  flex: 1 1 180px;
+  min-width: 120px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 400 12px var(--font-mono);
+}
+.docs-search:focus {
+  outline: none;
+  border-bottom-color: var(--color-accent);
+}
+.docs-search[hidden] { display: none; }
+
+/* ── The body: an optional nav column, and the page ──────────────────────── */
+
+.docs-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.docs-nav {
+  width: 168px;
+  flex: none;
+  overflow-y: auto;
+  padding: 6px 0;
+  border-right: var(--rule-chrome);
+  font: 400 12px var(--font-body);
+}
+.docs-nav[hidden] { display: none; }
+
+.docs-nav-item {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--chrome-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.docs-nav-item:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.docs-nav-item.active { color: var(--color-accent-400); font-weight: 600; }
+.docs-nav-item.child { padding-left: 24px; font-size: 11px; }
+.docs-nav-arrow {
+  flex: none;
+  width: 12px;
+  font-size: 8px;
+  margin-right: 4px;
+  transition: transform 0.15s;
+}
+.docs-nav-item.open > .docs-nav-arrow { transform: rotate(90deg); }
+.docs-nav-children { display: none; }
+.docs-nav-children.expanded { display: block; }
+
+.docs-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  font: 400 13px/1.6 var(--font-body);
+  color: var(--chrome-text);
+  -webkit-overflow-scrolling: touch;
+}
+
+.docs-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--chrome-dim);
+}
+.docs-empty kbd,
+.docs-content kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--chrome-rule);
+  background: var(--chrome-panel);
+  color: var(--chrome-text);
+  font: 400 0.9em var(--font-mono);
+}
+
+.web-doc-loading {
+  padding: 8px 0;
+  color: var(--chrome-dim);
+  font-style: italic;
+}
+
+.docs-credit {
+  margin-top: 20px;
+  padding-top: 8px;
+  border-top: var(--rule-chrome);
+  color: var(--chrome-dim);
+  font: 400 11px var(--font-label);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+/* ── An API entry ────────────────────────────────────────────────────────── */
+
+.docs-signature {
+  margin-bottom: 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  color: var(--color-accent-400);
+  font: 500 15px var(--font-mono);
+}
+.docs-desc { margin-bottom: 10px; }
+.docs-class-badge {
+  margin-bottom: 6px;
+  color: var(--chrome-dim);
+  font: 400 11px var(--font-label);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.docs-section-title {
+  margin: 14px 0 4px;
+  color: var(--chrome-dim);
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.docs-params { margin: 0 0 8px; padding: 0; list-style: none; }
+.docs-param {
+  padding: 4px 0;
+  border-top: 1px solid var(--chrome-panel);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+.docs-param-name { font: 500 12px var(--font-mono); color: var(--chrome-text); }
+.docs-param-type { font: 400 11px var(--font-mono); color: var(--color-accent-400); }
+.docs-param-optional {
+  font: 600 10px var(--font-label);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--chrome-dim);
+}
+.docs-param-desc { flex: 1 1 100%; color: var(--chrome-dim); font-size: 12px; }
+.docs-returns { display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.docs-since { margin-top: 12px; color: var(--chrome-dim); font-size: 11px; }
+
+/* ── Search results, and the topic browser ───────────────────────────────── */
+
+.docs-search-result {
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-bottom: 1px solid var(--chrome-panel);
+  cursor: pointer;
+}
+.docs-search-result:hover { background: var(--chrome-panel); }
+.docs-search-result-name { font: 500 13px var(--font-mono); color: var(--chrome-text); }
+.docs-search-result-desc { margin-top: 2px; color: var(--chrome-dim); font-size: 12px; }
+
+.web-doc-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 4px;
+  border: 1px solid var(--color-neutral-700);
+  color: var(--chrome-dim);
+  font: 600 10px var(--font-label);
+  letter-spacing: 0.4px;
+  vertical-align: 1px;
+}
+
+.docs-browser-section { margin-bottom: 16px; }
+.docs-browser-title {
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: var(--rule-chrome);
+  color: var(--color-accent-400);
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.docs-browser-items { display: flex; flex-wrap: wrap; gap: 2px 0; }
+.docs-browser-item {
+  padding: 3px 8px;
+  color: var(--chrome-dim);
+  font: 400 12px var(--font-mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.docs-browser-item:hover { background: var(--chrome-panel); color: var(--chrome-text); }
+
+/* ── A rendered page ─────────────────────────────────────────────────────── */
+
+.docs-content h2,
+.docs-content h3,
+.docs-content h4,
+.docs-content h5,
+.docs-content h6 {
+  margin: 18px 0 6px;
+  color: var(--color-accent-400);
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.docs-content h2 { font-size: 16px; }
+.docs-content h3 { font-size: 14px; }
+.docs-content h4,
+.docs-content h5,
+.docs-content h6 { font-size: 13px; }
+
+.docs-content p { margin: 6px 0 10px; }
+.docs-content ul,
+.docs-content ol { margin: 4px 0 10px; padding-left: 20px; }
+.docs-content li { margin: 2px 0; }
+.docs-content blockquote {
+  margin: 10px 0;
+  padding: 4px 12px;
+  border-left: 2px solid var(--color-accent);
+  color: var(--chrome-dim);
+}
+.docs-content strong { font-weight: 600; }
+.docs-content a {
+  color: var(--color-accent-400);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+}
+.docs-content a:hover { text-decoration-style: solid; }
+
+.docs-content code,
+.docs-desc code {
+  padding: 1px 4px;
+  background: var(--chrome-panel);
+  color: var(--color-accent-400);
+  font: 400 0.92em var(--font-mono);
+}
+.docs-content pre,
+.docs-desc pre {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--chrome-panel);
+  border-left: 2px solid var(--chrome-rule);
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.docs-content pre code,
+.docs-desc pre code {
+  padding: 0;
+  background: none;
+  color: var(--chrome-text);
+}
+
+/* Syntax colours. One accent means the code palette leans on the neutral
+   ramp, with the accent reserved for the thing being named. */
+.docs-content pre .hl-kw,
+.docs-desc pre .hl-kw { color: var(--color-accent-400); }
+.docs-content pre .hl-str,
+.docs-desc pre .hl-str { color: #b7c9a8; }
+.docs-content pre .hl-num,
+.docs-desc pre .hl-num { color: #d8c48a; }
+.docs-content pre .hl-fn,
+.docs-desc pre .hl-fn { color: #a8c0d8; }
+.docs-content pre .hl-const,
+.docs-desc pre .hl-const { color: #d8c48a; }
+.docs-content pre .hl-cmt,
+.docs-desc pre .hl-cmt { color: var(--chrome-dim); font-style: italic; }
+
+/* Docked, the modal is a short row and the reference has to give way to the
+   editor above it rather than the other way round. */
+.code-backdrop.docked .docs-panel { max-height: 50%; }
+
+/* On a narrow iPad the two toggles and the field will not share a line. The
+   header wraps, and the nav column narrows rather than the page. */
+@media (max-width: 720px) {
+  .docs-modes { margin-left: 0; }
+  .docs-nav { width: 132px; }
+}
