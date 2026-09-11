@@ -1,6 +1,6 @@
 /**
  * Dragging what is selected: a placed image, one of its corner handles, a
- * filled run of grid spaces, or a boundary.
+ * filled run of grid spaces, a named point, or a boundary.
  *
  * Split out of the scene because it is a small state machine with one job and
  * the scene has several. What it needs from the scene is narrow enough to
@@ -20,6 +20,7 @@ import { makeId } from "../lib/doc-store";
 import type {
   Cell,
   FillPatch,
+  MapPoint,
   Placement,
   Point,
   Rect,
@@ -27,7 +28,7 @@ import type {
   Zone,
 } from "../lib/types";
 import type { DragModifiers } from "./camera-rig";
-import { pointInPolygon } from "./doc-renderer";
+import { pointInPolygon, pointReach } from "./doc-renderer";
 import {
   instanceMembers,
   instanceOf,
@@ -77,6 +78,14 @@ type DragState =
       grabCell: Cell;
       /** The outline as it was at pointer-down, so the drag never compounds. */
       points: Point[];
+    }
+  | {
+      kind: "point";
+      layerId: string;
+      id: string;
+      grabCell: Cell;
+      /** The space it was on at pointer-down, so the drag never compounds. */
+      cell: Cell;
     }
   | {
       kind: "resize";
@@ -174,6 +183,9 @@ export class DragController {
     if (selection.kind === "zone") {
       return this.beginZone(selection, world, grabCell, modifiers.alt);
     }
+    if (selection.kind === "point") {
+      return this.beginPoint(selection, world, grabCell, modifiers.alt);
+    }
     return false;
   }
 
@@ -240,6 +252,16 @@ export class DragController {
       }
       store.updateFill(drag.layerId, drag.id, {
         cells: drag.cells.map((c) => ({ cx: c.cx + dx, cy: c.cy + dy })),
+      });
+      return;
+    }
+
+    if (drag.kind === "point") {
+      // A point is a space, so the drag is the cell step and nothing else —
+      // no projection back into world coordinates the way a boundary's
+      // outline needs, because there is no sub-cell offset to preserve.
+      store.updatePoint(drag.layerId, drag.id, {
+        cell: { cx: drag.cell.cx + dx, cy: drag.cell.cy + dy },
       });
       return;
     }
@@ -443,6 +465,40 @@ export class DragController {
     return true;
   }
 
+  /**
+   * A point drags from its marker, not from anywhere.
+   *
+   * Everything else here is picked up from inside a shape it fills; a point
+   * has no inside, so the target is the marker itself — the same reach the
+   * tap that selected it used, or there would be places where a point can be
+   * chosen and not moved.
+   */
+  private beginPoint(
+    selection: Extract<Selection, { kind: "point" }>,
+    world: Point,
+    grabCell: Cell,
+    alt: boolean,
+  ): boolean {
+    const layer = this.host.store.layer(selection.layerId);
+    if (!layer || layer.locked) return false;
+    const point = layer.points.find((p) => p.id === selection.pointId);
+    if (!point) return false;
+    const at = this.host.grid.cellCentre(point.cell);
+    if (Math.hypot(at.x - world.x, at.y - world.y) > pointReach(this.host.grid)) {
+      return false;
+    }
+
+    const dragged = alt ? this.copyPoint(layer.id, point) : point;
+    this.start({
+      kind: "point",
+      layerId: layer.id,
+      id: dragged.id,
+      grabCell,
+      cell: dragged.cell,
+    });
+    return true;
+  }
+
   private start(state: DragState): void {
     this.state = state;
     this.host.onDragStateChange(true);
@@ -452,6 +508,14 @@ export class DragController {
     const { id: _id, ...rest } = source;
     const copy = this.host.store.addZone(layerId, rest);
     this.host.setSelection({ kind: "zone", layerId, zoneId: copy.id });
+    return copy;
+  }
+
+  /** The copy takes a name of its own: two points called the same thing is
+   *  exactly what a name is for avoiding. */
+  private copyPoint(layerId: string, source: MapPoint): MapPoint {
+    const copy = this.host.store.addPoint(layerId, source.cell);
+    this.host.setSelection({ kind: "point", layerId, pointId: copy.id });
     return copy;
   }
 

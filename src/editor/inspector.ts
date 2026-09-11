@@ -13,6 +13,7 @@ import { brushPanel } from "./inspect-brush";
 import {
   renderLayer,
   renderPlacements,
+  renderPoint,
   renderRegion,
   renderStrokes,
   renderZone,
@@ -62,6 +63,11 @@ export interface InspectorCallbacks {
    * a layer selection as nothing to delete.
    */
   onDeleteLayer: (layerId: string) => void;
+  /** Rename a named place. Its own callback because a point's name is the
+   *  only thing about it the panel can change. */
+  onRenamePoint: (layerId: string, pointId: string, name: string) => void;
+  /** Say where the open scene starts play, or that it starts nowhere. */
+  onSetStartPoint: (pointId: string | null) => void;
   /** Write the selected grid area out as a transparent PNG. */
   onExportSelection: () => void;
   onUsePatternImage: () => void;
@@ -232,6 +238,15 @@ export class Inspector {
       case "placements":
         renderPlacements(this.surface(), this.store, this.callbacks, this.selection);
         break;
+      case "point":
+        renderPoint(
+          this.surface(),
+          this.store,
+          this.grid,
+          this.callbacks,
+          this.selection,
+        );
+        break;
       case "zone":
         renderZone(this.surface(), this.store, this.callbacks, this.selection);
         break;
@@ -283,6 +298,8 @@ export class Inspector {
     return {
       body: this.body,
       head: (kicker, title) => this.head(kicker, title),
+      editableHead: (kicker, value, suffix, onCommit) =>
+        this.editableHead(kicker, value, suffix, onCommit),
       section: (title) => this.section(title),
       row: (key, value) => this.row(key, value),
       empty: () => this.renderEmpty(),

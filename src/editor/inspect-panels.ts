@@ -27,6 +27,18 @@ import type { FillPatch, Selection } from "../lib/types";
 export interface PanelSurface {
   body: HTMLElement;
   head(kicker: string, title: string): void;
+  /**
+   * A head whose title is the thing's own name, and can be retyped.
+   *
+   * The inspector's, because it is the field its `captureName` puts the caret
+   * back into when the panel is rebuilt under someone typing in it.
+   */
+  editableHead(
+    kicker: string,
+    value: string,
+    suffix: string,
+    onCommit: (next: string) => void,
+  ): void;
   section(title?: string): HTMLElement;
   row(key: string, value: string): void;
   /** What to show when the thing selected has gone from the document. */
@@ -48,6 +60,67 @@ export interface PanelActions {
   onStrokesToZone: () => void;
   /** Get rid of a whole document layer — the shell asks before it does. */
   onDeleteLayer: (layerId: string) => void;
+  onRenamePoint: (layerId: string, pointId: string, name: string) => void;
+  /** Say where this scene starts play, or that it starts nowhere. */
+  onSetStartPoint: (pointId: string | null) => void;
+}
+
+/**
+ * A named place, and the one thing a scene can say about one.
+ *
+ * The start point is designated from here rather than from the layer list,
+ * because it is a property of the *scene* and this is the only panel that
+ * knows which point is being talked about. Only one point per scene can hold
+ * it, and that is enforced by the document — `setStartPoint` writes one id on
+ * the scene, so naming a second point is the first ceasing to be it — rather
+ * than by clearing a flag on everything else and hoping.
+ */
+export function renderPoint(
+  panel: PanelSurface,
+  store: DocStore,
+  grid: Grid,
+  actions: PanelActions,
+  selection: Extract<Selection, { kind: "point" }>,
+): void {
+  const { layerId, pointId } = selection;
+  const layer = store.layer(layerId);
+  const point = layer?.points.find((p) => p.id === pointId);
+  if (!layer || !point) return panel.empty();
+
+  const isStart = store.activeScene.startPointId === point.id;
+  panel.editableHead("Point", point.name, "", (next) =>
+    actions.onRenamePoint(layerId, pointId, next),
+  );
+  panel.section("Info");
+  panel.row("Layer", layer.name);
+  // The space on a lattice, the pixel where there is none: a blank project's
+  // cell *is* a pixel, so one row says the true thing either way.
+  panel.row(grid.snaps ? "Space" : "Position", `${point.cell.cx}, ${point.cell.cy}`);
+  panel.row("Start point", isStart ? `Yes — ${store.activeScene.name}` : "No");
+
+  panel.body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", {
+        class: "field-hint",
+        text: isStart
+          ? "The game puts the character here when this scene opens."
+          : "A scene has one start point. Making this it releases whichever " +
+            "point holds it now.",
+      }),
+      h("button", {
+        class: isStart ? "panel-btn" : "panel-btn primary",
+        text: isStart ? "Clear start point" : "Make start point",
+        onClick: () => actions.onSetStartPoint(isStart ? null : point.id),
+      }),
+      h("button", {
+        class: "panel-btn",
+        text: "Delete point",
+        onClick: () => actions.onDeleteSelection(),
+      }),
+    ),
+  );
 }
 
 /**

@@ -24,6 +24,7 @@ function layer(id: string, placements: Placement[] = []) {
     visible: true,
     fills: [],
     placements,
+    points: [],
     zones: [],
     strokes: [],
   };

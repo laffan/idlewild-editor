@@ -99,6 +99,7 @@ function doc(...placements: Placement[]): StoredDoc {
         visible: true,
         fills: [],
         placements,
+        points: [],
         zones: [],
         strokes: [],
       },

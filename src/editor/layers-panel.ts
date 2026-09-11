@@ -157,7 +157,7 @@ export class LayersPanel {
       this.body.appendChild(group);
 
       if (!this.expanded.has(layer.id)) return;
-      const items = layerItems(layer);
+      const items = layerItems(layer, this.store.activeScene.startPointId);
       if (items.length === 0 && layer.strokes.length === 0) {
         group.appendChild(
           h("div", { class: "layer-item empty m", text: "Nothing on this layer" }),
@@ -581,6 +581,7 @@ function describe(layer: Layer): string {
     if (cells) parts.push(count(cells, "cell"));
     if (rects) parts.push(count(rects, "fill"));
   }
+  if (layer.points.length) parts.push(count(layer.points.length, "point"));
   if (layer.zones.length) parts.push(count(layer.zones.length, "zone"));
   if (layer.strokes.length) parts.push(count(layer.strokes.length, "stroke"));
   return parts.length ? parts.join(" · ") : "empty";

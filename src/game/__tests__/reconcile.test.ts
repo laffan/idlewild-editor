@@ -77,6 +77,7 @@ function store(...placements: Placement[]): DocStore {
         visible: true,
         fills: [],
         placements,
+        points: [],
         zones: [],
         strokes: [],
       },

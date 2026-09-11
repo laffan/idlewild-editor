@@ -31,6 +31,7 @@ function layers(...placements: Placement[]): Layer[] {
       visible: true,
       fills: [],
       placements,
+      points: [],
       zones: [],
       strokes: [],
     },

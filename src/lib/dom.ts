@@ -133,6 +133,10 @@ export const ICONS = {
     "m3 7.5 9 5 9-5",
     "M12 12.5V21.5",
   ],
+  /* A map pin: a dot standing on a place, which is what a point is. */
+  point: ["M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z", "M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"],
+  /* A flag, for the point a scene starts play on. */
+  flag: ["M6 21V4", "M6 4h11l-2.5 4L17 12H6"],
   file: "M6 3h8l4 4v14H6V3Z",
   folder: "M3 6h6l2 3h10v11H3V6Z",
   trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 14h10l1-14"],

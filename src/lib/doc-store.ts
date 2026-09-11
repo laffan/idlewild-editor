@@ -25,6 +25,7 @@ import type {
   GameDoc,
   Genre,
   Layer,
+  MapPoint,
   Placement,
   Projection,
   Scene,
@@ -33,15 +34,16 @@ import type {
   Zone,
 } from "./types";
 import { doc as docIpc } from "./ipc";
+import { emptyLayer, copyLayer, makeId, withScenes } from "./doc-shape";
 import * as log from "./log";
 
-const SAVE_DEBOUNCE_MS = 800;
+// Re-exported because they were this module's before `doc-shape.ts` was split
+// out of it, and because the callers that mint ids — the drawing engine, the
+// drag controller, the PSD placer — are asking the document for one rather
+// than reaching for a utility.
+export { makeId, withScenes };
 
-let nextId = 0;
-export function makeId(prefix: string): string {
-  nextId += 1;
-  return `${prefix}-${Date.now().toString(36)}-${nextId.toString(36)}`;
-}
+const SAVE_DEBOUNCE_MS = 800;
 
 export class DocStore extends EventTarget {
   readonly projectId: string;
@@ -146,11 +148,18 @@ export class DocStore extends EventTarget {
   duplicateScene(sceneId: string): Scene | undefined {
     const source = this.scene(sceneId);
     if (!source) return undefined;
+    const points = new Map<string, string>();
     const copy: Scene = {
       id: makeId("scene"),
       name: `${source.name} copy`,
-      layers: source.layers.map(copyLayer),
+      layers: source.layers.map((layer) => copyLayer(layer, points)),
       ...(source.camera ? { camera: source.camera } : {}),
+      // Through the map, because the copy's points have ids of their own: an
+      // untranslated id would leave the duplicate starting on the original's
+      // point, which is in another scene entirely.
+      ...(source.startPointId && points.has(source.startPointId)
+        ? { startPointId: points.get(source.startPointId) }
+        : {}),
     };
     const at = this.state.scenes.findIndex((s) => s.id === sceneId) + 1;
     const scenes = [...this.state.scenes];
@@ -224,7 +233,14 @@ export class DocStore extends EventTarget {
       log.warn("A scene keeps at least one layer");
       return;
     }
+    // The scene's start point may be on the layer that is going. A dangling
+    // id is a scene that says it starts somewhere that is not there, which
+    // nothing downstream can report and the config would export as a spawn
+    // at the origin without saying why.
+    const doomed = this.layer(layerId);
+    const orphaned = doomed?.points.some((p) => p.id === this.activeScene.startPointId);
     this.replaceLayers((layers) => layers.filter((l) => l.id !== layerId));
+    if (orphaned) this.setStartPoint(null);
   }
 
   renameLayer(layerId: string, name: string): void {
@@ -501,6 +517,71 @@ export class DocStore extends EventTarget {
     this.replaceLayer(layerId, (l) => ({ ...l, strokes }));
   }
 
+  // ── points ────────────────────────────────────────────────────────────────
+
+  /**
+   * A named place on a layer.
+   *
+   * The name is worked out here rather than by the caller because it is a
+   * fact about the whole scene: "Point 3" has to be the third one anywhere in
+   * it, not the third on this layer, or two layers each get a Point 1 and the
+   * game reads whichever it finds first.
+   */
+  addPoint(layerId: string, cell: Cell, name?: string): MapPoint {
+    const created: MapPoint = {
+      id: makeId("point"),
+      name: name?.trim() || nextPointName(this.layers),
+      cell,
+    };
+    this.replaceLayer(layerId, (l) => ({ ...l, points: [...l.points, created] }));
+    return created;
+  }
+
+  updatePoint(layerId: string, pointId: string, patch: Partial<MapPoint>): void {
+    this.replaceLayer(layerId, (l) => ({
+      ...l,
+      points: l.points.map((p) => (p.id === pointId ? { ...p, ...patch } : p)),
+    }));
+  }
+
+  removePoint(layerId: string, pointId: string): void {
+    // Written as one commit rather than two: a point that was the scene's
+    // start and a scene that still names it must never both be true, not even
+    // for the one `change` event in between.
+    this.replaceScene(this.state.activeSceneId, (scene) => ({
+      ...scene,
+      layers: scene.layers.map((l) =>
+        l.id === layerId ? { ...l, points: l.points.filter((p) => p.id !== pointId) } : l,
+      ),
+      ...(scene.startPointId === pointId ? { startPointId: undefined } : {}),
+    }));
+  }
+
+  /** The point play begins on in the open scene, if it has one. */
+  get startPoint(): MapPoint | undefined {
+    const id = this.activeScene.startPointId;
+    if (!id) return undefined;
+    for (const layer of this.layers) {
+      const found = layer.points.find((p) => p.id === id);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  /**
+   * Say where play begins in the open scene, or that it begins nowhere.
+   *
+   * One per scene, and that is enforced by *where this is stored* rather than
+   * by clearing a flag on every other point: the scene holds one id, so
+   * naming a second point is the first one ceasing to be it.
+   */
+  setStartPoint(pointId: string | null): void {
+    this.replaceScene(this.state.activeSceneId, (scene) => ({
+      ...scene,
+      startPointId: pointId ?? undefined,
+    }));
+  }
+
   addZone(layerId: string, zone: Omit<Zone, "id">): Zone {
     const created: Zone = { ...zone, id: makeId("zone") };
     this.replaceLayer(layerId, (l) => ({ ...l, zones: [...l.zones, created] }));
@@ -575,87 +656,17 @@ export class DocStore extends EventTarget {
 }
 
 /**
- * A document with scenes in it, whatever it arrived as.
+ * The next unclaimed "Point N" across the scene.
  *
- * Projects written before scenes existed keep their layers and their camera
- * at the top level. Those become one scene called Main — which is what they
- * always were, named for the first time. A document that already has scenes
- * is checked rather than trusted: an `activeSceneId` naming a scene that is
- * not there would be an editor with nowhere to draw, and hand-edited
- * documents are a thing this app invites.
+ * Counting the points and adding one is not enough: delete Point 1 of two and
+ * the next one made would be Point 2 again, and two points with one name is
+ * the one thing a name is for avoiding. So it walks up from one until it
+ * finds a name nothing is using.
  */
-export function withScenes(doc: StoredDoc): GameDoc {
-  const { layers: legacyLayers, camera: legacyCamera, ...rest } = doc;
-
-  const scenes =
-    Array.isArray(doc.scenes) && doc.scenes.length > 0
-      ? doc.scenes
-      : [
-          {
-            id: makeId("scene"),
-            name: "Main",
-            layers: legacyLayers ?? [emptyLayer("Terrain")],
-            ...(legacyCamera ? { camera: legacyCamera } : {}),
-          },
-        ];
-
-  const named = doc.activeSceneId;
-  const active =
-    named && scenes.some((s) => s.id === named) ? named : scenes[0].id;
-
-  return { ...rest, version: 2, scenes, activeSceneId: active };
-}
-
-/** The one layer a scene is never without. */
-function emptyLayer(fallback: string, name?: string): Layer {
-  return {
-    id: makeId("layer"),
-    name: name ?? fallback,
-    locked: false,
-    visible: true,
-    fills: [],
-    placements: [],
-    zones: [],
-    strokes: [],
-  };
-}
-
-/**
- * A layer and everything on it, under new ids.
- *
- * Strokes are copied too. They are the one thing that does not reach a
- * publish, but a duplicated scene you then drew over would otherwise share
- * its ink with the original — the strokes are stored by id and the drawing
- * layer diffs by identity.
- */
-function copyLayer(layer: Layer): Layer {
-  return {
-    ...layer,
-    id: makeId("layer"),
-    fills: layer.fills.map((fill) => ({ ...fill, id: makeId("fill") })),
-    placements: copyPlacements(layer.placements),
-    zones: layer.zones.map((zone) => ({ ...zone, id: makeId("zone") })),
-    strokes: layer.strokes.map((stroke) => ({ ...stroke, id: makeId("stroke") })),
-  };
-}
-
-/**
- * Placements, with their units kept together.
- *
- * The placements one PSD arrived as share an `instance`, and that is what
- * makes them drag as one thing. Minting a fresh id per placement without
- * remapping the instance would leave a copy whose parts each think they
- * belong to the original's unit.
- */
-function copyPlacements(placements: readonly Placement[]): Placement[] {
-  const units = new Map<string, string>();
-  return placements.map((placement) => {
-    const copy: Placement = { ...placement, id: makeId("place") };
-    if (placement.instance) {
-      const mapped = units.get(placement.instance) ?? makeId("unit");
-      units.set(placement.instance, mapped);
-      copy.instance = mapped;
-    }
-    return copy;
-  });
+function nextPointName(layers: readonly Layer[]): string {
+  const taken = new Set(layers.flatMap((l) => l.points.map((p) => p.name)));
+  for (let n = 1; ; n++) {
+    const name = `Point ${n}`;
+    if (!taken.has(name)) return name;
+  }
 }

@@ -241,3 +241,135 @@ fn a_document_written_before_scenes_still_reaches_the_config() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// Where the character starts is the open scene's start point.
+///
+/// `spawn` was the origin, always, and the two scaffolded scenes have read it
+/// since they were written — so making a point the scene's start is a matter
+/// of that field answering differently, and every project's own
+/// `spawnCharacter` follows without being touched.
+///
+/// The designation lives on the scene rather than on the point, which is what
+/// makes "one per scene" a fact about the document instead of a rule someone
+/// has to enforce. A scene that names no point, or names one that has been
+/// deleted, is the origin again — the fallback every one of those files
+/// already writes.
+#[test]
+fn the_config_spawns_on_the_scenes_start_point() {
+    let meta = store::create_project("Spawned", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let config = |id: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &store::read_game_file(id, "js/game.config.json").expect("config should read"),
+            )
+            .expect("config should be JSON")
+        };
+        let doc = |start: serde_json::Value| {
+            serde_json::json!({
+                "version": 2,
+                "projection": "orthogonal",
+                "genre": "topdown",
+                "gridSize": 32,
+                "activeSceneId": "scene-main",
+                "scenes": [{
+                    "id": "scene-main",
+                    "name": "Main",
+                    "startPointId": start,
+                    "layers": [{
+                        "id": "l1", "name": "Terrain", "visible": true,
+                        "fills": [], "placements": [], "zones": [], "strokes": [],
+                        "points": [
+                            { "id": "pt-gate", "name": "Gate", "cell": { "cx": 5, "cy": -2 } },
+                            { "id": "pt-cave", "name": "Cave", "cell": { "cx": 0, "cy": 9 } }
+                        ]
+                    }]
+                }]
+            })
+            .to_string()
+        };
+
+        store::write_doc(&meta.id, &doc(serde_json::json!("pt-gate")))
+            .expect("document should save");
+        let after = config(&meta.id);
+        assert_eq!(after["spawn"]["cx"], 5.0);
+        assert_eq!(after["spawn"]["cy"], -2.0);
+
+        // The points themselves travel too, so a project's own code can read
+        // the other one by name.
+        let points = &after["layers"][0]["points"];
+        assert_eq!(points.as_array().map(Vec::len), Some(2));
+        assert_eq!(points[1]["name"], "Cave");
+        assert_eq!(points[1]["cell"]["cy"], 9.0);
+        assert_eq!(after["scenes"][0]["startPointId"], "pt-gate");
+
+        // A scene naming a point that is not there starts where a scene with
+        // no start point starts: the origin, which is what every scaffolded
+        // `spawnCharacter` falls back to anyway.
+        store::write_doc(&meta.id, &doc(serde_json::json!("pt-gone")))
+            .expect("document should save");
+        assert_eq!(config(&meta.id)["spawn"]["cx"], 0.0);
+
+        store::write_doc(&meta.id, &doc(serde_json::Value::Null))
+            .expect("document should save");
+        assert_eq!(config(&meta.id)["spawn"]["cy"], 0.0);
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// A point a long way out still has ground under it.
+///
+/// `gridSpan` is both how far the grid is drawn and how far the character may
+/// walk, so a start point outside it would put the character outside the
+/// world on the first frame — walking on nothing, in a scene whose own spawn
+/// put it there.
+#[test]
+fn the_span_reaches_a_point_put_down_a_long_way_out() {
+    let meta = store::create_project("Distant", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        store::write_doc(
+            &meta.id,
+            &serde_json::json!({
+                "version": 2,
+                "projection": "orthogonal",
+                "genre": "topdown",
+                "gridSize": 32,
+                "activeSceneId": "scene-main",
+                "scenes": [{
+                    "id": "scene-main",
+                    "name": "Main",
+                    "startPointId": "pt-far",
+                    "layers": [{
+                        "id": "l1", "name": "Terrain", "visible": true,
+                        "fills": [], "placements": [], "zones": [], "strokes": [],
+                        "points": [{ "id": "pt-far", "name": "Far", "cell": { "cx": 60, "cy": 0 } }]
+                    }]
+                }]
+            })
+            .to_string(),
+        )
+        .expect("document should save");
+
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&meta.id, "js/game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+        assert!(
+            config["gridSpan"].as_i64().unwrap_or(0) >= 60,
+            "the span should hold the point: {}",
+            config["gridSpan"]
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}

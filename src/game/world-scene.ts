@@ -84,6 +84,8 @@ export class WorldScene extends Phaser.Scene {
   private lastView = "";
   /** The layer new work lands on. */
   activeLayerId = "";
+  /** The rail's tool, as the gesture arbiter sees it — see `setGestureMode`. */
+  private gestureMode: RigMode = "select";
   /**
    * The placed PSD whose layers are being moved individually.
    *
@@ -359,40 +361,31 @@ export class WorldScene extends Phaser.Scene {
     // shape's faces. Either way it never reaches the document underneath.
     if (this.modes.tap(screenX, screenY)) return;
 
-    // Tapping an image selects it; otherwise fall through to the grid.
-    const hit = this.docRenderer.pick(world.x, world.y);
-    if (hit) {
-      this.setSelection({
-        kind: "placement",
-        layerId: hit.layerId,
-        placementId: hit.placement.id,
-      });
-      return;
-    }
+    // Under the Point tool a tap puts one down rather than picking up what is
+    // already there — the only tool for which a tap on empty space makes
+    // something. It still falls through when the layer will not take it, so
+    // the tap clears the selection rather than doing nothing at all.
+    if (this.gestureMode === "point" && this.addPoint(world)) return;
 
-    // Then a boundary. Ahead of fills because a boundary is a thing someone
-    // made and a fill is the ground it was made over — and behind images
-    // because a boundary is usually drawn around them and would otherwise
-    // swallow every tap meant for what is standing inside it.
-    const zone = this.docRenderer.pickZone(world.x, world.y);
-    if (zone) {
-      this.setSelection({
-        kind: "zone",
-        layerId: zone.layerId,
-        zoneId: zone.zone.id,
-      });
-      return;
-    }
+    this.setSelection(this.docRenderer.pickAt(world, this.activeLayerId));
+  }
 
-    const cell = this.grid.worldToCell(world);
+  /**
+   * Put a named place on the active layer, on the space that was tapped.
+   *
+   * The space rather than the pixel, because a point is a thing standing on
+   * one and the space is what the game reads it back as. A blank project's
+   * space is a single pixel, so there it is the pixel that was tapped.
+   */
+  private addPoint(world: Phaser.Math.Vector2): boolean {
     const layer = this.store.layer(this.activeLayerId);
-    const fill = layer && !layer.locked ? this.store.fillAt(layer.id, cell) : undefined;
-    if (fill && layer) {
-      this.setSelection({ kind: "fill", layerId: layer.id, fillId: fill.id });
-      return;
+    if (!layer || layer.locked) {
+      log.warn("The active layer is locked");
+      return false;
     }
-
-    this.setSelection({ kind: "none" });
+    const point = this.store.addPoint(layer.id, this.grid.worldToCell(world));
+    this.setSelection({ kind: "point", layerId: layer.id, pointId: point.id });
+    return true;
   }
 
   private beginMarquee(
@@ -459,6 +452,9 @@ export class WorldScene extends Phaser.Scene {
    */
   private handleDoubleTap(screenX: number, screenY: number): void {
     if (this.mode === "play") return;
+    // Two taps under the Point tool are two points, not a request to open
+    // whatever the second one happened to land on.
+    if (this.gestureMode === "point") return;
     // A second tap inside collider mode is a second space painted, not a
     // request to open the PSD under it up into its layers.
     if (this.modes.collider.active) return;
@@ -660,6 +656,9 @@ export class WorldScene extends Phaser.Scene {
   /** Let a tool take raw pointer input — the drawing layer's entry point. */
   /** What a drag on empty space does: rubber-band, or move the camera. */
   setGestureMode(mode: RigMode): void {
+    // Kept as well as handed on, because a tap means something different
+    // under the Point tool and the rig reports every tap the same way.
+    this.gestureMode = mode;
     this.rig.setMode(mode);
   }
 

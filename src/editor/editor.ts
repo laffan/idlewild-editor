@@ -80,6 +80,7 @@ export async function mountEditor(
         selection.kind === "placement" ||
         selection.kind === "placements" ||
         selection.kind === "fill" ||
+        selection.kind === "point" ||
         selection.kind === "zone" ||
         selection.kind === "strokes"
           ? selection.layerId
@@ -128,6 +129,17 @@ export async function mountEditor(
     },
     onDeleteSelection: () => deleteSelection(),
     onDeleteLayer: (layerId) => void deleteLayer(layerId),
+    onRenamePoint: (layerId, pointId, name) =>
+      store.updatePoint(layerId, pointId, { name }),
+    onSetStartPoint: (pointId) => {
+      store.setStartPoint(pointId);
+      const point = store.startPoint;
+      log.info(
+        point
+          ? `${store.activeScene.name} starts at ${point.name}`
+          : `${store.activeScene.name} has no start point`,
+      );
+    },
     onExportSelection: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;
@@ -229,16 +241,20 @@ export async function mountEditor(
     const drawingTool =
       tool === "pencil" || tool === "eraser" || tool === "lasso" ? tool : null;
     handle?.scene.suspendGestures(drawingTool !== null);
-    handle?.scene.setGestureMode(tool === "pan" ? "pan" : "select");
+    handle?.scene.setGestureMode(
+      tool === "pan" ? "pan" : tool === "point" ? "point" : "select",
+    );
     // A hand over the canvas, whether Pan was picked from the rail or
     // borrowed with the space bar. The class carries it rather than an inline
     // style so the drawing layer's own crosshair still wins where it is up.
     canvasWrap.classList.toggle("panning", tool === "pan");
+    canvasWrap.classList.toggle("placing", tool === "point");
     drawing?.setTool(drawingTool);
     inspector.setDrawingTool(drawingTool, drawing?.style ?? null);
     if (!announce) return;
     if (tool === "select") log.info("Select — drag a box around what you want");
     if (tool === "pan") log.info("Pan tool: drag to move the camera");
+    if (tool === "point") log.info("Point — tap to put one down; drag still pans");
     if (tool === "pencil") log.info("Pencil — draw with a pencil or a mouse; fingers pan");
     if (tool === "lasso") log.info("Lasso — sweep around strokes to select them");
   }
@@ -474,6 +490,7 @@ export async function mountEditor(
       selection.kind === "placement" ||
       selection.kind === "placements" ||
       selection.kind === "fill" ||
+      selection.kind === "point" ||
       selection.kind === "zone" ||
       selection.kind === "strokes"
     ) {
@@ -523,6 +540,8 @@ export async function mountEditor(
       for (const id of selection.ids) {
         store.removePlacement(selection.layerId, id);
       }
+    } else if (selection.kind === "point") {
+      store.removePoint(selection.layerId, selection.pointId);
     } else if (selection.kind === "zone") {
       store.removeZone(selection.layerId, selection.zoneId);
     } else if (selection.kind === "strokes") {

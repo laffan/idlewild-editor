@@ -32,6 +32,7 @@ function layer(placements: Placement[]): Layer {
     visible: true,
     fills: [],
     placements,
+    points: [],
     zones: [],
     strokes: [],
   };

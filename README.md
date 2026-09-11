@@ -140,6 +140,15 @@ remaining pieces are wired to real slots rather than mocked.
   would go with it — it asks first, and the PSDs themselves stay in the
   project. A scene keeps its last layer, and the button says so rather than
   disappearing
+- **Points**, from the rail: tap and a named place lands on that space, in
+  the layer palette and on the canvas. Rename it in the inspector, drag it a
+  space at a time, delete it. One point per scene can be its **start point** —
+  the palette marks it with a flag and the canvas gives it a second ring — and
+  that is where the character stands when the game opens, in Play and in an
+  export alike. Naming a second point the start releases the first, because
+  the scene holds the designation rather than the point. Every point reaches
+  the game in `config.layers[].points`, so a door or a trigger is a matter of
+  reading back the one you named
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass
@@ -149,8 +158,8 @@ remaining pieces are wired to real slots rather than mocked.
   drawn over — so there is a grid under the ink when you open it to paint.
   Its canvas is the ink plus the spaces the ink actually covers, not the
   larger diamond enclosing them
-- Inspector for layers, selections, fills, placed images and boundaries, in
-  Info / Transform / Layers sections. A placed image's title is its filename,
+- Inspector for layers, selections, fills, placed images, points and
+  boundaries, in Info / Transform / Layers sections. A placed image's title is its filename,
   and retyping the part before `.psd` renames the file, moves its assets with
   it, and repoints every placement on it
 - Option-drag a fill or an image to copy it. A copied image references the

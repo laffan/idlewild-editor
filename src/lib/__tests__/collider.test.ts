@@ -40,6 +40,7 @@ function layer(over: Partial<Layer> = {}): Layer {
     visible: true,
     fills: [],
     placements: [],
+    points: [],
     zones: [],
     strokes: [],
     ...over,

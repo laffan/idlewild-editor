@@ -1,6 +1,6 @@
 /**
- * The selection overlay: the accent-red outline over a chosen region, fill or
- * placed image. Drawn above everything the document renders.
+ * The selection overlay: the accent-red outline over a chosen region, fill,
+ * point or placed image. Drawn above everything the document renders.
  */
 
 import type Phaser from "phaser";
@@ -133,6 +133,24 @@ export class SelectionOverlay {
         g.lineStyle(2 * scale, ACCENT, 1);
         g.fillRect(box.x, box.y, box.width, box.height);
         g.strokeRect(box.x, box.y, box.width, box.height);
+        break;
+      }
+      case "point": {
+        const point = store
+          .layer(selection.layerId)
+          ?.points.find((p) => p.id === selection.pointId);
+        if (!point) break;
+        // A ring around the marker rather than a box: a point has no extent,
+        // and a rectangle drawn round a dot says it has a size it has not.
+        // Sized off the grid like the marker itself, and thickened against
+        // the zoom so it stays a highlight rather than a blob.
+        const scale = 1 / zoom;
+        const at = this.grid.cellCentre(point.cell);
+        const radius = this.grid.tileHeight * 0.5;
+        g.fillStyle(ACCENT, 0.12);
+        g.lineStyle(2 * scale, ACCENT, 1);
+        g.fillCircle(at.x, at.y, radius);
+        g.strokeCircle(at.x, at.y, radius);
         break;
       }
       case "zone": {

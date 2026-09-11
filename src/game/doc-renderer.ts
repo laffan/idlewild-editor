@@ -1,5 +1,5 @@
 /**
- * Draws the document into the scene: fills, zones and PSD placements.
+ * Draws the document into the scene: fills, points, zones and PSD placements.
  *
  * Layers are stored top-first (Hush's convention), and Phaser depth counts
  * upward, so layer index N of M renders at depth (M - N) × `DEPTH_STRIDE`.
@@ -12,10 +12,33 @@ import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { convexOverlapsRect, Grid, fillShape } from "../lib/grid";
 import { instanceOf } from "./instance";
-import type { FillPatch, Layer, Placement, Point, Rect, Zone } from "../lib/types";
+import type {
+  Cell,
+  FillPatch,
+  Layer,
+  MapPoint,
+  Placement,
+  Point,
+  Rect,
+  Selection,
+  Zone,
+} from "../lib/types";
 import * as log from "../lib/log";
 
 const DEPTH_STRIDE = 1000;
+
+/** The accent, which is what every mark the editor makes is drawn in. */
+const POINT_COLOR = 0xec3013;
+/**
+ * And the light the marker is haloed in.
+ *
+ * A point is the accent like everything else the editor draws, and the first
+ * one anybody puts down goes on a fill — which is the same accent. A red ring
+ * on a red patch is not a marker. So every stroke is laid twice: a thicker
+ * light pass, then the accent over it, which reads on the pale grid, on a
+ * fill of any colour, and on artwork.
+ */
+const POINT_HALO = 0xf3f2f2;
 
 /** What a hit-test returns: the document record, not the rendered object. */
 export interface PickResult {
@@ -27,6 +50,40 @@ export interface PickResult {
 export interface ZonePickResult {
   layerId: string;
   zone: Zone;
+}
+
+/** And for a named place. */
+export interface PointPickResult {
+  layerId: string;
+  point: MapPoint;
+}
+
+/**
+ * How big a point's marker is, against the grid.
+ *
+ * Drawn in world units rather than at a fixed screen size, like everything
+ * else this renderer puts down: a point is a thing standing on a space, and
+ * it should grow and shrink with the space it stands on.
+ */
+const POINT_RADIUS = 0.22;
+/**
+ * And how far from the middle of one a tap still counts, in the same units.
+ *
+ * Half a tile's height, which on a 64 px grid is sixteen world pixels: a
+ * finger's worth without being a whole space, so a point never swallows the
+ * tap meant for the ground it is standing on.
+ */
+const POINT_REACH = 0.5;
+
+/**
+ * How near a point a finger has to land to mean it, in world pixels.
+ *
+ * Shared with the drag controller, which asks the same question of the same
+ * marker: picking one up has to have the same reach as picking it, or a point
+ * can be selected in a place where it cannot then be moved.
+ */
+export function pointReach(grid: Grid): number {
+  return grid.tileHeight * POINT_REACH;
 }
 
 /**
@@ -57,6 +114,7 @@ export class DocRenderer {
   private readonly store: DocStore;
   private readonly fillGraphics: Phaser.GameObjects.Graphics;
   private readonly zoneGraphics: Phaser.GameObjects.Graphics;
+  private readonly pointGraphics: Phaser.GameObjects.Graphics;
   private readonly placements = new Map<string, PlacementView>();
   /**
    * A placed unit that is being worked on somewhere else and must not draw.
@@ -74,6 +132,7 @@ export class DocRenderer {
     this.grid = grid;
     this.fillGraphics = scene.add.graphics();
     this.zoneGraphics = scene.add.graphics();
+    this.pointGraphics = scene.add.graphics();
   }
 
   /** Keep one placed unit off the canvas while something else has it. */
@@ -87,6 +146,7 @@ export class DocRenderer {
   render(): void {
     this.renderFills();
     this.renderZones();
+    this.renderPoints();
     this.syncPlacements();
   }
 
@@ -142,6 +202,47 @@ export class DocRenderer {
     }
     g.closePath();
     g.strokePath();
+  }
+
+  /**
+   * The named places, over everything else.
+   *
+   * A point has no size and nothing to fill, so what is drawn is a marker
+   * rather than the thing itself — which is why it goes above the artwork
+   * instead of taking a depth from the layer it belongs to. A marker hidden
+   * behind a building is a marker nobody can find or pick up.
+   *
+   * The scene's start point is filled and the rest are rings. One glance
+   * rather than a label: a scene has at most one, and reading a name off the
+   * canvas at any useful zoom is not something to design around.
+   */
+  private renderPoints(): void {
+    const g = this.pointGraphics;
+    g.clear();
+    g.setDepth(910_000);
+
+    const start = this.store.activeScene.startPointId;
+    const radius = this.grid.tileHeight * POINT_RADIUS;
+    for (const layer of this.store.layers) {
+      if (!layer.visible) continue;
+      for (const point of layer.points) {
+        const at = this.grid.cellCentre(point.cell);
+        const isStart = point.id === start;
+        // The halo pass, then the mark over it.
+        for (const [colour, width] of [
+          [POINT_HALO, 4],
+          [POINT_COLOR, 1.5],
+        ] as const) {
+          g.lineStyle(width, colour, 1);
+          g.strokeCircle(at.x, at.y, radius);
+          // A second ring around the one the scene starts on — the extra
+          // thing about it, drawn as an extra thing.
+          if (isStart) g.strokeCircle(at.x, at.y, radius * 1.8);
+        }
+        g.fillStyle(POINT_COLOR, 1);
+        g.fillCircle(at.x, at.y, radius * (isStart ? 0.55 : 0.28));
+      }
+    }
   }
 
   /** Position and depth-sort placed PSD objects; drop views whose placement
@@ -227,9 +328,60 @@ export class DocRenderer {
     return pickZone(this.store.layers, worldX, worldY);
   }
 
+  /** And for named places, within a finger's reach of one. */
+  pickPoint(worldX: number, worldY: number): PointPickResult | undefined {
+    return pickPoint(this.grid, this.store.layers, worldX, worldY);
+  }
+
+  /**
+   * What a tap on the canvas picks, in the order it asks.
+   *
+   * **A point first.** It is the smallest thing in the document and the only
+   * one drawn over everything else, so a point standing on a building has to
+   * win the tap or it can never be picked up at all — and its reach is a
+   * third of a space, so nothing else is caught by it.
+   *
+   * **Then an image.** Then a boundary: a boundary is a thing someone made
+   * and a fill is the ground it was made over, so it comes first of those
+   * two — but behind images, because a boundary is usually drawn *around*
+   * them and would otherwise swallow every tap meant for what is inside it.
+   * It is hit-tested against its polygon rather than its box, so an L-shaped
+   * wall is not selected by the empty corner of the box around it.
+   *
+   * **Then a fill**, on the active layer only, and last of all nothing.
+   */
+  pickAt(world: Point, activeLayerId: string): Selection {
+    const point = this.pickPoint(world.x, world.y);
+    if (point) {
+      return { kind: "point", layerId: point.layerId, pointId: point.point.id };
+    }
+
+    const hit = this.pick(world.x, world.y);
+    if (hit) {
+      return {
+        kind: "placement",
+        layerId: hit.layerId,
+        placementId: hit.placement.id,
+      };
+    }
+
+    const zone = this.pickZone(world.x, world.y);
+    if (zone) {
+      return { kind: "zone", layerId: zone.layerId, zoneId: zone.zone.id };
+    }
+
+    const cell: Cell = this.grid.worldToCell(world);
+    const layer = this.store.layer(activeLayerId);
+    const fill = layer && !layer.locked ? this.store.fillAt(layer.id, cell) : undefined;
+    if (fill && layer) return { kind: "fill", layerId: layer.id, fillId: fill.id };
+
+    return { kind: "none" };
+  }
+
   destroy(): void {
     this.fillGraphics.destroy();
     this.zoneGraphics.destroy();
+    this.pointGraphics.destroy();
     for (const view of this.placements.values()) destroyPlaced(view.object);
     this.placements.clear();
   }
@@ -344,6 +496,35 @@ export function pickZone(
     }
   }
   return undefined;
+}
+
+/**
+ * The nearest named place within reach of a world point.
+ *
+ * Nearest rather than front-most, which is what every other picker here
+ * answers: two markers close together are two dots a finger lands between,
+ * and the one under the middle of the finger is the one meant. Locked and
+ * hidden layers are inert, the same rule the others follow.
+ */
+export function pickPoint(
+  grid: Grid,
+  layers: readonly Layer[],
+  worldX: number,
+  worldY: number,
+): PointPickResult | undefined {
+  let best: PointPickResult | undefined;
+  let nearest = pointReach(grid);
+  for (const layer of layers) {
+    if (layer.locked || !layer.visible) continue;
+    for (const point of layer.points) {
+      const at = grid.cellCentre(point.cell);
+      const distance = Math.hypot(at.x - worldX, at.y - worldY);
+      if (distance > nearest) continue;
+      nearest = distance;
+      best = { layerId: layer.id, point };
+    }
+  }
+  return best;
 }
 
 /**

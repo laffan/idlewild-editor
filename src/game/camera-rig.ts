@@ -12,12 +12,19 @@ export type RigPhase = "idle" | "pan" | "pinch" | "marquee" | "drag";
 /**
  * What a one-finger drag on empty space does.
  *
- * The rail's Select and Pan tools, as the arbiter sees them. It used to be
- * neither: a drag always panned and only a hold started a selection, which
- * made Select and Pan the same tool with a delay between them and left no
- * way to rubber-band over several things at once.
+ * The rail's tools, as the arbiter sees them. It used to be neither: a drag
+ * always panned and only a hold started a selection, which made Select and
+ * Pan the same tool with a delay between them and left no way to rubber-band
+ * over several things at once.
+ *
+ * **Point** is a mode here even though nothing about a *drag* is different
+ * under it, because two things about a drag are: there is no rubber band to
+ * pull, and there is nothing to ask for by holding still. A tool whose whole
+ * gesture is the tap should leave the other hand free, so a drag under it
+ * moves the camera exactly as Pan does — and what the tap then means is the
+ * scene's to decide, not this one's.
  */
-export type RigMode = "select" | "pan";
+export type RigMode = "select" | "pan" | "point";
 
 /** What was held when the drag began. */
 export interface DragModifiers {
@@ -193,8 +200,8 @@ export class CameraRig {
     }
 
     // A hold still opens a selection where the finger already is, so a single
-    // space can be picked without dragging out a box around it. Under Pan
-    // there is nothing to hold for.
+    // space can be picked without dragging out a box around it. Under Pan and
+    // Point there is nothing to hold for.
     if (this.mode === "select") {
       this.holdTimer = window.setTimeout(() => {
         this.holdTimer = null;
@@ -303,9 +310,18 @@ export class CameraRig {
       return;
     }
 
+    // What counts as a tap depends on the tool. Under Select it is a hold
+    // that never got to fire — the timer was still pending, so the finger
+    // neither moved nor stayed. Under Point there is no hold to wait on and
+    // the tap *is* the gesture, so a pointer that went down and came up
+    // without becoming a pan is one. Pan reports none at all: the camera tool
+    // picks nothing up, which is what makes it safe to hold space over
+    // anything.
     const wasPending = this.holdTimer !== null;
     this.clearHold();
-    if (wasPending && this.phase === "idle") this.reportTap(event);
+    const tapped =
+      this.phase === "idle" && (wasPending || this.mode === "point");
+    if (tapped) this.reportTap(event);
     this.phase = "idle";
   };
 

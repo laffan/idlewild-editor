@@ -125,6 +125,28 @@ export interface Placement {
 }
 
 /**
+ * A named place on the map — psd-to-phaser's `P | name`, made by hand.
+ *
+ * A point marks somewhere rather than covering something: where the
+ * character starts, where a door leads, where a trigger sits. It has no size
+ * and nothing to fill, so it is a position and a name and nothing else, and
+ * the game reads it out of `config` by that name.
+ *
+ * A **cell**, where a zone is world pixels and a placement is both. A point
+ * is put down on a space and dragged a whole space at a time, so world
+ * coordinates would be a second copy of the same fact — one that a grid
+ * resize would have to be taught to keep in step, and that Rust would have to
+ * learn the projection to read back. `cellCentre` turns it into a position
+ * wherever one is wanted, which on a blank project is the pixel that was
+ * tapped, because a cell there is a pixel.
+ */
+export interface MapPoint {
+  id: string;
+  name: string;
+  cell: Cell;
+}
+
+/**
  * A boundary: a psd-to-phaser zone with no PSD behind it. Drawn strokes get
  * promoted into these, and play mode reads `blocking` when building the
  * navigation grid.
@@ -175,6 +197,12 @@ export interface Layer {
   visible: boolean;
   fills: FillPatch[];
   placements: Placement[];
+  /**
+   * Named places. Absent on every document written before the Point tool
+   * existed, which is why `withScenes` fills it in on the way through rather
+   * than leaving every reader to write `?? []`.
+   */
+  points: MapPoint[];
   zones: Zone[];
   strokes: Stroke[];
 }
@@ -269,6 +297,19 @@ export interface Scene {
   /** Top-first, as the layer panel shows them. */
   layers: Layer[];
   camera?: CameraState;
+  /**
+   * The point the character starts on, by id.
+   *
+   * On the *scene* rather than on the point, because "only one of them" is
+   * the whole of what makes it a start point: a flag on each point would let
+   * two of them claim it and leave the game to pick. A scene has one place
+   * where play begins or it has none, and this says which — the id, so
+   * renaming or moving the point changes nothing about the designation.
+   *
+   * It names a point in one of this scene's layers. Deleting that point, or
+   * the layer holding it, clears this rather than leaving it dangling.
+   */
+  startPointId?: string;
 }
 
 /** The saved body of a project. */
@@ -342,6 +383,7 @@ export type Selection =
    * exactly one?" on every line otherwise.
    */
   | { kind: "placements"; layerId: string; ids: string[] }
+  | { kind: "point"; layerId: string; pointId: string }
   | { kind: "zone"; layerId: string; zoneId: string }
   | { kind: "strokes"; layerId: string; ids: string[] };
 
@@ -351,8 +393,12 @@ export type EditorMode = "edit" | "play";
  * The rail's tools. Boundary is not among them: a boundary is made from
  * strokes already drawn and lassoed, so it is an action on a selection
  * rather than a mode you draw in.
+ *
+ * Point *is* among them, for the opposite reason: there is nothing already
+ * on the canvas to promote into one, so putting a point down has to be
+ * something you do to empty space.
  */
-export type ToolId = "select" | "pan" | "pencil" | "eraser" | "lasso";
+export type ToolId = "select" | "pan" | "point" | "pencil" | "eraser" | "lasso";
 
 export interface PsdManifestEntry {
   key: string;

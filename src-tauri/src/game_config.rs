@@ -52,6 +52,7 @@ pub fn empty(projection: Projection, genre: Genre, grid_size: u32) -> Value {
         genre,
         grid_size,
         MIN_SPAN,
+        json!({ "cx": 0, "cy": 0 }),
         json!([]),
         json!([]),
         json!([{ "id": "scene-main", "name": "Main", "layers": [] }]),
@@ -102,11 +103,20 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
     // themselves, so every scene is told the same map.
     let colliders = &doc.colliders;
 
+    // Where the character starts: the open scene's start point, or the origin
+    // for a scene that has not named one. The origin is what `spawn` has
+    // always been and what every scaffolded `spawnCharacter` still falls back
+    // to, so a project with no points reads exactly as it did.
+    let spawn = open
+        .and_then(|scene| scene.start_cell())
+        .unwrap_or(Cell { cx: 0.0, cy: 0.0 });
+
     Ok(config(
         meta.projection,
         meta.genre,
         meta.grid_size,
         span,
+        json!(spawn),
         json!(keys),
         json!(open
             .map(|s| s
@@ -137,6 +147,7 @@ fn config(
     genre: Genre,
     grid_size: u32,
     span: i64,
+    spawn: Value,
     psd_keys: Value,
     layers: Value,
     scenes: Value,
@@ -147,7 +158,7 @@ fn config(
         "genre": genre.as_str(),
         "grid": grid_size,
         "gridSpan": span,
-        "spawn": { "cx": 0, "cy": 0 },
+        "spawn": spawn,
         "psdKeys": psd_keys,
         "layers": layers,
         "scenes": scenes,
@@ -193,6 +204,12 @@ fn span_for(scenes: &[Scene], grid_size: u32) -> i64 {
                 cells(point.x / size, point.y / size);
             }
         }
+        // A point is already in cells, and it counts: the span is also the
+        // bounds the character may walk, and a start point outside it would
+        // put the character outside the world on the first frame.
+        for point in &layer.points {
+            cells(point.cell.cx, point.cell.cy);
+        }
     }
     // A NaN or an infinity in a hand-edited document must not become a span.
     let span = if reach.is_finite() { reach.ceil() as i64 } else { 0 };
@@ -228,11 +245,15 @@ impl Document {
             id: Some("scene-main".into()),
             name: "Main".into(),
             layers: self.layers.clone(),
+            // A document written before scenes existed was written before
+            // points existed too, so it has nowhere it starts.
+            start_point_id: None,
         }]
     }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Scene {
     #[serde(default)]
     id: Option<String>,
@@ -240,6 +261,10 @@ struct Scene {
     name: String,
     #[serde(default)]
     layers: Vec<Layer>,
+    /// The point play begins on, by id. One per scene, which is why it is
+    /// stored here rather than as a flag on each point.
+    #[serde(default)]
+    start_point_id: Option<String>,
 }
 
 impl Scene {
@@ -247,12 +272,26 @@ impl Scene {
         json!({
             "id": self.id,
             "name": self.name,
+            "startPointId": self.start_point_id,
             "layers": self
                 .layers
                 .iter()
                 .map(|layer| layer.to_config(colliders))
                 .collect::<Vec<_>>(),
         })
+    }
+
+    /// The space this scene starts play on, if it names a point that is
+    /// really there. A designation left pointing at a deleted point is not a
+    /// spawn at the origin quietly — it is no designation at all, and the
+    /// caller falls back the same way a scene with none does.
+    fn start_cell(&self) -> Option<Cell> {
+        let id = self.start_point_id.as_deref()?;
+        self.layers
+            .iter()
+            .flat_map(|layer| &layer.points)
+            .find(|point| point.id == id)
+            .map(|point| point.cell)
     }
 }
 
@@ -269,6 +308,9 @@ struct Layer {
     fills: Vec<Fill>,
     #[serde(default)]
     placements: Vec<Placement>,
+    /// Named places. Absent on every document written before the Point tool.
+    #[serde(default)]
+    points: Vec<MapPoint>,
     #[serde(default)]
     zones: Vec<Zone>,
 }
@@ -305,6 +347,7 @@ impl Layer {
             "visible": self.visible,
             "fills": self.fills.iter().map(Fill::to_config).collect::<Vec<_>>(),
             "placements": placements,
+            "points": self.points.iter().map(MapPoint::to_config).collect::<Vec<_>>(),
             "zones": self.zones.iter().map(Zone::to_config).collect::<Vec<_>>(),
         })
     }
@@ -418,6 +461,29 @@ struct Collider {
     rect: Option<Rect>,
     #[serde(default)]
     blocking: bool,
+}
+
+/// A named place: an id, a name and the space it stands on.
+///
+/// The cell travels unresolved, for the reason a placement's anchor does —
+/// turning it into a position is a diamond transform of two integers, and
+/// that arithmetic lives in `grid.js`, which the exported game already
+/// carries. `cellCentre` is what the scenes call on it.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MapPoint {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    cell: Cell,
+}
+
+impl MapPoint {
+    fn to_config(&self) -> Value {
+        json!({ "id": self.id, "name": self.name, "cell": self.cell })
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

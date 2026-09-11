@@ -1,5 +1,5 @@
 /**
- * The contents of a layer, listed under it: placed images, fills and
+ * The contents of a layer, listed under it: placed images, fills, points and
  * boundaries. Selecting one here is the same as selecting it on the canvas —
  * useful when a thing is off-screen, underneath something else, or failed to
  * render.
@@ -40,8 +40,15 @@ export interface LayerItem {
   members?: string[];
 }
 
-/** Everything on a layer that can be selected, in the order it draws. */
-export function layerItems(layer: Layer): LayerItem[] {
+/**
+ * Everything on a layer that can be selected, in the order it draws.
+ *
+ * `startPointId` is the scene's, not the layer's — a scene has one start
+ * point wherever it lives — and it is passed in so a point's row can say it
+ * is the one. Optional, because the two callers that only want the list
+ * (a test, a count) have no scene to ask.
+ */
+export function layerItems(layer: Layer, startPointId?: string): LayerItem[] {
   const items: LayerItem[] = [];
 
   for (const unit of placedUnits(layer)) {
@@ -66,6 +73,19 @@ export function layerItems(layer: Layer): LayerItem[] {
       detail: describeFill(fill),
       path: ICONS.fill,
       swatch: fill.color ?? "#ec3013",
+    });
+  }
+
+  for (const point of layer.points) {
+    const start = point.id === startPointId;
+    items.push({
+      selection: { kind: "point", layerId: layer.id, pointId: point.id },
+      label: point.name,
+      // The space it stands on, unless it is the start point — in which case
+      // that is the thing worth knowing about it, and the coordinates are two
+      // rows away in the inspector.
+      detail: start ? "start" : `${point.cell.cx}, ${point.cell.cy}`,
+      path: start ? ICONS.flag : ICONS.point,
     });
   }
 
@@ -193,6 +213,8 @@ export function isSelected(item: LayerItem, selection: Selection): boolean {
       );
     case "fill":
       return selection.kind === "fill" && a.fillId === selection.fillId;
+    case "point":
+      return selection.kind === "point" && a.pointId === selection.pointId;
     case "zone":
       return selection.kind === "zone" && a.zoneId === selection.zoneId;
     default:

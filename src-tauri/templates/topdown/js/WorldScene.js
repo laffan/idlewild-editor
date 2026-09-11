@@ -126,6 +126,15 @@ export class WorldScene extends Phaser.Scene {
   }
   // idlewild:end paintFill
 
+  /**
+   * Where the character starts.
+   *
+   * `config.spawn` is the space the editor's Point tool designated as this
+   * scene's start point, or the origin when it has none. Every point in the
+   * scene is in `config.layers[].points` beside it — an id, a name and a
+   * cell — so a door, a trigger or a second spawn is a matter of finding the
+   * one you named and reading its cell.
+   */
   spawnCharacter() {
     const start = config.spawn ?? { cx: 0, cy: 0 };
     const world = this.nav.cellToWorld(start.cx, start.cy);

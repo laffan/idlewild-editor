@@ -53,6 +53,10 @@
 .editor-canvas-wrap.panning canvas { cursor: grab; }
 .editor-canvas-wrap.panning canvas:active { cursor: grabbing; }
 
+/* The Point tool, whose whole gesture is the tap: a crosshair says the tap
+   lands somewhere exact, which is the one thing worth knowing about it. */
+.editor-canvas-wrap.placing canvas { cursor: crosshair; }
+
 /* The header. A row of the shell rather than a floating toolbar, spanning
    the window and standing the same height as the console bar at the bottom,
    so the canvas sits between two rules instead of under a hovering bar. */

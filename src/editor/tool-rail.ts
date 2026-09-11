@@ -9,6 +9,12 @@
  * There is no Fill tool and no Boundary tool. Both are actions on something
  * already selected — a run of grid spaces, a group of strokes — rather than
  * modes you enter, so a rail slot for either only ever did nothing.
+ *
+ * Point is here for the opposite reason: nothing on the canvas can be
+ * promoted into one, so putting a point down has to be a thing you do to
+ * empty space. It sits with Select and Pan because the game canvas keeps the
+ * pointer under it — a drag still moves the camera, and only the tap means
+ * anything new.
  */
 
 import { h, ICONS, icon } from "../lib/dom";
@@ -25,6 +31,7 @@ interface ToolSpec {
 export const TOOLS: ToolSpec[] = [
   { id: "select", name: "Select", path: ICONS.select },
   { id: "pan", name: "Pan", path: ICONS.hand },
+  { id: "point", name: "Point", path: ICONS.point },
   { id: "pencil", name: "Pencil", path: ICONS.pencil, divide: true },
   { id: "eraser", name: "Eraser", path: ICONS.eraser },
   { id: "lasso", name: "Lasso", path: ICONS.lasso },

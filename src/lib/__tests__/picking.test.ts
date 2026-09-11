@@ -4,12 +4,13 @@ import {
   drawOrder,
   pickPlacement,
   pickPlacementsIn,
+  pickPoint,
   pickZone,
   pointInPolygon,
 } from "../../game/doc-renderer";
 import { Grid } from "../grid";
 import { isSelected, layerItems } from "../../editor/layer-items";
-import type { Layer, Placement, Zone } from "../types";
+import type { Layer, MapPoint, Placement, Zone } from "../types";
 
 function placement(id: string, x: number, y: number): Placement {
   return {
@@ -32,6 +33,7 @@ function layer(id: string, overrides: Partial<Layer> = {}): Layer {
     visible: true,
     fills: [],
     placements: [],
+    points: [],
     zones: [],
     strokes: [],
     ...overrides,
@@ -441,5 +443,70 @@ describe("drawOrder", () => {
     // scene's migration has run over it.
     const loose = [placement("a", 0, 0), placement("b", 0, 0)];
     expect(drawOrder(loose, false)).toHaveLength(2);
+  });
+});
+
+describe("pickPoint", () => {
+  const grid = new Grid("orthogonal", 64);
+  const at = (id: string, cx: number, cy: number): MapPoint => ({
+    id,
+    name: id,
+    cell: { cx, cy },
+  });
+
+  it("finds the point whose space the finger is on", () => {
+    const layers = [layer("l1", { points: [at("a", 0, 0), at("b", 3, 0)] })];
+    // The middle of space 3,0 — a point is drawn on the middle of its space.
+    expect(pickPoint(grid, layers, 3 * 64 + 32, 32)?.point.id).toBe("b");
+  });
+
+  it("misses when the finger is more than a marker away", () => {
+    const layers = [layer("l1", { points: [at("a", 0, 0)] })];
+    // Two spaces off: well past the marker, which reaches about a third of
+    // one. A point is small on purpose, so it never swallows a tap meant for
+    // the ground it is standing on.
+    expect(pickPoint(grid, layers, 32 + 128, 32)).toBeUndefined();
+  });
+
+  it("takes the nearest rather than the front-most", () => {
+    // Two markers a finger lands between. Every other picker here answers
+    // front-most, which for two dots is whichever happens to be listed first.
+    const layers = [
+      layer("top", { points: [at("far", 1, 0)] }),
+      layer("bottom", { points: [at("near", 0, 0)] }),
+    ];
+    expect(pickPoint(grid, layers, 40, 32)?.point.id).toBe("near");
+  });
+
+  it("ignores locked and hidden layers, as every other pick does", () => {
+    const locked = [layer("l1", { locked: true, points: [at("a", 0, 0)] })];
+    const hidden = [layer("l1", { visible: false, points: [at("a", 0, 0)] })];
+    expect(pickPoint(grid, locked, 32, 32)).toBeUndefined();
+    expect(pickPoint(grid, hidden, 32, 32)).toBeUndefined();
+  });
+});
+
+describe("a point in the layer list", () => {
+  const point: MapPoint = { id: "p1", name: "Cave mouth", cell: { cx: 2, cy: -1 } };
+
+  it("says where it is", () => {
+    const [row] = layerItems(layer("l1", { points: [point] }));
+    expect(row.label).toBe("Cave mouth");
+    expect(row.detail).toBe("2, -1");
+  });
+
+  it("says so instead when it is the scene's start", () => {
+    const [row] = layerItems(layer("l1", { points: [point] }), "p1");
+    expect(row.detail).toBe("start");
+  });
+
+  it("lights up when the canvas selects it", () => {
+    const [row] = layerItems(layer("l1", { points: [point] }));
+    expect(
+      isSelected(row, { kind: "point", layerId: "l1", pointId: "p1" }),
+    ).toBe(true);
+    expect(
+      isSelected(row, { kind: "point", layerId: "l1", pointId: "other" }),
+    ).toBe(false);
   });
 });

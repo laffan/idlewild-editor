@@ -157,6 +157,10 @@ gets a directory and the document is written beside its assets.
 ### In memory
 
 `src/lib/types.ts` is the shared shape; `src-tauri/src/project.rs` mirrors it.
+`src/lib/doc-shape.ts` holds the parts of it that are functions rather than
+state — an empty layer, a copy of one, and the migration a document goes
+through on the way in from disk. Split from `doc-store.ts` for the line rule,
+and it splits cleanly: none of it touches the store.
 
 - **Layers are top-first**, matching Hush. Phaser depth counts upward, so
   layer *N* of *M* renders at depth `(M − N) × 1000`. Isometric placements add
@@ -231,7 +235,7 @@ a grid, a genre and a pile of PSDs, but not a single thing standing on them.
 
 ```text
 GameDoc
-  scenes: [ { id, name, layers: [...], camera? }, ... ]
+  scenes: [ { id, name, layers: [...], camera?, startPointId? }, ... ]
   activeSceneId
   extrusions        ← document-level: a PSD is the project's, not a scene's
 ```
@@ -309,15 +313,23 @@ contract:
 |---|---|
 | One finger down on the current selection | Drag it, snapped to the grid |
 | One finger, moved, under **Select** | Rubber-band a selection from where it went down |
-| One finger, moved, under **Pan** | Pan |
+| One finger, moved, under **Pan** or **Point** | Pan |
 | Space held | Borrow Pan until it is released |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
 | Hold ~320 ms, still | Begin a grid selection where the finger is, with its action bar |
 | Either of those, in extrude mode | Take hold of a face of the shape, or pull the one already held |
 | ⌘ (or Ctrl) held, in extrude mode | Borrow X-ray, so the far side is what a click lands on |
-| Tap | Pick the image under the finger, else the boundary, else the fill, else clear |
+| Tap | Pick the point under the finger, else the image, else the boundary, else the fill, else clear |
+| Tap, under **Point** | Put a named place on the space it landed on |
 | Double-tap a placed PSD | Open it up into its own layers |
 | Ctrl/⌘ + wheel | Zoom (WebKit reports a trackpad pinch this way) |
+
+**Which taps are reported is the tool's too.** Under Select a tap is a hold
+that never got to fire — the timer was still pending when the finger came up,
+so it neither moved nor stayed. Under Point there is nothing to hold for and
+the tap *is* the gesture, so a pointer that went down and came up without
+becoming a pan is one. Pan reports none at all, which is what makes holding
+space safe over anything: the camera tool picks nothing up.
 
 **The rail's tool decides what a drag means**, through `rig.setMode`. It used
 to decide nothing: a drag always panned and only a hold started a selection,
@@ -368,6 +380,60 @@ document on every pointer move, so the scene brackets it with
 `onDragStateChange` and the panels hold their re-renders — otherwise the
 inspector would rebuild its colour picker, and the layer panel its name
 inputs, every frame.
+
+### Points, and where a scene starts
+
+A point is a named place: psd-to-phaser's `P | name`, made by hand rather than
+found in a PSD. It has no size and nothing to fill, so it is a name and a
+position and nothing else, and it is the one thing on the canvas that a tap on
+*empty space* makes — which is why Point is a rail tool where Fill and
+Boundary are not. Nothing already on the canvas can be promoted into one.
+
+**It is stored as a cell**, where a boundary is world pixels and a placement
+is both. A point is put down on a space and dragged a whole space at a time,
+so a world position would be a second copy of the same fact: one more thing
+for a grid resize to keep in step, and one that Rust would have to learn the
+projection to read back. `cellCentre` turns it into a position wherever one is
+wanted — the renderer, the picker, the drag — and on a blank project, where a
+cell is a pixel, that is the pixel that was tapped.
+
+**A tap picks a point before anything else.** It is the smallest thing in the
+document and the only one drawn over everything, so a point standing on a
+building has to win the tap or it can never be picked up at all. Its reach is
+half a tile height, which is a finger's worth and less than a space, so
+nothing else is caught by it. And the pick is the *nearest* rather than the
+front-most, which every other picker answers: two markers close together are
+two dots a finger lands between.
+
+**The marker is drawn twice**, a light halo under the accent. Everything the
+editor draws is the accent — and the first point anybody puts down goes on a
+fill, which is the same accent. A red ring on a red patch is not a marker.
+
+#### The start point
+
+One point per scene can be where play begins, and that is stored as
+`Scene.startPointId` — an id on the *scene*, not a flag on the point. The
+difference is the whole design: "only one" is then a fact about the document
+rather than a rule something has to enforce, and naming a second point is the
+first ceasing to be it, with nothing to clear and nothing to go wrong halfway.
+It also survives renaming and moving the point, because an id is neither.
+
+Two things clear it, and both write in one commit so a scene never names a
+point that is not there for even one `change` event: deleting the point, and
+deleting the layer holding it. Duplicating a scene translates it through the
+same map that gives the copy's points their new ids — an untranslated id would
+leave the duplicate starting on a point in another scene.
+
+It reaches the game as `spawn`, the field both scaffolded scenes have read
+since they were written: `game_config` resolves the id to its cell, or falls
+back to the origin for a scene that names none — or names one that has been
+deleted, which is the same thing honestly reported. So designating a start
+point is that field answering differently, and every project's own
+`spawnCharacter` follows without being touched. The points themselves travel
+too, in `layers[].points`, so a door or a trigger is a matter of reading back
+the one you named. `span_for` counts them: the span is also how far the
+character may walk, and a start point outside it would put the character
+outside the world on the first frame.
 
 ### What a marquee catches
 
