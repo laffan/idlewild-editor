@@ -25,8 +25,12 @@
  *   level zero already, so the whole shape is a collider and nothing needed a
  *   second rule to say so.
  * - **Anything else** — an import, a converted sketch, a converted fill — has
- *   only its artwork to go on, so the default is the spaces that artwork
- *   covers, which is what the footprint mark in the file already says.
+ *   only its artwork to go on, so the default is the spaces its *base* covers.
+ *   Under an orthogonal template that is the whole picture, which is what a
+ *   sprite on a square grid occupies. Under an isometric one it is the bottom
+ *   tile-height of it, for the same reason the extrusion rule is about level
+ *   zero: up the screen is away, so the spaces the top of a tall sprite
+ *   crosses are the spaces *behind* it rather than the ground it stands on.
  */
 
 import { parseVoxel } from "./extrude";
@@ -37,6 +41,7 @@ import type {
   Extrusion,
   Layer,
   Placement,
+  Point,
   Rect,
 } from "./types";
 
@@ -98,11 +103,65 @@ export function defaultCollider(
   }
   if (!box) return { cells: [], blocking: true };
 
-  const cells = cellsUnderBox(grid, box);
+  const cells = groundCells(grid, box);
   if (cells.length > MAX_COLLIDER_CELLS) {
     return boxCollider(box, grid.cellToWorld(anchor));
   }
   return { cells: cells.map((cell) => offsetOf(cell, anchor)), blocking: true };
+}
+
+/**
+ * The spaces a flat picture stands on.
+ *
+ * Every space it is drawn over, on a square grid: a sprite there occupies
+ * what it covers, and a side-on project wants its full height as ground
+ * anyway.
+ *
+ * On a diamond grid, the spaces under its **base**. The projection puts
+ * *away* up the screen, so a 64 × 96 tower drawn over a 64 × 32 tile sweeps
+ * its bounding box across fourteen diamonds, twelve of which are the hillside
+ * behind it. Taking the bottom tile-height of the picture is the flat-artwork
+ * reading of the rule an extrusion gets exactly: the ground it rests on, not
+ * the air it occupies.
+ *
+ * Within that strip a space counts when its **middle** is under the artwork,
+ * rather than when the two merely overlap. A diamond the base clips a corner
+ * off is a space beside the tower, and blocking it is what makes a character
+ * stop a tile short of everything. The middle can miss every space — a small
+ * picture dropped between four of them — so the space under the middle of the
+ * base is the floor, and a collider is never empty for want of a rounding.
+ */
+function groundCells(grid: Grid, box: Rect): Cell[] {
+  if (grid.projection !== "isometric") return cellsUnderBox(grid, box);
+
+  const height = Math.min(box.height, grid.tileHeight);
+  const base: Rect = {
+    x: box.x,
+    y: box.y + box.height - height,
+    width: box.width,
+    height,
+  };
+
+  const standing = cellsUnderBox(grid, base).filter((cell) =>
+    inside(base, grid.cellCentre(cell)),
+  );
+  if (standing.length > 0) return standing;
+  return [
+    grid.worldToCell({
+      x: base.x + base.width / 2,
+      y: base.y + base.height / 2,
+    }),
+  ];
+}
+
+/** Strictly inside, so a middle on the base's own edge is not under it. */
+function inside(rect: Rect, p: Point): boolean {
+  return (
+    p.x > rect.x &&
+    p.x < rect.x + rect.width &&
+    p.y > rect.y &&
+    p.y < rect.y + rect.height
+  );
 }
 
 /**
@@ -249,6 +308,61 @@ export function blockedColliderCells(
     }
   }
   return blocked;
+}
+
+/**
+ * One placed unit of a PSD: the placements it is made of, and the space they
+ * hang from.
+ *
+ * The first one found, in layer order. A collider is a fact about the file
+ * rather than about any one placement of it, so where two copies of a PSD
+ * disagree about their own size the first is as good an answer as the second
+ * — and both of them are the same artwork.
+ */
+export function unitOfKey(
+  layers: readonly Layer[],
+  key: string,
+): { anchor: Cell; placements: Placement[] } | null {
+  for (const layer of layers) {
+    const first = layer.placements.find((p) => p.psdKey === key);
+    if (!first) continue;
+    const unit = first.instance ?? first.id;
+    return {
+      anchor: first.anchor,
+      placements: layer.placements.filter(
+        (p) => p.psdKey === key && (p.instance ?? p.id) === unit,
+      ),
+    };
+  }
+  return null;
+}
+
+/**
+ * What a key blocks, whether or not the document has been told yet.
+ *
+ * Every placed key has a record in practice — one is written when the PSD
+ * lands and backfilled on open — but "in practice" is not a thing a panel can
+ * be written against: it would mean an inspector with nothing to show, and a
+ * toggle with nothing to toggle, in exactly the moment somebody first goes
+ * looking for the collider. So the default is derived on demand here as well
+ * as written, and the two agree because they are the same function.
+ */
+export function resolveCollider(
+  grid: Grid,
+  layers: readonly Layer[],
+  colliders: Record<string, Collider> | undefined,
+  key: string,
+  extrusion?: Extrusion,
+): Collider {
+  const held = colliders?.[key];
+  if (held) return held;
+  const unit = unitOfKey(layers, key);
+  return defaultCollider(
+    grid,
+    unit?.anchor ?? { cx: 0, cy: 0 },
+    placementsBox(unit?.placements ?? []),
+    extrusion,
+  );
 }
 
 /**

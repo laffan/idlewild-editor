@@ -11,77 +11,103 @@
  * one place — the fill's version and the placement's version drifting apart
  * is how "walkable" and "blocking" came to mean two different things in the
  * first place.
+ *
+ * What the section *says* is worked out by `colliderPanel`, which is a
+ * function of the document and nothing else. The two answers worth being sure
+ * of — that there is always a shape to show, and that Edit is offered
+ * wherever there is a grid to draw on — are then testable without a DOM, the
+ * same bargain `game/resize.ts` and `lib/extrude.ts` make.
  */
 
 import { h } from "../lib/dom";
-import { describeCollider } from "../lib/collider";
+import { describeCollider, resolveCollider } from "../lib/collider";
 import type { Grid } from "../lib/grid";
-import type { Collider, FillPatch } from "../lib/types";
+import type { Collider, Extrusion, FillPatch, Layer } from "../lib/types";
+
+/** What the section shows, before any of it is a DOM node. */
+export interface ColliderPanel {
+  /** Whether it stops a character at all. */
+  blocks: boolean;
+  /** The shape, and whether it is still the one the editor chose. */
+  shape: string;
+  /** The switch's label, which names what pressing it does. */
+  toggle: string;
+  /**
+   * Whether the shape can be drawn.
+   *
+   * False only where the grid does not snap: a blank project's spaces are
+   * single world pixels, so a collider there is the box the artwork covers
+   * and there is nothing to paint. The panel says so rather than offering a
+   * button that would be refused.
+   */
+  canEdit: boolean;
+  /** The collider these are about, resolved — see `resolveCollider`. */
+  collider: Collider;
+}
+
+export function colliderPanel(
+  grid: Grid,
+  layers: readonly Layer[],
+  colliders: Record<string, Collider> | undefined,
+  key: string,
+  extrusion?: Extrusion,
+): ColliderPanel {
+  // Resolved rather than looked up: a key whose record has not been written
+  // yet still has an answer, and it is the same one the document is about to
+  // be given. A panel that said "nothing here" in that moment would be the
+  // first thing anybody saw of this feature.
+  const collider = resolveCollider(grid, layers, colliders, key, extrusion);
+  return {
+    blocks: collider.blocking,
+    shape: `${describeCollider(grid, collider)}${
+      collider.edited ? " · edited" : " · default"
+    }`,
+    toggle: collider.blocking ? "Make walkable" : "Make blocking",
+    canEdit: grid.snaps,
+    collider,
+  };
+}
 
 export interface ColliderSectionOptions {
-  grid: Grid;
   /** The PSD the collider belongs to; the toggle is written against the key. */
   psdKey: string;
-  /**
-   * What the document holds for it. Undefined only in the moment between a
-   * document being read and the scene filling its defaults in, which the
-   * panel says rather than papering over.
-   */
-  collider: Collider | undefined;
+  panel: ColliderPanel;
   onToggle: (key: string, blocking: boolean) => void;
   onEdit: () => void;
 }
 
 export function colliderSection(options: ColliderSectionOptions): HTMLElement {
-  const { collider, grid } = options;
+  const { panel } = options;
   const section = h(
     "div",
     { class: "inspect-section" },
     h("div", { class: "inspect-section-title m", text: "Collider" }),
-  );
-
-  if (!collider) {
-    section.appendChild(
-      h("div", { class: "field-hint", text: "Not worked out yet." }),
-    );
-    return section;
-  }
-
-  section.append(
-    row("Blocks", collider.blocking ? "Yes" : "No"),
+    row("Blocks", panel.blocks ? "Yes" : "No"),
     // Whether the shape is still the one the editor chose is worth saying:
     // it is what decides whether re-importing the artwork or extruding it
     // again will move the collider with it.
-    row(
-      "Shape",
-      `${describeCollider(grid, collider)}${collider.edited ? " · edited" : " · default"}`,
-    ),
+    row("Shape", panel.shape),
     h("button", {
       class: "panel-btn",
-      text: collider.blocking ? "Make walkable" : "Make blocking",
-      onClick: () => options.onToggle(options.psdKey, !collider.blocking),
+      text: panel.toggle,
+      onClick: () => options.onToggle(options.psdKey, !panel.blocks),
     }),
   );
 
-  // Drawing spaces needs spaces to draw on. A blank project's collider is the
-  // box the artwork covers and there is nothing to paint, so the button is
-  // replaced by the reason rather than being offered and refused.
-  if (grid.snaps) {
-    section.appendChild(
-      h("button", {
-        class: "panel-btn",
-        text: "Edit collider",
-        onClick: () => options.onEdit(),
-      }),
-    );
-  } else {
-    section.appendChild(
-      h("div", {
-        class: "field-hint",
-        text: "This project has no grid to draw a collider on, so it is the image's own box.",
-      }),
-    );
-  }
+  section.appendChild(
+    panel.canEdit
+      ? h("button", {
+          class: "panel-btn primary",
+          text: "Edit collider",
+          onClick: () => options.onEdit(),
+        })
+      : h("div", {
+          class: "field-hint",
+          text:
+            "This project has no grid to draw a collider on, " +
+            "so it is the image's own box.",
+        }),
+  );
   return section;
 }
 

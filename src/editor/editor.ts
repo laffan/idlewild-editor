@@ -100,7 +100,7 @@ export async function mountEditor(
       if (handle.scene.adjustingInstance) handle.scene.stopAdjusting();
       else handle.scene.startAdjusting();
     },
-    onToggleCollider: (key, blocking) => store.setColliderBlocking(key, blocking),
+    onToggleCollider: (key, blocking) => collider.setBlocking(key, blocking),
     onEditCollider: () => collider.open(),
     onStrokesToPsd: () => void strokesToPsd(),
     onStrokesToZone: () => strokesToZone(),

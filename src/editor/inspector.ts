@@ -17,7 +17,11 @@ import {
   renderZone,
   type PanelSurface,
 } from "./inspect-panels";
-import { colliderSection, fillColliderSection } from "./inspect-collider";
+import {
+  colliderPanel,
+  colliderSection,
+  fillColliderSection,
+} from "./inspect-collider";
 import { scaleOf, sizeControls } from "./inspect-transform";
 import { openPsdLabel, refreshPsdLabel } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
@@ -545,6 +549,25 @@ export class Inspector {
     this.row("Position", `${Math.round(placement.x)}, ${Math.round(placement.y)}`);
     this.row("Anchor cell", `${placement.anchor.cx}, ${placement.anchor.cy}`);
 
+    // What the file stops, straight after what it is: a collider is a fact
+    // about the thing standing on the grid, and the way into the mode that
+    // draws it should be where someone goes looking for it rather than below
+    // the file's own layer stack.
+    this.body.appendChild(
+      colliderSection({
+        psdKey: placement.psdKey,
+        panel: colliderPanel(
+          this.grid,
+          this.store.layers,
+          this.store.colliders,
+          placement.psdKey,
+          this.store.extrusion(placement.psdKey),
+        ),
+        onToggle: (key, blocking) => this.callbacks.onToggleCollider(key, blocking),
+        onEdit: () => this.callbacks.onEditCollider(),
+      }),
+    );
+
     // Size is the one property you change rather than read, so it sits with
     // the controls that change it rather than among the facts above.
     const transform = this.section("Transform");
@@ -562,19 +585,6 @@ export class Inspector {
     };
     this.row("Source", `${Math.round(source.w)} × ${Math.round(source.h)} px`);
     this.row("Scale", `${Math.round(scaleOf(placement) * 100)}%`);
-
-    // What the file stops. Above the layer stack because it is a fact about
-    // the thing on the grid rather than about the file's contents, and below
-    // Transform because where it stands is what it blocks.
-    this.body.appendChild(
-      colliderSection({
-        grid: this.grid,
-        psdKey: placement.psdKey,
-        collider: this.store.collider(placement.psdKey),
-        onToggle: (key, blocking) => this.callbacks.onToggleCollider(key, blocking),
-        onEdit: () => this.callbacks.onEditCollider(),
-      }),
-    );
 
     // The stack inside the file. It sits above the buttons that send the file
     // out, because most of what anyone opened Photoshop for — reordering,

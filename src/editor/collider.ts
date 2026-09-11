@@ -21,6 +21,7 @@ import {
   colliderCells,
   defaultCollider,
   placementsBox,
+  resolveCollider,
 } from "../lib/collider";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
@@ -46,6 +47,8 @@ export interface ColliderUiOptions {
 export interface ColliderUi {
   /** Enter the mode over whatever placement is selected. */
   open: () => void;
+  /** Switch one on or off from the inspector, without changing its shape. */
+  setBlocking: (key: string, blocking: boolean) => void;
   /** The scene says something changed; put it in the bar. */
   sync: () => void;
   destroy: () => void;
@@ -120,6 +123,26 @@ export function createColliderUi(options: ColliderUiOptions): ColliderUi {
   }
 
   /**
+   * Switch a collider on or off.
+   *
+   * Through `resolveCollider` rather than through the record, because the
+   * panel offering this switch shows a resolved collider too: a key the
+   * document has not been told about yet has an answer, and pressing the
+   * button is as good a moment as any to write it down.
+   */
+  function setBlocking(key: string, blocking: boolean): void {
+    const held = resolveCollider(
+      options.grid,
+      options.store.layers,
+      options.store.colliders,
+      key,
+      options.store.extrusion(key),
+    );
+    if (held.blocking === blocking) return;
+    options.store.setCollider(key, { ...held, blocking });
+  }
+
+  /**
    * Write the spaces out and leave.
    *
    * A collider that has come back to the default is written as one rather
@@ -154,6 +177,7 @@ export function createColliderUi(options: ColliderUiOptions): ColliderUi {
 
   return {
     open,
+    setBlocking,
     sync,
     destroy: () => {
       options.scene()?.modes.collider.stop();

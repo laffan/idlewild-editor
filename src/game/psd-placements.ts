@@ -13,7 +13,7 @@ import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
-import { defaultCollider, placementsBox } from "../lib/collider";
+import { defaultCollider, placementsBox, unitOfKey } from "../lib/collider";
 import {
   parseManifest,
   placeableLayers,
@@ -155,7 +155,7 @@ export class PsdPlacements {
    */
   private syncCollider(key: string): void {
     if (this.host.store.collider(key)?.edited) return;
-    const unit = this.unitOf(key);
+    const unit = unitOfKey(this.host.store.layers, key);
     if (!unit) return;
     this.host.store.setCollider(
       key,
@@ -166,30 +166,6 @@ export class PsdPlacements {
         this.host.store.extrusion(key),
       ),
     );
-  }
-
-  /**
-   * One placed unit of a PSD: the placements it is made of, and the space
-   * they hang from.
-   *
-   * The first one found. A collider is a fact about the file rather than
-   * about any one placement of it, so where two copies of a PSD disagree
-   * about their own size the first is as good an answer as the second — and
-   * both of them are the same artwork.
-   */
-  private unitOf(key: string): { anchor: Cell; placements: Placement[] } | null {
-    for (const layer of this.host.store.layers) {
-      const first = layer.placements.find((p) => p.psdKey === key);
-      if (!first) continue;
-      const unit = instanceOf(first);
-      return {
-        anchor: first.anchor,
-        placements: layer.placements.filter(
-          (p) => p.psdKey === key && instanceOf(p) === unit,
-        ),
-      };
-    }
-    return null;
   }
 
   /**

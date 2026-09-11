@@ -310,13 +310,6 @@ export class DocStore extends EventTarget {
     });
   }
 
-  /** Toggle one between blocking and walkable, keeping its shape. */
-  setColliderBlocking(key: string, blocking: boolean): void {
-    const held = this.state.colliders?.[key];
-    if (!held || held.blocking === blocking) return;
-    this.setCollider(key, { ...held, blocking });
-  }
-
   /**
    * Carry the record with the file, when the file is renamed or copied.
    *

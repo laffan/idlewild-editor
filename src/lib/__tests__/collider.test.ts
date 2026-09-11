@@ -112,6 +112,40 @@ describe("the default anything else gets", () => {
     expect(sorted(there.cells)).toEqual(sorted(here.cells));
   });
 
+  it("takes the base of an isometric picture, not the ground behind it", () => {
+    // A 64 x 96 tower standing on the tile at the origin: its bounding box
+    // sweeps up the screen across a dozen diamonds, and all but the one it
+    // rests on are the hillside behind it.
+    const tower = { x: -32, y: -80, width: 64, height: 96 };
+    expect(sorted(defaultCollider(iso, { cx: 0, cy: 0 }, tower).cells)).toEqual([
+      "0,0",
+    ]);
+  });
+
+  it("stands a wide isometric picture on every space under its base", () => {
+    // Three tiles of frontage, one tile deep.
+    const wall = { x: -96, y: -80, width: 192, height: 96 };
+    const cells = sorted(defaultCollider(iso, { cx: 0, cy: 0 }, wall).cells);
+    expect(cells.length).toBeGreaterThan(1);
+    expect(cells).toContain("0,0");
+  });
+
+  it("gives a small isometric picture the space under its middle", () => {
+    // Smaller than a tile and dropped between four of them: no space has its
+    // middle under the base, and a collider of nothing would read as broken.
+    const icon = { x: -5, y: -5, width: 10, height: 10 };
+    expect(defaultCollider(iso, { cx: 0, cy: 0 }, icon).cells).toHaveLength(1);
+  });
+
+  it("keeps the whole picture on a square grid, where up the screen is not away", () => {
+    const tower = { x: 0, y: 0, width: 64, height: 192 };
+    expect(sorted(defaultCollider(ortho, { cx: 0, cy: 0 }, tower).cells)).toEqual([
+      "0,0",
+      "0,1",
+      "0,2",
+    ]);
+  });
+
   it("is the box itself where the grid does not snap", () => {
     const box = { x: 100, y: 40, width: 200, height: 120 };
     const collider = defaultCollider(blank, { cx: 100, cy: 40 }, box);
