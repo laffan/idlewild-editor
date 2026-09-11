@@ -91,25 +91,36 @@ pub fn layout(image_width: u32, image_height: u32, marks: &AnchorMarks) -> Layou
 /// The two marker layers, ready to add above the artwork.
 pub fn layers(layout: &Layout, marks: &AnchorMarks) -> Vec<LayerBuilder> {
     let mut out = Vec::new();
-
-    if let Some(pixels) = zone_pixels(layout, marks) {
-        out.push(
-            LayerBuilder::new(format!("Z | {}", zone_name(marks)))
-                .rgba(layout.zone_width, layout.zone_height, pixels)
-                .at(layout.zone_left, layout.zone_top),
-        );
+    if let Some(zone) = zone_layer(layout, marks) {
+        out.push(zone);
     }
-
-    out.push(
-        LayerBuilder::new("P | anchor")
-            .rgba(DOT, DOT, dot_pixels())
-            .at(
-                layout.anchor_x - DOT as i32 / 2,
-                layout.anchor_y - DOT as i32 / 2,
-            ),
-    );
-
+    out.push(anchor_layer(layout));
     out
+}
+
+/// The footprint on its own.
+///
+/// Separate from `layers` because a rewrite puts each mark back *where it
+/// was* in the stack rather than both on top — see `psd_write::rewrite_marked`
+/// — and picking them out of a vector by position would be a sharp edge
+/// waiting for whoever adds a third mark.
+pub fn zone_layer(layout: &Layout, marks: &AnchorMarks) -> Option<LayerBuilder> {
+    let pixels = zone_pixels(layout, marks)?;
+    Some(
+        LayerBuilder::new(format!("Z | {}", zone_name(marks)))
+            .rgba(layout.zone_width, layout.zone_height, pixels)
+            .at(layout.zone_left, layout.zone_top),
+    )
+}
+
+/// The anchor dot on its own.
+pub fn anchor_layer(layout: &Layout) -> LayerBuilder {
+    LayerBuilder::new("P | anchor")
+        .rgba(DOT, DOT, dot_pixels())
+        .at(
+            layout.anchor_x - DOT as i32 / 2,
+            layout.anchor_y - DOT as i32 / 2,
+        )
 }
 
 fn zone_name(marks: &AnchorMarks) -> String {

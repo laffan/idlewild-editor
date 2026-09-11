@@ -106,16 +106,27 @@ export const ANCHOR_LAYER = "anchor";
 export const GRID_LAYER = "grid";
 
 /**
- * The names this editor reserves for its own marks.
+ * Whether a layer is one of the two marks this editor writes.
  *
- * Both are written by `psd_marks.rs` into every file the editor generates,
- * and neither is artwork — psd-to-json exports no pixels for a point or a
- * zone, so placing one yields an empty group on the grid. Refusing them by
- * *name* as well as by category is what makes that true whatever the manifest
- * says the category is: the names are the app's, which is also why the
- * inspector will not let them be renamed.
+ * Both come from `psd_marks.rs` and neither is artwork — psd-to-json exports
+ * no pixels for a point or a zone, so placing one yields an empty group on
+ * the grid. Knowing them by *name* as well as by category is what makes that
+ * true whatever the manifest says the category is: the names are the app's,
+ * which is also why the inspector will not let them be renamed.
+ *
+ * The footprint carries its size in its name once it covers more than one
+ * space — `grid-4x2` — so the match is a prefix rather than an equality. It
+ * was an equality, which meant every multi-space import had a mark this did
+ * not recognise.
  */
-const MARK_LAYERS = new Set([ANCHOR_LAYER, GRID_LAYER]);
+export function isMarkLayer(name: string): boolean {
+  const named = name.trim().toLowerCase();
+  return (
+    named === ANCHOR_LAYER ||
+    named === GRID_LAYER ||
+    named.startsWith(`${GRID_LAYER}-`)
+  );
+}
 
 function findAnchor(all: readonly ManifestLayer[]): { x: number; y: number } | null {
   const point = all.find(
@@ -225,7 +236,7 @@ export function placeableLayers(manifest: Manifest): ManifestLayer[] {
     (l) =>
       l.category !== "zone" &&
       l.category !== "point" &&
-      !MARK_LAYERS.has(l.name.toLowerCase()),
+      !isMarkLayer(l.name),
   );
   return placeable.length > 0 ? placeable : manifest.top;
 }

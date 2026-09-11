@@ -254,6 +254,21 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         manifest: markedManifest(String(a.name), a.width, a.height, a.marks),
       };
     }
+    // Rewriting keeps the layers it did not write, which the stub shows by
+    // holding on to any extra layer a script added under that key.
+    case "rewrite_psd_from_rgba": {
+      const a = args as any;
+      (window as any).__lastRgba = {
+        width: a.width, height: a.height, name: a.key, marks: a.marks ?? null,
+      };
+      (window as any).__rewrites = ((window as any).__rewrites ?? 0) + 1;
+      return {
+        key: String(a.key),
+        width: a.width,
+        height: a.height,
+        manifest: markedManifest(String(a.key), a.width, a.height, a.marks),
+      };
+    }
     case "read_psd_bytes": return "AAAA";
     case "read_psd_layers": {
       // Only `tower` is the hand-built fixture whose stack the reorder and

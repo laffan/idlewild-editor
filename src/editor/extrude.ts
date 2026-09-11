@@ -155,26 +155,29 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
   /**
    * Write the solid out and leave.
    *
-   * The shape is read before the mode is stopped, and the mode is stopped
-   * before the PSD is written: the dim and the greybox have done their job by
-   * then, and leaving them up over an import that takes a second or two would
-   * make the canvas look stuck.
+   * The mode stays up until the file is written. A write can be refused — a
+   * PSD with groups or masks cannot be rebuilt without flattening it, so the
+   * rewrite declines rather than doing that — and a session that had already
+   * closed would have taken the shape with it. So the greybox holds until
+   * there is something to replace it with, which also reads as the work it
+   * is: the unit it was carrying on with is still hidden, so nothing flashes
+   * back into place first.
    */
   async function apply(): Promise<void> {
     const scene = options.scene();
     const shape = scene?.extrude.shape;
     if (!scene || !shape) return;
-    const target = scene.extrude.target;
-    scene.extrude.stop();
-    sync();
-    await applyExtrusion(
+    const written = await applyExtrusion(
       options.projectId,
       options.store,
       options.grid,
       scene,
       shape,
-      target,
+      scene.extrude.target,
     );
+    if (!written) return;
+    scene.extrude.stop();
+    sync();
   }
 
   return {

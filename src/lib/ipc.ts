@@ -271,6 +271,33 @@ export const psd = {
       rgbaBase64,
       marks,
     }),
+  /**
+   * Rewrite the layers this editor generated in a PSD it already wrote,
+   * keeping every other layer in the file.
+   *
+   * The difference from `fromRgba` is what happens to work someone did in
+   * Photoshop between one write and the next. That builds a file from
+   * nothing; this rebuilds the one that is there, so a layer painted over a
+   * generated block-out survives the block-out being regenerated. Takes a
+   * key rather than a name — the file exists, so there is nothing to
+   * sanitise or to make unique.
+   */
+  rewriteFromRgba: (
+    id: string,
+    key: string,
+    width: number,
+    height: number,
+    rgbaBase64: string,
+    marks: AnchorMarks,
+  ) =>
+    invoke<ImportResult>("rewrite_psd_from_rgba", {
+      id,
+      key,
+      width,
+      height,
+      rgbaBase64,
+      marks,
+    }),
   /** The PSD's real layer stack, top-first, and whether it can be rewritten. */
   readLayers: (id: string, key: string) =>
     invoke<PsdLayerList>("read_psd_layers", { id, key }),

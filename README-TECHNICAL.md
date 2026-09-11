@@ -1622,15 +1622,31 @@ A resumed session holds **nothing**. There is no plate to pull, the shape is
 already there, and guessing which of its faces someone came back for would be
 worse than letting the next tap say.
 
-**Apply writes back to the key it came from.** `create_psd_from_rgba` writes
-`<key>.psd` and runs the pipeline over it, so passing the existing key rewrites
-the file in place — the artwork layer and both marks come out freshly
-generated, every placement on that key redraws from the new manifest, and no
-second copy appears on the canvas. The one thing that has to happen first is
-the anchor: a footprint that has grown past where it started moves the space
-the artwork hangs from, and `reconcilePlacements` positions each placement
-from the anchor the *document* holds — so that is rewritten before the new
-manifest is read.
+**Apply rewrites the file rather than replacing it.** `create_psd_from_rgba`
+builds a PSD from nothing — artwork, footprint, anchor — which is right for an
+import and wrong for a second Apply: a layer painted over the greybox in
+Photoshop would not be preserved, it would simply not be there any more. So
+there is a second command. `psd_write::rewrite_marked` parses the file that is
+already on disk, regenerates the three layers this editor owns *each in the
+place it held in the stack*, and carries every other layer across with its
+pixels, position, name, opacity, visibility and blend mode.
+
+**The anchor is what the preserved layers hang from.** A shape pulled further
+out grows the canvas, which moves every canvas coordinate in the file — but
+not relative to the anchor mark, which is the fixed point the whole marks
+design is built on. So a preserved layer moves by the distance the anchor
+moved, and the wall someone painted stays on the wall the greybox drew.
+
+It is refused outright for a file the fork cannot rebuild — groups, masks,
+clipping — for the same reason `psd_layers` refuses a rename of one: it would
+come back flattened, having quietly lost work. Which is why the mode now stays
+up until the file is written: a refusal that arrived after the session had
+closed would have taken the shape with it.
+
+The one thing that has to happen before the reload is the anchor on the
+*document* side: a footprint that has grown past where it started moves the
+space the artwork hangs from, and `reconcilePlacements` positions each
+placement from the anchor the document holds.
 
 **The unit steps aside while the work goes on.** A reopened solid stands on
 exactly the ground its own flat artwork covers, and drawing both is seeing
@@ -1667,6 +1683,12 @@ title rather than leaving the reader to discover that typing does nothing. It
 reads `manifestName` rather than the whole label, because the exported name is
 the second pipe segment and that is what both psd-to-json and a placement's
 path are made of — so `P | anchor | note` is still the anchor.
+
+`isMarkLayer` is the shared predicate, and the footprint is why it is a
+predicate rather than a set: it carries its size in its name once it covers
+more than one space — `grid-4x2` — so the match is a prefix. It was an
+equality, which meant every multi-space import had a mark neither the reserved
+name rule nor the placement filter recognised.
 
 An owned layer may offer something in its place, which is the other half of
 why the rule exists: the extrusion's row carries the cube that reopens the
@@ -1901,12 +1923,15 @@ on chrome never highlights it.
 - Dropping several files at once takes the first one the pipeline can read.
   A drop is one gesture landing on one space, and a run of images would need
   somewhere to put the rest.
-- Continuing an extrusion rewrites the whole PSD, so anything added to that
-  file by hand goes with it: the shape is regenerated into the artwork layer
-  and both marks, and nothing else survives. The record deliberately outlives
-  every edit to the file, so it is the one place the editor lets you overwrite
-  your own work — Apply on a continued extrusion is the destructive step, and
-  it does not ask.
+- Continuing an extrusion is refused on a PSD the fork cannot rebuild —
+  groups, masks, clipping — because rewriting one would flatten it. The cube
+  is still offered on such a file and Apply says why it will not write, which
+  is one step later than it could be: the layer list already knows the file is
+  unwritable when it draws the row.
+- A preserved layer that hung off the edge of the old canvas is cropped to it,
+  because `crop` reads from the canvas-sized buffer the fork hands back and
+  what was outside it was never in that buffer. The same is true of a rename,
+  and has been all along.
 - A continued extrusion keeps whatever scale its placement was resized to, so
   a block-out scaled to 80% comes back at 80% rather than snapping to the
   grid. The shape is right and the displayed size is the user's; they are only

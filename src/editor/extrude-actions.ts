@@ -59,7 +59,12 @@ const MAX_PIXELS = 4096 * 4096;
  *
  * @param target the placed PSD this carries on from, when it is not a new
  *        one. Its file is rewritten under the key it already has, so every
- *        placement drawing it changes together and no second copy appears.
+ *        placement drawing it changes together and no second copy appears —
+ *        and only the layers this editor generated are rewritten, so anything
+ *        painted into the file since survives.
+ * @returns whether the file was written. False leaves the document untouched,
+ *        which is what lets the caller keep the session open rather than
+ *        losing a shape to a write that was refused.
  */
 export async function applyExtrusion(
   projectId: string,
@@ -68,11 +73,11 @@ export async function applyExtrusion(
   scene: WorldScene,
   shape: VoxelSet,
   target: ExtrudeTarget | null = null,
-): Promise<void> {
+): Promise<boolean> {
   const bounds = shapeBounds(grid, shape);
   if (!bounds) {
     log.warn("There is nothing extruded to apply");
-    return;
+    return false;
   }
 
   const width = Math.max(1, Math.ceil(bounds.width * EXPORT_SCALE));
@@ -82,13 +87,13 @@ export async function applyExtrusion(
       `That shape is ${width}×${height} pixels — too big to apply. ` +
         "Build it smaller, or in pieces.",
     );
-    return;
+    return false;
   }
 
   const rgba = rasterise(grid, shape, bounds, width, height);
   if (!rgba) {
     log.error("Could not rasterise the extrusion");
-    return;
+    return false;
   }
 
   try {
@@ -100,21 +105,28 @@ export async function applyExtrusion(
     const anchorWorld = grid.cellToWorld(anchor);
     const art: Point = { x: bounds.x - anchorWorld.x, y: bounds.y - anchorWorld.y };
 
-    const result = await psd.fromRgba(
-      projectId,
-      // Carrying one on writes back to the key it already has, which
-      // overwrites `<key>.psd` and runs the pipeline over it again: the
-      // artwork layer and both marks come out freshly generated, and every
-      // placement on that key redraws from the new file.
-      target ? target.key : `extrude-${Date.now().toString(36)}`,
-      width,
-      height,
-      toBase64(new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength)),
-      // The footprint marks the spaces the solid *stands on*, not the ones its
-      // walls reach across on screen: a tall block is anchored to the ground
-      // it was built from, which is where it has to come back down.
-      scaleMarks(marksForCells(grid, cells, anchor, art), EXPORT_SCALE),
+    const pixels = toBase64(
+      new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength),
     );
+    // The footprint marks the spaces the solid *stands on*, not the ones its
+    // walls reach across on screen: a tall block is anchored to the ground it
+    // was built from, which is where it has to come back down.
+    const marks = scaleMarks(marksForCells(grid, cells, anchor, art), EXPORT_SCALE);
+
+    // Carrying one on **rewrites** the file rather than replacing it. Both
+    // regenerate the artwork layer and both marks; only the rewrite keeps the
+    // rest of the stack, which is the difference between carrying a shape on
+    // and quietly throwing away an afternoon in Photoshop.
+    const result = target
+      ? await psd.rewriteFromRgba(projectId, target.key, width, height, pixels, marks)
+      : await psd.fromRgba(
+          projectId,
+          `extrude-${Date.now().toString(36)}`,
+          width,
+          height,
+          pixels,
+          marks,
+        );
 
     // Written before the artwork is placed, not after: placing selects the
     // new PSD, and the inspector builds its layer list from that selection —
@@ -136,8 +148,10 @@ export async function applyExtrusion(
       `${describeShape(grid, shape)} → ${result.key}.psd ` +
         `(${result.width}×${result.height})`,
     );
+    return true;
   } catch (err) {
     log.error("Could not turn the extrusion into a PSD:", err);
+    return false;
   }
 }
 

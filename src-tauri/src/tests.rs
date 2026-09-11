@@ -5,14 +5,15 @@
 //! write half of the psd fork and the read half of psd-to-json ever disagree,
 //! it shows up here rather than on an iPad.
 //!
-//! Two neighbours split off for the 700-line rule, sharing only the store
-//! they create projects in and `swatch`. `marks` is the orienting marks an
-//! import writes and psd-to-json reports back. `scaffolds` is what a
-//! *project* is made of — the starter document, the runnable game each
-//! template selection writes, what an export carries, and the tree the code
-//! modal edits.
+//! Neighbours split off for the 700-line rule, sharing only the store they
+//! create projects in and `swatch`. `marks` is the orienting marks an import
+//! writes and psd-to-json reports back. `rewrite` is what a *second* write to
+//! the same file has to keep. `scaffolds` is what a *project* is made of —
+//! the starter document, the runnable game each template selection writes,
+//! what an export carries, and the tree the code modal edits.
 
 mod marks;
+mod rewrite;
 mod scaffolds;
 mod server;
 mod stacking;

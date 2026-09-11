@@ -8,9 +8,9 @@
 //! Layers are named with psd-to-json's pipe convention (`S | name`) so the
 //! pipeline classifies them as sprites rather than ignoring them.
 
-use crate::psd_marks;
+use crate::{psd_layers, psd_marks};
 use image::GenericImageView;
-use psd::{LayerBuilder, PsdBuilder};
+use psd::{LayerBuilder, Psd, PsdBuilder};
 use serde::Deserialize;
 use std::path::Path;
 
@@ -94,6 +94,155 @@ pub fn psd_from_rgba_marked(
     builder
         .to_bytes()
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
+}
+
+/// Rewrite the layers this editor generates, leaving every other layer alone.
+///
+/// The difference between this and calling `psd_from_rgba_marked` again is the
+/// whole point of it. That writes a *new* file — artwork, anchor, footprint —
+/// so a layer someone added in Photoshop after the first Apply is not
+/// preserved, it is simply not there any more. This rebuilds the file the
+/// editor already wrote: the three generated layers come back regenerated,
+/// each in the place it held in the stack, and everything else is carried
+/// across as it was.
+///
+/// **The anchor is what everything else hangs from.** A shape pulled further
+/// out grows the canvas, which moves every canvas coordinate in the file —
+/// but not relative to the anchor mark, which is the fixed point the whole
+/// marks design is built on. So the preserved layers move by the distance the
+/// anchor moved, and a wall someone painted over the greybox stays on the
+/// greybox.
+///
+/// Refused outright for a file the fork cannot rebuild — groups, masks,
+/// clipping — for the reason `psd_layers` refuses a rename of one: it would
+/// come back flattened, having quietly lost work.
+pub fn rewrite_marked(
+    existing: &[u8],
+    name: &str,
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
+    marks: &AnchorMarks,
+) -> Result<Vec<u8>, String> {
+    let expected = (width as usize) * (height as usize) * 4;
+    if rgba.len() != expected {
+        return Err(format!(
+            "RGBA buffer is {} bytes, expected {expected} for {width}x{height}",
+            rgba.len()
+        ));
+    }
+
+    let doc = Psd::from_bytes(existing).map_err(|e| format!("Cannot parse the PSD: {e}"))?;
+    if let Some(reason) = psd_layers::unwritable_because(&doc) {
+        return Err(reason);
+    }
+
+    let layout = psd_marks::layout(width, height, marks);
+    let (old_w, old_h) = (doc.width(), doc.height());
+    // How far the anchor moved, which is how far everything hanging from it
+    // moves with it. No anchor in the old file means nothing to measure
+    // against, and leaving the other layers where they are is the only
+    // honest answer.
+    let (dx, dy) = match anchor_centre(&doc) {
+        Some((x, y)) => (layout.anchor_x - x, layout.anchor_y - y),
+        None => (0, 0),
+    };
+
+    let mut artwork = Some(
+        LayerBuilder::new(format!("S | {name}"))
+            .rgba(width, height, rgba)
+            .at(layout.art_left, layout.art_top),
+    );
+    let mut anchor = Some(psd_marks::anchor_layer(&layout));
+    let mut zone = psd_marks::zone_layer(&layout, marks);
+
+    let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
+    // A file with no artwork layer of ours is not one we wrote. Put it at the
+    // bottom, where a generated file has it, rather than on top of work that
+    // was there first.
+    if !doc.layers().iter().any(|l| is_artwork(l.name(), name)) {
+        if let Some(art) = artwork.take() {
+            builder.add_layer(art);
+        }
+    }
+
+    // `layers()` reads top-first and `add_layer` stacks bottom-up, so the
+    // walk is reversed — the same round trip `psd_layers::write` makes.
+    for layer in doc.layers().iter().rev() {
+        let generated = if is_artwork(layer.name(), name) {
+            artwork.take()
+        } else if is_named(layer.name(), "anchor") {
+            anchor.take()
+        } else if is_grid(layer.name()) {
+            // A footprint that has nothing to draw leaves the old one out
+            // rather than keeping a stale one: the shape it described is gone.
+            zone.take().or(None)
+        } else {
+            None
+        };
+        if let Some(built) = generated {
+            builder.add_layer(built);
+            continue;
+        }
+        if is_grid(layer.name()) || is_named(layer.name(), "anchor") {
+            // One of ours, regenerated already or no longer wanted.
+            continue;
+        }
+
+        let (left, top, w, h, pixels) = psd_layers::crop(layer, old_w, old_h);
+        if w == 0 || h == 0 {
+            continue;
+        }
+        builder.add_layer(
+            LayerBuilder::new(layer.name())
+                .rgba(w, h, pixels)
+                .at(left + dx, top + dy)
+                .opacity(layer.opacity())
+                .visible(layer.visible())
+                .blend_mode(layer.blend_mode()),
+        );
+    }
+
+    // Anything the old file did not have goes on top, where a generated file
+    // puts its marks.
+    if let Some(built) = zone.take() {
+        builder.add_layer(built);
+    }
+    if let Some(built) = anchor.take() {
+        builder.add_layer(built);
+    }
+
+    builder
+        .to_bytes()
+        .map_err(|e| format!("Failed to write PSD: {e:?}"))
+}
+
+/// The anchor mark's centre in canvas coordinates, which is what psd-to-json
+/// reports for a point and what the editor reads a placement's position from.
+fn anchor_centre(doc: &Psd) -> Option<(i32, i32)> {
+    let layer = doc.layers().iter().find(|l| is_named(l.name(), "anchor"))?;
+    Some((
+        layer.layer_left() + layer.width() as i32 / 2,
+        layer.layer_top() + layer.height() as i32 / 2,
+    ))
+}
+
+fn is_named(layer_name: &str, exported: &str) -> bool {
+    psd_layers::exported_name(layer_name)
+        .is_some_and(|n| n.eq_ignore_ascii_case(exported))
+}
+
+/// The footprint, whose name carries its size once it covers more than one
+/// space — `Z | grid-4x2`.
+fn is_grid(layer_name: &str) -> bool {
+    psd_layers::exported_name(layer_name).is_some_and(|n| {
+        let n = n.to_ascii_lowercase();
+        n == "grid" || n.starts_with("grid-")
+    })
+}
+
+fn is_artwork(layer_name: &str, key: &str) -> bool {
+    is_named(layer_name, key)
 }
 
 /// Turn whatever a file picker handed back into a path that can be opened.

@@ -172,7 +172,7 @@ pub fn write(
 /// in that buffer to begin with. And `layer_right()` / `layer_bottom()` are
 /// **inclusive** in this crate (`width() == right - left + 1`), so the size
 /// is taken from `width()` and `height()` and every edge below is exclusive.
-fn crop(
+pub(crate) fn crop(
     layer: &psd::PsdLayer,
     canvas_w: u32,
     canvas_h: u32,
@@ -197,7 +197,7 @@ fn crop(
 }
 
 /// The reason a file cannot be rewritten, or None when it can.
-fn unwritable_because(doc: &Psd) -> Option<String> {
+pub(crate) fn unwritable_because(doc: &Psd) -> Option<String> {
     if !doc.group_ids_in_order().is_empty() {
         return Some(
             "This PSD uses layer groups, which a rewrite would flatten.".to_string(),
@@ -275,6 +275,15 @@ pub fn rename_layers_named_after(
     Ok(true)
 }
 
+/// The name psd-to-json exports a layer under: the second pipe segment.
+pub(crate) fn exported_name(layer_name: &str) -> Option<&str> {
+    let parts: Vec<&str> = layer_name.split('|').map(str::trim).collect();
+    if parts.len() < 2 || parts.len() > 4 || parts[1].is_empty() {
+        return None;
+    }
+    layer_name.split('|').nth(1).map(str::trim)
+}
+
 /// Swap the name out of `S | name`, leaving every other segment alone.
 ///
 /// The second segment is what psd-to-json takes as the layer's name and what
@@ -303,7 +312,7 @@ fn rename_segment(layer_name: &str, from: &str, to: &str) -> String {
         .to_string()
 }
 
-fn category_of(name: &str) -> String {
+pub(crate) fn category_of(name: &str) -> String {
     // The shape as well as the prefix: psd-to-json takes the name from the
     // second segment, so a layer called plain "S" is ignored rather than a
     // sprite, and so is one with five segments.

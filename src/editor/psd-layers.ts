@@ -27,6 +27,7 @@
  */
 
 import { clear, h, ICONS, icon } from "../lib/dom";
+import { isMarkLayer } from "../lib/manifest";
 import { psd, type PsdLayerInfo, type PsdLayerList } from "../lib/ipc";
 import * as log from "../lib/log";
 
@@ -81,11 +82,13 @@ export function psdLayerOwner(
   // The exported name, not the whole label: `manifestName` is what a
   // placement's path is made of, and it is what psd-to-json reads too.
   const named = manifestName(layer.name)?.toLowerCase() ?? "";
-  if (layer.category === "point" && named === "anchor") {
-    return { reason: "The editor finds this mark by name — it cannot be renamed" };
-  }
-  if (layer.category === "zone" && named === "grid") {
-    return { reason: "The editor writes this mark — it cannot be renamed" };
+  if (isMarkLayer(named)) {
+    return {
+      reason:
+        layer.category === "point"
+          ? "The editor finds this mark by name — it cannot be renamed"
+          : "The editor writes this mark — it cannot be renamed",
+    };
   }
   if (isExtrusion && layer.category === "sprite" && named === key.toLowerCase()) {
     return {
