@@ -179,6 +179,33 @@ export interface Layer {
   strokes: Stroke[];
 }
 
+/**
+ * The solid an extruded PSD was rasterised from, kept so it can be opened
+ * back up and carried on with.
+ *
+ * Apply flattens a shape into pixels, and pixels cannot say where the columns
+ * were — so without this a block-out is a one-way door. It is keyed by PSD
+ * key rather than carried on a placement because the shape is a fact about
+ * the *file*: two placements of one PSD are two views of the same solid, and
+ * continuing either of them rewrites the file both draw.
+ *
+ * Dropped the moment the file stops being the editor's own output — a
+ * re-import, or a rewrite of its layer stack — because a greybox someone has
+ * since painted over is no longer the thing the shape describes.
+ */
+export interface Extrusion {
+  /** Voxel keys, as `lib/extrude.ts` writes them: `"cx,cy,cz"`. */
+  voxels: string[];
+  /**
+   * The space the artwork was anchored to when it was written.
+   *
+   * Kept so a placement that has since been dragged can be reopened where it
+   * now stands: the difference between this and the placement's own anchor is
+   * how far the whole shape has moved since.
+   */
+  anchor: Cell;
+}
+
 export interface CameraState {
   x: number;
   y: number;
@@ -194,6 +221,11 @@ export interface GameDoc {
   gridSize: number;
   layers: Layer[];
   camera?: CameraState;
+  /**
+   * The solids behind extruded PSDs, by key. Absent on documents written
+   * before extrude mode existed, and on every project that has never used it.
+   */
+  extrusions?: Record<string, Extrusion>;
 }
 
 /** What the inspector is currently describing. */

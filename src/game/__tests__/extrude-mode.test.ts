@@ -418,3 +418,76 @@ describe("erasing", () => {
     expect(mode.shape?.size).toBe(3);
   });
 });
+
+describe("carrying an applied solid on", () => {
+  /** The voxel keys of a shape, as the document stores them. */
+  function keysOf(mode: ExtrudeMode): string[] {
+    return [...(mode.shape ?? [])].sort();
+  }
+
+  const target = { key: "extrude-abc", instance: "psd-1", layerId: "l1" };
+
+  it("comes up holding nothing, over the solid it was given", () => {
+    const built = tenHigh();
+    const shape = new Set(built.shape ?? []);
+    built.stop();
+
+    const { mode } = started1x1();
+    mode.stop();
+    expect(mode.resume(shape, target)).toBe(true);
+    expect(mode.active).toBe(true);
+    expect(keysOf(mode)).toEqual([...shape].sort());
+    expect(mode.summary).toBe("1 space · 10 levels");
+    // Nothing is held: guessing which face was come back for would be worse
+    // than letting the next tap say.
+    expect(mode.beginPull(0, 0)).toBe(false);
+  });
+
+  it("says which placed PSD it writes back to", () => {
+    const { mode } = started1x1();
+    mode.stop();
+    mode.resume(new Set(["0,0,0"]), target);
+    expect(mode.target).toEqual(target);
+  });
+
+  it("is a new session, not a continued one, when it started from a plate", () => {
+    const { mode } = started1x1();
+    expect(mode.target).toBeNull();
+  });
+
+  it("forgets the target when the session ends", () => {
+    const { mode } = started1x1();
+    mode.stop();
+    mode.resume(new Set(["0,0,0"]), target);
+    mode.stop();
+    expect(mode.target).toBeNull();
+    // And a fresh session from a selection is its own again.
+    mode.start({ cx: 0, cy: 0 }, { cx: 0, cy: 0 });
+    expect(mode.target).toBeNull();
+  });
+
+  it("goes on being pullable from a face taken after it reopens", () => {
+    const built = tenHigh();
+    const shape = new Set(built.shape ?? []);
+    built.stop();
+
+    const { mode } = started1x1();
+    mode.stop();
+    mode.resume(shape, target);
+    const grab = at.rightWall(0, 0, 3);
+    mode.tap(grab.x, grab.y);
+    mode.beginPull(grab.x, grab.y);
+    mode.movePull(grab.x + 64, grab.y + 32);
+    mode.endPull();
+    expect(mode.shape?.size).toBe(12);
+    // Still writing back to the same file.
+    expect(mode.target).toEqual(target);
+  });
+
+  it("refuses a shape with nothing in it", () => {
+    const { mode } = started1x1();
+    mode.stop();
+    expect(mode.resume(new Set(), target)).toBe(false);
+    expect(mode.active).toBe(false);
+  });
+});

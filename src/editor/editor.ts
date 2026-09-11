@@ -115,6 +115,7 @@ export async function mountEditor(
       inspector.updateStrokeStyle(drawing.style);
     },
     onDeleteSelection: () => deleteSelection(),
+    onContinueExtrude: () => extrude.resume(),
     onExportSelection: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;
@@ -169,6 +170,7 @@ export async function mountEditor(
   // out of it. The mode itself is the scene's — see game/extrude-mode.ts.
   const extrude = createExtrudeUi({
     projectId: meta.id,
+    store,
     grid,
     host: canvasWrap,
     scene: () => handle?.scene ?? null,
@@ -489,6 +491,10 @@ export async function mountEditor(
     try {
       const manifest = await refreshPsd(meta.id, key, os);
       if (!manifest) return;
+      // Whatever came back is the file now, and the solid an extrusion was
+      // rasterised from no longer describes it. Re-applying that shape would
+      // throw away the edit that was just brought in.
+      store.removeExtrusion(key);
       await handle?.scene.reloadPsd(key, manifest);
       // The file on disk has changed, and the inspector's list of its layers
       // is built once and kept — so it has to be told, or it goes on showing
@@ -505,6 +511,9 @@ export async function mountEditor(
     manifest: string,
     renames: Map<string, string>,
   ): Promise<void> {
+    // A stack rewritten by hand is no longer the one Apply generates, so the
+    // extrusion behind it stops being something to carry on with.
+    store.removeExtrusion(key);
     await handle?.scene.reloadPsd(key, manifest, renames);
     // Reordering renumbers every layer, so the next edit has to be made
     // against the file as it is now rather than as it was.
@@ -570,6 +579,9 @@ export async function mountEditor(
   ): Promise<void> {
     try {
       const copy = await psd.duplicate(meta.id, key);
+      // A copy of an extruded PSD is an extrusion of its own, and carrying
+      // one on must rewrite the file this placement actually draws.
+      store.copyExtrusion(key, copy.key);
       await handle?.scene.repointPlacement(
         { kind: "placement", layerId, placementId },
         copy.key,

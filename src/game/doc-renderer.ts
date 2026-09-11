@@ -58,12 +58,29 @@ export class DocRenderer {
   private readonly fillGraphics: Phaser.GameObjects.Graphics;
   private readonly zoneGraphics: Phaser.GameObjects.Graphics;
   private readonly placements = new Map<string, PlacementView>();
+  /**
+   * A placed unit that is being worked on somewhere else and must not draw.
+   *
+   * Extrude mode is the one user of this: a solid reopened to carry on with
+   * stands on exactly the ground its own flat artwork covers, and drawing
+   * both is seeing double. Held here rather than on the document because it
+   * is a fact about what is on screen this second, not about the project —
+   * the placement is untouched, and a cancelled session leaves no trace.
+   */
+  private hidden: string | null = null;
 
   constructor(scene: Phaser.Scene, store: DocStore, grid: Grid) {
     this.store = store;
     this.grid = grid;
     this.fillGraphics = scene.add.graphics();
     this.zoneGraphics = scene.add.graphics();
+  }
+
+  /** Keep one placed unit off the canvas while something else has it. */
+  suppressInstance(instance: string | null): void {
+    if (this.hidden === instance) return;
+    this.hidden = instance;
+    this.syncPlacements();
   }
 
   /** Repaint everything the document describes. */
@@ -152,7 +169,9 @@ export class DocRenderer {
         view.object.setPosition(placement.x, placement.y);
         applyScale(view.object, placement);
         view.object.setDepth(base + step);
-        view.object.setVisible(layer.visible);
+        view.object.setVisible(
+          layer.visible && instanceOf(placement) !== this.hidden,
+        );
       });
     });
 

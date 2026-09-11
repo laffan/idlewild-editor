@@ -12,12 +12,19 @@
  * same order, with the same palette. That is deliberate: the point of Apply
  * is to keep what the user is looking at, and a second renderer that agreed
  * with the first only most of the time would be worse than no preview.
+ *
+ * The solid itself is written into the document beside the placement, keyed
+ * by the PSD it became. Pixels cannot say where the columns were, so without
+ * that record Apply is a one-way door; with it, the same shape can be opened
+ * back up and carried on with, and a second Apply rewrites the file it came
+ * from rather than leaving a second copy of it on the canvas.
  */
 
+import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { cellsBounds } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
-import type { Point, Rect } from "../lib/types";
+import type { Cell, Point, Rect } from "../lib/types";
 import * as log from "../lib/log";
 import {
   describeShape,
@@ -28,6 +35,7 @@ import {
   shapeFaces,
   type VoxelSet,
 } from "../lib/extrude";
+import type { ExtrudeTarget } from "../game/extrude-mode";
 import type { WorldScene } from "../game/world-scene";
 import {
   anchorCell,
@@ -46,11 +54,20 @@ import {
  */
 const MAX_PIXELS = 4096 * 4096;
 
+/**
+ * Write the solid out as a PSD and put it on the canvas.
+ *
+ * @param target the placed PSD this carries on from, when it is not a new
+ *        one. Its file is rewritten under the key it already has, so every
+ *        placement drawing it changes together and no second copy appears.
+ */
 export async function applyExtrusion(
   projectId: string,
+  store: DocStore,
   grid: Grid,
   scene: WorldScene,
   shape: VoxelSet,
+  target: ExtrudeTarget | null = null,
 ): Promise<void> {
   const bounds = shapeBounds(grid, shape);
   if (!bounds) {
@@ -85,7 +102,11 @@ export async function applyExtrusion(
 
     const result = await psd.fromRgba(
       projectId,
-      `extrude-${Date.now().toString(36)}`,
+      // Carrying one on writes back to the key it already has, which
+      // overwrites `<key>.psd` and runs the pipeline over it again: the
+      // artwork layer and both marks come out freshly generated, and every
+      // placement on that key redraws from the new file.
+      target ? target.key : `extrude-${Date.now().toString(36)}`,
       width,
       height,
       toBase64(new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength)),
@@ -95,13 +116,34 @@ export async function applyExtrusion(
       scaleMarks(marksForCells(grid, cells, anchor, art), EXPORT_SCALE),
     );
 
-    await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+    if (target && result.key === target.key) {
+      // The footprint may have grown past where it started, which moves the
+      // space the artwork hangs from. Reconciliation positions each placement
+      // from the anchor the document holds for it, so that has to say where
+      // the artwork is *now* before the new manifest is read.
+      reanchor(store, result.key, anchor);
+      await scene.reloadPsd(result.key, result.manifest);
+    } else {
+      await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+    }
+
+    store.setExtrusion(result.key, { voxels: [...shape], anchor });
     log.info(
       `${describeShape(grid, shape)} → ${result.key}.psd ` +
         `(${result.width}×${result.height})`,
     );
   } catch (err) {
     log.error("Could not turn the extrusion into a PSD:", err);
+  }
+}
+
+/** Point every placement on a key at the space its artwork now hangs from. */
+function reanchor(store: DocStore, key: string, anchor: Cell): void {
+  for (const layer of store.layers) {
+    for (const placement of layer.placements) {
+      if (placement.psdKey !== key) continue;
+      store.updatePlacement(layer.id, placement.id, { anchor });
+    }
   }
 }
 

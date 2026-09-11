@@ -9,6 +9,7 @@
 
 import type {
   Cell,
+  Extrusion,
   FillPatch,
   GameDoc,
   Genre,
@@ -251,6 +252,43 @@ export class DocStore extends EventTarget {
       ...l,
       placements: l.placements.filter((p) => p.id !== placementId),
     }));
+  }
+
+  // ── extrusions ────────────────────────────────────────────────────────────
+
+  /** The solid an extruded PSD was rasterised from, if it still has one. */
+  extrusion(key: string): Extrusion | undefined {
+    return this.state.extrusions?.[key];
+  }
+
+  setExtrusion(key: string, extrusion: Extrusion): void {
+    this.commit({
+      ...this.state,
+      extrusions: { ...this.state.extrusions, [key]: extrusion },
+    });
+  }
+
+  /**
+   * Forget the solid behind a key.
+   *
+   * Called when the file stops being the editor's own output — a re-import,
+   * or a rewrite of its layer stack — because from then on the shape no
+   * longer describes what is in the file, and re-applying it would throw
+   * away whatever was put there instead.
+   */
+  removeExtrusion(key: string): void {
+    if (!this.state.extrusions?.[key]) return;
+    const { [key]: _gone, ...rest } = this.state.extrusions;
+    this.commit({ ...this.state, extrusions: rest });
+  }
+
+  /** Carry the record with the file, when the file is renamed or copied. */
+  copyExtrusion(from: string, to: string, keepOriginal = true): void {
+    const held = this.state.extrusions?.[from];
+    if (!held) return;
+    const next = { ...this.state.extrusions, [to]: held };
+    if (!keepOriginal) delete next[from];
+    this.commit({ ...this.state, extrusions: next });
   }
 
   /** Replace a layer's strokes wholesale — how the drawing layer writes. */

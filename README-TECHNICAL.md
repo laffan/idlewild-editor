@@ -1593,6 +1593,51 @@ it off the bottom of the file.
 Nothing reaches the document until Apply. The shape lives in the mode object,
 so Cancel is dropping it and entering play mode drops it too.
 
+### Continuing an extrusion
+
+Pixels cannot say where the columns were, so Apply used to be a one-way door.
+The solid now goes into the document beside the artwork — `GameDoc.extrusions`,
+keyed by PSD key — and **Continue Extruding** in the inspector's Info section
+opens it back up.
+
+**Keyed by the file, not carried on a placement**, because that is what the
+shape is a fact about: two placements of one PSD are two views of the same
+solid, and continuing either rewrites the file both draw. A rename moves the
+record with the file and Remove Reference copies it to the new key, for the
+same reason.
+
+**The record keeps the anchor it was written at.** A placement that has been
+dragged since is now some number of spaces from where its voxels were
+described, and the difference between the two anchors is exactly that
+distance — so `translateShape` carries the shape the same way and it reopens
+under its own artwork.
+
+A resumed session holds **nothing**. There is no plate to pull, the shape is
+already there, and guessing which of its faces someone came back for would be
+worse than letting the next tap say.
+
+**Apply writes back to the key it came from.** `create_psd_from_rgba` writes
+`<key>.psd` and runs the pipeline over it, so passing the existing key rewrites
+the file in place — the artwork layer and both marks come out freshly
+generated, every placement on that key redraws from the new manifest, and no
+second copy appears on the canvas. The one thing that has to happen first is
+the anchor: a footprint that has grown past where it started moves the space
+the artwork hangs from, and `reconcilePlacements` positions each placement
+from the anchor the *document* holds — so that is rewritten before the new
+manifest is read.
+
+**The unit steps aside while the work goes on.** A reopened solid stands on
+exactly the ground its own flat artwork covers, and drawing both is seeing
+double. `DocRenderer.suppressInstance` keeps it off the canvas without
+touching the document, so a cancelled session leaves no trace — and it is
+derived from the mode's state on every change rather than switched on and off
+at each call site, so however the session ends the placement comes back.
+
+**The record is dropped the moment the file stops being the editor's own
+output** — a re-import, or a rewrite of its layer stack from the inspector.
+A greybox someone has since painted over is no longer the thing the shape
+describes, and re-applying it would throw the painting away.
+
 ## The iPad's safe area
 
 `viewport-fit=cover` hands the webview the whole screen, status bar and home
@@ -1782,9 +1827,17 @@ on chrome never highlights it.
 - Dropping several files at once takes the first one the pipeline can read.
   A drop is one gesture landing on one space, and a run of images would need
   somewhere to put the rest.
-- An extrusion applies as flat artwork. The shape it was built from is not
-  kept anywhere, so a PSD cannot be opened back up into the solid that made
-  it — Apply is a one-way door, the same one a fill conversion is.
+- Continuing an extrusion rewrites the whole PSD, so anything added to that
+  file by hand goes with it. The record is dropped on a re-import or a layer
+  rewrite, which covers the round trip through Photoshop the editor knows
+  about — but a file edited and saved without being re-imported is still
+  overwritten, and the canvas was showing stale artwork for it anyway.
+- A continued extrusion keeps whatever scale its placement was resized to, so
+  a block-out scaled to 80% comes back at 80% rather than snapping to the
+  grid. The shape is right and the displayed size is the user's; they are only
+  the same thing until someone resizes it.
+- A fill or a sketch converted to a PSD is still a one-way door. Only an
+  extrusion keeps what it was made from.
 - Extrude mode has no undo of its own. A pull too far is corrected by pulling
   the face back, which the carve rule makes exact, and a space too many by
   rubbing it out; Cancel is the only way back to nothing.

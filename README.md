@@ -64,7 +64,13 @@ remaining pieces are wired to real slots rather than mocked.
   the way holding space borrows Pan. Erase, beside it, is a rubber: press or
   drag and the space under the pointer goes, on the far side too
 - Apply writes the extrusion as a PSD, marked and anchored on the spaces it
-  was built over, and places it where it stood
+  was built over, and places it where it stood. The solid goes into the
+  document with it, so Apply is not a one-way door: **Continue Extruding**, in
+  the inspector, opens the same shape back up — the flat artwork steps aside
+  while you work on it, and applying again rewrites that file rather than
+  leaving a second copy beside it. A PSD that has been re-imported or had its
+  layer stack rewritten stops offering it, because the shape no longer
+  describes what is in the file
 - Drag placed images, fills and boundaries, snapped to the grid; resize images
   from their corner handles, or freely from the inspector
 - A placed PSD moves as one thing: every layer it came in with drags and

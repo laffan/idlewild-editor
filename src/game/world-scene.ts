@@ -534,6 +534,15 @@ export class WorldScene extends Phaser.Scene {
     return this.drops.at(world.x, world.y);
   }
 
+  /**
+   * Keep one placed PSD off the canvas while extrude mode has its solid open.
+   *
+   * The document is untouched, so Cancel is a matter of clearing this again.
+   */
+  suppressInstance(instance: string | null): void {
+    this.docRenderer.suppressInstance(instance);
+  }
+
   /** Outline what a drop would replace, or clear the outline. */
   markDrop(target: PlacedTarget | null): void {
     this.drops.mark(target, this.cameras.main.zoom);

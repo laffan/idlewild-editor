@@ -541,6 +541,22 @@ export function shapeBounds(grid: Grid, shape: VoxelSet): Rect | null {
   return points.length ? pointsBounds(points) : null;
 }
 
+/**
+ * The same solid, moved bodily across the grid.
+ *
+ * What a placement that has been dragged since it was applied needs: the
+ * voxels were written against the space the artwork was anchored to, and
+ * reopening it has to put them back under the artwork wherever it now is.
+ */
+export function translateShape(shape: VoxelSet, by: Cell): Set<string> {
+  const moved = new Set<string>();
+  for (const key of shape) {
+    const v = parseVoxel(key);
+    moved.add(voxelKey({ cx: v.cx + by.cx, cy: v.cy + by.cy, cz: v.cz }));
+  }
+  return moved;
+}
+
 /** The grid spaces the solid stands on — its footprint, one entry each. */
 export function shapeCells(shape: VoxelSet): Cell[] {
   const seen = new Set<string>();

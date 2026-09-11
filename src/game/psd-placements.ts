@@ -204,6 +204,11 @@ export class PsdPlacements {
       }
     }
 
+    // The solid an extrusion was rasterised from is keyed by the file, so it
+    // moves with the file rather than being left pointing at a name that has
+    // gone.
+    this.host.store.copyExtrusion(from, to, false);
+
     await this.load(to);
     for (const { layerId, placement } of moved) this.placeOne(layerId, placement);
     this.host.docRenderer.render();

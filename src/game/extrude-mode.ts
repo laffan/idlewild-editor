@@ -67,6 +67,19 @@ import { ExtrudeRender } from "./extrude-render";
 /** What the pointer does inside the mode. */
 export type ExtrudeTool = "pull" | "erase";
 
+/**
+ * The placed PSD a session is carrying on with, when it is not a new one.
+ *
+ * Apply writes back to this key rather than making another, and the unit is
+ * hidden while the work goes on — the flat artwork and the solid it came from
+ * occupy the same ground, and seeing both at once is seeing double.
+ */
+export interface ExtrudeTarget {
+  key: string;
+  instance: string;
+  layerId: string;
+}
+
 /** What the mode needs from the scene around it. */
 export interface ExtrudeHost {
   /** For its own graphics. The scene owns the display list, not this. */
@@ -130,6 +143,8 @@ export class ExtrudeMode {
   /** The bar's toggle, and the modifier key that borrows it while held. */
   private backfaces = false;
   private peek = false;
+  /** Set while carrying on with a PSD rather than building a new one. */
+  private continuing: ExtrudeTarget | null = null;
 
   constructor(host: ExtrudeHost) {
     this.host = host;
@@ -152,6 +167,11 @@ export class ExtrudeMode {
 
   get erasing(): boolean {
     return this.tool === "erase";
+  }
+
+  /** The placed PSD this session writes back to, if it is carrying one on. */
+  get target(): ExtrudeTarget | null {
+    return this.continuing;
   }
 
   /** Whether the far side is currently what a click lands on. */
@@ -188,13 +208,10 @@ export class ExtrudeMode {
       return false;
     }
 
-    this.state = { shape: new Set(), patch: groundPatch([...cellsInRange(from, to)]) };
-    this.faces = [];
-    this.tool = "pull";
-    this.backfaces = false;
-    this.peek = false;
-    this.host.clearSelection();
-    this.draw();
+    this.begin(
+      { shape: new Set(), patch: groundPatch([...cellsInRange(from, to)]) },
+      null,
+    );
     log.info(
       "Extrude mode — drag the highlighted spaces to pull them, " +
         "or hold to take hold of a different face",
@@ -202,10 +219,43 @@ export class ExtrudeMode {
     return true;
   }
 
+  /**
+   * Re-enter the mode over a solid that was applied earlier.
+   *
+   * Nothing is held to begin with. There is no plate to pull — the shape is
+   * already there — and guessing which of its faces the user came back for
+   * would be worse than letting them say: a tap or a sweep picks one, exactly
+   * as it does at every other point in a session.
+   */
+  resume(shape: VoxelSet, target: ExtrudeTarget): boolean {
+    if (!this.host.grid.snaps || shape.size === 0) return false;
+    this.begin(
+      { shape: new Set(shape), patch: { voxels: [], virtual: false, facing: "+z" } },
+      target,
+    );
+    log.info(
+      `Extrude mode — carrying on with ${target.key}.psd; ` +
+        "hold on it to take a face, and Apply writes it back",
+    );
+    return true;
+  }
+
+  private begin(state: ExtrudeState, target: ExtrudeTarget | null): void {
+    this.state = state;
+    this.continuing = target;
+    this.faces = [];
+    this.tool = "pull";
+    this.backfaces = false;
+    this.peek = false;
+    this.host.clearSelection();
+    this.draw();
+  }
+
   /** Leave, keeping nothing. Apply reads the shape out first. */
   stop(): void {
     if (!this.state) return;
     this.state = null;
+    this.continuing = null;
     this.faces = [];
     this.clearGesture();
     this.render.clear();

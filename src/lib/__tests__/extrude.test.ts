@@ -18,6 +18,7 @@ import {
   shapeCells,
   shapeFaces,
   surfacePatch,
+  translateShape,
   voxelKey,
   type AxisId,
   type ExtrudeState,
@@ -372,5 +373,23 @@ describe("the far side of the solid", () => {
 
   it("has nothing to add on a flat grid, whose spaces have no sides", () => {
     expect(shapeFaces(ortho, cube, true)).toEqual(shapeFaces(ortho, cube));
+  });
+});
+
+describe("translateShape", () => {
+  it("carries the whole solid across the grid, keeping its levels", () => {
+    const moved = translateShape(new Set(voxels([0, 0, 0], [1, 0, 3])), {
+      cx: 4,
+      cy: -2,
+    });
+    expect([...moved].sort()).toEqual(voxels([4, -2, 0], [5, -2, 3]));
+  });
+
+  it("is what puts a reopened shape back under artwork that was dragged", () => {
+    const shape = new Set(voxels([0, 0, 0], [0, 0, 1]));
+    const there = translateShape(shape, { cx: 3, cy: 3 });
+    expect([...translateShape(there, { cx: -3, cy: -3 })].sort()).toEqual(
+      [...shape].sort(),
+    );
   });
 });
