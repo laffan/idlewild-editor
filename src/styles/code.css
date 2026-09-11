@@ -254,6 +254,40 @@
   color: var(--chrome-text);
 }
 
+/* The template has blocks this file has never had.
+
+   A strip above the editor rather than a line in the bar: it is an offer to
+   write into someone's file, which is the one thing this whole mechanism
+   exists to not do quietly. */
+.code-repair {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--chrome-bg));
+  color: var(--chrome-text);
+  font-size: 11px;
+}
+.code-repair.hidden { display: none; }
+.code-repair-btn {
+  margin-left: auto;
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--color-accent);
+  background: transparent;
+  color: var(--color-accent-400);
+  font-family: var(--font-label);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.code-repair-btn:hover {
+  background: var(--color-accent);
+  color: var(--chrome-text);
+}
+
 .code-editor { flex: 1; min-height: 0; overflow: hidden; }
 .code-editor .cm-editor { height: 100%; }
 

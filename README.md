@@ -176,8 +176,11 @@ remaining pieces are wired to real slots rather than mocked.
   those lines come up in their own colour and refuse to be typed over. It is
   decided **line by line**, so a `console.log` dropped into the middle of one
   is yours to edit and delete while the lines around it stay locked, and every
-  marked block has a **Reset** beside it that puts it back the way it came. The
-  generated config is the whole-file case: read-only, and re-read as you build
+  marked block has a **Reset** beside it that puts it back the way it came.
+  When a fix to the editor adds a block your file has never had, it says so and
+  offers to put it in — your `game/` tree is your copy, and nothing writes into
+  it unasked. The generated config is the whole-file case: read-only, and
+  re-read as you build
 - Docs, along the bottom of the code modal: Phaser's concept guides, Phaser's
   own API, MDN's JavaScript, CSS and HTML reference, and psd-to-phaser's docs.
   Automatic follows the caret — put it on `this.add.sprite` and the page for it

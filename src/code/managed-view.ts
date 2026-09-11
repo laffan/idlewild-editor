@@ -30,6 +30,8 @@ export interface ManagedOptions {
   onReset: (blockId: string) => void;
   /** An edit was refused. Called at most once per rejected transaction. */
   onRefused: () => void;
+  /** Blocks the scaffold has that this file does not, after every change. */
+  onMissing?: (ids: readonly string[]) => void;
 }
 
 const managedLine = Decoration.line({ class: "cm-managed" });
@@ -43,10 +45,27 @@ const markerLine = Decoration.line({ class: "cm-managed cm-managed-mark" });
  * `EditorState` for each one.
  */
 export function managedExtension(options: ManagedOptions) {
+  let announced = "";
+  const announce = (managed: Managed) => {
+    const key = managed.missing.join(",");
+    if (key === announced) return;
+    announced = key;
+    // Out of the field's update before saying so: building state is not the
+    // moment to touch someone else's DOM.
+    queueMicrotask(() => options.onMissing?.(managed.missing));
+  };
+
   const field = StateField.define<{ managed: Managed; decorations: DecorationSet }>({
-    create: (state) => build(state, options),
+    create(state) {
+      const built = build(state, options);
+      announce(built.managed);
+      return built;
+    },
     update(value, tr) {
-      return tr.docChanged ? build(tr.state, options) : value;
+      if (!tr.docChanged) return value;
+      const built = build(tr.state, options);
+      announce(built.managed);
+      return built;
     },
     provide: (self) => EditorView.decorations.from(self, (v) => v.decorations),
   });

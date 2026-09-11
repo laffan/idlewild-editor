@@ -2144,6 +2144,35 @@ when it has directives in it and Phaser's boot banner is exactly that.
 Arriving in the drawer, those lines are tagged **JS** — see
 [Console](#console).
 
+### Stacking, which the game got wrong
+
+A PSD is a stack of layers and the order is the artwork: a roof over a tower
+is not the same picture as a tower over a roof, and an extrusion's `lines`,
+`shading` and `shape` stacked backwards is a solid with its silhouette painted
+over everything that made it read as one.
+
+Two things reach the game now that did not:
+
+- **`order`** — how high a layer sat in its file's stack, counting up from the
+  back — and **`instance`**, the unit the placements of one PSD share. Neither
+  was in `game.config.json`, so the game had nothing to sort by.
+- **`applyDepth`**, in the template. `P2P.place()` returns a Phaser **Group**,
+  whose children live on the scene's own display list rather than inside it —
+  so `setDepth` on the group writes one depth onto every child and the
+  artwork's order collapses. Phaser then draws them in the order it was handed
+  them, which is the manifest's top-first order, which is upside down. Each
+  child is now ranked by the depth psd-to-phaser gave it and spaced inside the
+  placement's own slot, so the file's stack survives and the group still sits
+  between the placement below it and the one above.
+
+The editor's renderer learned both lessons already, in `doc-renderer.ts` — it
+is where the `drawOrder`/`applyDepth` pair came from. So the same ordering
+exists twice, once for the editor and once in the project's own
+`WorldScene.js`, which cannot import it. `game/__tests__/draw-order.test.ts`
+holds them to the same fixtures by pulling the template's functions out
+between their markers and running both, the same arrangement the console
+bridge's snapshot is under.
+
 ### Saving applies
 
 `CodeModal.save` reports the path it wrote; the shell reloads the frame if a
@@ -2221,6 +2250,20 @@ and a repair you then have to remember to save is half a repair. `templates.rs`
 answers for the pristine text (`read_game_template`), so the blocks a project
 can reset are the blocks its own genre scaffolds.
 
+**A block the template gains later** is the case Reset cannot serve: a
+project's `game/` tree is its own copy, so there is nothing in the file to put
+back. `analyse` names those in `missing`, and a strip above the editor offers
+to put them in — `addMissingBlocks` inserts each where the scaffold has it
+*relative to the blocks the file already has*, so a helper lands beside the
+code that calls it rather than at the end. An offer rather than an edit: code
+appearing in someone's file unasked is the fight this whole mechanism exists
+to avoid.
+
+This is not hypothetical. `WorldScene.js` gained `drawOrder` and `applyDepth`
+when the exported game learned to stack a PSD the right way up, and without
+that strip every project made before it would have drawn multi-layer files
+upside down for good.
+
 The generated config is the whole-file case of the same idea. It has no room
 for comments and nothing in it was written by hand, so it is owned end to end
 and read-only in CodeMirror's own terms as well — the caret still moves,
@@ -2233,8 +2276,8 @@ Resetting the config means *regenerating* it — its pristine form is the
 document as it stands, not the empty file a new project scaffolds with.
 
 Today the marked blocks are `preload`, `drawGrid`, `placeDocument`,
-`paintFill`, `applyScale` and `pointsToVectors`, the same six in both scenes,
-plus the config. A test pins that the two genres mark the same set and that
+`paintFill`, `drawOrder`, `applyDepth`, `applyScale` and `pointsToVectors`,
+the same eight in both scenes, plus the config. A test pins that the two genres mark the same set and that
 every marker closes, because a block is found by id and one renamed on one side
 would quietly stop offering its Reset there.
 

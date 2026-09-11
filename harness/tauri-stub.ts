@@ -194,7 +194,7 @@ function markedManifest(
  * harness's editor sees an untouched file — every marked line still the
  * editor's, which is where the interesting behaviour starts.
  */
-function gameFile(path: string): string {
+function gameFile(path: string, template = false): string {
   if (path.endsWith(".json")) {
     return JSON.stringify({ projection: "orthogonal", grid: 64, layers: [] }, null, 2);
   }
@@ -203,7 +203,7 @@ function gameFile(path: string): string {
     "export class WorldScene extends Phaser.Scene {",
     "  // idlewild:begin placeDocument",
     "  placeDocument() {",
-    "    for (const layer of config.layers ?? []) this.paint(layer);",
+    "    for (const layer of drawOrder(config.layers ?? [])) this.paint(layer);",
     "  }",
     "  // idlewild:end placeDocument",
     "",
@@ -211,6 +211,16 @@ function gameFile(path: string): string {
     "    this.placeDocument();",
     "  }",
     "}",
+    ...(template
+      ? [
+          "",
+          "// idlewild:begin drawOrder",
+          "function drawOrder(layers) {",
+          "  return [...layers].reverse();",
+          "}",
+          "// idlewild:end drawOrder",
+        ]
+      : []),
     "",
   ].join("\n");
 }
@@ -285,9 +295,12 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       return [...TREE].sort((a, b) => a.path.localeCompare(b.path));
     // A file with one managed block in it, so the code modal's read-only
     // lines, its Reset and its refusals are all reachable in the harness.
+    // The template has a second block the file does not, which is what puts
+    // the "add the blocks this file is missing" offer on screen.
     case "read_game_file":
-    case "read_game_template":
       return gameFile(String((args as any).path));
+    case "read_game_template":
+      return gameFile(String((args as any).path), true);
     case "write_game_file": return undefined;
     case "create_game_file":
     case "create_game_dir": {

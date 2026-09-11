@@ -299,6 +299,13 @@ impl Fill {
 /// manifest exported — their ratio is the scale, exactly as the editor's own
 /// renderer works it out. Sending the ratio instead would hide where it comes
 /// from in a file whose whole job is to be readable.
+///
+/// `order` and `instance` are what make a multi-layer PSD draw the right way
+/// up. `order` is how high the layer sat in its file's stack, counting from
+/// the back; `instance` is the unit the placements of one PSD share, so a
+/// roof and the tower under it sort against the rest of the scene as one
+/// thing. Both are optional because a document written before they existed
+/// has neither, and the editor fills them in on open.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Placement {
@@ -318,6 +325,10 @@ struct Placement {
     natural_width: Option<f64>,
     #[serde(default)]
     natural_height: Option<f64>,
+    #[serde(default)]
+    order: Option<i64>,
+    #[serde(default)]
+    instance: Option<String>,
 }
 
 impl Placement {
@@ -331,6 +342,8 @@ impl Placement {
             "height": self.height,
             "naturalWidth": self.natural_width,
             "naturalHeight": self.natural_height,
+            "order": self.order,
+            "instance": self.instance,
         })
     }
 }

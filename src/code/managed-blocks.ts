@@ -56,6 +56,16 @@ export interface Managed {
   blocks: ManagedBlock[];
   /** 1-based line numbers the editor owns. */
   owned: Set<number>;
+  /**
+   * Blocks the scaffold has that this file does not.
+   *
+   * A project's `game/` tree is its own copy, so a template that gains a
+   * block — as `WorldScene.js` did when the exported game learned to stack a
+   * PSD the right way up — can never reach a project made before it. Reset
+   * cannot help: there is nothing there to put back. So they are named here,
+   * and `addMissingBlocks` puts them in.
+   */
+  missing: string[];
 }
 
 export function isGenerated(path: string): boolean {
@@ -83,6 +93,7 @@ export function analyse(
     return {
       generated: true,
       owned,
+      missing: [],
       blocks: [
         { id: path, from: 1, to: lines.length, resettable: canonical !== null },
       ],
@@ -94,6 +105,7 @@ export function analyse(
     return {
       generated: false,
       owned: new Set(),
+      missing: [],
       blocks: here.map((block) => ({ ...block, resettable: false })),
     };
   }
@@ -122,7 +134,61 @@ export function analyse(
     }
   }
 
-  return { generated: false, owned, blocks };
+  const held = new Set(here.map((block) => block.id));
+  const missing = [...theirs.keys()].filter((id) => !held.has(id));
+  return { generated: false, owned, blocks, missing };
+}
+
+/**
+ * Put the scaffold's blocks that this file lacks into it, and hand back the
+ * whole file.
+ *
+ * Each lands where the scaffold has it *relative to the blocks this file
+ * already has* — after the nearest one before it, or before the nearest one
+ * after — so an added helper turns up beside the code that calls it rather
+ * than at the end of the file. Returns null when there is nothing to add.
+ */
+export function addMissingBlocks(
+  current: string,
+  canonical: string,
+): string | null {
+  const canonicalBlocks = findBlocks(canonical.split("\n"));
+  const canonicalLines = canonical.split("\n");
+  let lines = current.split("\n");
+
+  const absent = canonicalBlocks.filter(
+    (block) => !findBlocks(lines).some((b) => b.id === block.id),
+  );
+  if (absent.length === 0) return null;
+
+  // Front to back, so each insertion can see the ones already made and a run
+  // of neighbouring blocks arrives in the order the scaffold has them.
+  for (const block of absent) {
+    const at = insertionFor(lines, canonicalBlocks, block);
+    const text = canonicalLines.slice(block.from - 1, block.to);
+    lines = [...lines.slice(0, at), "", ...text, ...lines.slice(at)];
+  }
+  return lines.join("\n");
+}
+
+/** The 0-based line to insert one absent block at. */
+function insertionFor(
+  lines: string[],
+  canonicalBlocks: Array<Omit<ManagedBlock, "resettable">>,
+  block: Omit<ManagedBlock, "resettable">,
+): number {
+  const here = findBlocks(lines);
+  const at = canonicalBlocks.findIndex((b) => b.id === block.id);
+
+  for (let i = at - 1; i >= 0; i--) {
+    const before = here.find((b) => b.id === canonicalBlocks[i].id);
+    if (before) return before.to;
+  }
+  for (let i = at + 1; i < canonicalBlocks.length; i++) {
+    const after = here.find((b) => b.id === canonicalBlocks[i].id);
+    if (after) return after.from - 1;
+  }
+  return lines.length;
 }
 
 /**

@@ -36,12 +36,12 @@ import { javascript } from "@codemirror/lang-javascript";
 import { html as htmlLang } from "@codemirror/lang-html";
 import { css as cssLang } from "@codemirror/lang-css";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { h, ICONS, icon } from "../lib/dom";
+import { clear, h, ICONS, icon } from "../lib/dom";
 import { gameFiles } from "../lib/ipc";
 import * as log from "../lib/log";
 import { FileTree } from "./file-tree";
 import { DocsPanel } from "./docs/panel";
-import { isGenerated, resetBlock } from "./managed-blocks";
+import { addMissingBlocks, isGenerated, resetBlock } from "./managed-blocks";
 import { managedEdit, managedExtension } from "./managed-view";
 import { createResizer, type Resizer } from "../editor/resizer";
 
@@ -55,6 +55,8 @@ export class CodeModal {
   private readonly dirtyFlag: HTMLElement;
   /** Why an edit did not take, or what a Reset just did. Clears itself. */
   private readonly note: HTMLElement;
+  /** The template has blocks this file lacks, and an offer to put them in. */
+  private readonly repair: HTMLElement;
   private readonly editorHost: HTMLElement;
   private view: EditorView | null = null;
   private openPath: string | null = null;
@@ -123,6 +125,7 @@ export class CodeModal {
     this.filename = h("div", { class: "code-filename m", text: "No file open" });
     this.dirtyFlag = h("div", { class: "code-dirty m" });
     this.note = h("div", { class: "code-note m" });
+    this.repair = h("div", { class: "code-repair hidden" });
     this.editorHost = h("div", { class: "code-editor" });
 
     this.docsButton = h(
@@ -188,6 +191,7 @@ export class CodeModal {
             this.dirtyFlag,
             this.note,
           ),
+          this.repair,
           this.editorHost,
           h(
             "div",
@@ -342,6 +346,7 @@ export class CodeModal {
           onReset: (blockId) => void this.reset(blockId),
           onRefused: () =>
             this.setNote("These lines are the editor's — Reset puts them back."),
+          onMissing: (ids) => this.offerMissing(path, ids),
         }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) this.setDirty(true);
@@ -442,6 +447,59 @@ export class CodeModal {
       annotations: managedEdit.of(true),
     });
     this.setDirty(false);
+  }
+
+  /**
+   * The template has blocks this file has never had.
+   *
+   * A project's `game/` tree is its own copy, so a block the scaffold gains
+   * afterwards can never reach it — and Reset cannot help, because there is
+   * nothing there to put back. That is not hypothetical: `WorldScene.js`
+   * gained `drawOrder` and `applyDepth` when the exported game learned to
+   * stack a PSD the right way up, and without this a project made before that
+   * would have drawn every multi-layer file upside down for good.
+   *
+   * An offer rather than an edit: it is the user's file, and code appearing
+   * in it unasked is the fight this whole mechanism exists to avoid.
+   */
+  private offerMissing(path: string, ids: readonly string[]): void {
+    if (this.openPath !== path) return;
+    clear(this.repair);
+    this.repair.classList.toggle("hidden", ids.length === 0);
+    if (ids.length === 0) return;
+
+    this.repair.append(
+      h("span", {
+        text:
+          `This file is missing ${ids.length} ` +
+          `${ids.length === 1 ? "block" : "blocks"} the editor maintains: ` +
+          `${ids.join(", ")}.`,
+      }),
+      h("button", {
+        class: "code-repair-btn",
+        type: "button",
+        text: "Add them",
+        onClick: () => void this.addMissing(),
+      }),
+    );
+  }
+
+  /** Put the missing blocks in, and save. */
+  private async addMissing(): Promise<void> {
+    const path = this.openPath;
+    if (!this.view || !path) return;
+    const canonical = await this.readTemplate(path);
+    if (!canonical) return;
+
+    const next = addMissingBlocks(this.view.state.doc.toString(), canonical);
+    if (next === null) return;
+    this.view.dispatch({
+      changes: { from: 0, to: this.view.state.doc.length, insert: next },
+      annotations: managedEdit.of(true),
+    });
+    this.setDirty(true);
+    await this.save();
+    this.setNote("Added the blocks this file was missing.");
   }
 
   /** A line in the file bar, gone again after a moment. */
