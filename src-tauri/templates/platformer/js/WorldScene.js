@@ -13,17 +13,28 @@ import config from "./game.config.json" with { type: "json" };
 // platformer needs from a body is an AABB sweep against a list of solids, and
 // keeping it in a file of the project's own is what makes it something to
 // change rather than a plugin to configure around.
+//
+// This is the program the editor's Play runs, over the project's own files.
+//
+// Lines between an `idlewild:begin` and its `idlewild:end` belong to the
+// editor: they read the config it writes beside this file, and the code modal
+// shows them read-only with a Reset beside each block. Everything else here is
+// yours. You can still type new lines *inside* a managed block — only the
+// lines the editor wrote are locked — and Reset puts that block back as it
+// came, dropping whatever was added to it.
 export class WorldScene extends Phaser.Scene {
   constructor() {
     super("World");
   }
 
+  // idlewild:begin preload
   preload() {
     this.grid = createGrid(config.projection, config.grid);
     for (const key of config.psdKeys ?? []) {
       this.P2P.load.load(this, key, `assets/${key}`);
     }
   }
+  // idlewild:end preload
 
   create() {
     this.solids = solidsFromDocument(this.grid, config.layers ?? []);
@@ -41,6 +52,7 @@ export class WorldScene extends Phaser.Scene {
     this.character.setPosition(this.body.x, this.body.y);
   }
 
+  // idlewild:begin drawGrid
   drawGrid() {
     if (!this.grid.snaps) return;
     const g = this.add.graphics().setDepth(-1000);
@@ -56,7 +68,9 @@ export class WorldScene extends Phaser.Scene {
       }
     }
   }
+  // idlewild:end drawGrid
 
+  // idlewild:begin placeDocument
   placeDocument() {
     const layers = config.layers ?? [];
     layers.forEach((layer, index) => {
@@ -74,7 +88,9 @@ export class WorldScene extends Phaser.Scene {
       }
     });
   }
+  // idlewild:end placeDocument
 
+  // idlewild:begin paintFill
   paintFill(fill, depth) {
     const g = this.add.graphics().setDepth(depth * 1000);
     const color = Phaser.Display.Color.HexStringToColor(
@@ -85,6 +101,7 @@ export class WorldScene extends Phaser.Scene {
       g.fillRect(box.x, box.y, box.width, box.height);
     }
   }
+  // idlewild:end paintFill
 
   spawnCharacter() {
     const start = config.spawn ?? { cx: 0, cy: 0 };
@@ -189,13 +206,16 @@ export class WorldScene extends Phaser.Scene {
  * away from its top-left — the corner the placement's x/y describes, so the
  * image lands exactly where the editor drew it.
  */
+// idlewild:begin applyScale
 function applyScale(object, placement) {
   const naturalWidth = placement.naturalWidth ?? placement.width;
   const naturalHeight = placement.naturalHeight ?? placement.height;
   if (!naturalWidth || !naturalHeight || !object.setScale) return;
   object.setScale(placement.width / naturalWidth, placement.height / naturalHeight);
 }
+// idlewild:end applyScale
 
+// idlewild:begin pointsToVectors
 function pointsToVectors(flat) {
   const out = [];
   for (let i = 0; i < flat.length; i += 2) {
@@ -203,3 +223,4 @@ function pointsToVectors(flat) {
   }
   return out;
 }
+// idlewild:end pointsToVectors

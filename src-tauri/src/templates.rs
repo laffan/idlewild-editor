@@ -61,28 +61,32 @@ pub fn starter_doc(projection: Projection, genre: Genre, grid_size: u32) -> Stri
     serde_json::to_string_pretty(&doc).unwrap_or_else(|_| "{}".into())
 }
 
-/// Write the runnable project source into `game/`.
+/// Every file the scaffold writes, as (path within `game/`, contents).
+///
+/// Split out of `scaffold_game` because the code modal needs the same answer
+/// for one file at a time: a managed block's Reset restores the lines the
+/// scaffold wrote, so the scaffold has to be askable rather than only
+/// runnable. See `store::read_game_template`.
 ///
 /// Each genre carries only the module it uses — A\* for top down, the body
 /// step for a platformer — so what lands in `game/` is the program the
 /// project actually runs rather than a library of alternatives to read past.
-pub fn scaffold_game(
-    dir: &Path,
+pub fn template_files(
     project_name: &str,
     projection: Projection,
     genre: Genre,
     grid_size: u32,
-) -> Result<(), String> {
+) -> Result<Vec<(&'static str, String)>, String> {
     let (scene_js, helper) = match genre {
         Genre::Topdown => (TOPDOWN_SCENE_JS, ("js/navigation.js", NAVIGATION_JS)),
         Genre::Platformer => (PLATFORMER_SCENE_JS, ("js/physics.js", PHYSICS_JS)),
     };
 
-    // Empty, because nothing has been drawn yet. Publish rewrites it from
-    // the live document on the way out — see `game_config`.
+    // Empty, because a scaffold runs before anything has been drawn. Every
+    // save rewrites it from the live document — see `game_config`.
     let config = crate::game_config::empty(projection, genre, grid_size);
 
-    let files: Vec<(&str, String)> = vec![
+    Ok(vec![
         ("index.html", INDEX_HTML.replace("__PROJECT_NAME__", project_name)),
         ("css/styles.css", STYLES_CSS.to_string()),
         ("js/main.js", MAIN_JS.to_string()),
@@ -90,12 +94,40 @@ pub fn scaffold_game(
         ("js/grid.js", GRID_JS.to_string()),
         (helper.0, helper.1.to_string()),
         (
-            "js/game.config.json",
+            crate::game_config::CONFIG_REL,
             serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?,
         ),
-    ];
+    ])
+}
 
-    for (rel, contents) in files {
+/// One scaffolded file, as it was first written.
+///
+/// A path this genre does not scaffold — the other genre's helper, or a file
+/// the user made — has no pristine form to go back to, and says so rather
+/// than answering with something plausible.
+pub fn template_file(
+    rel: &str,
+    project_name: &str,
+    projection: Projection,
+    genre: Genre,
+    grid_size: u32,
+) -> Result<String, String> {
+    template_files(project_name, projection, genre, grid_size)?
+        .into_iter()
+        .find(|(path, _)| *path == rel)
+        .map(|(_, contents)| contents)
+        .ok_or_else(|| format!("{rel} is not a file this template writes"))
+}
+
+/// Write the runnable project source into `game/`.
+pub fn scaffold_game(
+    dir: &Path,
+    project_name: &str,
+    projection: Projection,
+    genre: Genre,
+    grid_size: u32,
+) -> Result<(), String> {
+    for (rel, contents) in template_files(project_name, projection, genre, grid_size)? {
         let path = dir.join(rel);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;

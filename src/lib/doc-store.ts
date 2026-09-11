@@ -338,6 +338,10 @@ export class DocStore extends EventTarget {
     this.dirty = false;
     try {
       await docIpc.write(this.projectId, JSON.stringify(this.state));
+      // Writing the document rewrites `game/js/game.config.json` behind it,
+      // so anything showing that file is now a save behind — see
+      // `store::sync_game_config` and the code modal's `refreshGenerated`.
+      this.dispatchEvent(new CustomEvent("saved"));
     } catch (err) {
       this.dirty = true;
       log.error("Save failed:", err);

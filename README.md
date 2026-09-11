@@ -143,23 +143,41 @@ remaining pieces are wired to real slots rather than mocked.
   to the system editor on macOS and to the share sheet on iPadOS. Re-import
   asks where the edited file came back from — Files, the photo library or the
   clipboard — and replaces it under the same key, re-running the pipeline
-- Play mode, in the style the project was made in: top down is a character
-  that walks the grid over A*, side-on is one that runs and jumps with the
-  arrow keys or an on-screen pad. A platformer reads the same document from
-  the side — every non-walkable fill and blocking boundary is the ground it
-  stands on rather than an obstacle to route around
+- Play runs **the project's own code**: the `game/` tree you see in the code
+  modal, loaded over the local server exactly the way a published export loads
+  it, in a frame over the canvas. Save a file while it is up and the game
+  restarts on what you just wrote. Top down is a character that walks the grid
+  over A*, side-on is one that runs and jumps with the arrow keys or an
+  on-screen pad — and both of those are files in the project now, so they are
+  something to change rather than something the editor does. A platformer reads
+  the same document from the side: every non-walkable fill and blocking
+  boundary is the ground it stands on rather than an obstacle to route around
+- `js/game.config.json` — the document in the shape the project's code reads
+  it — is rewritten on every save, so the file the code modal opens describes
+  the canvas beside it and the game you play is the game you built
 - Code modal: the project's real file tree in CodeMirror 6, full-screen or
   pinned above the console. New File and New Folder sit in its header; rename,
   duplicate, delete and dragging files between folders are on the rows, in a
   column with a divider of its own
+- The editor and you do not fight over the code. A scaffolded file marks the
+  runs the editor maintains — `preload`, `placeDocument` and the rest — and
+  those lines come up in their own colour and refuse to be typed over. It is
+  decided **line by line**, so a `console.log` dropped into the middle of one
+  is yours to edit and delete while the lines around it stay locked, and every
+  marked block has a **Reset** beside it that puts it back the way it came. The
+  generated config is the whole-file case: read-only, and re-read as you build
 - Docs, along the bottom of the code modal: Phaser's concept guides, Phaser's
   own API, MDN's JavaScript, CSS and HTML reference, and psd-to-phaser's docs.
   Automatic follows the caret — put it on `this.add.sprite` and the page for it
   appears — and the MDN half follows the file, so a `.css` asks about CSS.
   Search, and a table of contents for the written guides. All of it is on the
   device, so it works on an iPad with no network
-- Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
-  by psd-to-json's own progress
+- Console drawer in Fira Code — selectable, `%c`-aware — carrying the
+  editor's own commentary, psd-to-json's progress, and the JavaScript console:
+  this page's and the running game's, errors and stack traces included, so a
+  `console.log` in your `WorldScene.js` shows up where you are looking. **App**
+  and **JS** toggles on the right of its header bar, when it is open, filter
+  one from the other
 - Publish: a zipped project carrying both runtimes and the document, so the
   exported game opens showing what the editor showed
 
@@ -170,7 +188,11 @@ remaining pieces are wired to real slots rather than mocked.
 - Undo, which the drawing layer wants first and the rest of the editor
   wants too
 - Pattern fills rendering their PSD texture rather than a tint
-- Phaser-aware autocomplete in the code modal, and canvas ↔ code binding
+- Phaser-aware autocomplete in the code modal, and the other direction of the
+  canvas ↔ code binding: the canvas drives the code today, through the config
+  the editor writes, and code does not yet drive the canvas
+- Play starting from the camera the editor is looking through, rather than
+  where the project's own scene opens
 - Sloped ground for the platformer: a blocking boundary is currently taken as
   its bounding box
 - rsync publish targets

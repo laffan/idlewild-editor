@@ -1,9 +1,14 @@
 /**
  * The console the editor's terminal drawer shows.
  *
- * Phaser Bench forwards `console.*` across a postMessage bridge because its
- * game runs in an iframe. Idlewild's game runs in this same webview, so the
- * bridge collapses into a plain wrap of the console plus a subscribable log.
+ * Two things write to it and the drawer lets you see either on its own.
+ * **App** is the editor talking about itself — an import finished, a PSD was
+ * renamed, a save failed — every `log.info`/`warn`/`error` call in this
+ * codebase. **JS** is the JavaScript console: whatever `console.*` is handed,
+ * here and in the frame play mode runs the project's own program in, plus
+ * uncaught errors and rejected promises from both. That second source is the
+ * one you debug your own code with, and it arrives verbatim, which is why it
+ * is worth being able to hide the first.
  *
  * Format directives are interpreted rather than printed. Phaser's own boot
  * banner is a `%c`-styled string with two CSS arguments; joining the raw
@@ -12,6 +17,9 @@
  */
 
 export type LogLevel = "info" | "warn" | "error";
+
+/** Who said it — the editor, or the JavaScript console. */
+export type LogSource = "app" | "js";
 
 /** A run of text with optional inline CSS, as `%c` produces. */
 export interface LogSegment {
@@ -22,6 +30,7 @@ export interface LogSegment {
 export interface LogEntry {
   t: string;
   level: LogLevel;
+  source: LogSource;
   segments: LogSegment[];
   /** The whole line as plain text, for copying and searching. */
   message: string;
@@ -38,16 +47,27 @@ function stamp(): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-export function log(level: LogLevel, ...args: unknown[]): void {
+/** Record a line, saying where it came from. */
+export function logFrom(
+  source: LogSource,
+  level: LogLevel,
+  ...args: unknown[]
+): void {
   const segments = formatArgs(args);
   entries.push({
     t: stamp(),
     level,
+    source,
     segments,
     message: segments.map((s) => s.text).join(""),
   });
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
   for (const listener of listeners) listener(entries);
+}
+
+/** The editor talking about itself. */
+export function log(level: LogLevel, ...args: unknown[]): void {
+  logFrom("app", level, ...args);
 }
 
 export const info = (...args: unknown[]) => log("info", ...args);
@@ -153,7 +173,12 @@ function sanitiseStyle(css: string): string | undefined {
 
 function stringify(value: unknown): string {
   if (typeof value === "string") return value;
-  if (value instanceof Error) return `${value.name}: ${value.message}`;
+  // With its stack: an error in the user's own code is the line this drawer
+  // exists for, and `TypeError: undefined is not an object` with no frame
+  // under it names nothing you can go and look at.
+  if (value instanceof Error) {
+    return value.stack || `${value.name}: ${value.message}`;
+  }
   if (value === undefined) return "undefined";
   if (value === null) return "null";
   try {
@@ -181,6 +206,11 @@ export function clearLog(): void {
 /**
  * Mirror the page's console into the drawer, keeping the originals so
  * devtools still work. Called once at boot.
+ *
+ * Everything this captures is tagged **JS**, because that is literally what
+ * it is: the browser console, as the browser would have shown it. The
+ * editor's own commentary goes through `info`/`warn`/`error` and never
+ * touches `console`, so the two never have to be told apart after the fact.
  */
 export function captureConsole(): void {
   const levels: Array<[LogLevel, "log" | "info" | "warn" | "error"]> = [
@@ -193,14 +223,14 @@ export function captureConsole(): void {
     const original = console[method].bind(console);
     console[method] = (...args: unknown[]) => {
       original(...args);
-      log(level, ...args);
+      logFrom("js", level, ...args);
     };
   }
 
   window.addEventListener("error", (event) => {
-    log("error", event.message);
+    logFrom("js", "error", event.error ?? event.message);
   });
   window.addEventListener("unhandledrejection", (event) => {
-    log("error", String(event.reason));
+    logFrom("js", "error", "Unhandled rejection:", event.reason);
   });
 }

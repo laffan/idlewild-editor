@@ -171,6 +171,34 @@ function markedManifest(
   });
 }
 
+/**
+ * The stubbed contents of a file in `game/`.
+ *
+ * Both `read_game_file` and `read_game_template` answer with it, so the
+ * harness's editor sees an untouched file — every marked line still the
+ * editor's, which is where the interesting behaviour starts.
+ */
+function gameFile(path: string): string {
+  if (path.endsWith(".json")) {
+    return JSON.stringify({ projection: "orthogonal", grid: 64, layers: [] }, null, 2);
+  }
+  return [
+    `// ${path}`,
+    "export class WorldScene extends Phaser.Scene {",
+    "  // idlewild:begin placeDocument",
+    "  placeDocument() {",
+    "    for (const layer of config.layers ?? []) this.paint(layer);",
+    "  }",
+    "  // idlewild:end placeDocument",
+    "",
+    "  create() {",
+    "    this.placeDocument();",
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+}
+
 export async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   (window as any).__calls = [...((window as any).__calls ?? []), { cmd, args }];
   switch (cmd) {
@@ -223,8 +251,11 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     case "list_projects": return [];
     case "list_game_files":
       return [...TREE].sort((a, b) => a.path.localeCompare(b.path));
+    // A file with one managed block in it, so the code modal's read-only
+    // lines, its Reset and its refusals are all reachable in the harness.
     case "read_game_file":
-      return `// ${(args as any).path}\nexport default class WorldScene {}\n`;
+    case "read_game_template":
+      return gameFile(String((args as any).path));
     case "write_game_file": return undefined;
     case "create_game_file":
     case "create_game_dir": {

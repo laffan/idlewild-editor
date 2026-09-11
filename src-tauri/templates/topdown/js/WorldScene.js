@@ -7,13 +7,24 @@ import config from "./game.config.json" with { type: "json" };
 // the projection reaches it through the config the editor wrote.
 //
 // A blank project has no lattice to draw and none to walk, so it draws no
-// grid and navigates on a square lattice of the project's nominal unit —
-// the same substitution the editor's own play mode makes.
+// grid and navigates on a square lattice of the project's nominal unit — the
+// grid scale chosen in New Game, which is what that setting is for on a
+// template that does not snap.
+//
+// This is the program the editor's Play runs, over the project's own files.
+//
+// Lines between an `idlewild:begin` and its `idlewild:end` belong to the
+// editor: they read the config it writes beside this file, and the code modal
+// shows them read-only with a Reset beside each block. Everything else here is
+// yours. You can still type new lines *inside* a managed block — only the
+// lines the editor wrote are locked — and Reset puts that block back as it
+// came, dropping whatever was added to it.
 export class WorldScene extends Phaser.Scene {
   constructor() {
     super("World");
   }
 
+  // idlewild:begin preload
   preload() {
     this.grid = createGrid(config.projection, config.grid);
     this.nav = this.grid.snaps ? this.grid : createGrid("orthogonal", config.grid);
@@ -21,6 +32,7 @@ export class WorldScene extends Phaser.Scene {
       this.P2P.load.load(this, key, `assets/${key}`);
     }
   }
+  // idlewild:end preload
 
   create() {
     this.drawGrid();
@@ -33,6 +45,7 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  // idlewild:begin drawGrid
   drawGrid() {
     if (!this.grid.snaps) return;
     const g = this.add.graphics().setDepth(-1000);
@@ -48,7 +61,9 @@ export class WorldScene extends Phaser.Scene {
       }
     }
   }
+  // idlewild:end drawGrid
 
+  // idlewild:begin placeDocument
   placeDocument() {
     // Layers are stored top-first; Phaser depth counts upward, so the last
     // layer in the list is the furthest back.
@@ -70,7 +85,9 @@ export class WorldScene extends Phaser.Scene {
       }
     });
   }
+  // idlewild:end placeDocument
 
+  // idlewild:begin paintFill
   paintFill(fill, depth) {
     const g = this.add.graphics().setDepth(depth * 1000);
     const color = Phaser.Display.Color.HexStringToColor(
@@ -90,6 +107,7 @@ export class WorldScene extends Phaser.Scene {
       );
     }
   }
+  // idlewild:end paintFill
 
   spawnCharacter() {
     const start = config.spawn ?? { cx: 0, cy: 0 };
@@ -157,13 +175,16 @@ function contains(box, p) {
  * away from its top-left — the corner the placement's x/y describes, so the
  * image lands exactly where the editor drew it.
  */
+// idlewild:begin applyScale
 function applyScale(object, placement) {
   const naturalWidth = placement.naturalWidth ?? placement.width;
   const naturalHeight = placement.naturalHeight ?? placement.height;
   if (!naturalWidth || !naturalHeight || !object.setScale) return;
   object.setScale(placement.width / naturalWidth, placement.height / naturalHeight);
 }
+// idlewild:end applyScale
 
+// idlewild:begin pointsToVectors
 function pointsToVectors(flat) {
   const out = [];
   for (let i = 0; i < flat.length; i += 2) {
@@ -171,3 +192,4 @@ function pointsToVectors(flat) {
   }
   return out;
 }
+// idlewild:end pointsToVectors

@@ -5,6 +5,15 @@
 //! Tauri's asset protocol percent-encodes the whole path into one opaque
 //! segment, so concatenation breaks; a plain HTTP origin keeps P2P working
 //! unmodified. Requests are `/<project-id>/<path within the project>`.
+//!
+//! It also serves the project's `game/` tree *as an export*, which is what
+//! play mode runs in a frame over the canvas. Two paths exist only in an
+//! export's layout and are answered here rather than duplicated on every
+//! project's disk: `game/lib/<runtime>` is Phaser and psd-to-phaser, both
+//! vendored into this binary, and `game/assets/…` is the processed PSD output,
+//! which sits *beside* `game/` in the store and *inside* it in a zip. With
+//! those two shims the same `index.html` runs in both places, so what plays
+//! and what publishes cannot drift.
 
 use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::Receiver;
@@ -37,8 +46,18 @@ pub fn start() -> Result<(u16, Receiver<()>), String> {
     Ok((port, ready_rx))
 }
 
+/// The script `?idlewild=console` asks to have injected — see
+/// `templates/play/console-bridge.js`.
+const CONSOLE_BRIDGE: &str = include_str!("../templates/play/console-bridge.js");
+
+/// The query that asks for the console bridge. Spelled out at the request
+/// rather than assumed, so a published page and a played one differ by a URL
+/// and nothing else.
+const CONSOLE_QUERY: &str = "idlewild=console";
+
 fn respond(request: tiny_http::Request) -> std::io::Result<()> {
-    let raw = request.url().split('?').next().unwrap_or("").to_string();
+    let url = request.url().to_string();
+    let (raw, query) = url.split_once('?').unwrap_or((url.as_str(), ""));
     let decoded = percent_decode(raw.trim_start_matches('/'));
 
     // The root answers for itself, so the editor can tell "the asset server
@@ -50,7 +69,12 @@ fn respond(request: tiny_http::Request) -> std::io::Result<()> {
         return request.respond(reply(200, "idlewild asset server", "text/plain"));
     }
 
-    let Some(path) = resolve(&decoded) else {
+    // A runtime a game loads lives in this binary, not in the project.
+    if let Some(source) = vendored_runtime(&decoded) {
+        return request.respond(reply(200, source, "text/javascript; charset=utf-8"));
+    }
+
+    let Some(path) = resolve(&store_path(&decoded)) else {
         return request.respond(reply(404, "Not found", "text/plain"));
     };
 
@@ -59,11 +83,67 @@ fn respond(request: tiny_http::Request) -> std::io::Result<()> {
     };
 
     let mime = mime_for(&path);
+    let asked = query.split('&').any(|part| part == CONSOLE_QUERY);
+    let bytes = if asked && mime.starts_with("text/html") {
+        inject(&bytes, CONSOLE_BRIDGE)
+    } else {
+        bytes
+    };
+
     let mut response = tiny_http::Response::from_data(bytes);
     for (name, value) in common_headers(mime) {
         response.add_header(header(name, value));
     }
     request.respond(response)
+}
+
+/// Rewrite an export-shaped request onto where the store actually keeps it.
+///
+/// Only one path needs it: a game asks for `assets/…` relative to its own
+/// `index.html`, which inside `game/` resolves to `<id>/game/assets/…`, and
+/// the processed output is at `<id>/assets/…`. A project that really does
+/// have a file under `game/assets/` is not reachable through this, which is
+/// the trade: that directory is the export's name for the pipeline's output.
+fn store_path(decoded: &str) -> String {
+    let Some((id, rest)) = decoded.split_once('/') else {
+        return decoded.to_string();
+    };
+    match rest.strip_prefix("game/assets/") {
+        Some(asset) => format!("{id}/assets/{asset}"),
+        None => decoded.to_string(),
+    }
+}
+
+/// The runtime behind `game/lib/<name>`, if that is what was asked for.
+///
+/// An export carries its own copy of both; a project in the store does not,
+/// because they are 1.5 MB that would be identical in every project and are
+/// already in this binary for the exporter to write.
+fn vendored_runtime(decoded: &str) -> Option<&'static str> {
+    let (_id, rest) = decoded.split_once('/')?;
+    match rest.strip_prefix("game/lib/")? {
+        "phaser.min.js" => Some(crate::templates::PHASER),
+        "psd-to-phaser.umd.js" => Some(crate::templates::P2P_UMD),
+        _ => None,
+    }
+}
+
+/// Put a script at the top of a page's `<head>`.
+///
+/// Before everything else on purpose: the bridge wraps `console` and listens
+/// for uncaught errors, and a boot failure in the very first module is
+/// exactly the thing it exists to report. A document with no `<head>` gets it
+/// in front of whatever it does start with.
+fn inject(page: &[u8], script: &str) -> Vec<u8> {
+    let text = String::from_utf8_lossy(page).into_owned();
+    let tag = format!("<script>\n{script}\n</script>");
+    match text.find("<head>") {
+        Some(at) => {
+            let cut = at + "<head>".len();
+            format!("{}{tag}{}", &text[..cut], &text[cut..]).into_bytes()
+        }
+        None => format!("{tag}{text}").into_bytes(),
+    }
 }
 
 /// What every answer carries, whatever its status.

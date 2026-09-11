@@ -128,3 +128,85 @@ fn the_asset_server_serves_a_project_and_nothing_above_it() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// The project's `game/` tree, served as an export.
+///
+/// Play mode loads this in a frame over the canvas, so the same `index.html`
+/// has to run here and out of a zip. Two paths are the whole difference and
+/// both are answered by the server: the runtimes, which live in this binary
+/// rather than in every project, and `assets/`, which sits beside `game/` on
+/// disk and inside it in an archive. If either stopped answering, Play would
+/// be a blank frame and the reason would be one line in a console.
+#[test]
+fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
+    let (port, ready) = file_server::start().expect("the server should bind");
+    ready.recv().expect("the listener thread should start");
+
+    let meta = store::create_project("Played", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+
+        // The page itself, and the module it pulls in.
+        let page = get(port, &format!("/{id}/game/index.html"));
+        assert_eq!(page.status, 200, "body was {:?}", page.body);
+        assert!(page.body.contains("js/main.js"), "body was {:?}", page.body);
+        // Untouched unless the request asks otherwise: what plays and what
+        // publishes are the same file.
+        assert!(!page.body.contains("idlewild-game-console"));
+
+        let scene = get(port, &format!("/{id}/game/js/WorldScene.js"));
+        assert_eq!(scene.status, 200);
+        assert_eq!(
+            scene.header("Content-Type"),
+            Some("text/javascript; charset=utf-8")
+        );
+
+        // The console bridge, and only for a request that asks for it.
+        let played = get(port, &format!("/{id}/game/index.html?idlewild=console"));
+        assert_eq!(played.status, 200);
+        assert!(
+            played.body.contains("idlewild-game-console"),
+            "the bridge should be injected",
+        );
+        assert!(
+            played.body.find("idlewild-game-console") < played.body.find("js/main.js"),
+            "the bridge has to be in place before the first module runs",
+        );
+        assert!(played.body.contains("js/main.js"), "the page itself survives");
+
+        // The runtimes an export carries, answered from this binary.
+        for name in ["phaser.min.js", "psd-to-phaser.umd.js"] {
+            let runtime = get(port, &format!("/{id}/game/lib/{name}"));
+            assert_eq!(runtime.status, 200, "{name} should be served");
+            assert!(!runtime.body.is_empty(), "{name} came back empty");
+        }
+        assert_eq!(
+            get(port, &format!("/{id}/game/lib/anything-else.js")).status,
+            404,
+            "only the two vendored runtimes are answered",
+        );
+
+        // Processed assets, which the game asks for relative to itself.
+        let manifest = r#"{"name":"hut","width":8,"height":8,"layers":[]}"#;
+        let assets = store::assets_dir(id).expect("assets dir").join("hut");
+        std::fs::create_dir_all(&assets).expect("asset dir should be created");
+        std::fs::write(assets.join("data.json"), manifest).expect("manifest should save");
+
+        let found = get(port, &format!("/{id}/game/assets/hut/data.json"));
+        assert_eq!(found.status, 200, "body was {:?}", found.body);
+        assert_eq!(found.body, manifest);
+
+        // The shims are not a way around the store's boundary.
+        assert_eq!(
+            get(port, &format!("/{id}/game/assets/../../meta.json")).status,
+            404,
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}

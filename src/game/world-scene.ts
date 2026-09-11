@@ -1,8 +1,12 @@
 /**
- * The editor scene. In edit mode this is the canvas the user builds on; in
- * play mode the same scene grows a character and drives it with A*. It is one
- * scene, not two — the spec's play mode adds a character to the game rather
- * than rebooting it.
+ * The editor scene: the canvas the user builds on.
+ *
+ * It used to grow a character in play mode and drive it with A*, which made
+ * Play a performance the editor gave *about* the document — and left the
+ * project's own `WorldScene.js`, the one in the code modal, never running at
+ * all. Play now loads that program instead, in a frame over this canvas (see
+ * `editor/game-frame.ts`), so this scene's only part in play mode is to put
+ * its tools down.
  */
 
 import Phaser from "phaser";
@@ -16,9 +20,6 @@ import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { DropTargets, type PlacedTarget } from "./drop-target";
 import { Marquee } from "./marquee";
-import { PlayController, type PlayMode } from "./play-controller";
-import { PlatformerController } from "./play-platformer";
-import type { PlayInput } from "./platformer";
 import { DragController } from "./drag";
 import { ExtrudeMode } from "./extrude-mode";
 import { PsdPlacements } from "./psd-placements";
@@ -67,9 +68,6 @@ export class WorldScene extends Phaser.Scene {
   private overlay!: SelectionOverlay;
   private drops!: DropTargets;
   private marquee!: Marquee;
-  private play!: PlayMode;
-  /** Held movement, written by the editor's play pad and its keyboard. */
-  private playInput: PlayInput = { left: false, right: false, jump: false };
 
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
@@ -114,12 +112,6 @@ export class WorldScene extends Phaser.Scene {
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
     this.drops = new DropTargets(this.add.graphics(), this.store);
     this.marquee = new Marquee(this.add.graphics(), this.grid);
-    // Which play mode this project has is a property of the project, decided
-    // when it was created and carried in the document ever since.
-    this.play =
-      this.store.genre === "platformer"
-        ? new PlatformerController(this, this.store, this.grid)
-        : new PlayController(this, this.store, this.grid);
     this.drag = new DragController({
       store: this.store,
       grid: this.grid,
@@ -202,21 +194,9 @@ export class WorldScene extends Phaser.Scene {
     this.refresh();
   }
 
-  override update(_time: number, delta: number): void {
+  override update(_time: number, _delta: number): void {
     this.gridRenderer.update(this.cameras.main);
     this.publishViewport();
-    if (this.mode === "play") this.play.update(delta, this.playInput);
-  }
-
-  /**
-   * Take the movement currently held down.
-   *
-   * The editor shell owns the play pad and the keyboard, because both are
-   * chrome rather than scene content — see `editor/play-pad.ts`. A top-down
-   * project has nothing to do with it and ignores it.
-   */
-  setPlayInput(input: PlayInput): void {
-    this.playInput = input;
   }
 
   /** How the world maps onto the screen right now. */
@@ -329,12 +309,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private handleTap(screenX: number, screenY: number): void {
+    // The running game is a frame over this canvas and takes its own input;
+    // nothing down here is meant for it.
+    if (this.mode === "play") return;
     const world = this.worldAt(screenX, screenY);
-
-    if (this.mode === "play") {
-      this.play.tap(world);
-      return;
-    }
 
     // While a shape is being extruded, a tap takes hold of one of its spaces
     // rather than reaching past it for whatever is on the document.
@@ -643,12 +621,9 @@ export class WorldScene extends Phaser.Scene {
     this.marquee.cancel();
     // Nothing half-built survives a trip through play mode.
     this.extrude.stop();
-    if (mode === "play") {
-      this.setSelection({ kind: "none" });
-      this.play.start();
-    } else {
-      this.play.stop();
-    }
+    // The running game is the editor shell's — a frame over this canvas, not
+    // an object in it. All the scene owes play mode is to stop editing.
+    if (mode === "play") this.setSelection({ kind: "none" });
   }
 
   /** Let a tool take raw pointer input — the drawing layer's entry point. */

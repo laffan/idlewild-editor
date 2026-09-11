@@ -1,9 +1,13 @@
-//! `game.config.json` — the document, as the exported game reads it.
+//! `game.config.json` — the document, as the project's own code reads it.
 //!
 //! The scaffold writes an empty one so a fresh project runs before anything
-//! has been drawn; an export writes the live document into it, and that is
-//! what makes a published game show what the editor shows. Both go through
-//! here so there is one definition of the file's shape rather than two that
+//! has been drawn, and every save rewrites it from the live document — see
+//! `store::sync_game_config`. That is what makes the file the code modal
+//! opens describe the canvas beside it, and what lets play mode run the
+//! project's own program against what has actually been built.
+//!
+//! An export writes the same thing into the zip. Every path goes through here
+//! so there is one definition of the file's shape rather than several that
 //! drift.
 //!
 //! The config is a *projection* of the document, not a second copy of it: it
@@ -15,6 +19,14 @@
 use crate::project::{Genre, ProjectMeta, Projection};
 use serde::Deserialize;
 use serde_json::{json, Value};
+
+/// Where the generated config lives inside `game/`, and inside a zip.
+///
+/// One constant because three places need the same path: the scaffold that
+/// writes the first one, the save that keeps it in step with the document,
+/// and the export that leaves the on-disk copy out of the archive and writes
+/// its own.
+pub const CONFIG_REL: &str = "js/game.config.json";
 
 /// How far out the grid is drawn and the character may walk, in cells.
 ///

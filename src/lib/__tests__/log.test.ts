@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatArgs } from "../log";
+import { clearLog, error, formatArgs, getEntries, info, logFrom } from "../log";
 
 const plain = (args: unknown[]) => formatArgs(args).map((s) => s.text).join("");
 
@@ -57,5 +57,28 @@ describe("formatArgs", () => {
 
   it("leaves a string with no directives untouched", () => {
     expect(plain(["50% of the grid"])).toBe("50% of the grid");
+  });
+});
+
+describe("where a line came from", () => {
+  it("tags the editor's own commentary App and the console JS", () => {
+    clearLog();
+    info("Imported tower.psd");
+    error("Save failed:", "disk full");
+    logFrom("js", "warn", "Phaser: no WebGL");
+
+    expect(getEntries().map((e) => [e.source, e.level])).toEqual([
+      ["app", "info"],
+      ["app", "error"],
+      ["js", "warn"],
+    ]);
+  });
+
+  it("keeps an error's stack, which is the part worth reading", () => {
+    clearLog();
+    const err = new Error("boom");
+    err.stack = "Error: boom\n    at WorldScene.create (WorldScene.js:31:7)";
+    logFrom("js", "error", err);
+    expect(getEntries()[0].message).toContain("WorldScene.js:31:7");
   });
 });

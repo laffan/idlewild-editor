@@ -138,9 +138,20 @@ fn read_project_meta(id: String) -> Result<ProjectMeta, String> {
     store::read_meta(&id)
 }
 
+/// Read the document — and, on the way, bring the generated config level
+/// with it.
+///
+/// Opening a project is the one moment the whole document is in hand and
+/// nothing is about to change it. Every save keeps
+/// `game/js/game.config.json` in step from then on, but a project made before
+/// that was true has an empty one on disk, and Play runs the project's own
+/// code against that file. Syncing here is what stops such a project opening
+/// to a canvas full of work and playing an empty world.
 #[tauri::command]
 fn read_document(id: String) -> Result<String, String> {
-    store::read_doc(&id)
+    let doc = store::read_doc(&id)?;
+    let _ = store::sync_game_config(&id);
+    Ok(doc)
 }
 
 #[tauri::command]
@@ -178,6 +189,17 @@ fn list_game_files(id: String) -> Result<Vec<GameFile>, String> {
 #[tauri::command]
 fn read_game_file(id: String, path: String) -> Result<String, String> {
     store::read_game_file(&id, &path)
+}
+
+/// One file of `game/` as the scaffold wrote it.
+///
+/// The code modal marks the lines the editor maintains and offers a Reset
+/// beside each managed block; this is what Reset puts back. It is asked for
+/// on every open, so a file the template does not write answers with an error
+/// and the modal simply treats that file as the user's alone.
+#[tauri::command]
+fn read_game_template(id: String, path: String) -> Result<String, String> {
+    store::read_game_template(&id, &path)
 }
 
 #[tauri::command]
@@ -607,6 +629,7 @@ pub fn run() {
             write_thumbnail,
             list_game_files,
             read_game_file,
+            read_game_template,
             write_game_file,
             create_game_file,
             create_game_dir,

@@ -19,6 +19,14 @@
  * where they can. It is ported from phaser-bench, where it sits under the
  * editor for the same reason — the question "what does this method take?"
  * arrives while you are typing the method. See `docs/panel.ts`.
+ *
+ * Some of these lines are the editor's. A scaffolded file marks the runs it
+ * maintains, and `managed-blocks.ts` works out line by line which of them are
+ * still the editor's after everything that has been typed around them: those
+ * are shown in their own colour, refuse to be edited, and carry a Reset that
+ * puts the block back. The generated config is the whole-file case of the
+ * same idea, and it is re-read whenever the document is saved so that what is
+ * on screen is what the running game reads.
  */
 
 import { EditorState, Compartment } from "@codemirror/state";
@@ -33,6 +41,8 @@ import { gameFiles } from "../lib/ipc";
 import * as log from "../lib/log";
 import { FileTree } from "./file-tree";
 import { DocsPanel } from "./docs/panel";
+import { isGenerated, resetBlock } from "./managed-blocks";
+import { managedEdit, managedExtension } from "./managed-view";
 import { createResizer, type Resizer } from "../editor/resizer";
 
 const languageCompartment = new Compartment();
@@ -43,6 +53,8 @@ export class CodeModal {
   private readonly tree: FileTree;
   private readonly filename: HTMLElement;
   private readonly dirtyFlag: HTMLElement;
+  /** Why an edit did not take, or what a Reset just did. Clears itself. */
+  private readonly note: HTMLElement;
   private readonly editorHost: HTMLElement;
   private view: EditorView | null = null;
   private openPath: string | null = null;
@@ -51,6 +63,11 @@ export class CodeModal {
   private readonly pinButton: HTMLButtonElement;
   private readonly docsButton: HTMLButtonElement;
   private readonly onPinChange: (pinned: boolean) => void;
+  /** A file was written. The shell restarts a running game against it. */
+  private readonly onSaved: (path: string) => void;
+  /** Which open is the current one — see `openFile`. */
+  private openToken = 0;
+  private noteTimer: number | null = null;
   private readonly filesResizer: Resizer;
   private readonly docs = new DocsPanel();
   private readonly docsResizer: Resizer;
@@ -60,9 +77,11 @@ export class CodeModal {
     projectId: string,
     onClose: () => void,
     onPinChange: (pinned: boolean) => void,
+    onSaved: (path: string) => void = () => {},
   ) {
     this.projectId = projectId;
     this.onPinChange = onPinChange;
+    this.onSaved = onSaved;
     this.tree = new FileTree(projectId, {
       onOpen: (path) => void this.openFile(path),
       onMoved: (from, to) => {
@@ -103,6 +122,7 @@ export class CodeModal {
 
     this.filename = h("div", { class: "code-filename m", text: "No file open" });
     this.dirtyFlag = h("div", { class: "code-dirty m" });
+    this.note = h("div", { class: "code-note m" });
     this.editorHost = h("div", { class: "code-editor" });
 
     this.docsButton = h(
@@ -161,7 +181,13 @@ export class CodeModal {
         h(
           "div",
           { class: "code-main" },
-          h("div", { class: "code-bar" }, this.filename, this.dirtyFlag),
+          h(
+            "div",
+            { class: "code-bar" },
+            this.filename,
+            this.dirtyFlag,
+            this.note,
+          ),
           this.editorHost,
           h(
             "div",
@@ -238,6 +264,10 @@ export class CodeModal {
 
   private async openFile(path: string): Promise<void> {
     if (this.dirty && this.openPath) await this.save();
+    // Two round trips stand between a click on a file and that file being on
+    // screen, and a second click during them would otherwise land first and
+    // be overwritten by the first click's answer.
+    const token = ++this.openToken;
 
     let content = "";
     try {
@@ -246,10 +276,18 @@ export class CodeModal {
       log.error(`Could not open ${path}:`, err);
       return;
     }
+    const canonical = await this.readTemplate(path);
+    if (token !== this.openToken) return;
 
     this.openPath = path;
     this.filename.textContent = path;
     this.setDirty(false);
+    this.setNote(
+      isGenerated(path)
+        ? "The editor writes this file. It follows the canvas."
+        : "",
+      0,
+    );
     this.tree.setOpen(path);
 
     const state = EditorState.create({
@@ -272,6 +310,13 @@ export class CodeModal {
         ]),
         languageCompartment.of(languageFor(path)),
         oneDark,
+        managedExtension({
+          path,
+          canonical,
+          onReset: (blockId) => void this.reset(blockId),
+          onRefused: () =>
+            this.setNote("These lines are the editor's — Reset puts them back."),
+        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) this.setDirty(true);
           // Automatic mode is the docs panel following the caret, so it wants
@@ -300,6 +345,92 @@ export class CodeModal {
   }
 
   /**
+   * The open file as the scaffold wrote it.
+   *
+   * A file the template does not write — one the user made, or the other
+   * genre's helper — answers with an error, and null is the right answer to
+   * carry: nothing in it is the editor's, so nothing in it is locked.
+   */
+  private async readTemplate(path: string): Promise<string | null> {
+    try {
+      return await gameFiles.template(this.projectId, path);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Put one managed block back, and save.
+   *
+   * Saved rather than left dirty because a Reset is a repair: the reason to
+   * press it is that the running game is broken, and a repair you then have
+   * to remember to save is half a repair. The write goes through the same
+   * `save`, so a game that is up restarts on it.
+   */
+  private async reset(blockId: string): Promise<void> {
+    const path = this.openPath;
+    if (!this.view || !path) return;
+    // Re-read rather than trust what was loaded with the file: the generated
+    // config's pristine form is the document as it stands, and the document
+    // moves while the modal is open.
+    const canonical = await this.readTemplate(path);
+    if (!canonical) {
+      this.setNote("There is no scaffold for this file to go back to.");
+      return;
+    }
+
+    const next = resetBlock(path, this.view.state.doc.toString(), canonical, blockId);
+    if (next === null) {
+      this.setNote(`Could not find ${blockId} to reset.`);
+      return;
+    }
+    this.view.dispatch({
+      changes: { from: 0, to: this.view.state.doc.length, insert: next },
+      annotations: managedEdit.of(true),
+    });
+    this.setDirty(true);
+    await this.save();
+    this.setNote(`${blockId} is back the way the editor wrote it.`);
+  }
+
+  /**
+   * Re-read the open file if the editor is the one writing it.
+   *
+   * Called when the document has been saved, which is when Rust rewrites
+   * `game.config.json` behind it. Only generated files: anything else on
+   * screen may be half-typed, and replacing it under the caret would be the
+   * editor taking the file back.
+   */
+  async refreshGenerated(): Promise<void> {
+    const path = this.openPath;
+    if (!this.view || !path || !isGenerated(path)) return;
+    let content = "";
+    try {
+      content = await gameFiles.read(this.projectId, path);
+    } catch {
+      return;
+    }
+    if (content === this.view.state.doc.toString()) return;
+    this.view.dispatch({
+      changes: { from: 0, to: this.view.state.doc.length, insert: content },
+      annotations: managedEdit.of(true),
+    });
+    this.setDirty(false);
+  }
+
+  /** A line in the file bar, gone again after a moment. */
+  private setNote(text: string, clearAfterMs = 4000): void {
+    this.note.textContent = text;
+    if (this.noteTimer !== null) window.clearTimeout(this.noteTimer);
+    this.noteTimer = null;
+    if (!text || clearAfterMs <= 0) return;
+    this.noteTimer = window.setTimeout(() => {
+      this.note.textContent = "";
+      this.noteTimer = null;
+    }, clearAfterMs);
+  }
+
+  /**
    * Tell the docs panel where the caret is.
    *
    * Sent whether or not the panel is open: the web reference's button carries
@@ -320,20 +451,21 @@ export class CodeModal {
 
   async save(): Promise<void> {
     if (!this.view || !this.openPath || !this.dirty) return;
+    const path = this.openPath;
     try {
-      await gameFiles.write(
-        this.projectId,
-        this.openPath,
-        this.view.state.doc.toString(),
-      );
+      await gameFiles.write(this.projectId, path, this.view.state.doc.toString());
       this.setDirty(false);
-      log.info(`Saved ${this.openPath}`);
+      log.info(`Saved ${path}`);
+      // The shell's business, not this modal's: if the project is playing,
+      // this is the point at which it restarts on the new code.
+      this.onSaved(path);
     } catch (err) {
-      log.error(`Could not save ${this.openPath}:`, err);
+      log.error(`Could not save ${path}:`, err);
     }
   }
 
   destroy(): void {
+    if (this.noteTimer !== null) window.clearTimeout(this.noteTimer);
     this.filesResizer.destroy();
     this.docsResizer.destroy();
     this.docs.destroy();

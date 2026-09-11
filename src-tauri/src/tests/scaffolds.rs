@@ -387,3 +387,165 @@ fn count_in_zip(bytes: &[u8], name: &str) -> usize {
     };
     archive.file_names().filter(|n| *n == name).count()
 }
+
+/// The config the project's own code reads follows the document.
+///
+/// It used to be written once, empty, and rewritten only on the way out to a
+/// zip — so the file the code modal opened described nothing that had been
+/// built, and play mode, which now runs that code, would have run against an
+/// empty world. Every save regenerates it.
+#[test]
+fn saving_the_document_rewrites_the_config_the_game_reads() {
+    let meta = store::create_project("Synced", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let config = |id: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &store::read_game_file(id, "js/game.config.json").expect("config should read"),
+            )
+            .expect("config should be JSON")
+        };
+
+        // A fresh project has the shape of the space and nothing in it.
+        assert_eq!(config(&meta.id)["layers"].as_array().map(Vec::len), Some(1));
+        assert_eq!(config(&meta.id)["psdKeys"].as_array().map(Vec::len), Some(0));
+
+        store::write_doc(
+            &meta.id,
+            &serde_json::json!({
+                "version": 1,
+                "projection": "orthogonal",
+                "genre": "topdown",
+                "gridSize": 32,
+                "layers": [{
+                    "id": "layer-terrain",
+                    "name": "Terrain",
+                    "visible": true,
+                    "fills": [{ "id": "f1", "cells": [{ "cx": 3, "cy": 4 }], "color": "#ec3013" }],
+                    "placements": [{
+                        "id": "p1",
+                        "psdKey": "tower",
+                        "layerPath": "S | tower",
+                        "x": 64.0, "y": 64.0, "width": 32.0, "height": 32.0
+                    }],
+                    "zones": [],
+                    "strokes": []
+                }]
+            })
+            .to_string(),
+        )
+        .expect("document should save");
+
+        let after = config(&meta.id);
+        assert_eq!(after["psdKeys"][0], "tower");
+        assert_eq!(after["layers"][0]["fills"][0]["cells"][0]["cx"], 3.0);
+        assert_eq!(after["layers"][0]["placements"][0]["psdKey"], "tower");
+
+        // A document that will not parse leaves the last good config alone
+        // rather than failing the save that carries the real work.
+        store::write_doc(&meta.id, "{ not json").expect("the document still saves");
+        assert_eq!(config(&meta.id)["psdKeys"][0], "tower");
+
+        // The migration path, which `read_document` takes on every open: a
+        // project made before the config was kept in step has the empty one
+        // the scaffold wrote, and opening it is what brings it level.
+        store::write_game_file(&meta.id, "js/game.config.json", "{}")
+            .expect("a stale config should write");
+        assert!(config(&meta.id)["psdKeys"].is_null());
+        store::sync_game_config(&meta.id).expect_err("a broken document has nothing to sync");
+
+        store::write_doc(
+            &meta.id,
+            &templates::starter_doc(Projection::Orthogonal, Genre::Topdown, 32),
+        )
+        .expect("document should save");
+        store::write_game_file(&meta.id, "js/game.config.json", "{}")
+            .expect("a stale config should write");
+        store::sync_game_config(&meta.id).expect("a readable document syncs");
+        assert_eq!(config(&meta.id)["grid"], 32);
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// What a managed block's Reset in the code modal puts back.
+#[test]
+fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
+    let meta = store::create_project("Pristine", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let scene = store::read_game_template(&meta.id, "js/WorldScene.js")
+            .expect("the scene has a scaffold");
+        assert_eq!(
+            scene,
+            store::read_game_file(&meta.id, "js/WorldScene.js").expect("scene should read"),
+            "an untouched file and its template are the same thing"
+        );
+        // The markers the code modal reads ownership from.
+        assert!(scene.contains("// idlewild:begin placeDocument"));
+        assert!(scene.contains("// idlewild:end placeDocument"));
+
+        // The generated config's pristine form is the document as it stands,
+        // not the empty file a new project scaffolds with: Reset there means
+        // regenerate.
+        let fresh = store::read_game_template(&meta.id, "js/game.config.json")
+            .expect("the config regenerates");
+        let value: serde_json::Value = serde_json::from_str(&fresh).expect("config should be JSON");
+        assert_eq!(value["grid"], 32);
+
+        // A file this template does not write has nothing to go back to, and
+        // says so rather than answering with the other genre's.
+        assert!(store::read_game_template(&meta.id, "js/physics.js").is_err());
+        assert!(store::read_game_template(&meta.id, "js/mine.js").is_err());
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// Every marked block in a scaffolded scene closes, and both genres carry the
+/// same set — the code modal finds a block by id, so a template that renamed
+/// one on one side would silently stop offering its Reset on that side.
+#[test]
+fn both_scenes_mark_the_same_blocks_and_close_every_one() {
+    for genre in [Genre::Topdown, Genre::Platformer] {
+        let scene = templates::template_file(
+            "js/WorldScene.js",
+            "Marks",
+            Projection::Orthogonal,
+            genre,
+            32,
+        )
+        .expect("the scene has a scaffold");
+
+        let mut open: Vec<&str> = Vec::new();
+        let mut closed: Vec<&str> = Vec::new();
+        for line in scene.lines().map(str::trim) {
+            if let Some(id) = line.strip_prefix("// idlewild:begin ") {
+                open.push(id);
+            } else if let Some(id) = line.strip_prefix("// idlewild:end ") {
+                closed.push(id);
+            }
+        }
+        assert_eq!(open, closed, "{genre:?} has a marker without its pair");
+        assert_eq!(
+            open,
+            [
+                "preload",
+                "drawGrid",
+                "placeDocument",
+                "paintFill",
+                "applyScale",
+                "pointsToVectors",
+            ],
+            "{genre:?} marks a different set of blocks",
+        );
+    }
+}

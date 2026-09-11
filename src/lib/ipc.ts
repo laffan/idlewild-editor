@@ -241,6 +241,13 @@ export const gameFiles = {
   list: (id: string) => invoke<GameFile[]>("list_game_files", { id }),
   read: (id: string, path: string) =>
     invoke<string>("read_game_file", { id, path }),
+  /**
+   * The file as the scaffold wrote it — what a managed block's Reset puts
+   * back. Rejects for a file the template does not write, which the code
+   * modal reads as "this one is the user's alone".
+   */
+  template: (id: string, path: string) =>
+    invoke<string>("read_game_template", { id, path }),
   write: (id: string, path: string, content: string) =>
     invoke<void>("write_game_file", { id, path, content }),
   createFile: (id: string, path: string) =>

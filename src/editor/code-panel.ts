@@ -22,14 +22,22 @@ export class CodePanel {
   private readonly shell: HTMLElement;
   /** The console drawer: docked, the panel goes in above it. */
   private readonly before: HTMLElement;
+  /** A file in `game/` was written — the shell decides what that means. */
+  private readonly onSaved: (path: string) => void;
 
   private modal: CodeModal | null = null;
   private resizer: Resizer | null = null;
 
-  constructor(projectId: string, shell: HTMLElement, before: HTMLElement) {
+  constructor(
+    projectId: string,
+    shell: HTMLElement,
+    before: HTMLElement,
+    onSaved: (path: string) => void = () => {},
+  ) {
     this.projectId = projectId;
     this.shell = shell;
     this.before = before;
+    this.onSaved = onSaved;
   }
 
   get open(): boolean {
@@ -54,8 +62,17 @@ export class CodePanel {
       this.projectId,
       () => this.destroy(),
       (pinned) => this.setPinned(pinned),
+      this.onSaved,
     );
     this.shell.appendChild(this.modal.root);
+  }
+
+  /**
+   * The document has been saved, so the generated config on disk has moved.
+   * If that is what is on screen, show the new one.
+   */
+  refreshGenerated(): void {
+    void this.modal?.refreshGenerated();
   }
 
   /**

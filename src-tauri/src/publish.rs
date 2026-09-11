@@ -5,11 +5,13 @@
 //! processed `assets/`, and the two runtime libraries — the exact builds the
 //! editor itself runs, since both are vendored into this binary.
 //!
-//! `game.config.json` is the one file the export does not copy: the scaffold
-//! wrote an empty one, and what belongs in the zip is the live document. It
-//! is rewritten here rather than in the frontend because this is the only
-//! place that sees the document and the archive at the same time — see
-//! `game_config`.
+//! `game.config.json` is the one file the export does not copy. The on-disk
+//! copy is kept in step with the document on every save, so copying it would
+//! usually be right — but "usually" is not a guarantee to hand a zip, and
+//! this is the one place that sees the document and the archive at the same
+//! time. It is written from the document here, deliberately, and left out of
+//! the directory walk so no reader has to choose between two entries of the
+//! same name. See `game_config`.
 
 use crate::store;
 use std::io::Write;
@@ -29,7 +31,8 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
 
         // The editable project source, minus the generated config.
         let game = store::game_dir(project_id)?;
-        add_dir(&mut zip, &game, &format!("{root}/"), options, &[CONFIG_REL])?;
+        let generated = crate::game_config::CONFIG_REL;
+        add_dir(&mut zip, &game, &format!("{root}/"), options, &[generated])?;
 
         // The document, in the shape `WorldScene.js` reads. A project whose
         // document will not parse still exports — as the empty game the
@@ -41,7 +44,7 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
             Ok(config) => config,
             Err(_) => crate::game_config::empty(meta.projection, meta.genre, meta.grid_size),
         };
-        zip.start_file(format!("{root}/{CONFIG_REL}"), options)
+        zip.start_file(format!("{root}/{generated}"), options)
             .map_err(|e| e.to_string())?;
         zip.write_all(
             serde_json::to_string_pretty(&config)
@@ -76,9 +79,6 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
     }
     Ok(buf)
 }
-
-/// Where the generated config lives inside `game/`, and inside the zip.
-const CONFIG_REL: &str = "js/game.config.json";
 
 /// Copy a directory into the archive, skipping the relative paths in `skip`.
 ///
