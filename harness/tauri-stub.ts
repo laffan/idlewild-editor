@@ -255,9 +255,26 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       };
     }
     case "read_psd_bytes": return "AAAA";
-    case "read_psd_layers":
+    case "read_psd_layers": {
+      // Only `tower` is the hand-built fixture whose stack the reorder and
+      // rename paths edit. Every other key is a file this editor generated,
+      // so it has the stack those always have: the artwork under both marks.
+      const asked = String((args as any).key);
+      if (asked !== "tower") {
+        return {
+          key: asked, width: 128, height: 192, writable: true, blockedBy: null,
+          layers: [
+            { name: "P | anchor", category: "point", index: 0, visible: true,
+              opacity: 255, width: 12, height: 12, x: 58, y: 90 },
+            { name: "Z | grid", category: "zone", index: 1, visible: true,
+              opacity: 255, width: 64, height: 32, x: 32, y: 80 },
+            { name: `S | ${asked}`, category: "sprite", index: 2, visible: true,
+              opacity: 255, width: 128, height: 192, x: 0, y: 0 },
+          ],
+        };
+      }
       return {
-        key: String((args as any).key), width: 128, height: 192,
+        key: asked, width: 128, height: 192,
         writable: (window as any).__psdWritable ?? true,
         blockedBy: (window as any).__psdWritable === false
           ? "This PSD uses layer groups, which a rewrite would flatten."
@@ -268,6 +285,7 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
           category: categoryOf(l.name),
         })),
       };
+    }
     case "write_psd_layers": {
       const edits = (args as any).layers as Array<{ index: number; name: string }>;
       const next = edits.map((e) => ({ ...PSD_LAYERS[e.index], name: e.name }));

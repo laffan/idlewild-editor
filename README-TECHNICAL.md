@@ -1597,8 +1597,14 @@ so Cancel is dropping it and entering play mode drops it too.
 
 Pixels cannot say where the columns were, so Apply used to be a one-way door.
 The solid now goes into the document beside the artwork — `GameDoc.extrusions`,
-keyed by PSD key — and **Continue Extruding** in the inspector's Info section
-opens it back up.
+keyed by PSD key — and the cube on the extruded layer's row in the inspector's
+PSD layer list opens it back up. On the row rather than in Info because that is
+where the layer it is about is: the button and the thing it acts on are the
+same line.
+
+The record is written **before** the artwork is placed. Placing selects the new
+PSD and the inspector builds its layer list from that selection, so a record
+written afterwards arrives too late for the row that offers the way back in.
 
 **Keyed by the file, not carried on a placement**, because that is what the
 shape is a fact about: two placements of one PSD are two views of the same
@@ -1637,6 +1643,55 @@ at each call site, so however the session ends the placement comes back.
 output** — a re-import, or a rewrite of its layer stack from the inspector.
 A greybox someone has since painted over is no longer the thing the shape
 describes, and re-applying it would throw the painting away.
+
+### Layers the app owns the name of
+
+Some layers in a PSD belong to the editor rather than to whoever opens the
+file, and their names are load-bearing. `P | anchor` is found *by name* on
+every parse (`findAnchor`), so renaming it costs the artwork its alignment on
+the next re-import — silently, a re-parse later. `Z | grid` is written by the
+same pass. And an extrusion's artwork layer is regenerated under the file's own
+key every time the solid is applied again, so a new name would survive exactly
+one Apply.
+
+`psdLayerOwner` is the rule and `PsdLayerEditor` renders it: an owned row is
+read-only however writable the file is, and its field carries the reason as a
+title rather than leaving the reader to discover that typing does nothing. It
+reads `manifestName` rather than the whole label, because the exported name is
+the second pipe segment and that is what both psd-to-json and a placement's
+path are made of — so `P | anchor | note` is still the anchor.
+
+An owned layer may offer something in its place, which is the other half of
+why the rule exists: the extrusion's row carries the cube that reopens the
+mode that wrote it.
+
+### One re-parse, one extra row
+
+Reconciliation had two halves that disagreed about what counts as placed.
+`reviseExisting` looked a placement's path up in `manifest.all` — every layer,
+marks and nested layers included — while `adoptNewLayers` walked
+`placeableLayers`, which is top-level and pixels only. A placement standing on
+one of the marks therefore survived revision *and* left adoption seeing nothing
+on the artwork, so it added a second placement for it. One re-parse, one extra
+row in the layer list, and nothing new on the canvas — because the extra
+placement drew a point.
+
+Two changes close it. Adoption now treats a top-level layer as taken when a
+placement stands on it **or on anything nested under it**, so a group whose
+child is placed is not a layer that has appeared. And revision **repoints** a
+placement standing on a layer with no pixels onto the file's first placeable
+one, keeping its id, instance and anchor: that placement was drawing an empty
+group, which is the thing `placeableLayers` exists to refuse.
+
+How one comes to be there is the migration early builds needed —
+`layerPath: "root"` was repointed at the file's *first* layer, and for
+everything this editor generates that is one of the two marks drawn over the
+artwork.
+
+The reconciliation is `game/reconcile.ts`, split out of `psd-loader.ts`
+because that file imports Phaser for its side of the loading contract and none
+of this touches a canvas. The same bargain `instance.ts` and `resize.ts`
+already make, and it is what lets the case above be a test.
 
 ## The iPad's safe area
 
@@ -1827,6 +1882,11 @@ on chrome never highlights it.
 - Dropping several files at once takes the first one the pipeline can read.
   A drop is one gesture landing on one space, and a run of images would need
   somewhere to put the rest.
+- Reordering an extruded PSD's layers from the inspector drops the record
+  behind it, so the cube goes and the shape can no longer be carried on. The
+  rewrite cannot tell a reorder from an edit that makes the file somebody
+  else's, and it says nothing when it happens — the disappearing icon is the
+  only notice.
 - Continuing an extrusion rewrites the whole PSD, so anything added to that
   file by hand goes with it. The record is dropped on a re-import or a layer
   rewrite, which covers the round trip through Photoshop the editor knows

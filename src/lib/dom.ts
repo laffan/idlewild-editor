@@ -127,6 +127,12 @@ export const ICONS = {
     "M6.5 17.2c-.6 1.2-.4 2.4.6 3.1",
   ],
   hand: "M8 13V6a1.6 1.6 0 0 1 3.2 0v6m0-1V5a1.6 1.6 0 0 1 3.2 0v7m0-2a1.6 1.6 0 0 1 3.2 0v6a5 5 0 0 1-5 5h-1a6 6 0 0 1-6-6v-3",
+  /** A solid, for what extrude mode builds: the cube seen from its corner. */
+  box: [
+    "M12 2.5 21 7.5v9l-9 5-9-5v-9l9-5Z",
+    "m3 7.5 9 5 9-5",
+    "M12 12.5V21.5",
+  ],
   file: "M6 3h8l4 4v14H6V3Z",
   folder: "M3 6h6l2 3h10v11H3V6Z",
   trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 14h10l1-14"],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { manifestName } from "../psd-layers";
+import { manifestName, psdLayerOwner } from "../psd-layers";
+import type { PsdLayerInfo } from "../../lib/ipc";
 
 /**
  * `manifestName` decides whether renaming a PSD layer takes a placement with
@@ -33,5 +34,48 @@ describe("manifestName", () => {
   it("trims, because Photoshop names carry whatever spacing was typed", () => {
     expect(manifestName("S|tower")).toBe("tower");
     expect(manifestName("S  |  tower  ")).toBe("tower");
+  });
+});
+
+/**
+ * Some layers belong to the app rather than to whoever opens the file, and
+ * their names are load-bearing: `P | anchor` is looked up by name on every
+ * parse, and an extrusion's artwork layer is regenerated under the file's own
+ * key each time the solid is applied again.
+ */
+describe("psdLayerOwner", () => {
+  function layer(name: string, category: PsdLayerInfo["category"]): PsdLayerInfo {
+    return {
+      index: 0, name, category,
+      visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
+    };
+  }
+  const noop = () => {};
+  const owner = (l: PsdLayerInfo, isExtrusion = true) =>
+    psdLayerOwner(l, "extrude-abc", isExtrusion, noop);
+
+  it("owns both orienting marks, on any file that carries them", () => {
+    expect(owner(layer("P | anchor", "point"), false)?.reason).toContain("cannot be renamed");
+    expect(owner(layer("Z | grid", "zone"), false)?.reason).toContain("cannot be renamed");
+  });
+
+  it("owns an extrusion's artwork, and offers the way back into the mode", () => {
+    const held = owner(layer("S | extrude-abc", "sprite"));
+    expect(held?.action?.label).toContain("Continue extruding");
+  });
+
+  it("leaves the same layer alone on a PSD that is not an extrusion", () => {
+    expect(owner(layer("S | extrude-abc", "sprite"), false)).toBeNull();
+  });
+
+  it("leaves everything the author named alone", () => {
+    expect(owner(layer("S | tower", "sprite"))).toBeNull();
+    expect(owner(layer("T | ground", "tileset"))).toBeNull();
+    // A point of their own is theirs: only the mark this editor writes is not.
+    expect(owner(layer("P | spawn", "point"))).toBeNull();
+  });
+
+  it("reads the exported name rather than the whole label", () => {
+    expect(owner(layer("P | anchor | note", "point"))?.reason).toBeTruthy();
   });
 });

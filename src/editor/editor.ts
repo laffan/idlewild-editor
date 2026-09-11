@@ -24,7 +24,7 @@ import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
 import { createResizer } from "./resizer";
 import { openPsdExternally, refreshPsd } from "./psd-actions";
-import { PsdLayerEditor } from "./psd-layers";
+import { PsdLayerEditor, psdLayerOwner } from "./psd-layers";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
 import { createExtrudeUi } from "./extrude";
@@ -108,6 +108,10 @@ export async function mountEditor(
     createPsdLayers: (key) =>
       new PsdLayerEditor(meta.id, key, {
         onWritten: (manifest, renames) => void applyPsdLayers(key, manifest, renames),
+        // The marks and an extrusion's artwork are the app's to name, and the
+        // extrusion's row is the way back into the mode that built it.
+        ownerOf: (layer) =>
+          psdLayerOwner(layer, key, !!store.extrusion(key), () => extrude.resume()),
       }),
     onStrokeStyle: (patch) => {
       if (!drawing) return;
@@ -115,7 +119,6 @@ export async function mountEditor(
       inspector.updateStrokeStyle(drawing.style);
     },
     onDeleteSelection: () => deleteSelection(),
-    onContinueExtrude: () => extrude.resume(),
     onExportSelection: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;

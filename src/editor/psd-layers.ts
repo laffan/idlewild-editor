@@ -15,11 +15,36 @@
  * A file the fork cannot rebuild without losing something — groups, masks,
  * clipping — comes back `writable: false` and is listed read-only, with the
  * reason above it. See src-tauri/src/psd_layers.rs.
+ *
+ * Some layers are the *app's* rather than the author's, and their names are
+ * load-bearing: the two orienting marks are found by name on every re-parse,
+ * and an extrusion's artwork layer is regenerated under the file's own key
+ * every time the solid behind it is applied again. Renaming one of those is
+ * not an edit, it is a way to break something quietly — so an owned layer is
+ * listed read-only however writable the file is, and says why. Some of them
+ * offer something better instead: the extrusion's carries the way back into
+ * extrude mode.
  */
 
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { psd, type PsdLayerInfo, type PsdLayerList } from "../lib/ipc";
 import * as log from "../lib/log";
+
+/**
+ * A layer this editor owns the name of, and what it offers in its place.
+ *
+ * `reason` is what the field says when it will not be typed in. `action` is
+ * the button on the right of the row — the one thing an owned layer can do
+ * that an ordinary one cannot.
+ */
+export interface OwnedLayer {
+  reason: string;
+  action?: {
+    icon: string | readonly string[];
+    label: string;
+    run: () => void;
+  };
+}
 
 export interface PsdLayerEditorCallbacks {
   /**
@@ -30,6 +55,49 @@ export interface PsdLayerEditorCallbacks {
    * layer that had gone and take the placement with it.
    */
   onWritten: (manifest: string, renames: Map<string, string>) => void;
+  /**
+   * Whether the app owns this layer's name. Optional: a caller that has no
+   * opinion gets the old behaviour, where every layer of a writable file can
+   * be renamed.
+   */
+  ownerOf?: (layer: PsdLayerInfo) => OwnedLayer | null;
+}
+
+/**
+ * Which of a PSD's layers this editor owns the name of.
+ *
+ * The two orienting marks on any file it wrote — `P | anchor` is looked up by
+ * name on every parse, and renaming it silently costs the artwork its
+ * alignment on the next re-import — and the artwork layer of an extrusion,
+ * which Apply regenerates under the file's own key. That last one is also the
+ * way back in: its row carries the button that reopens the solid.
+ */
+export function psdLayerOwner(
+  layer: PsdLayerInfo,
+  key: string,
+  isExtrusion: boolean,
+  onExtrude: () => void,
+): OwnedLayer | null {
+  // The exported name, not the whole label: `manifestName` is what a
+  // placement's path is made of, and it is what psd-to-json reads too.
+  const named = manifestName(layer.name)?.toLowerCase() ?? "";
+  if (layer.category === "point" && named === "anchor") {
+    return { reason: "The editor finds this mark by name — it cannot be renamed" };
+  }
+  if (layer.category === "zone" && named === "grid") {
+    return { reason: "The editor writes this mark — it cannot be renamed" };
+  }
+  if (isExtrusion && layer.category === "sprite" && named === key.toLowerCase()) {
+    return {
+      reason: "Extrude mode writes this layer — it cannot be renamed",
+      action: {
+        icon: ICONS.box,
+        label: "Continue extruding this shape",
+        run: onExtrude,
+      },
+    };
+  }
+  return null;
 }
 
 /** A layer as it is in the file, beside the name it is being given. */
@@ -161,10 +229,11 @@ export class PsdLayerEditor {
   }
 
   private rowEl(row: Row, stack: PsdLayerList): HTMLElement {
+    const owner = this.callbacks.ownerOf?.(row.source) ?? null;
     const el = h(
       "div",
       {
-        class: `psd-layer-row ${row.source.category}`,
+        class: `psd-layer-row ${row.source.category}${owner ? " owned" : ""}`,
         dataset: { index: String(row.source.index) },
       },
       stack.writable
@@ -186,7 +255,8 @@ export class PsdLayerEditor {
         h("input", {
           class: "psd-layer-name",
           value: row.name,
-          readonly: stack.writable ? null : "true",
+          readonly: stack.writable && !owner ? null : "true",
+          title: owner?.reason ?? null,
           onInput: (event: Event) => {
             row.name = (event.target as HTMLInputElement).value;
             this.updateFoot();
@@ -200,6 +270,18 @@ export class PsdLayerEditor {
           text: `${row.source.category} · ${row.source.width} × ${row.source.height}`,
         }),
       ),
+      owner?.action
+        ? h(
+            "button",
+            {
+              class: "psd-layer-action",
+              title: owner.action.label,
+              "aria-label": owner.action.label,
+              onClick: owner.action.run,
+            },
+            icon(owner.action.icon, 14),
+          )
+        : null,
     );
     return el;
   }

@@ -116,6 +116,12 @@ export async function applyExtrusion(
       scaleMarks(marksForCells(grid, cells, anchor, art), EXPORT_SCALE),
     );
 
+    // Written before the artwork is placed, not after: placing selects the
+    // new PSD, and the inspector builds its layer list from that selection —
+    // so a record written afterwards would arrive too late for the row that
+    // offers the way back in.
+    store.setExtrusion(result.key, { voxels: [...shape], anchor });
+
     if (target && result.key === target.key) {
       // The footprint may have grown past where it started, which moves the
       // space the artwork hangs from. Reconciliation positions each placement
@@ -126,8 +132,6 @@ export async function applyExtrusion(
     } else {
       await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
     }
-
-    store.setExtrusion(result.key, { voxels: [...shape], anchor });
     log.info(
       `${describeShape(grid, shape)} → ${result.key}.psd ` +
         `(${result.width}×${result.height})`,

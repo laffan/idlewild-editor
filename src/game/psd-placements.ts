@@ -23,7 +23,8 @@ import type { Cell, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { DocRenderer } from "./doc-renderer";
 import { instanceOf } from "./instance";
-import { evictPsd, loadPsd, reconcilePlacements } from "./psd-loader";
+import { evictPsd, loadPsd } from "./psd-loader";
+import { reconcilePlacements } from "./reconcile";
 
 /** What placing a PSD needs from the scene around it. */
 export interface PsdHost {

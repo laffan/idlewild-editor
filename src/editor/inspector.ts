@@ -43,8 +43,6 @@ export interface InspectorCallbacks {
    */
   onToggleLayerAdjust: () => void;
   onDeleteSelection: () => void;
-  /** Re-open the solid behind an extruded PSD and carry on pulling it. */
-  onContinueExtrude: () => void;
   /** Write the selected grid area out as a transparent PNG. */
   onExportSelection: () => void;
   onUsePatternImage: () => void;
@@ -540,20 +538,6 @@ export class Inspector {
     this.row("Layer path", placement.layerPath);
     this.row("Position", `${Math.round(placement.x)}, ${Math.round(placement.y)}`);
     this.row("Anchor cell", `${placement.anchor.cx}, ${placement.anchor.cy}`);
-
-    // A PSD this editor extruded keeps the solid it was rasterised from, so
-    // it can be opened back up rather than rebuilt from nothing. Files that
-    // came from anywhere else — or that have been painted over since, which
-    // is what drops the record — simply do not offer it.
-    if (this.store.extrusion(placement.psdKey)) {
-      this.current.appendChild(
-        h("button", {
-          class: "panel-btn",
-          text: "Continue Extruding",
-          onClick: () => this.callbacks.onContinueExtrude(),
-        }),
-      );
-    }
 
     // Size is the one property you change rather than read, so it sits with
     // the controls that change it rather than among the facts above.
