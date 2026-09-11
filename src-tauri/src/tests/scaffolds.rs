@@ -36,7 +36,11 @@ fn starter_documents_carry_the_chosen_template_and_grid() {
     assert_eq!(value["projection"], "isometric");
     assert_eq!(value["genre"], "topdown");
     assert_eq!(value["gridSize"], 128);
-    assert_eq!(value["layers"].as_array().map(Vec::len), Some(1));
+    // One scene, holding the one layer a project starts with.
+    assert_eq!(value["scenes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(value["scenes"][0]["name"], "Main");
+    assert_eq!(value["activeSceneId"], value["scenes"][0]["id"]);
+    assert_eq!(value["scenes"][0]["layers"].as_array().map(Vec::len), Some(1));
 
     // Both axes reach the document, because the editor reads its play mode
     // out of it rather than out of the project's meta.
@@ -417,6 +421,12 @@ fn an_export_carries_what_each_placed_psd_blocks() {
         // collider dropped here could not be switched back on without a
         // re-export.
         assert_eq!(placements[2]["collider"]["blocking"], false);
+
+        // And every scene carries the same map, because a collider is a fact
+        // about the file: the same PSD standing in a second scene blocks the
+        // same spaces there.
+        let in_scene = &config["scenes"][0]["layers"][0]["placements"][0];
+        assert_eq!(in_scene["collider"], placements[0]["collider"]);
     });
 
     store::delete_project(&meta.id).ok();
@@ -466,4 +476,84 @@ fn count_in_zip(bytes: &[u8], name: &str) -> usize {
         return 0;
     };
     archive.file_names().filter(|n| *n == name).count()
+}
+
+/// What a managed block's Reset in the code modal puts back.
+#[test]
+fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
+    let meta = store::create_project("Pristine", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let scene = store::read_game_template(&meta.id, "js/WorldScene.js")
+            .expect("the scene has a scaffold");
+        assert_eq!(
+            scene,
+            store::read_game_file(&meta.id, "js/WorldScene.js").expect("scene should read"),
+            "an untouched file and its template are the same thing"
+        );
+        // The markers the code modal reads ownership from.
+        assert!(scene.contains("// idlewild:begin placeDocument"));
+        assert!(scene.contains("// idlewild:end placeDocument"));
+
+        // The generated config's pristine form is the document as it stands,
+        // not the empty file a new project scaffolds with: Reset there means
+        // regenerate.
+        let fresh = store::read_game_template(&meta.id, "js/game.config.json")
+            .expect("the config regenerates");
+        let value: serde_json::Value = serde_json::from_str(&fresh).expect("config should be JSON");
+        assert_eq!(value["grid"], 32);
+
+        // A file this template does not write has nothing to go back to, and
+        // says so rather than answering with the other genre's.
+        assert!(store::read_game_template(&meta.id, "js/physics.js").is_err());
+        assert!(store::read_game_template(&meta.id, "js/mine.js").is_err());
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// Every marked block in a scaffolded scene closes, and both genres carry the
+/// same set — the code modal finds a block by id, so a template that renamed
+/// one on one side would silently stop offering its Reset on that side.
+#[test]
+fn both_scenes_mark_the_same_blocks_and_close_every_one() {
+    for genre in [Genre::Topdown, Genre::Platformer] {
+        let scene = templates::template_file(
+            "js/WorldScene.js",
+            "Marks",
+            Projection::Orthogonal,
+            genre,
+            32,
+        )
+        .expect("the scene has a scaffold");
+
+        let mut open: Vec<&str> = Vec::new();
+        let mut closed: Vec<&str> = Vec::new();
+        for line in scene.lines().map(str::trim) {
+            if let Some(id) = line.strip_prefix("// idlewild:begin ") {
+                open.push(id);
+            } else if let Some(id) = line.strip_prefix("// idlewild:end ") {
+                closed.push(id);
+            }
+        }
+        assert_eq!(open, closed, "{genre:?} has a marker without its pair");
+        assert_eq!(
+            open,
+            [
+                "preload",
+                "drawGrid",
+                "placeDocument",
+                "paintFill",
+                "drawOrder",
+                "applyDepth",
+                "applyScale",
+                "pointsToVectors",
+            ],
+            "{genre:?} marks a different set of blocks",
+        );
+    }
 }

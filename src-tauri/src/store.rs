@@ -110,11 +110,14 @@ pub fn create_project(
 
     let meta = ProjectMeta::new(id.clone(), name.to_string(), projection, genre, grid_size);
     write_meta(&meta)?;
+    // Scaffolded before the document is written, because writing a document
+    // regenerates the config inside `game/` and there has to be a `game/` to
+    // regenerate it in.
+    crate::templates::scaffold_game(&game_dir(&id)?, name, projection, genre, grid_size)?;
     write_doc(
         &id,
         &crate::templates::starter_doc(projection, genre, grid_size),
     )?;
-    crate::templates::scaffold_game(&game_dir(&id)?, name, projection, genre, grid_size)?;
     Ok(meta)
 }
 
@@ -161,13 +164,83 @@ pub fn write_doc(id: &str, doc_json: &str) -> Result<(), String> {
     if let Ok(mut meta) = read_meta(id) {
         meta.updated_at = now_ms();
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(doc_json) {
-            if let Some(layers) = value.get("layers").and_then(|l| l.as_array()) {
-                meta.layer_count = layers.len() as u32;
+            // Every scene's layers, because the home screen's count is about
+            // the project rather than about whichever scene was left open.
+            // A document written before scenes still keeps them at the top.
+            let counted = value
+                .get("scenes")
+                .and_then(|s| s.as_array())
+                .map(|scenes| {
+                    scenes
+                        .iter()
+                        .filter_map(|scene| scene.get("layers")?.as_array())
+                        .map(|layers| layers.len())
+                        .sum::<usize>()
+                })
+                .or_else(|| value.get("layers").and_then(|l| l.as_array()).map(Vec::len));
+            if let Some(count) = counted {
+                meta.layer_count = count as u32;
             }
         }
         write_meta(&meta)?;
     }
+    // The document has moved, so the file the project's own code reads has to
+    // move with it — see `sync_game_config` for why a failure here is not a
+    // failed save.
+    let _ = sync_game_config(id);
     Ok(())
+}
+
+/// Rewrite `game/js/game.config.json` from the live document.
+///
+/// The config is the document in the shape the project's own code reads, and
+/// the project's own code is what play mode runs — so it is regenerated on
+/// every save rather than only on the way out to a zip. Before this, the file
+/// the code modal opened was the empty one the scaffold wrote, whatever had
+/// been built on the canvas since, and a project could be played for an hour
+/// without its own config ever mentioning a single thing in it.
+///
+/// A failure here never fails the save. `doc.json` is the truth and this is
+/// derived from it: a project whose document is mid-migration is better off
+/// with a stale config and a written document than with neither.
+pub fn sync_game_config(id: &str) -> Result<(), String> {
+    let meta = read_meta(id)?;
+    let doc = read_doc(id)?;
+    let config = crate::game_config::from_document(&meta, &doc)?;
+    let body = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    let path = game_dir(id)?.join(safe_relative(crate::game_config::CONFIG_REL)?);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    // An unchanged config is not rewritten: the code modal watches this file
+    // and a save storm on a drag would otherwise reload the editor under the
+    // user's caret once per frame.
+    if fs::read_to_string(&path).ok().as_deref() == Some(body.as_str()) {
+        return Ok(());
+    }
+    fs::write(&path, body).map_err(|e| format!("Cannot write the game config: {e}"))
+}
+
+/// One file of `game/` as the scaffold first wrote it — what a managed
+/// block's Reset in the code modal restores.
+///
+/// The generated config is the exception, and the interesting one: its
+/// pristine form is not the empty file the scaffold wrote but the document as
+/// it stands now, because that is what the editor would write into it on the
+/// next save. Resetting it means regenerating it, not blanking it.
+pub fn read_game_template(id: &str, rel: &str) -> Result<String, String> {
+    let meta = read_meta(id)?;
+    if rel == crate::game_config::CONFIG_REL {
+        let config = crate::game_config::from_document(&meta, &read_doc(id)?)?;
+        return serde_json::to_string_pretty(&config).map_err(|e| e.to_string());
+    }
+    crate::templates::template_file(
+        rel,
+        &meta.name,
+        meta.projection,
+        meta.genre,
+        meta.grid_size,
+    )
 }
 
 pub fn write_thumbnail(id: &str, png: &[u8]) -> Result<(), String> {

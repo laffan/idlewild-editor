@@ -1,6 +1,11 @@
 /**
- * Left sidebar: the layer list. Layers can be reordered, renamed, locked and
- * hidden. Stored top-first, shown top-first.
+ * Left sidebar: scenes and layers, in the order you think about them —
+ * which place am I in, then what is in it.
+ *
+ * The scene dropdown along the top is `scenes-bar.ts`; the rest of this file
+ * is the layer list. Layers can be reordered, renamed, locked and hidden, and
+ * belong to the scene that is open — switching scenes is a different list,
+ * not a filter over one.  Stored top-first, shown top-first.
  *
  * Reordering is a drag on the grip at the left of each row. Pointer events
  * rather than HTML5 drag-and-drop, because the iPad is a first-class target
@@ -19,6 +24,7 @@ import { clear, h, ICONS, icon } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
 import type { Layer, Selection } from "../lib/types";
 import { isSelected, layerItems, renderLayerItem } from "./layer-items";
+import { ScenesBar } from "./scenes-bar";
 
 export interface LayersPanelCallbacks {
   onSelectLayer: (layerId: string) => void;
@@ -66,6 +72,7 @@ interface ItemDragState {
 export class LayersPanel {
   readonly root: HTMLElement;
   private readonly body: HTMLElement;
+  private readonly scenes: ScenesBar;
   private readonly store: DocStore;
   private readonly callbacks: LayersPanelCallbacks;
   private suspended = false;
@@ -79,9 +86,11 @@ export class LayersPanel {
     this.callbacks = callbacks;
 
     this.body = h("div", { class: "panel-body scroll" });
+    this.scenes = new ScenesBar(store);
     this.root = h(
       "div",
       { class: "side-panel left" },
+      this.scenes.root,
       h(
         "div",
         { class: "panel-head" },
@@ -104,6 +113,14 @@ export class LayersPanel {
 
     store.addEventListener("change", () => {
       if (!this.suspended) this.render();
+    });
+    // A switch leaves the list showing another scene's layers, and the drag
+    // or rename that was in flight is about a row that has gone.
+    store.addEventListener("scene", () => {
+      this.drag = null;
+      this.itemDrag = null;
+      this.expanded.clear();
+      this.render();
     });
     this.render();
   }

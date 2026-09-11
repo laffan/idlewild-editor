@@ -2,22 +2,41 @@ import { createGrid } from "./grid.js";
 import { findPath } from "./navigation.js";
 import config from "./game.config.json" with { type: "json" };
 
-// The top-down template. One scene serves all three projections: the
-// difference between diamonds, squares and bare pixels lives in grid.js, and
-// the projection reaches it through the config the editor wrote.
+// The top-down template. One *Phaser* scene serves all three projections —
+// the difference between diamonds, squares and bare pixels lives in grid.js,
+// and the projection reaches it through the config the editor wrote. That is
+// a different sense of the word from the editor's scenes, which are places in
+// your project; this one class places whichever of them is open.
 //
 // What the character routes around: a fill marked not-walkable, and the
 // collider of every placed PSD — the spaces the editor says that file stands
 // on.
 //
 // A blank project has no lattice to draw and none to walk, so it draws no
-// grid and navigates on a square lattice of the project's nominal unit —
-// the same substitution the editor's own play mode makes.
+// grid and navigates on a square lattice of the project's nominal unit — the
+// grid scale chosen in New Game, which is what that setting is for on a
+// template that does not snap.
+//
+// This is the program the editor's Play runs, over the project's own files.
+//
+// `config.layers` is the layers of the scene the editor has open, which is
+// the one this places. `config.scenes` carries every scene the project has —
+// id, name and layers — and `config.activeScene` says which of them
+// `config.layers` mirrors, so switching to another one in your own code is a
+// matter of reading its layers and placing them the same way.
+//
+// Lines between an `idlewild:begin` and its `idlewild:end` belong to the
+// editor: they read the config it writes beside this file, and the code modal
+// shows them read-only with a Reset beside each block. Everything else here is
+// yours. You can still type new lines *inside* a managed block — only the
+// lines the editor wrote are locked — and Reset puts that block back as it
+// came, dropping whatever was added to it.
 export class WorldScene extends Phaser.Scene {
   constructor() {
     super("World");
   }
 
+  // idlewild:begin preload
   preload() {
     this.grid = createGrid(config.projection, config.grid);
     this.nav = this.grid.snaps ? this.grid : createGrid("orthogonal", config.grid);
@@ -25,6 +44,7 @@ export class WorldScene extends Phaser.Scene {
       this.P2P.load.load(this, key, `assets/${key}`);
     }
   }
+  // idlewild:end preload
 
   create() {
     this.readColliders();
@@ -38,6 +58,7 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  // idlewild:begin drawGrid
   drawGrid() {
     if (!this.grid.snaps) return;
     const g = this.add.graphics().setDepth(-1000);
@@ -53,7 +74,9 @@ export class WorldScene extends Phaser.Scene {
       }
     }
   }
+  // idlewild:end drawGrid
 
+  // idlewild:begin placeDocument
   placeDocument() {
     // Layers are stored top-first; Phaser depth counts upward, so the last
     // layer in the list is the furthest back.
@@ -65,17 +88,23 @@ export class WorldScene extends Phaser.Scene {
       for (const fill of layer.fills ?? []) {
         this.paintFill(fill, depth);
       }
-      for (const placement of layer.placements ?? []) {
+      // Back to front, once for the whole layer: each placement takes the
+      // next depth up, so what is above what is decided here rather than by
+      // the order Phaser happened to be handed the objects in.
+      const order = drawOrder(layer.placements ?? [], config.projection === "isometric");
+      order.forEach((placement, step) => {
         const object = this.P2P.place(this, placement.psdKey, placement.layerPath);
         if (object && object.setPosition) {
           object.setPosition(placement.x, placement.y);
           applyScale(object, placement);
-          object.setDepth(depth * 1000 + placement.y);
+          applyDepth(object, depth * 1000 + step);
         }
-      }
+      });
     });
   }
+  // idlewild:end placeDocument
 
+  // idlewild:begin paintFill
   paintFill(fill, depth) {
     const g = this.add.graphics().setDepth(depth * 1000);
     const color = Phaser.Display.Color.HexStringToColor(
@@ -95,6 +124,7 @@ export class WorldScene extends Phaser.Scene {
       );
     }
   }
+  // idlewild:end paintFill
 
   spawnCharacter() {
     const start = config.spawn ?? { cx: 0, cy: 0 };
@@ -192,6 +222,86 @@ function contains(box, p) {
 }
 
 /**
+ * Everything on one document layer, back to front.
+ *
+ * Two orderings, one inside the other.
+ *
+ * **Between placed PSDs.** An isometric scene sorts them on screen Y, so a
+ * thing standing nearer the viewer draws in front of one behind it. A unit
+ * sorts on its *own* Y rather than each of its layers separately: a roof sits
+ * higher up the screen than the tower under it, and sorting the two against
+ * each other would put the roof behind the building every time. Flat
+ * projections leave them in the order they were placed.
+ *
+ * **Within one placed PSD.** The author's stack, and nothing else — that is
+ * what `order` is, counting up from the back of the file.
+ *
+ * Shared with the editor's own `drawOrder`, in `src/game/doc-renderer.ts`.
+ * Keep the two in step.
+ */
+// idlewild:begin drawOrder
+function drawOrder(placements, isometric) {
+  const units = [];
+  const byInstance = new Map();
+  for (const placement of placements) {
+    // A placement with no unit is a unit of one. Documents written before
+    // units existed have none, and the editor fills them in on open.
+    if (!placement.instance) {
+      units.push([placement]);
+      continue;
+    }
+    const held = byInstance.get(placement.instance);
+    if (held) {
+      held.push(placement);
+    } else {
+      const unit = [placement];
+      byInstance.set(placement.instance, unit);
+      units.push(unit);
+    }
+  }
+
+  if (isometric) {
+    const top = (unit) => Math.min(...unit.map((p) => p.y));
+    units.sort((a, b) => top(a) - top(b));
+  }
+
+  return units.flatMap((unit) =>
+    [...unit].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+  );
+}
+// idlewild:end drawOrder
+
+/**
+ * Give a placed object its depth, keeping a group's own stacking under it.
+ *
+ * `place()` returns a Phaser **Group**, and a Group's children live on the
+ * scene's own display list rather than inside it — so `setDepth` on the group
+ * writes the same depth onto every child and the artwork's order collapses.
+ * Phaser then draws them in the order it was handed them, which is the
+ * manifest's top-first order, which is upside down.
+ *
+ * So each child is ranked by the depth psd-to-phaser already gave it and
+ * spaced inside this placement's own slot: the file's stack survives, and the
+ * whole group still sits between the placement below it and the one above.
+ *
+ * Shared with the editor's own `applyDepth`, in `src/game/doc-renderer.ts`.
+ * Keep the two in step.
+ */
+// idlewild:begin applyDepth
+function applyDepth(object, depth) {
+  const children = object.getChildren ? object.getChildren() : [];
+  if (children.length < 2) {
+    object.setDepth(depth);
+    return;
+  }
+  const ranked = [...children].sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0));
+  ranked.forEach((child, rank) => {
+    if (child.setDepth) child.setDepth(depth + (rank + 1) / (ranked.length + 1));
+  });
+}
+// idlewild:end applyDepth
+
+/**
  * Scale a placed object to the size the editor displays it at.
  *
  * Shared with the editor's own `applyScale`. An import lands at half size, so
@@ -202,13 +312,16 @@ function contains(box, p) {
  * away from its top-left — the corner the placement's x/y describes, so the
  * image lands exactly where the editor drew it.
  */
+// idlewild:begin applyScale
 function applyScale(object, placement) {
   const naturalWidth = placement.naturalWidth ?? placement.width;
   const naturalHeight = placement.naturalHeight ?? placement.height;
   if (!naturalWidth || !naturalHeight || !object.setScale) return;
   object.setScale(placement.width / naturalWidth, placement.height / naturalHeight);
 }
+// idlewild:end applyScale
 
+// idlewild:begin pointsToVectors
 function pointsToVectors(flat) {
   const out = [];
   for (let i = 0; i < flat.length; i += 2) {
@@ -216,3 +329,4 @@ function pointsToVectors(flat) {
   }
   return out;
 }
+// idlewild:end pointsToVectors

@@ -4,40 +4,56 @@
  */
 
 const DOC = {
-  version: 1,
+  version: 2,
   // Overridable so the harness can be pointed at a blank or platformer
   // project without a second fixture — see harness/main.ts.
   projection: (window as any).__projection ?? "isometric",
   genre: (window as any).__genre ?? "topdown",
   gridSize: (window as any).__gridSize ?? 64,
-  layers: [
+  activeSceneId: "scene-main",
+  scenes: [
+    // Two scenes, so switching between them can be driven here: one with
+    // everything in it, one empty, which is what a clean canvas looks like.
     {
-      id: "layer-1", name: "Foreground", locked: false, visible: true,
-      fills: [{ id: "fill-1", cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }], kind: "color", color: "#ec3013", walkable: true }],
-      // Two layers of one file, sharing an instance: on the canvas they are
-      // one placed PSD, and a double-tap is what takes them apart.
-      placements: [
-        { id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
-        { id: "place-2", psdKey: "tower", layerPath: "roof", x: 16, y: -24, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
-      ],
-      // A boundary, so selecting and dragging one can be driven here.
-      zones: [
+      id: "scene-main",
+      name: "Main",
+      layers: [
         {
-          id: "zone-1",
-          name: "Dock edge",
-          blocking: true,
-          points: [
-            { x: 160, y: 0 },
-            { x: 288, y: 64 },
-            { x: 160, y: 128 },
-            { x: 32, y: 64 },
+          id: "layer-1", name: "Foreground", locked: false, visible: true,
+          fills: [{ id: "fill-1", cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }], kind: "color", color: "#ec3013", walkable: true }],
+          // Two layers of one file, sharing an instance: on the canvas they
+          // are one placed PSD, and a double-tap is what takes them apart.
+          placements: [
+            { id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
+            { id: "place-2", psdKey: "tower", layerPath: "roof", x: 16, y: -24, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
           ],
+          // A boundary, so selecting and dragging one can be driven here.
+          zones: [
+            {
+              id: "zone-1",
+              name: "Dock edge",
+              blocking: true,
+              points: [
+                { x: 160, y: 0 },
+                { x: 288, y: 64 },
+                { x: 160, y: 128 },
+                { x: 32, y: 64 },
+              ],
+            },
+          ],
+          strokes: [],
         },
+        { id: "layer-2", name: "Ground", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
+        { id: "layer-3", name: "Backdrop", locked: true, visible: false, fills: [], placements: [], zones: [], strokes: [] },
       ],
-      strokes: [],
     },
-    { id: "layer-2", name: "Ground", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
-    { id: "layer-3", name: "Backdrop", locked: true, visible: false, fills: [], placements: [], zones: [], strokes: [] },
+    {
+      id: "scene-cave",
+      name: "Cave",
+      layers: [
+        { id: "layer-cave", name: "Walls", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
+      ],
+    },
   ],
 };
 
@@ -171,6 +187,44 @@ function markedManifest(
   });
 }
 
+/**
+ * The stubbed contents of a file in `game/`.
+ *
+ * Both `read_game_file` and `read_game_template` answer with it, so the
+ * harness's editor sees an untouched file — every marked line still the
+ * editor's, which is where the interesting behaviour starts.
+ */
+function gameFile(path: string, template = false): string {
+  if (path.endsWith(".json")) {
+    return JSON.stringify({ projection: "orthogonal", grid: 64, layers: [] }, null, 2);
+  }
+  return [
+    `// ${path}`,
+    "export class WorldScene extends Phaser.Scene {",
+    "  // idlewild:begin placeDocument",
+    "  placeDocument() {",
+    "    for (const layer of drawOrder(config.layers ?? [])) this.paint(layer);",
+    "  }",
+    "  // idlewild:end placeDocument",
+    "",
+    "  create() {",
+    "    this.placeDocument();",
+    "  }",
+    "}",
+    ...(template
+      ? [
+          "",
+          "// idlewild:begin drawOrder",
+          "function drawOrder(layers) {",
+          "  return [...layers].reverse();",
+          "}",
+          "// idlewild:end drawOrder",
+        ]
+      : []),
+    "",
+  ].join("\n");
+}
+
 export async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
   (window as any).__calls = [...((window as any).__calls ?? []), { cmd, args }];
   switch (cmd) {
@@ -221,10 +275,32 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       };
     }
     case "list_projects": return [];
+    // Publish's two exits write to a path the dialog stub hands back; there
+    // is no store here to write out of, so both simply succeed.
+    case "publish_site":
+    case "export_project":
+      return undefined;
+    case "import_project":
+      return {
+        id: "imported-1",
+        name: "Imported project",
+        projection: "orthogonal",
+        genre: "topdown",
+        gridSize: 64,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        layerCount: 1,
+      };
     case "list_game_files":
       return [...TREE].sort((a, b) => a.path.localeCompare(b.path));
+    // A file with one managed block in it, so the code modal's read-only
+    // lines, its Reset and its refusals are all reachable in the harness.
+    // The template has a second block the file does not, which is what puts
+    // the "add the blocks this file is missing" offer on screen.
     case "read_game_file":
-      return `// ${(args as any).path}\nexport default class WorldScene {}\n`;
+      return gameFile(String((args as any).path));
+    case "read_game_template":
+      return gameFile(String((args as any).path), true);
     case "write_game_file": return undefined;
     case "create_game_file":
     case "create_game_dir": {

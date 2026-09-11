@@ -1,13 +1,21 @@
-//! `game.config.json` — the document, as the exported game reads it.
+//! `game.config.json` — the document, as the project's own code reads it.
 //!
 //! The scaffold writes an empty one so a fresh project runs before anything
-//! has been drawn; an export writes the live document into it, and that is
-//! what makes a published game show what the editor shows. Both go through
-//! here so there is one definition of the file's shape rather than two that
+//! has been drawn, and every save rewrites it from the live document — see
+//! `store::sync_game_config`. That is what makes the file the code modal
+//! opens describe the canvas beside it, and what lets play mode run the
+//! project's own program against what has actually been built.
+//!
+//! An export writes the same thing into the zip. Every path goes through here
+//! so there is one definition of the file's shape rather than several that
 //! drift.
 //!
 //! The config is a *projection* of the document, not a second copy of it: it
-//! carries what `WorldScene.js` reads and nothing else. So the document stays
+//! carries what `WorldScene.js` reads and nothing else. Since scenes, `layers`
+//! means *the open scene's* layers — which is what that field has always meant
+//! in practice and what every project's own copy of the scene file reads — and
+//! `scenes` carries all of them beside it for code that wants to place
+//! somewhere else. So the document stays
 //! opaque to Rust except for these fields, and every one of them is optional
 //! — a document written by a build that did not have zones, or instances, or
 //! rectangle fills still exports.
@@ -16,6 +24,14 @@ use crate::project::{Genre, ProjectMeta, Projection};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
+
+/// Where the generated config lives inside `game/`, and inside a zip.
+///
+/// One constant because three places need the same path: the scaffold that
+/// writes the first one, the save that keeps it in step with the document,
+/// and the export that leaves the on-disk copy out of the archive and writes
+/// its own.
+pub const CONFIG_REL: &str = "js/game.config.json";
 
 /// How far out the grid is drawn and the character may walk, in cells.
 ///
@@ -31,7 +47,16 @@ const SPAN_MARGIN: i64 = 4;
 /// The config a fresh project scaffolds with: the shape of the space, and
 /// nothing in it.
 pub fn empty(projection: Projection, genre: Genre, grid_size: u32) -> Value {
-    config(projection, genre, grid_size, MIN_SPAN, json!([]), json!([]))
+    config(
+        projection,
+        genre,
+        grid_size,
+        MIN_SPAN,
+        json!([]),
+        json!([]),
+        json!([{ "id": "scene-main", "name": "Main", "layers": [] }]),
+        json!("scene-main"),
+    )
 }
 
 /// The config an export ships: the same fields, filled in from `doc.json`.
@@ -42,22 +67,40 @@ pub fn empty(projection: Projection, genre: Genre, grid_size: u32) -> Value {
 pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String> {
     let doc: Document = serde_json::from_str(doc_json)
         .map_err(|e| format!("Cannot read this project's document: {e}"))?;
+    let scenes = doc.scenes();
 
+    // Every scene's keys, not just the open one's. The scene the editor is
+    // looking at is the one the game places, but a project that switches
+    // scenes in its own code needs the textures for the one it switches to —
+    // and loading them is cheap beside finding out at the switch that they
+    // are not there.
     let mut keys: Vec<String> = Vec::new();
-    for layer in &doc.layers {
-        for placement in &layer.placements {
-            if !keys.contains(&placement.psd_key) {
-                keys.push(placement.psd_key.clone());
+    for scene in &scenes {
+        for layer in &scene.layers {
+            for placement in &layer.placements {
+                if !keys.contains(&placement.psd_key) {
+                    keys.push(placement.psd_key.clone());
+                }
             }
         }
     }
 
-    let span = span_for(&doc, meta.grid_size);
-    let layers: Vec<Value> = doc
-        .layers
+    let span = span_for(&scenes, meta.grid_size);
+    let active = doc
+        .active_scene_id
+        .clone()
+        .filter(|id| scenes.iter().any(|s| s.id.as_deref() == Some(id.as_str())))
+        .or_else(|| scenes.first().and_then(|s| s.id.clone()))
+        .unwrap_or_default();
+
+    let open = scenes
         .iter()
-        .map(|layer| layer.to_config(&doc.colliders))
-        .collect();
+        .find(|s| s.id.as_deref() == Some(active.as_str()))
+        .or_else(|| scenes.first());
+
+    // What each placed PSD blocks is document-level, like the PSDs
+    // themselves, so every scene is told the same map.
+    let colliders = &doc.colliders;
 
     Ok(config(
         meta.projection,
@@ -65,10 +108,30 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
         meta.grid_size,
         span,
         json!(keys),
-        json!(layers),
+        json!(open
+            .map(|s| s
+                .layers
+                .iter()
+                .map(|layer| layer.to_config(colliders))
+                .collect::<Vec<_>>())
+            .unwrap_or_default()),
+        json!(scenes
+            .iter()
+            .map(|scene| scene.to_config(colliders))
+            .collect::<Vec<_>>()),
+        json!(active),
     ))
 }
 
+/// The file, in the order it reads.
+///
+/// `layers` is the **open scene's** layers, at the top level because it is
+/// what every project's own `WorldScene.js` reads and has always read — a
+/// project scaffolded before scenes existed keeps its own copy of that file,
+/// and moving the field would have broken it. `scenes` carries all of them
+/// beside it, for code that wants to place somewhere else, and `activeScene`
+/// says which one `layers` mirrors.
+#[allow(clippy::too_many_arguments)]
 fn config(
     projection: Projection,
     genre: Genre,
@@ -76,6 +139,8 @@ fn config(
     span: i64,
     psd_keys: Value,
     layers: Value,
+    scenes: Value,
+    active_scene: Value,
 ) -> Value {
     json!({
         "projection": projection.as_str(),
@@ -85,6 +150,8 @@ fn config(
         "spawn": { "cx": 0, "cy": 0 },
         "psdKeys": psd_keys,
         "layers": layers,
+        "scenes": scenes,
+        "activeScene": active_scene,
         "psdPipeline": "psd-to-json@tauri"
     })
 }
@@ -97,12 +164,14 @@ fn config(
 /// and a world pixel is a cell divided by the grid size. Under a blank
 /// projection a *document* cell is one pixel, which is why fill cells are
 /// absent there and the world-pixel path is what measures the content.
-fn span_for(doc: &Document, grid_size: u32) -> i64 {
+fn span_for(scenes: &[Scene], grid_size: u32) -> i64 {
     let size = grid_size.max(1) as f64;
     let mut reach = 0f64;
     let mut cells = |cx: f64, cy: f64| reach = reach.max(cx.abs()).max(cy.abs());
 
-    for layer in &doc.layers {
+    // Over every scene, because the span is also the bounds the character may
+    // walk: a scene switch must not land it outside the world.
+    for layer in scenes.iter().flat_map(|scene| &scene.layers) {
         for fill in &layer.fills {
             for cell in &fill.cells {
                 cells(cell.cx, cell.cy);
@@ -133,7 +202,15 @@ fn span_for(doc: &Document, grid_size: u32) -> i64 {
 // ── the half of the document the exported scene reads ───────────────────────
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Document {
+    #[serde(default)]
+    scenes: Vec<Scene>,
+    #[serde(default)]
+    active_scene_id: Option<String>,
+    /// Where layers lived before scenes. A document is migrated the first
+    /// time the editor opens it, but this runs on the way *in* as well — so
+    /// a project that has not been opened since still exports what is in it.
     #[serde(default)]
     layers: Vec<Layer>,
     /// What each placed PSD blocks, by key — see `lib/collider.ts`.
@@ -141,7 +218,49 @@ struct Document {
     colliders: HashMap<String, Collider>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+impl Document {
+    /// The scenes this document has, or the one it implies.
+    fn scenes(&self) -> Vec<Scene> {
+        if !self.scenes.is_empty() {
+            return self.scenes.clone();
+        }
+        vec![Scene {
+            id: Some("scene-main".into()),
+            name: "Main".into(),
+            layers: self.layers.clone(),
+        }]
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct Scene {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default = "unnamed")]
+    name: String,
+    #[serde(default)]
+    layers: Vec<Layer>,
+}
+
+impl Scene {
+    fn to_config(&self, colliders: &HashMap<String, Collider>) -> Value {
+        json!({
+            "id": self.id,
+            "name": self.name,
+            "layers": self
+                .layers
+                .iter()
+                .map(|layer| layer.to_config(colliders))
+                .collect::<Vec<_>>(),
+        })
+    }
+}
+
+fn unnamed() -> String {
+    "Scene".into()
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Layer {
     #[serde(default = "yes")]
@@ -169,11 +288,10 @@ impl Layer {
             .placements
             .iter()
             .map(|placement| {
-                let unit = if placement.instance.is_empty() {
-                    placement.id.as_str()
-                } else {
-                    placement.instance.as_str()
-                };
+                let unit = placement
+                    .instance
+                    .as_deref()
+                    .unwrap_or(placement.id.as_str());
                 let collider = if seen.insert(unit) {
                     colliders.get(&placement.psd_key)
                 } else {
@@ -192,7 +310,7 @@ impl Layer {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Fill {
     #[serde(default)]
@@ -220,16 +338,18 @@ impl Fill {
 /// manifest exported — their ratio is the scale, exactly as the editor's own
 /// renderer works it out. Sending the ratio instead would hide where it comes
 /// from in a file whose whole job is to be readable.
-#[derive(Debug, Default, Deserialize)]
+///
+/// `order` and `instance` are what make a multi-layer PSD draw the right way
+/// up. `order` is how high the layer sat in its file's stack, counting from
+/// the back; `instance` is the unit the placements of one PSD share, so a
+/// roof and the tower under it sort against the rest of the scene as one
+/// thing. Both are optional because a document written before they existed
+/// has neither, and the editor fills them in on open.
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Placement {
     #[serde(default)]
     id: String,
-    /// Which placed unit this belongs to. Empty on a document written before
-    /// units existed, where a placement is a unit of one and its own id says
-    /// so — the same fallback `game/instance.ts` makes.
-    #[serde(default)]
-    instance: String,
     #[serde(default)]
     psd_key: String,
     #[serde(default)]
@@ -246,6 +366,13 @@ struct Placement {
     natural_width: Option<f64>,
     #[serde(default)]
     natural_height: Option<f64>,
+    #[serde(default)]
+    order: Option<i64>,
+    /// Which placed unit this belongs to. Absent on a document written before
+    /// units existed, where a placement is a unit of one and its own id says
+    /// so — the same fallback `game/instance.ts` makes.
+    #[serde(default)]
+    instance: Option<String>,
     /// The space the artwork hangs from, which a collider is measured against.
     #[serde(default)]
     anchor: Cell,
@@ -270,6 +397,8 @@ impl Placement {
             "height": self.height,
             "naturalWidth": self.natural_width,
             "naturalHeight": self.natural_height,
+            "order": self.order,
+            "instance": self.instance,
             "anchor": self.anchor,
             "collider": collider,
         })
@@ -291,7 +420,7 @@ struct Collider {
     blocking: bool,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Zone {
     #[serde(default)]

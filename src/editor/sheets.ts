@@ -273,37 +273,66 @@ export function openExportSelection(
 }
 
 /** Publish. A zipped copy for now; rsync targets are explicitly deferred. */
+/**
+ * Publish, which has two exits.
+ *
+ * **Export site** is a zip you can serve: the game, its processed assets and
+ * both runtimes, and nothing you would edit it with. **Export project** is a
+ * `.idlewild` file — the project itself, source PSDs and all, to open
+ * somewhere else and carry on with. The source files are the difference, and
+ * they are the part a published site cannot give back.
+ *
+ * Both are written straight to the path the dialog returns; neither comes
+ * back through the IPC boundary as base64 first.
+ */
 export function openPublish(projectId: string, projectName: string): void {
   const sheet = openSheet({
     title: "Publish",
-    subtitle: "Zipped project · rsync targets coming later",
-    width: 520,
+    subtitle: "rsync targets coming later",
+    width: 560,
   });
 
-  const exportZip = async () => {
+  const stem = projectName.replace(/[^\w-]+/g, "-").toLowerCase() || "idlewild";
+
+  const run = async (
+    what: string,
+    extension: string,
+    filterName: string,
+    write: (path: string) => Promise<void>,
+  ) => {
     sheet.close();
     try {
-      // Both runtime libraries are vendored into the Rust binary, so the
-      // export carries the exact builds this editor runs.
-      const base64 = await publish.zip(projectId);
       const path = await saveFileDialog({
-        defaultPath: `${projectName.replace(/[^\w-]+/g, "-").toLowerCase()}.zip`,
-        filters: [{ name: "Zip archive", extensions: ["zip"] }],
+        defaultPath: `${stem}.${extension}`,
+        filters: [{ name: filterName, extensions: [extension] }],
       });
       if (!path) return;
-      await publish.saveBytes(path, base64);
-      log.info(`Published to ${path}`);
+      await write(path);
+      log.info(`${what} → ${path}`);
     } catch (err) {
-      log.error("Publish failed:", err);
+      log.error(`${what} failed:`, err);
     }
   };
 
-  sheet.actions.append(
-    h("button", {
-      class: "btn btn-primary",
-      text: "Export .zip",
-      onClick: () => void exportZip(),
-    }),
+  const list = h("div", { class: "sheet-list" });
+  list.append(
+    option("Export site", "A zip to serve · game, assets, runtimes", () =>
+      void run("Exported site", "zip", "Zip archive", (path) =>
+        publish.site(projectId, path),
+      ),
+    ),
+    option(
+      "Export project",
+      "A .idlewild file · everything, source PSDs included",
+      () =>
+        void run("Exported project", "idlewild", "Idlewild project", (path) =>
+          publish.project(projectId, path),
+        ),
+    ),
+  );
+
+  sheet.body.appendChild(list);
+  sheet.actions.appendChild(
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
   );
 }

@@ -205,7 +205,88 @@
   gap: 12px;
 }
 .code-filename { font-size: 10px; color: var(--chrome-text); }
-.code-dirty { margin-left: auto; font-size: 10px; color: var(--color-accent); }
+.code-dirty { font-size: 10px; color: var(--color-accent); }
+/* Why an edit did not take, or what a Reset just did. Right-aligned so it
+   never pushes the filename around as it comes and goes. */
+.code-note {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--chrome-dim);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Lines the editor owns.
+
+   A tint down the whole line rather than a gutter mark: the thing being said
+   is "this run is not yours to type in", and a run reads as a run. The two
+   marker comments that bracket a block are dimmed further, because they are
+   the fence rather than the code. See code/managed-blocks.ts. */
+.cm-editor .cm-line.cm-managed {
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
+}
+.cm-editor .cm-line.cm-managed-mark { opacity: 0.55; }
+
+/* The Reset beside a block's opening marker. Inline at the end of that line,
+   where the block starts, so the button and the thing it resets are the same
+   glance apart on a phone as on a desk. */
+.cm-editor .cm-reset {
+  margin-left: 12px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: transparent;
+  color: var(--color-accent-400);
+  font-family: var(--font-label);
+  font-size: 10px;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.cm-editor .cm-reset:hover {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--chrome-text);
+}
+
+/* The template has blocks this file has never had.
+
+   A strip above the editor rather than a line in the bar: it is an offer to
+   write into someone's file, which is the one thing this whole mechanism
+   exists to not do quietly. */
+.code-repair {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--chrome-bg));
+  color: var(--chrome-text);
+  font-size: 11px;
+}
+.code-repair.hidden { display: none; }
+.code-repair-btn {
+  margin-left: auto;
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--color-accent);
+  background: transparent;
+  color: var(--color-accent-400);
+  font-family: var(--font-label);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.code-repair-btn:hover {
+  background: var(--color-accent);
+  color: var(--chrome-text);
+}
 
 .code-editor { flex: 1; min-height: 0; overflow: hidden; }
 .code-editor .cm-editor { height: 100%; }

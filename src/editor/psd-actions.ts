@@ -16,9 +16,12 @@
  */
 
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import type { DocStore } from "../lib/doc-store";
 import { psd, publish } from "../lib/ipc";
 import * as log from "../lib/log";
 import { isMobile } from "../lib/platform";
+import type { WorldScene } from "../game/world-scene";
+import type { Inspector } from "./inspector";
 import { openReplacePsd } from "./sheets";
 
 /**
@@ -149,4 +152,130 @@ async function psdBlob(projectId: string, key: string): Promise<Blob> {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], { type: PSD_MIME });
+}
+
+/**
+ * The file behind a placement, as the shell's buttons act on it.
+ *
+ * Six things happen to a PSD from the editor — it goes out to Photoshop, it
+ * comes back, its layer stack is rewritten from the inspector, it is renamed,
+ * and a referencing placement is given a copy of its own — and every one of
+ * them is the same three steps: talk to Rust, tell the scene, tell the
+ * inspector its list of the file's layers is out of date. They were six
+ * closures in `editor.ts` because they need the project id, the platform and
+ * both panels; bound here instead, that is a parameter list rather than a
+ * reason to live in the shell.
+ */
+export interface PsdFileActionsOptions {
+  projectId: string;
+  /** `std::env::consts::OS`, which decides how a file goes out and comes back. */
+  os: string;
+  store: DocStore;
+  scene: () => WorldScene | null;
+  inspector: Inspector;
+}
+
+export interface PsdFileActions {
+  /** Hand the file to the OS: a desktop editor, or an iPadOS share sheet. */
+  open: (key: string) => Promise<void>;
+  /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
+  refresh: (key: string) => Promise<void>;
+  /** The inspector rewrote the layer stack; take the result back. */
+  applyLayers: (
+    key: string,
+    manifest: string,
+    renames: Map<string, string>,
+  ) => Promise<void>;
+  /** Rename the file, and carry every placement on it to the new key. */
+  rename: (key: string, name: string) => Promise<void>;
+  /** Give one placement a copy of the file, by id. */
+  detach: (layerId: string, placementId: string, key: string) => Promise<void>;
+}
+
+export function createPsdFileActions(
+  options: PsdFileActionsOptions,
+): PsdFileActions {
+  const { projectId, os, store, scene, inspector } = options;
+
+  async function open(key: string): Promise<void> {
+    try {
+      await openPsdExternally(projectId, key, os);
+    } catch (err) {
+      log.error(`Could not open ${key}.psd:`, err);
+    }
+  }
+
+  async function refresh(key: string): Promise<void> {
+    try {
+      const manifest = await refreshPsd(projectId, key, os);
+      if (!manifest) return;
+      await scene()?.reloadPsd(key, manifest);
+      // The file on disk has changed, and the inspector's list of its layers
+      // is built once and kept — so it has to be told, or it goes on showing
+      // the stack from before the edit.
+      inspector.reloadPsdLayers(key);
+    } catch (err) {
+      log.error(`Could not refresh ${key}:`, err);
+    }
+  }
+
+  async function applyLayers(
+    key: string,
+    manifest: string,
+    renames: Map<string, string>,
+  ): Promise<void> {
+    await scene()?.reloadPsd(key, manifest, renames);
+    // Reordering renumbers every layer, so the next edit has to be made
+    // against the file as it is now rather than as it was.
+    inspector.reloadPsdLayers(key);
+  }
+
+  /**
+   * Rust decides the key: what the field holds is raw text and goes through
+   * the same sanitiser an import uses, so the name that lands can differ from
+   * the name that was typed. On failure the panel is redrawn, which is what
+   * puts the real name back in the field.
+   */
+  async function rename(key: string, name: string): Promise<void> {
+    try {
+      const result = await psd.rename(projectId, key, name);
+      if (result.key === key) return;
+      await scene()?.renamePsd(key, result.key);
+      log.info(`${key}.psd → ${result.key}.psd`);
+    } catch (err) {
+      log.error(`Could not rename ${key}.psd:`, err);
+      inspector.render();
+    }
+  }
+
+  /**
+   * Named by id rather than by what is selected — which is what an
+   * option-shift drag needs, since the copy it hands over is only *usually*
+   * still the selection by the time the file has finished copying.
+   */
+  async function detach(
+    layerId: string,
+    placementId: string,
+    key: string,
+  ): Promise<void> {
+    try {
+      const copy = await psd.duplicate(projectId, key);
+      // A copy of an extruded PSD is an extrusion of its own, and carrying
+      // one on must rewrite the file this placement actually draws.
+      store.copyExtrusion(key, copy.key);
+      // The copy blocks what the original blocked: it is the same artwork
+      // standing on the same spaces until someone changes one of them.
+      store.copyCollider(key, copy.key);
+      await scene()?.repointPlacement(
+        { kind: "placement", layerId, placementId },
+        copy.key,
+        copy.manifest,
+      );
+      log.info(`${key}.psd → ${copy.key}.psd — this placement is now its own`);
+    } catch (err) {
+      log.error(`Could not break the reference to ${key}:`, err);
+    }
+  }
+
+  return { open, refresh, applyLayers, rename, detach };
 }

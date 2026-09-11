@@ -226,6 +226,8 @@ export const projects = {
   remove: (id: string) => invoke<void>("delete_project", { id }),
   duplicate: (id: string) => invoke<ProjectMeta>("duplicate_project", { id }),
   meta: (id: string) => invoke<ProjectMeta>("read_project_meta", { id }),
+  /** Read a `.idlewild` file back in, as a new project of its own. */
+  import: (path: string) => invoke<ProjectMeta>("import_project", { path }),
   thumbnail: (id: string) => invoke<string | null>("read_thumbnail", { id }),
   writeThumbnail: (id: string, pngBase64: string) =>
     invoke<void>("write_thumbnail", { id, pngBase64 }),
@@ -241,6 +243,13 @@ export const gameFiles = {
   list: (id: string) => invoke<GameFile[]>("list_game_files", { id }),
   read: (id: string, path: string) =>
     invoke<string>("read_game_file", { id, path }),
+  /**
+   * The file as the scaffold wrote it — what a managed block's Reset puts
+   * back. Rejects for a file the template does not write, which the code
+   * modal reads as "this one is the user's alone".
+   */
+  template: (id: string, path: string) =>
+    invoke<string>("read_game_template", { id, path }),
   write: (id: string, path: string, content: string) =>
     invoke<void>("write_game_file", { id, path, content }),
   createFile: (id: string, path: string) =>
@@ -388,7 +397,17 @@ export const psd = {
 };
 
 export const publish = {
-  zip: (id: string) => invoke<string>("publish_zip", { id }),
+  /**
+   * A zip you can serve: the game, its assets and both runtimes.
+   *
+   * Written straight to the path rather than handed back as base64 — an
+   * archive carrying every processed asset has no business crossing this
+   * boundary as a string first.
+   */
+  site: (id: string, path: string) => invoke<void>("publish_site", { id, path }),
+  /** The project itself, as `.idlewild` — source PSDs included. */
+  project: (id: string, path: string) =>
+    invoke<void>("export_project", { id, path }),
   saveBytes: (path: string, dataBase64: string) =>
     invoke<void>("save_bytes", { path, dataBase64 }),
 };

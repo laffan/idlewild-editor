@@ -6,7 +6,7 @@
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { describeRange, Grid } from "../lib/grid";
-import { assetBase, checkAssetServer, platform, projects, psd } from "../lib/ipc";
+import { assetBase, checkAssetServer, platform, projects } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
@@ -18,12 +18,12 @@ import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
 import { bindShortcuts } from "./shortcuts";
 import { startIntake } from "./intake";
-import { PlayPad } from "./play-pad";
+import { GameFrame } from "./game-frame";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
 import { createResizer } from "./resizer";
-import { openPsdExternally, refreshPsd } from "./psd-actions";
+import { createPsdFileActions } from "./psd-actions";
 import { PsdLayerEditor, psdLayerOwner } from "./psd-layers";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
@@ -59,7 +59,10 @@ export async function mountEditor(
   let drawing: DrawingLayer | null = null;
 
   const canvasWrap = h("div", { class: "editor-canvas-wrap" });
-  const terminal = new Terminal();
+  // The console's level chip is a link when the line came from a file the
+  // code modal can open. `code` is built further down, once there is a shell
+  // to put it in; this only runs when something is clicked.
+  const terminal = new Terminal((site) => code.openAt(site.path, site.line));
 
   const layers = new LayersPanel(store, {
     getActiveLayerId: () => activeLayerId,
@@ -92,9 +95,9 @@ export async function mountEditor(
       if (selection?.kind !== "fill") return;
       store.updateFill(selection.layerId, selection.fillId, { walkable });
     },
-    onOpenPsd: (key) => void openPsd(key),
-    onRefreshPsd: (key) => void refresh(key),
-    onRenamePsd: (key, name) => void renamePsd(key, name),
+    onOpenPsd: (key) => void psdFile.open(key),
+    onRefreshPsd: (key) => void psdFile.refresh(key),
+    onRenamePsd: (key, name) => void psdFile.rename(key, name),
     onToggleLayerAdjust: () => {
       if (!handle) return;
       if (handle.scene.adjustingInstance) handle.scene.stopAdjusting();
@@ -110,7 +113,8 @@ export async function mountEditor(
     // travels with the manifest — see reconcilePlacements.
     createPsdLayers: (key) =>
       new PsdLayerEditor(meta.id, key, {
-        onWritten: (manifest, renames) => void applyPsdLayers(key, manifest, renames),
+        onWritten: (manifest, renames) =>
+          void psdFile.applyLayers(key, manifest, renames),
         // The marks and an extrusion's artwork are the app's to name, and the
         // extrusion's row is the way back into the mode that built it.
         ownerOf: (layer) =>
@@ -139,6 +143,18 @@ export async function mountEditor(
           patternKey: result.key,
         });
       }),
+  });
+
+  // Everything that happens to the *file* behind a placement — out to
+  // Photoshop and back, a rewritten layer stack, a rename, a copy of its own.
+  // Bound here because it needs both panels; written in psd-actions, beside
+  // the round trip it is mostly made of.
+  const psdFile = createPsdFileActions({
+    projectId: meta.id,
+    os,
+    store,
+    scene: () => handle?.scene ?? null,
+    inspector,
   });
 
   const actions = new SelectionActions(grid, {
@@ -257,9 +273,11 @@ export async function mountEditor(
     },
   );
 
-  // Movement controls for a platformer's play mode. Built for every project
-  // and shown for the ones that can use them — see setMode.
-  const playPad = new PlayPad((input) => handle?.scene.setPlayInput(input));
+  // What Play runs: the project's own `game/` tree, in a frame over the
+  // canvas. Built for every project and shown only in play mode — see
+  // setMode, and `editor/game-frame.ts` for why Play is the program rather
+  // than a second implementation of it.
+  const gameFrame = new GameFrame(meta.id);
 
   // The header is a row of the shell, not chrome floating over the canvas, so
   // only the tools and the selection bar are inside the canvas wrapper.
@@ -269,7 +287,7 @@ export async function mountEditor(
     actions.root,
     leftToggle,
     rightToggle,
-    playPad.root,
+    gameFrame.root,
   );
 
   // Draggable dividers on both sidebars and the console drawer. Sizes are a
@@ -318,7 +336,29 @@ export async function mountEditor(
 
   // Where the code modal sits in the shell, and what pinning it does to the
   // rows around it. Built after the shell because both are facts about it.
-  const code = new CodePanel(meta.id, shell, terminal.root);
+  const code = new CodePanel(meta.id, shell, terminal.root, (path) => {
+    // Saving code applies it: a game that is up restarts against the file
+    // just written, which is the only way to tell whether the change worked.
+    if (!gameFrame.isRunning) return;
+    gameFrame.reload();
+    log.info(`Play restarted on ${path}`);
+  });
+
+  // The document's save is what rewrites `game/js/game.config.json`, so it is
+  // also when a code modal showing that file has gone stale.
+  store.addEventListener("saved", () => code.refreshGenerated());
+
+  // A scene switch is a clean canvas. The Phaser scene rebuilds itself off
+  // the same event; what the shell owes it is the shared state that names a
+  // layer — which layer new work lands on, which one the ink is on, and an
+  // inspector still describing something that has gone.
+  store.addEventListener("scene", () => {
+    setActiveLayer(store.layers[0]?.id ?? "");
+    layers.render();
+    inspector.setSelection({ kind: "none" });
+    actions.update({ kind: "none" }, null);
+    log.info(`Scene · ${store.activeScene.name}`);
+  });
 
   // A paste and a drop are the same import: the bytes become a PSD, marked
   // with the grid spaces they landed on, and placed on the layer being worked
@@ -367,7 +407,7 @@ export async function mountEditor(
     },
     onViewport: (view) => drawing?.sync(view),
     onDetachCopy: (layerId, placementId, key) =>
-      void detach(layerId, placementId, key),
+      void psdFile.detach(layerId, placementId, key),
     onExtrudeChange: () => extrude.sync(),
     onColliderChange: () => collider.sync(),
   });
@@ -491,66 +531,6 @@ export async function mountEditor(
     handle?.scene.setSelection({ kind: "none" });
   }
 
-  /**
-   * Hand the PSD to the OS. On macOS that is the editor registered for PSDs,
-   * opened where the file lies; on iPadOS, where an app cannot open another
-   * app's document in place, it is the share sheet.
-   */
-  async function openPsd(key: string): Promise<void> {
-    try {
-      await openPsdExternally(meta.id, key, os);
-    } catch (err) {
-      log.error(`Could not open ${key}.psd:`, err);
-    }
-  }
-
-  /** Bring a PSD's edits back in, then reload what is on the canvas. */
-  async function refresh(key: string): Promise<void> {
-    try {
-      const manifest = await refreshPsd(meta.id, key, os);
-      if (!manifest) return;
-      await handle?.scene.reloadPsd(key, manifest);
-      // The file on disk has changed, and the inspector's list of its layers
-      // is built once and kept — so it has to be told, or it goes on showing
-      // the stack from before the edit.
-      inspector.reloadPsdLayers(key);
-    } catch (err) {
-      log.error(`Could not refresh ${key}:`, err);
-    }
-  }
-
-  /** The inspector rewrote the PSD's own layer stack; take the result back. */
-  async function applyPsdLayers(
-    key: string,
-    manifest: string,
-    renames: Map<string, string>,
-  ): Promise<void> {
-    await handle?.scene.reloadPsd(key, manifest, renames);
-    // Reordering renumbers every layer, so the next edit has to be made
-    // against the file as it is now rather than as it was.
-    inspector.reloadPsdLayers(key);
-  }
-
-  /**
-   * Rename a PSD, then carry every placement on it over to the new key.
-   *
-   * Rust decides the key: what the field holds is raw text and goes through
-   * the same sanitiser an import uses, so the name that lands can differ from
-   * the name that was typed. On failure the panel is redrawn, which is what
-   * puts the real name back in the field.
-   */
-  async function renamePsd(key: string, name: string): Promise<void> {
-    try {
-      const result = await psd.rename(meta.id, key, name);
-      if (result.key === key) return;
-      await handle?.scene.renamePsd(key, result.key);
-      log.info(`${key}.psd → ${result.key}.psd`);
-    } catch (err) {
-      log.error(`Could not rename ${key}.psd:`, err);
-      inspector.render();
-    }
-  }
-
   /** Hand a stroke selection to a layer as a placed PSD. */
   async function strokesToPsd(): Promise<void> {
     const selection = handle?.scene.getSelection();
@@ -575,36 +555,7 @@ export async function mountEditor(
   async function removeReference(key: string): Promise<void> {
     const selection = handle?.scene.getSelection();
     if (selection?.kind !== "placement") return;
-    await detach(selection.layerId, selection.placementId, key);
-  }
-
-  /**
-   * The same, named by id rather than by what is selected — which is what an
-   * option-shift drag needs, since the copy it hands over is only *usually*
-   * still the selection by the time the file has finished copying.
-   */
-  async function detach(
-    layerId: string,
-    placementId: string,
-    key: string,
-  ): Promise<void> {
-    try {
-      const copy = await psd.duplicate(meta.id, key);
-      // A copy of an extruded PSD is an extrusion of its own, and carrying
-      // one on must rewrite the file this placement actually draws.
-      store.copyExtrusion(key, copy.key);
-      // The copy blocks what the original blocked: it is the same artwork
-      // standing on the same spaces until someone changes one of them.
-      store.copyCollider(key, copy.key);
-      await handle?.scene.repointPlacement(
-        { kind: "placement", layerId, placementId },
-        copy.key,
-        copy.manifest,
-      );
-      log.info(`${key}.psd → ${copy.key}.psd — this placement is now its own`);
-    } catch (err) {
-      log.error(`Could not break the reference to ${key}:`, err);
-    }
+    await psdFile.detach(selection.layerId, selection.placementId, key);
   }
 
   /** Hand a stroke selection to a layer as a boundary zone. */
@@ -629,17 +580,18 @@ export async function mountEditor(
     shell.classList.toggle("play-mode", next === "play");
     handle?.scene.setMode(next);
 
-    // A top-down character walks where it is told and has no use for a pad;
-    // a platformer is nothing but held controls.
-    const platformer = store.genre === "platformer";
-    playPad.setActive(next === "play" && platformer);
-    if (next === "play") {
-      log.info(
-        platformer
-          ? "Play mode — arrow keys or the pad to move, up to jump"
-          : "Play mode — tap the canvas to walk there",
-      );
+    if (next !== "play") {
+      gameFrame.stop();
+      return;
     }
+    log.info("Play — running this project's own code");
+    // Flushed first, and awaited: the config the game reads is rewritten by
+    // the document's save, so starting without waiting would run the project
+    // against whatever the last debounce happened to have written.
+    void store.flush().then(() => {
+      // Play may already have been left again while that was in flight.
+      if (mode === "play") void gameFrame.start();
+    });
   }
 
   async function saveThumbnail(): Promise<void> {
@@ -666,7 +618,7 @@ export async function mountEditor(
     header.destroy();
     layers.destroy();
     inspector.destroy();
-    playPad.destroy();
+    gameFrame.destroy();
     extrude.destroy();
     collider.destroy();
     drawing?.destroy();

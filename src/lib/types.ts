@@ -251,27 +251,78 @@ export interface CameraState {
   zoom: number;
 }
 
-/** The saved body of a project. Layers are ordered top-first. */
+/**
+ * A scene: a set of layers and a canvas of its own.
+ *
+ * The same idea Phaser has. A project is several places — a title screen, a
+ * cave, the overworld — and they share a grid, a genre and a pile of PSDs but
+ * not a single thing standing on them. So layers hang off a scene rather than
+ * off the document, and switching scenes is a clean canvas rather than a
+ * filter over one.
+ *
+ * The camera rides the scene, because a scene is a place and you come back to
+ * where you were standing in it.
+ */
+export interface Scene {
+  id: string;
+  name: string;
+  /** Top-first, as the layer panel shows them. */
+  layers: Layer[];
+  camera?: CameraState;
+}
+
+/** The saved body of a project. */
 export interface GameDoc {
-  version: 1;
+  version: 1 | 2;
   projection: Projection;
   /** Absent on documents written before the choice existed: top down. */
   genre?: Genre;
   gridSize: number;
-  layers: Layer[];
-  camera?: CameraState;
+  scenes: Scene[];
+  activeSceneId: string;
   /**
-   * The solids behind extruded PSDs, by key. Absent on documents written
-   * before extrude mode existed, and on every project that has never used it.
+   * The solids behind extruded PSDs, by key.
+   *
+   * Document-level rather than per scene, because a PSD is: `psd/` is one
+   * directory for the project, an extruded file can be placed in more than
+   * one scene, and the record is keyed by the file. Absent on documents
+   * written before extrude mode existed, and on every project that has never
+   * used it.
    */
   extrusions?: Record<string, Extrusion>;
   /**
-   * What each placed PSD blocks, by key. Absent on documents written before
+   * What each placed PSD blocks, by key.
+   *
+   * Document-level for the same reason the extrusions are: a collider is a
+   * fact about the file, one PSD can be placed in more than one scene, and it
+   * blocks the same spaces in each. Absent on documents written before
    * colliders existed; the scene fills one in per placed key on open, from
    * the same defaults a fresh import gets.
    */
   colliders?: Record<string, Collider>;
+  /**
+   * Where layers lived before scenes existed, and where the camera did.
+   *
+   * Read once, by `DocStore`'s migration, and never written again — a
+   * document that has been opened since has one scene holding what these
+   * held. Kept on the type so that migration is a thing the compiler knows
+   * about rather than a cast.
+   */
+  layers?: Layer[];
+  camera?: CameraState;
 }
+
+/**
+ * A document as it may arrive from disk.
+ *
+ * `scenes` and `activeSceneId` are the two fields a project written before
+ * scenes existed does not have, so what is read is a document that may be
+ * missing them and what everything downstream works on is one that is not —
+ * see `withScenes`. Saying that in the type is what keeps the migration a
+ * conversion rather than a cast.
+ */
+export type StoredDoc = Omit<GameDoc, "scenes" | "activeSceneId"> &
+  Partial<Pick<GameDoc, "scenes" | "activeSceneId">>;
 
 /** What the inspector is currently describing. */
 export type Selection =

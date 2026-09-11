@@ -558,7 +558,7 @@ export class Inspector {
         psdKey: placement.psdKey,
         panel: colliderPanel(
           this.grid,
-          this.store.layers,
+          this.store.allLayers,
           this.store.colliders,
           placement.psdKey,
           this.store.extrusion(placement.psdKey),
@@ -631,17 +631,21 @@ export class Inspector {
     return this.psdLayers.root;
   }
 
-  /** How many placements in the whole document draw this same PSD layer. */
+  /**
+   * How many placements in the whole project draw this same PSD layer.
+   *
+   * Every scene, not the open one: the number is there to warn that editing
+   * this file edits something else, and one that stopped counting at the edge
+   * of the canvas would warn about the wrong half.
+   */
   private copiesOf(placement: Placement): number {
     let n = 0;
-    for (const layer of this.store.layers) {
-      for (const other of layer.placements) {
-        if (
-          other.psdKey === placement.psdKey &&
-          other.layerPath === placement.layerPath
-        ) {
-          n++;
-        }
+    for (const { placement: other } of this.store.everyPlacement()) {
+      if (
+        other.psdKey === placement.psdKey &&
+        other.layerPath === placement.layerPath
+      ) {
+        n++;
       }
     }
     return n;

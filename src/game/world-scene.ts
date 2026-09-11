@@ -1,13 +1,17 @@
 /**
- * The editor scene. In edit mode this is the canvas the user builds on; in
- * play mode the same scene grows a character and drives it with A*. It is one
- * scene, not two — the spec's play mode adds a character to the game rather
- * than rebooting it.
+ * The editor scene: the canvas the user builds on.
+ *
+ * It used to grow a character in play mode and drive it with A*, which made
+ * Play a performance the editor gave *about* the document — and left the
+ * project's own `WorldScene.js`, the one in the code modal, never running at
+ * all. Play now loads that program instead, in a frame over this canvas (see
+ * `editor/game-frame.ts`), so this scene's only part in play mode is to put
+ * its tools down.
  */
 
 import Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { Grid, cellsInRange } from "../lib/grid";
+import { Grid } from "../lib/grid";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
@@ -16,12 +20,10 @@ import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { DropTargets, type PlacedTarget } from "./drop-target";
 import { Marquee } from "./marquee";
-import { PlayController, type PlayMode } from "./play-controller";
-import { PlatformerController } from "./play-platformer";
-import type { PlayInput } from "./platformer";
 import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
+import { fillRegion } from "./fill-region";
 import { instanceMembers, instanceOf } from "./instance";
 import type { Viewport } from "../drawing";
 
@@ -69,9 +71,6 @@ export class WorldScene extends Phaser.Scene {
   private overlay!: SelectionOverlay;
   private drops!: DropTargets;
   private marquee!: Marquee;
-  private play!: PlayMode;
-  /** Held movement, written by the editor's play pad and its keyboard. */
-  private playInput: PlayInput = { left: false, right: false, jump: false };
 
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
@@ -116,12 +115,6 @@ export class WorldScene extends Phaser.Scene {
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
     this.drops = new DropTargets(this.add.graphics(), this.store);
     this.marquee = new Marquee(this.add.graphics(), this.grid);
-    // Which play mode this project has is a property of the project, decided
-    // when it was created and carried in the document ever since.
-    this.play =
-      this.store.genre === "platformer"
-        ? new PlatformerController(this, this.store, this.grid)
-        : new PlayController(this, this.store, this.grid);
     this.drag = new DragController({
       store: this.store,
       grid: this.grid,
@@ -148,7 +141,7 @@ export class WorldScene extends Phaser.Scene {
       onColliderChange: () => this.config.onColliderChange?.(),
     });
 
-    const saved = this.store.doc.camera;
+    const saved = this.store.activeScene.camera;
     if (saved) {
       this.cameras.main.setZoom(saved.zoom);
       this.cameras.main.centerOn(saved.x, saved.y);
@@ -201,26 +194,49 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.store.addEventListener("change", () => this.refresh());
+    // A different scene is not a changed document, it is a different canvas.
+    this.store.addEventListener("scene", () => this.reloadScene());
     this.psds.migrate();
     void this.psds.loadAll();
     this.refresh();
   }
 
-  override update(_time: number, delta: number): void {
-    this.gridRenderer.update(this.cameras.main);
-    this.publishViewport();
-    if (this.mode === "play") this.play.update(delta, this.playInput);
+  /**
+   * The active scene has changed: everything on the canvas is now about
+   * somewhere else.
+   *
+   * Nothing half-done survives the move — a drag, a marquee, a solid being
+   * pulled or a collider being painted, and an opened-up PSD are all about
+   * objects that are on their way out. Then `render()` does the demolition for free: the renderer keys its
+   * placements by placement id and destroys every one it no longer finds in
+   * the document, which after a switch is all of them. `loadAll` puts the new
+   * scene's up, loading any PSD this session has not needed yet.
+   */
+  reloadScene(): void {
+    this.drag.cancel();
+    this.markDrop(null);
+    this.marquee.cancel();
+    this.modes.stop();
+    this.adjusting = null;
+    this.setSelection({ kind: "none" });
+    this.activeLayerId = this.store.layers[0]?.id ?? "";
+
+    this.docRenderer.render();
+    void this.psds.loadAll();
+
+    // Where you were standing in the scene you are arriving in — or the
+    // origin, for one nobody has looked at yet.
+    const saved = this.store.activeScene.camera;
+    this.cameraPlaced = true;
+    this.cameras.main.setZoom(saved?.zoom ?? 1);
+    this.cameras.main.centerOn(saved?.x ?? 0, saved?.y ?? 0);
+    this.gridRenderer.invalidate();
+    this.config.onCameraChange();
   }
 
-  /**
-   * Take the movement currently held down.
-   *
-   * The editor shell owns the play pad and the keyboard, because both are
-   * chrome rather than scene content — see `editor/play-pad.ts`. A top-down
-   * project has nothing to do with it and ignores it.
-   */
-  setPlayInput(input: PlayInput): void {
-    this.playInput = input;
+  override update(_time: number, _delta: number): void {
+    this.gridRenderer.update(this.cameras.main);
+    this.publishViewport();
   }
 
   /** How the world maps onto the screen right now. */
@@ -333,12 +349,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private handleTap(screenX: number, screenY: number): void {
+    // The running game is a frame over this canvas and takes its own input;
+    // nothing down here is meant for it.
+    if (this.mode === "play") return;
     const world = this.worldAt(screenX, screenY);
-
-    if (this.mode === "play") {
-      this.play.tap(world);
-      return;
-    }
 
     // While a collider is being drawn, a tap paints the space under the
     // finger; while a shape is being extruded, it takes hold of one of the
@@ -576,28 +590,15 @@ export class WorldScene extends Phaser.Scene {
   /** Fill the current region selection on the active layer. */
   fillSelection(color: string, walkable: boolean): void {
     if (this.selection.kind !== "region") return;
-    const layer = this.store.layer(this.activeLayerId);
-    if (!layer || layer.locked) {
-      log.warn("The active layer is locked");
-      return;
-    }
-    // A snapping project fills the spaces it covers, so an irregular run of
-    // them stays irregular. A blank one fills the rectangle that was dragged:
-    // its cells are single pixels, and one record per covered pixel would put
-    // a hundred thousand of them in a document that means "this box".
-    const shape = this.grid.snaps
-      ? { cells: [...cellsInRange(this.selection.from, this.selection.to)] }
-      : {
-          cells: [],
-          rect: this.grid.rangeBounds(this.selection.from, this.selection.to),
-        };
-    const fill = this.store.addFill(layer.id, {
-      ...shape,
-      kind: "color",
+    const next = fillRegion(
+      this.store,
+      this.grid,
+      this.activeLayerId,
+      this.selection,
       color,
       walkable,
-    });
-    this.setSelection({ kind: "fill", layerId: layer.id, fillId: fill.id });
+    );
+    if (next) this.setSelection(next);
   }
 
   /**
@@ -651,12 +652,9 @@ export class WorldScene extends Phaser.Scene {
     this.marquee.cancel();
     // Nothing half-built survives a trip through play mode.
     this.modes.stop();
-    if (mode === "play") {
-      this.setSelection({ kind: "none" });
-      this.play.start();
-    } else {
-      this.play.stop();
-    }
+    // The running game is the editor shell's — a frame over this canvas, not
+    // an object in it. All the scene owes play mode is to stop editing.
+    if (mode === "play") this.setSelection({ kind: "none" });
   }
 
   /** Let a tool take raw pointer input — the drawing layer's entry point. */

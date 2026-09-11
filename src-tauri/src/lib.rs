@@ -1,6 +1,7 @@
 //! Tauri command surface. Every frontend call lands here; the modules below
 //! hold the actual work.
 
+mod archive;
 mod clipboard;
 mod file_server;
 mod game_config;
@@ -138,9 +139,20 @@ fn read_project_meta(id: String) -> Result<ProjectMeta, String> {
     store::read_meta(&id)
 }
 
+/// Read the document — and, on the way, bring the generated config level
+/// with it.
+///
+/// Opening a project is the one moment the whole document is in hand and
+/// nothing is about to change it. Every save keeps
+/// `game/js/game.config.json` in step from then on, but a project made before
+/// that was true has an empty one on disk, and Play runs the project's own
+/// code against that file. Syncing here is what stops such a project opening
+/// to a canvas full of work and playing an empty world.
 #[tauri::command]
 fn read_document(id: String) -> Result<String, String> {
-    store::read_doc(&id)
+    let doc = store::read_doc(&id)?;
+    let _ = store::sync_game_config(&id);
+    Ok(doc)
 }
 
 #[tauri::command]
@@ -178,6 +190,17 @@ fn list_game_files(id: String) -> Result<Vec<GameFile>, String> {
 #[tauri::command]
 fn read_game_file(id: String, path: String) -> Result<String, String> {
     store::read_game_file(&id, &path)
+}
+
+/// One file of `game/` as the scaffold wrote it.
+///
+/// The code modal marks the lines the editor maintains and offers a Reset
+/// beside each managed block; this is what Reset puts back. It is asked for
+/// on every open, so a file the template does not write answers with an error
+/// and the modal simply treats that file as the user's alone.
+#[tauri::command]
+fn read_game_template(id: String, path: String) -> Result<String, String> {
+    store::read_game_template(&id, &path)
 }
 
 #[tauri::command]
@@ -543,11 +566,27 @@ fn read_asset_data_url(id: String, relative: String) -> Result<String, String> {
 // ── export & publish ────────────────────────────────────────────────────────
 
 /// Zip the project and return it as base64 for the frontend to save or share.
+/// **Export site**: a zip you can serve.
+///
+/// Written straight to the path the save dialog gave, like the project
+/// export beside it — an archive carrying every processed asset has no
+/// business crossing the IPC boundary as base64 first.
 #[tauri::command]
-fn publish_zip(id: String) -> Result<String, String> {
-    let bytes = publish::build_zip(&id)?;
-    use base64::Engine;
-    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+fn publish_site(id: String, path: String) -> Result<(), String> {
+    publish::write_zip(&id, &psd_write::source_path(&path))
+}
+
+/// **Export project**: the project itself, as a `.idlewild` file — source
+/// PSDs included, so it can be opened somewhere else and carried on with.
+#[tauri::command]
+fn export_project(id: String, path: String) -> Result<(), String> {
+    archive::export(&id, &psd_write::source_path(&path))
+}
+
+/// Read a `.idlewild` file back in, as a new project.
+#[tauri::command]
+fn import_project(path: String) -> Result<ProjectMeta, String> {
+    archive::import(&psd_write::source_path(&path))
 }
 
 /// Write bytes the frontend produced to a path the user picked.
@@ -607,6 +646,7 @@ pub fn run() {
             write_thumbnail,
             list_game_files,
             read_game_file,
+            read_game_template,
             write_game_file,
             create_game_file,
             create_game_dir,
@@ -634,7 +674,9 @@ pub fn run() {
             psd_thumbnail,
             psd_preview,
             read_asset_data_url,
-            publish_zip,
+            publish_site,
+            export_project,
+            import_project,
             save_bytes,
         ])
         .run(tauri::generate_context!())

@@ -8,10 +8,12 @@
  * concerned, kept beside the artwork rather than derived from its pixels.
  *
  * It is stored per PSD key and in **offsets from the anchor** — see
- * `Collider` in `types.ts` for why both. Everything here is the arithmetic
- * that takes it from that form into the two shapes play mode wants: a set of
- * cells for a top-down character to route around, and a list of world boxes
- * for a side-on one to stand on.
+ * `Collider` in `types.ts` for why both. What is here is everything the
+ * *editor* does with that: work out what a file blocks by default, say so in
+ * the inspector, and put the spaces where a placement stands so the mode that
+ * draws them has something to draw. Turning them into collisions belongs to
+ * the program that runs the game — `grid.js` and `physics.js` in the
+ * project's own tree, which is what Play runs and what an export ships.
  *
  * The defaults are the point of the file. A collider nobody has touched
  * should already be the right answer for most things, and what "right" means
@@ -34,7 +36,7 @@
  */
 
 import { parseVoxel } from "./extrude";
-import { cellKey, cellsUnderBox, Grid, pointsBounds } from "./grid";
+import { cellsUnderBox, Grid } from "./grid";
 import type {
   Cell,
   Collider,
@@ -209,37 +211,6 @@ export function colliderCells(collider: Collider, anchor: Cell): Cell[] {
   }));
 }
 
-/**
- * The same, in world pixels: one box per space, or the one box a collider on
- * a blank project is.
- *
- * Boxes rather than outlines because both consumers want boxes — a
- * platformer stands on rectangles, and a top-down character asks whether a
- * cell centre falls inside one. The diamond of an isometric space is
- * reduced to its bounding box for the platformer's sake, which is the same
- * reduction a non-walkable fill already goes through there.
- */
-export function colliderBoxes(
-  grid: Grid,
-  collider: Collider,
-  anchor: Cell,
-): Rect[] {
-  if (collider.rect) {
-    const world = grid.cellToWorld(anchor);
-    return [
-      {
-        x: collider.rect.x + world.x,
-        y: collider.rect.y + world.y,
-        width: collider.rect.width,
-        height: collider.rect.height,
-      },
-    ];
-  }
-  return colliderCells(collider, anchor).map((cell) =>
-    pointsBounds(grid.cellPolygon(cell)),
-  );
-}
-
 /** What a collider blocks, said the way the inspector says it. */
 export function describeCollider(grid: Grid, collider: Collider): string {
   if (collider.rect) {
@@ -250,64 +221,6 @@ export function describeCollider(grid: Grid, collider: Collider): string {
   const n = collider.cells.length;
   if (n === 0) return grid.snaps ? "no spaces" : "nothing";
   return `${n} ${n === 1 ? "space" : "spaces"}`;
-}
-
-/** One placed PSD's collider, where it stands. */
-export interface PlacedCollider {
-  key: string;
-  anchor: Cell;
-  collider: Collider;
-}
-
-/**
- * Every collider the document currently has on the grid.
- *
- * One per *unit*, not per placement: a PSD with three layers is three
- * placements sharing one anchor, and counting its collider three times would
- * be three copies of the same box in a platformer's solid list. Hidden
- * layers are left out, the same rule fills and boundaries follow — a layer
- * turned off is not in the game.
- *
- * A key with no record blocks nothing. That is the state a document written
- * before colliders existed opens in, for the half-second before the scene's
- * migration fills the defaults in, and it is the safe way round: a project
- * that has always played one way does not become unplayable between the file
- * being read and the migration running.
- */
-export function documentColliders(
-  layers: readonly Layer[],
-  colliders: Record<string, Collider> | undefined,
-  options: { includeHidden?: boolean } = {},
-): PlacedCollider[] {
-  if (!colliders) return [];
-  const out: PlacedCollider[] = [];
-  for (const layer of layers) {
-    if (!layer.visible && !options.includeHidden) continue;
-    const seen = new Set<string>();
-    for (const placement of layer.placements) {
-      const unit = placement.instance ?? placement.id;
-      if (seen.has(unit)) continue;
-      seen.add(unit);
-      const collider = colliders[placement.psdKey];
-      if (!collider || !collider.blocking) continue;
-      out.push({ key: placement.psdKey, anchor: placement.anchor, collider });
-    }
-  }
-  return out;
-}
-
-/** The blocked cells of every collider in the document, as `cx,cy` keys. */
-export function blockedColliderCells(
-  layers: readonly Layer[],
-  colliders: Record<string, Collider> | undefined,
-): Set<string> {
-  const blocked = new Set<string>();
-  for (const placed of documentColliders(layers, colliders)) {
-    for (const cell of colliderCells(placed.collider, placed.anchor)) {
-      blocked.add(cellKey(cell));
-    }
-  }
-  return blocked;
 }
 
 /**

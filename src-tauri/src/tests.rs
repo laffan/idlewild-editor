@@ -12,6 +12,8 @@
 //! the starter document, the runnable game each template selection writes,
 //! what an export carries, and the tree the code modal edits.
 
+mod archive;
+mod config;
 mod marks;
 mod rewrite;
 mod scaffolds;

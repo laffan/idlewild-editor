@@ -19,8 +19,9 @@ becomes a PSD and goes through
 psd-to-phaser integration is uniform: a screenshot and a hand-built Photoshop
 document arrive at the runtime the same way.
 
-Publishing hands you a zipped, runnable project. Direct publishing to a web
-server over rsync is planned and explicitly out of scope for now.
+Publishing hands you either a zipped runnable site or a `.idlewild` file — the
+whole project, source PSDs included, to open somewhere else. Direct publishing
+to a web server over rsync is planned and explicitly out of scope for now.
 
 ## Status
 
@@ -90,10 +91,12 @@ remaining pieces are wired to real slots rather than mocked.
   blocks the spaces its blocks actually stand on, following the same 3D logic
   the mode was pulled with, so you can walk under an arch and round its piers;
   a flat extrusion is every space of it, because every space of it is ground;
-  anything else blocks the spaces its artwork covers. Edit collider opens the
-  shape on the grid with Add, Remove and Reset along the bottom bar and Apply
-  to keep it. Play mode and a published game both read it, so a character
-  walks round a tower instead of through it
+  anything else blocks the spaces under its base, which on a diamond grid is
+  the bottom of the picture rather than the hillside behind it. Edit collider
+  opens the shape on the grid with Add, Remove and Reset along the bottom bar
+  and Apply to keep it. It rides in the config the game reads, so a character
+  walks round a tower instead of through it — in Play and in a published
+  export alike, because those are the same program
 - Drag placed images, fills and boundaries, snapped to the grid; resize images
   from their corner handles, or freely from the inspector
 - A placed PSD moves as one thing: every layer it came in with drags and
@@ -116,10 +119,17 @@ remaining pieces are wired to real slots rather than mocked.
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork
   re-anchors to it — which is how you make something stand on its tile
-- Layers: drag by the grip to reorder, rename, lock, hide, with live counts
-  and an expandable list of what is on each one — selecting there selects on
-  the canvas, and a placed PSD listed under a layer has a grip of its own that
-  carries it to whichever layer you let go over
+- **Scenes**, the way Phaser means them: a set of layers and a canvas of its
+  own. A project is several places — a title screen, a cave, the overworld —
+  sharing a grid, a genre and a pile of PSDs but not a single thing standing
+  on them. The dropdown at the top of the left sidebar switches between them
+  and holds New, Rename, Duplicate and Delete; each scene remembers where you
+  were standing in it. A duplicate is a real copy, not a second name for the
+  same thing
+- Layers, under the scene they belong to: drag by the grip to reorder, rename,
+  lock, hide, with live counts and an expandable list of what is on each one —
+  selecting there selects on the canvas, and a placed PSD listed under a layer
+  has a grip of its own that carries it to whichever layer you let go over
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass
@@ -154,25 +164,67 @@ remaining pieces are wired to real slots rather than mocked.
   to the system editor on macOS and to the share sheet on iPadOS. Re-import
   asks where the edited file came back from — Files, the photo library or the
   clipboard — and replaces it under the same key, re-running the pipeline
-- Play mode, in the style the project was made in: top down is a character
-  that walks the grid over A*, side-on is one that runs and jumps with the
-  arrow keys or an on-screen pad. A platformer reads the same document from
-  the side — every non-walkable fill, blocking boundary and placed PSD's
-  collider is the ground it stands on rather than an obstacle to route around
-- Code modal: the project's real file tree in CodeMirror 6, full-screen or
-  pinned above the console. New File and New Folder sit in its header; rename,
+- The exported game places the scene you have open, and carries the rest: the
+  config holds every scene's layers and loads every scene's PSDs, so switching
+  in your own code is a matter of reading `config.scenes`
+- Play runs **the project's own code**: the `game/` tree you see in the code
+  modal, loaded over the local server exactly the way a published export loads
+  it, in a frame over the canvas. Save a file while it is up and the game
+  restarts on what you just wrote. Top down is a character that walks the grid
+  over A*, side-on is one that runs and jumps with the arrow keys or an
+  on-screen pad — and both of those are files in the project now, so they are
+  something to change rather than something the editor does. A platformer reads
+  the same document from the side: every non-walkable fill, blocking boundary
+  and placed PSD's collider is the ground it stands on rather than an obstacle
+  to route around
+- `js/game.config.json` — the document in the shape the project's code reads
+  it — is rewritten on every save, so the file the code modal opens describes
+  the canvas beside it and the game you play is the game you built
+- Code modal: the project's real file tree in CodeMirror 6, pinned above the
+  console by default — code here is code about the canvas beside it — or
+  full-screen. New File and New Folder sit in its header; rename,
   duplicate, delete and dragging files between folders are on the rows, in a
   column with a divider of its own
+- The editor and you do not fight over the code. A scaffolded file marks the
+  runs the editor maintains — `preload`, `placeDocument` and the rest — and
+  those lines come up in their own colour and refuse to be typed over. It is
+  decided **line by line**, so a `console.log` dropped into the middle of one
+  is yours to edit and delete while the lines around it stay locked, and every
+  marked block has a **Reset** beside it that puts it back the way it came.
+  When a fix to the editor adds a block your file has never had, it says so and
+  offers to put it in — your `game/` tree is your copy, and nothing writes into
+  it unasked. The generated config is the whole-file case: read-only, and
+  re-read as you build
 - Docs, along the bottom of the code modal: Phaser's concept guides, Phaser's
   own API, MDN's JavaScript, CSS and HTML reference, and psd-to-phaser's docs.
   Automatic follows the caret — put it on `this.add.sprite` and the page for it
   appears — and the MDN half follows the file, so a `.css` asks about CSS.
   Search, and a table of contents for the written guides. All of it is on the
   device, so it works on an iPad with no network
-- Console drawer in Fira Code — selectable, `%c`-aware — fed by the page and
-  by psd-to-json's own progress
-- Publish: a zipped project carrying both runtimes and the document, so the
-  exported game opens showing what the editor showed
+- Console drawer in Fira Code — selectable, `%c`-aware — carrying the
+  editor's own commentary, psd-to-json's progress, and the JavaScript console:
+  this page's and the running game's, errors and stack traces included, so a
+  `console.log` in your `WorldScene.js` shows up where you are looking. **App**
+  and **JS** toggles on the right of its header bar, when it is open, filter
+  one from the other
+- Log an object and you get an object: a disclosure triangle, a one-line
+  preview, and its contents a level at a time, with keys, strings, numbers and
+  nulls each shown as what they are. Classes say which class they are, a Map
+  and a Set open like anything else, and a cycle says so rather than hanging
+- **LOG** beside a line from your own code is a link to the line that wrote
+  it: it opens the file in the code modal and puts the caret on it. Works for
+  warnings and errors too, and steps over Phaser's own frames — a
+  `console.log` reached through a callback still names the line you typed
+- Publish has two exits. **Export site** is a zip you can serve: the game, its
+  processed assets and both runtimes, so the exported game opens showing what
+  the editor showed. **Export project** is a `.idlewild` file — the project
+  itself, source PSDs and all, with the document, the processed assets and the
+  code as it was edited. A published site cannot give you back the file a
+  sprite was drawn in; that is what the second one is for
+- **Open**, beside New Game on the home screen, reads a `.idlewild` back in as
+  a project of its own. Everything comes with it, including the solids behind
+  extruded layers — so a shape you pulled on one machine is a shape you can go
+  on pulling on another
 
 **Next**
 
@@ -181,10 +233,19 @@ remaining pieces are wired to real slots rather than mocked.
 - Undo, which the drawing layer wants first and the rest of the editor
   wants too
 - Pattern fills rendering their PSD texture rather than a tint
-- Phaser-aware autocomplete in the code modal, and canvas ↔ code binding
+- Phaser-aware autocomplete in the code modal, and the other direction of the
+  canvas ↔ code binding: the canvas drives the code today, through the config
+  the editor writes, and code does not yet drive the canvas
+- Play starting from the camera the editor is looking through, rather than
+  where the project's own scene opens
+- One Phaser scene per Idlewild scene in the exported game, with transitions
+  between them — today the template places the open one
 - Sloped ground for the platformer: a blocking boundary is currently taken as
   its bounding box
 - rsync publish targets
+- Opening a `.idlewild` straight from Files or the Finder — the format is
+  real, but it is not declared to the system and nothing handles a file the OS
+  hands the app
 
 ## Development
 

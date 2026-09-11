@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  blockedColliderCells,
-  colliderBoxes,
   colliderCells,
   defaultCollider,
   describeCollider,
-  documentColliders,
   groundOffsets,
+  resolveCollider,
+  unitOfKey,
 } from "../collider";
 import { Grid } from "../grid";
 import type { Cell, Collider, Extrusion, Layer, Placement } from "../types";
@@ -152,7 +151,6 @@ describe("the default anything else gets", () => {
     expect(collider.cells).toEqual([]);
     // Relative to the anchor, which on a blank project is a world pixel.
     expect(collider.rect).toEqual({ x: 0, y: 0, width: 200, height: 120 });
-    expect(colliderBoxes(blank, collider, { cx: 100, cy: 40 })).toEqual([box]);
   });
 
   it("falls back to the box when the artwork covers more spaces than it is worth", () => {
@@ -171,64 +169,49 @@ describe("the default anything else gets", () => {
 
 describe("reading colliders off the document", () => {
   const colliders: Record<string, Collider> = {
-    tree: { cells: [{ cx: 0, cy: 0 }], blocking: true },
-    path: { cells: [{ cx: 0, cy: 0 }], blocking: false },
+    tree: { cells: [{ cx: 0, cy: 0 }], blocking: true, edited: true },
   };
 
-  it("counts a multi-layer PSD once rather than once per layer", () => {
-    const placed = documentColliders(
+  it("finds the unit a key is placed as, in whichever scene it stands", () => {
+    const unit = unitOfKey(
       [
-        layer({
-          placements: [
-            placement({ id: "a", instance: "u1" }),
-            placement({ id: "b", instance: "u1", layerPath: "roof" }),
-          ],
-        }),
-      ],
-      colliders,
-    );
-    expect(placed).toHaveLength(1);
-    expect(placed[0].key).toBe("tree");
-  });
-
-  it("leaves out walkable colliders, hidden layers and unknown keys", () => {
-    const placed = documentColliders(
-      [
-        layer({ placements: [placement({ psdKey: "path", instance: "u1" })] }),
+        layer({ id: "l1" }),
         layer({
           id: "l2",
-          visible: false,
-          placements: [placement({ id: "c", instance: "u2" })],
-        }),
-        layer({
-          id: "l3",
-          placements: [placement({ id: "d", psdKey: "nobody", instance: "u3" })],
-        }),
-      ],
-      colliders,
-    );
-    expect(placed).toEqual([]);
-  });
-
-  it("blocks the cells where each unit actually stands", () => {
-    const blocked = blockedColliderCells(
-      [
-        layer({
           placements: [
             placement({ id: "a", instance: "u1", anchor: { cx: 2, cy: 3 } }),
-            placement({ id: "b", instance: "u2", anchor: { cx: -1, cy: 0 } }),
+            placement({ id: "b", instance: "u1", layerPath: "roof" }),
+            placement({ id: "c", instance: "u2", psdKey: "other" }),
           ],
         }),
       ],
-      colliders,
+      "tree",
     );
-    expect([...blocked].sort()).toEqual(["-1,0", "2,3"]);
+    expect(unit?.anchor).toEqual({ cx: 2, cy: 3 });
+    expect(unit?.placements.map((p) => p.id)).toEqual(["a", "b"]);
   });
 
-  it("blocks nothing at all for a document that has never been told", () => {
+  it("hands back what the document holds, rather than guessing again", () => {
+    const held = resolveCollider(ortho, [layer()], colliders, "tree");
+    expect(held).toBe(colliders.tree);
+  });
+
+  it("answers for a key the document has not been told about", () => {
+    const derived = resolveCollider(
+      ortho,
+      [layer({ placements: [placement()] })],
+      undefined,
+      "tree",
+    );
+    expect(derived.blocking).toBe(true);
+    expect(derived.edited).toBeUndefined();
+    expect(sorted(derived.cells)).toEqual(["0,0"]);
+  });
+
+  it("puts a collider where its placement stands", () => {
     expect(
-      blockedColliderCells([layer({ placements: [placement()] })], undefined).size,
-    ).toBe(0);
+      sorted(colliderCells(colliders.tree, { cx: 2, cy: 3 })),
+    ).toEqual(["2,3"]);
   });
 });
 

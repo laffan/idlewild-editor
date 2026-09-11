@@ -62,18 +62,26 @@ Extension of [README.md](README.md).
 
 ---
 
-## Why the editor runs Phaser in-window
+## Why the editor runs Phaser in-window, and the game does not
 
-Phaser Bench runs its game in an iframe and forwards `console.*` over
-`postMessage`, because the game there is the user's program and needs
-isolation and hard reloads. Idlewild's canvas *is* the editor — selection,
-hit-testing and the inspector all need direct object access — so Phaser runs
-in the app's own webview and the console bridge collapses into a plain wrap of
-`console` (`src/lib/log.ts`).
+Idlewild's canvas *is* the editor — selection, hit-testing and the inspector
+all need direct object access — so the editor's Phaser runs in the app's own
+webview rather than behind a bridge.
 
-Play mode is a mode of the same scene, not a reboot: the spec says play mode
-*adds a character to the game*, and treating it as a separate boot would throw
-away the camera and the loaded PSDs for nothing.
+The **game** is the other case, and it is Phaser Bench's: the program being
+played is the user's, it wants isolation and a hard reload, and its console is
+something to forward rather than something to share. So Play loads the
+project's `game/` tree into a frame over the canvas, from the asset server, the
+way a published export loads it — see [What Play runs](#what-play-runs).
+
+Play used to be a mode of the editor's scene: a character added to the canvas,
+driven by `game/play-controller.ts` and `game/play-platformer.ts`. That reading
+of "play mode *adds a character to the game*" had two costs that took a while
+to come due. The project's own `WorldScene.js` — the file the code modal opens
+— never ran at all, so a `console.log` saved into it went nowhere and there was
+no way to tell whether any edit to it had worked. And the same game existed
+twice, once in TypeScript for the editor and once in JavaScript for the export,
+kept in step by hand. Both are gone with those files.
 
 ## Why there is still an HTTP server
 
@@ -176,9 +184,10 @@ spaces, and an import's footprint marks one space of its own size rather than
 shipping six hundred one-pixel division lines into a PSD.
 
 `size` survives as the project's nominal unit even where nothing rounds to
-it — play mode's character is measured in it, and so is the lattice its
-navigation walks. That is what the New Game sheet's grid scale still means on
-a blank canvas, and what the line under the control says.
+it — the played character is measured in it, and so is the lattice its
+navigation walks, in the template's `WorldScene.js` as it was in the editor's
+own play mode. That is what the New Game sheet's grid scale still means on a
+blank canvas, and what the line under the control says.
 
 The one place the substitution does not work is a **fill**. A fill stores the
 spaces it covers, and a 420 × 260 rectangle on a pixel lattice covers 109,200
@@ -192,16 +201,18 @@ the PNG export, the conversion to a PSD, and the platformer's ground.
 `cellToWorld` returns each shape's natural anchor — a diamond's centre, but a
 square's *top-left corner* — and anything asking "is this cell inside that
 shape" has to test a point that is unambiguously in the cell. A corner is
-shared with three neighbours, so play mode's navigation was blocking a cell
-either side of every wall until this existed.
+shared with three neighbours, so navigation was blocking a cell either side of
+every wall until this existed. `grid.js` in the templates carries the same
+distinction, for the same reason.
 
 ### Two genres, one document
 
-`genre` decides the scene a project scaffolds and the play mode the editor
-runs, and nothing else. Both read the same document: a fill marked
-not-walkable, a boundary marked blocking and a placed PSD's collider are what
-a top-down character routes *around* and what a side-on character stands *on*
-— a floor plan or a cross-section, the same geometry either way.
+`genre` decides the scene a project scaffolds, and so — since Play runs that
+scene — the game the editor plays. Nothing else. Both read the same document:
+a fill marked not-walkable, a boundary marked blocking and a placed PSD's
+collider are what a top-down character routes *around* and what a side-on
+character stands *on* — a floor plan or a cross-section, the same geometry
+either way.
 
 Isometric and platformer is the one pair not offered. Gravity has no
 direction on a diamond grid seen from above, so the New Game sheet greys the
@@ -211,6 +222,73 @@ that cannot work.
 Both fields are optional on disk (`#[serde(default)]` on the Rust side,
 `genre?:` on the TypeScript one) so every project written before the choice
 existed still loads, as top down — which is what it has always been.
+
+### Scenes
+
+A scene is what Phaser means by one: a set of layers and a canvas of its own.
+A project is several places — a title screen, a cave, the overworld — sharing
+a grid, a genre and a pile of PSDs, but not a single thing standing on them.
+
+```text
+GameDoc
+  scenes: [ { id, name, layers: [...], camera? }, ... ]
+  activeSceneId
+  extrusions        ← document-level: a PSD is the project's, not a scene's
+```
+
+**`DocStore.layers` and `layer(id)` answer about the active scene, and their
+signatures did not change.** That is the whole design: the Phaser scene, the
+three panels, the renderers, the drag controller and the overlay never had to
+learn that scenes exist. Switching scenes is this one object answering
+differently, not thirty call sites asking a new question — which is why the
+existing suite passed on the new model unmodified.
+
+**Two events, because two things happen.** `change` means the document moved:
+re-read it. `scene` means everything on the canvas is now about somewhere
+else: rebuild. `change` fires first, so a listener that re-reads runs before
+one that redraws. `WorldScene.reloadScene` is the redraw — it cancels
+everything half-done (a drag, a marquee, an extrusion, an opened-up PSD),
+clears the selection, and then gets the demolition free: the renderer keys its
+placements by placement id and destroys every one it no longer finds in the
+document, which after a switch is all of them.
+
+**The camera rides the scene**, because a scene is a place and coming back to
+it should be coming back to where you were standing.
+
+**A duplicate gets ids of its own, all the way down** — layers, fills,
+placements, zones and strokes. Two scenes sharing a placement id would be one
+rendered object belonging to both, showing whichever was drawn last. A unit
+(the placements one PSD arrived as, which drag together) is remapped rather
+than copied, or the duplicate's parts would each think they belong to the
+original's unit.
+
+#### What is the scene's, and what is the project's
+
+`psd/` is one directory for the project, so a *file* is project-wide while a
+*placement* is a scene's. Three edits are about the file and therefore about
+every scene: renaming a PSD, re-anchoring an extrusion, and counting how many
+placements draw one layer (the inspector's "editing one edits both", which
+under-counting would point the wrong way). They go through
+`updatePlacementsEverywhere` and `everyPlacement` and write once.
+
+Renaming is the one where scene-scoping would have been corruption rather
+than staleness: a placement in another scene left pointing at a key that has
+gone can never render, and there is nothing on screen to say why.
+
+#### Documents written before scenes
+
+`withScenes` folds a legacy document's top-level `layers` and `camera` into
+one scene called **Main** — which is what they always were, named for the
+first time, and the same name a fresh project's first scene gets, so the two
+kinds of project read the same afterwards. It also repairs an `activeSceneId`
+naming a scene that is not there, because hand-edited documents are a thing
+this app invites. `StoredDoc` is the type at that boundary: a document as it
+may arrive from disk, with the two fields a pre-scenes project lacks made
+optional, so the migration is a conversion rather than a cast.
+
+Rust reads both shapes too. The config is regenerated on the way *in* as well
+as on every save, so a project that has not been opened since the change still
+exports what is in it.
 
 ### Autosave
 
@@ -1194,6 +1272,88 @@ against the real plugin, with the manifest artificially delayed. The editor
 waits on `psdLoadComplete` because it loads at *runtime*, long after any
 `preload()`, which is a different situation.
 
+## Publish has two exits
+
+They answer different questions, and the difference is the source PSDs.
+
+| | Carries | For |
+|---|---|---|
+| **Export site** (`.zip`) | `game/`, processed `assets/`, both runtimes, a generated config | Serving. Nothing in it is what you would edit the project with |
+| **Export project** (`.idlewild`) | the manifest, `doc.json`, `thumbnail.png`, `psd/`, `assets/`, `game/` | Opening somewhere else and carrying on |
+
+A published site cannot give back the file a sprite was drawn in. That is the
+whole reason the second format exists, and why `psd/` is in one and not the
+other.
+
+Both are written straight to the path the save dialog returned
+(`publish_site`, `export_project`). The site export used to come back across
+the IPC boundary as base64 and be written by `save_bytes`; an archive carrying
+every processed asset — let alone every source PSD — has no business being a
+string in a JSON message first.
+
+### The format
+
+```text
+<name>.idlewild            (a zip)
+  idlewild.json            format, app version, exportedAt, and the project's own fields
+  doc.json                 layers, fills, placements, zones, strokes, extrusions
+  thumbnail.png            if one has been taken
+  psd/                     the source files
+  assets/                  psd-to-json's output, so an import opens without a re-parse
+  game/                    the project's own code, as it was edited
+```
+
+**Extrusions travel in `doc.json`**, and so do every scene and the one that
+was open. `GameDoc.extrusions` maps a PSD key to the voxels its solid was
+built from and the space it was anchored to — document-level, because a PSD
+is the project's rather than a scene's — and an extruded layer's way back into
+extrude mode is that record plus the PSD it wrote — the cube in the inspector's layer list, and the shape that opens when
+you click it. Both halves are in the archive, and the map is keyed by *file
+stem* rather than by anything about this install, so a re-opened project can
+still take hold of a face and pull it. `tests/archive.rs` pins that, because a
+project that came back without them would look entirely fine right up until
+someone tried.
+
+**`meta.json` does not travel.** A project's id is a directory name in *this*
+store; carrying one across would be a second source of truth for where a
+project lives. The fields worth keeping are in the manifest and an import
+writes a fresh `meta.json` around them — new id, the original `createdAt`,
+`updatedAt` of now, since the home screen sorts by it and an import you just
+made should be the one at the top.
+
+**A format number, not a guess.** An archive from a later build is refused by
+name rather than half-read: one that silently dropped what it did not
+understand would look like a project that had lost work.
+
+### An archive is a file someone hands you
+
+`CARRIED_DIRS` and `CARRIED_FILES` are read in both directions — an export
+puts nothing else in, an import takes nothing else out — and that second half
+is the guard. On the way in, every entry goes through the zip crate's
+`enclosed_name` (which refuses absolute paths and `..`) *and* that allowlist,
+so the five things an archive is allowed to be made of are the five things it
+can write. There are ceilings on entry count and unpacked bytes for the same
+reason. A hostile zip is a test rather than an assumption
+(`an_archive_cannot_write_outside_the_project_it_claims_to_be`).
+
+An import that fails partway removes the directory it was filling: a
+half-written project in the list is worse than a failed import. A `game/` tree
+that did not arrive is scaffolded, and the config is rebuilt from the document
+that did — so an archive assembled by hand still opens.
+
+### Where it is in the app
+
+**Open**, on the home screen beside New Game. The picker is unfiltered on a
+touch device and filtered on a desktop, the same split as the editor's Add
+Image and for the same reason: iPadOS reads the filter list to decide *which
+picker* to show, and an extension it has never heard of is not a reliable way
+to ask for the document browser.
+
+`.idlewild` is not declared as a system file type. Doing so without wiring the
+open would put Idlewild in macOS's "Open with" for a file it then ignores; the
+declaration and the `RunEvent::Opened` / deep-link handling behind it belong
+together, and neither has been exercised on either platform yet.
+
 ## Testing
 
 `cargo test --lib` covers the load-bearing path: RGBA → PSD → psd-to-json →
@@ -1893,11 +2053,22 @@ What the guess is depends on how the PSD was made:
   every voxel is at level zero already — `levelHeight` is 0 there — so the
   whole shape is a collider and nothing needed a second rule to say so.
 - **Anything else** — an import, a converted sketch, a converted fill — has
-  only its artwork, so the default is the spaces that artwork covers:
-  `cellsUnderBox` over the unit's own box, the same function the footprint
-  mark in the file is drawn from. Past `MAX_COLLIDER_CELLS` it falls back to
-  the box, because a default derived from something somebody resized to the
-  width of a continent should not be a hundred thousand records.
+  only its artwork, so the default is the spaces its **base** covers. On a
+  square grid that is the whole picture: a sprite there occupies what it is
+  drawn over, and a side-on project wants its full height as ground anyway.
+  On a diamond grid it is the bottom tile-height of it, which is the same rule
+  the extrusion gets, read for flat artwork — the projection puts *away* up
+  the screen, so a 64 × 96 tower sweeps its bounding box across fourteen
+  diamonds, thirteen of them the hillside behind it. Within that strip a space
+  counts when its **middle** is under the artwork rather than when the two
+  merely overlap, because a diamond the base clips a corner off is a space
+  beside the tower, and blocking it is what makes a character stop a tile
+  short of everything. The middle can miss every space — a picture smaller
+  than one, dropped between four — so the space under the middle of the base
+  is the floor: a collider is never empty for want of a rounding. Past
+  `MAX_COLLIDER_CELLS` the whole thing falls back to the box, because a
+  default derived from something somebody resized to the width of a continent
+  should not be a hundred thousand records.
 
 Blocking, in every case. A placed thing being solid is what makes the toggle
 worth having — a document where nothing collides until each file has been
@@ -1945,22 +2116,34 @@ how a mode ends up owning drags but not taps.
 
 ### What reads it
 
-The editor's two play modes read the document directly: `PlayController` adds
-the blocked cells to its navigation set, and `solidsFromDocument` adds the
-boxes to the platformer's ground. Both take spaces as spaces wherever the
-document has them — reducing an isometric diamond to its bounding box first
-would block the neighbours its corners reach into — and fall back to boxes
-only on a blank project, where navigation runs on a square lattice of the
-project's nominal unit anyway.
+**The game does, and nothing else.** Play runs the project's own code over
+`game.config.json`, which is regenerated on every save, so there is one
+implementation of what a collider means rather than one in the editor and
+another in the export. `grid.js` turns a collider into spaces or boxes —
+`colliderCells` and `colliderBoxes` — and the two scenes read it the way each
+needs to: `WorldScene.js` builds the blocked set once in `create()`, because
+`isWalkable` runs per node of every search and the document does not change
+under a running game, and `physics.js` adds the boxes to the ground the
+character stands on.
 
-The exported game reads it off each placement, because `game_config.rs`
-resolves *which* placement carries it at export time: a collider rides on the
-first placement of each unit and on none of the others, so a PSD placed as
-three layers contributes its ground once rather than three times. What it does
-not resolve is the arithmetic — the offsets and the anchor travel unresolved,
-because adding them up needs the projection, and the projection lives in the
-runtime's own `grid.js`. Doing it in Rust would mean a second copy of
-`cellToWorld` to keep in step with the one the game already has.
+Spaces are taken as spaces wherever the document has them. Reducing an
+isometric diamond to its bounding box first would block the neighbours its
+corners reach into, so only a project whose grid does not snap goes through
+boxes — and there the collider *is* a box.
+
+`game_config.rs` decides **which** placement carries it: a collider rides on
+the first placement of each unit and on none of the others, so a PSD placed as
+three layers contributes its ground once rather than three times. What Rust
+does not do is the arithmetic. The offsets and the anchor travel unresolved,
+because adding them up needs the projection and the projection lives in
+`grid.js` — resolving in Rust would mean a second copy of `cellToWorld` to
+keep in step with the one the game already has.
+
+A collider is document-level, beside the extrusions and for the same reason: a
+PSD can stand in more than one scene and blocks the same spaces in each. So
+the export hands every scene the same map, and the backfill on open covers
+every scene's keys rather than the open scene's — a file standing somewhere
+nobody has looked at this session is still in the published game.
 
 ## The iPad's safe area
 
@@ -2055,7 +2238,197 @@ across is the way to move the pin.
 The MDN pages are CC BY-SA 2.5, which is why every page rendered from them
 carries a line saying so.
 
+## What Play runs
+
+Play loads `http://127.0.0.1:<port>/<project-id>/game/index.html` into an
+iframe over the canvas (`editor/game-frame.ts`). That is the project's own
+`game/` tree — the files the code modal edits — served by `file_server.rs`,
+and it is the same program a publish zips. What plays and what publishes
+cannot drift, because there is only one of them.
+
+Two paths exist in an export's layout and not in the store's, and the server
+answers both rather than putting copies on every project's disk:
+
+| Request | Answered with | Why not on disk |
+|---|---|---|
+| `<id>/game/lib/phaser.min.js`, `…/psd-to-phaser.umd.js` | the constants `templates.rs` already holds for the exporter | 1.5 MB, identical in every project |
+| `<id>/game/assets/…` | `<id>/assets/…` | the pipeline's output sits *beside* `game/` in the store and *inside* it in a zip |
+
+The traversal guard is unchanged: the rewrite happens before `resolve`, which
+still canonicalises and checks against the store root, and `game/lib/` answers
+only those two exact names.
+
+### The console the game logs into
+
+The frame is a different origin, so the editor cannot read its console. It
+reports instead: `templates/play/console-bridge.js` wraps `console.*`, listens
+for `error` and `unhandledrejection`, and posts each call to the parent.
+
+It works out two things the editor cannot. Each argument is **flattened** into
+the tagged shape `lib/log-value.ts` describes, because a structured clone of a
+live Phaser object throws and a clone of a scene would carry the whole game
+across to be printed as one line. And each call's **site** — the file and line
+it was written on — is read out of a thrown error's stack and mapped back to a
+path inside `game/`, which is what makes the drawer's level chip a link into
+the code modal.
+
+`file_server.rs` injects the bridge at the top of `<head>`, and only for a
+request carrying `?idlewild=console` — which only `game-frame.ts` sends. So the
+project's `index.html` says nothing about it, and the page that publishes is
+byte for byte the page that was edited. First in the head on purpose: a boot
+failure in the very first module is exactly what it exists to report.
+
+`game-frame.ts` checks what arrives rather than trusting it — the path is
+about to be handed to the code modal to open — and unwraps a top-level string
+back to a plain one, because the first argument of a call is a *format string*
+when it has directives in it and Phaser's boot banner is exactly that.
+Arriving in the drawer, those lines are tagged **JS** — see
+[Console](#console).
+
+### Stacking, which the game got wrong
+
+A PSD is a stack of layers and the order is the artwork: a roof over a tower
+is not the same picture as a tower over a roof, and an extrusion's `lines`,
+`shading` and `shape` stacked backwards is a solid with its silhouette painted
+over everything that made it read as one.
+
+Two things reach the game now that did not:
+
+- **`order`** — how high a layer sat in its file's stack, counting up from the
+  back — and **`instance`**, the unit the placements of one PSD share. Neither
+  was in `game.config.json`, so the game had nothing to sort by.
+- **`applyDepth`**, in the template. `P2P.place()` returns a Phaser **Group**,
+  whose children live on the scene's own display list rather than inside it —
+  so `setDepth` on the group writes one depth onto every child and the
+  artwork's order collapses. Phaser then draws them in the order it was handed
+  them, which is the manifest's top-first order, which is upside down. Each
+  child is now ranked by the depth psd-to-phaser gave it and spaced inside the
+  placement's own slot, so the file's stack survives and the group still sits
+  between the placement below it and the one above.
+
+The editor's renderer learned both lessons already, in `doc-renderer.ts` — it
+is where the `drawOrder`/`applyDepth` pair came from. So the same ordering
+exists twice, once for the editor and once in the project's own
+`WorldScene.js`, which cannot import it. `game/__tests__/draw-order.test.ts`
+holds them to the same fixtures by pulling the template's functions out
+between their markers and running both, the same arrangement the console
+bridge's snapshot is under.
+
+### Saving applies
+
+`CodeModal.save` reports the path it wrote; the shell reloads the frame if a
+game is up. That is what "saving code applies it" means here — the program
+restarts against the file just written, which is the only way to see whether
+the change worked. Entering play mode flushes the document first and waits for
+it, because the document's save is what rewrites the config the game reads.
+
+### What went with it
+
+`game/play-controller.ts`, `game/play-platformer.ts`, `game/platformer.ts`,
+`lib/pathfinding.ts` and `editor/play-pad.ts` are deleted. Each had a
+counterpart in the templates — `navigation.js`, `physics.js`, and the
+platformer scene's own on-screen pad — and the templates are what runs now.
+The editor's scene keeps one line about play mode: put the tools down.
+
+## The config the game reads
+
+`game/js/game.config.json` is the document in the shape the project's own code
+reads it — `psdKeys` to load, layers to place, the grid to draw. It is
+generated, and `store::sync_game_config` rewrites it from `doc.json` on **every
+save**, not only on the way out to a zip.
+
+That is a three-line change with three consequences. The file the code modal
+opens describes the canvas beside it rather than being the empty one a new
+project scaffolded with. Play mode, which now runs that code, runs against what
+has actually been built. And the export's own rewrite becomes a re-derivation
+of the same thing rather than the only time it ever happens.
+
+A failure never fails the save: `doc.json` is the truth and this is derived
+from it, so a document mid-migration keeps a stale config rather than losing
+the write that carried the work. An unchanged config is not rewritten at all,
+which matters because a drag saves on an 800 ms debounce and the code modal
+watches this file.
+
+## Lines the editor owns
+
+The editor writes code into a project and the user edits that same code.
+Without a rule the two fight: the editor rewrites a function and takes a
+hand-made change with it, or it stops rewriting and the code stops matching the
+canvas. The rule is that ownership is **per line**.
+
+A scaffolded file marks its editor-owned runs:
+
+```js
+// idlewild:begin placeDocument
+placeDocument() { … }
+// idlewild:end placeDocument
+```
+
+Inside that range a line is the editor's if it is *still one of the lines the
+scaffold wrote*, decided by a longest common subsequence against the pristine
+template (`code/managed-blocks.ts`). Anything else between the markers was
+typed by the user and stays theirs. So a `console.log` dropped into the middle
+of `placeDocument` is one line you can edit and delete while the lines around
+it stay locked. A subsequence rather than a line-for-line comparison because
+that is the whole point: inserting a line must not disown every line after it.
+
+The markers themselves are always owned, which is what stops a block being
+dissolved from the inside. A `begin` with no `end` is not a block at all —
+locking the rest of the file would be the worst way to fail.
+
+`code/managed-view.ts` turns that into CodeMirror. The filter's job is narrower
+than "read-only": an owned line's *text* must survive, and it must still be a
+line of its own afterwards. So a break typed at the end of one is allowed —
+that is how you get a line of your own inside a block — and deleting a whole
+line above one is allowed, while a character typed at either end of an owned
+line, or a backspace that would join it to its neighbour, is not. A refused
+edit says so in the file bar rather than doing nothing.
+
+**Reset** sits at the end of each block's opening marker and puts that block
+back the way the scaffold wrote it, dropping whatever was added inside it. It
+saves as it goes: the reason to press Reset is that the running game is broken,
+and a repair you then have to remember to save is half a repair. `templates.rs`
+answers for the pristine text (`read_game_template`), so the blocks a project
+can reset are the blocks its own genre scaffolds.
+
+**A block the template gains later** is the case Reset cannot serve: a
+project's `game/` tree is its own copy, so there is nothing in the file to put
+back. `analyse` names those in `missing`, and a strip above the editor offers
+to put them in — `addMissingBlocks` inserts each where the scaffold has it
+*relative to the blocks the file already has*, so a helper lands beside the
+code that calls it rather than at the end. An offer rather than an edit: code
+appearing in someone's file unasked is the fight this whole mechanism exists
+to avoid.
+
+This is not hypothetical. `WorldScene.js` gained `drawOrder` and `applyDepth`
+when the exported game learned to stack a PSD the right way up, and without
+that strip every project made before it would have drawn multi-layer files
+upside down for good.
+
+The generated config is the whole-file case of the same idea. It has no room
+for comments and nothing in it was written by hand, so it is owned end to end
+and read-only in CodeMirror's own terms as well — the caret still moves,
+because reading and copying it is the point. There is no allowance for a break
+at the end of a line there, unlike a block: no line of that file is not about
+to be rewritten. It is re-read whenever the document is saved, so what is on
+screen is what the running game reads.
+
+Resetting the config means *regenerating* it — its pristine form is the
+document as it stands, not the empty file a new project scaffolds with.
+
+Today the marked blocks are `preload`, `drawGrid`, `placeDocument`,
+`paintFill`, `drawOrder`, `applyDepth`, `applyScale` and `pointsToVectors`,
+the same eight in both scenes, plus the config. A test pins that the two genres mark the same set and that
+every marker closes, because a block is found by id and one renamed on one side
+would quietly stop offering its Reset there.
+
 ## Pinning and unpinning the code panel
+
+**It opens pinned.** Code in this editor is code about the thing beside it:
+the config follows the canvas, a save while a game is up restarts it, and a
+console line opens the file it was written in — all of which you want to be
+looking at while it happens. Floating is one tap away and the choice is
+remembered (`codePinned`), so pinned is the default rather than the rule.
 
 Docked, the panel is a row of the shell and its divider writes an inline
 `height` on it. Floating, it is `position: absolute; inset: 0` — and an
@@ -2083,6 +2456,91 @@ Output uses Fira Code (bundled, not fetched — the editor works offline) and
 opts back into text selection, which the shell suppresses globally so a drag
 on chrome never highlights it.
 
+### A line is parts, not a string
+
+An entry carries a list of **parts**: runs of text, with whatever styling a
+`%c` asked for, and *values* — arguments that were objects, which the drawer
+draws as a tree you can open a level at a time (`editor/log-tree.ts`), with
+keys, strings, numbers, booleans and nulls each shown as what they are.
+Children are built on first open, so a five-hundred-line drawer has not built
+any of them.
+
+The value in a part is a **snapshot**, never the object (`lib/log-value.ts`).
+Two reasons, and the second is the hard one: the drawer keeps its last 500
+lines, so live references would pin every sprite ever logged; and the game
+frame is a different origin, which can only post — and a structured clone of a
+Phaser scene throws before it gets anywhere.
+
+The snapshot is tagged rather than plain JSON, because the tags are the things
+a console is for. `"5"` is not `5`; `NaN` and `-0` do not survive a JSON round
+trip; a class instance says which class (`Body {vx: 0, vy: 12}`) where a plain
+object stays unlabelled; a `Map` or `Set` is opened, since Phaser is full of
+both and `Map {}` says nothing; and `[Circular]` is a cut cycle rather than a
+string that happens to read that way. `seen` is the chain of *ancestors*, not
+everything visited, so the same sprite logged twice side by side is shown
+twice. Depth caps at 4, entries at 100, and what was cut is counted rather
+than quietly dropped.
+
+A snapshot shows what was true when the line was written, where devtools shows
+what is true when you open it. That is a difference worth knowing and, for a
+game mutating one sprite sixty times a second, mostly an improvement.
+
+**The same flattening exists twice.** The bridge cannot import
+`log-value.ts` — different origin, plain injected script — so it carries its
+own copy, and hangs it off `window.__idlewildSnapshot` before it looks for a
+parent. `__tests__/log-value.test.ts` runs both over the same fixtures, which
+is what holds one contract across two implementations.
+
+### LOG is a link
+
+`console.log` is labelled **LOG**, not INFO: `log` is what you write while
+debugging and `info` is what a library announces itself with, and the editor's
+own commentary is the second kind. So `LogLevel` has both.
+
+Where a line came from a file the code modal can open, its level chip *is* the
+way back to it — the fastest thing in a console is the one that answers "where
+did this come from". The bridge reads the site out of a thrown error's stack
+with one regex for two engines (JSC writes `fn@url:line:col`, V8 writes
+`    at fn (url:line:col)`), and steps over two kinds of frame that are never
+the answer: its own, and anything under `lib/`. That second skip is why a
+`console.log` reached through a Phaser callback still reports the line you
+wrote. `siteIn` is pure and exposed for the same reason the snapshot is;
+`__tests__/console-site.test.ts` puts real stacks from both engines through
+it.
+
+Clicking the chip opens the code modal — pinned, if it was not already up — at
+that file, centres the line and selects it, so the active-line highlight lands
+on it rather than leaving you to count rows. The editor's own JS lines carry
+no site: the frames behind them are this bundle's, and a link into a minified
+chunk is a link to nowhere.
+
+### App and JS
+
+The drawer does double duty, so every entry carries a `source` and the header
+carries a toggle for each.
+
+**App** is the editor talking about itself: every `log.info`/`warn`/`error`
+call in this codebase, plus psd-to-json's progress, which arrives from Rust as
+`psd-log-line`. **JS** is the JavaScript console — whatever `console.*` is
+handed in this page, plus everything the game frame forwards, plus uncaught
+errors and rejected promises from both. The App half is all `info`, which is
+what makes the JS half's `log` legible beside it.
+
+The two are told apart at the call site rather than afterwards: the editor's
+own commentary goes through `info`/`warn`/`error` and never touches `console`,
+and `captureConsole` tags what it wraps. `logFrom({ source, site }, level, …)`
+is the one entry point that says which, and the only one that can attach a
+site.
+
+The toggles are right-aligned in the header bar and appear only while the
+drawer is open — a filter on output you cannot see is chrome for nothing. The
+choice is remembered in `localStorage` under `consoleSources`, and both are on
+for anyone who has never touched them.
+
+An `Error` is now stringified with its stack. `TypeError: undefined is not an
+object` with no frame under it names nothing you can go and look at, and a
+frame is the point of the JS half.
+
 ## Known gaps
 
 - Pattern fills store their PSD key and render as a tint; the texture is not
@@ -2105,11 +2563,18 @@ on chrome never highlights it.
   only a sketch photographs blank.
 - There is no undo. The drawing layer wants it most — Hush routes every
   engine mutation into a snapshot stack — and it is the next thing to build.
-- Strokes do not reach a publish. They are scaffolding for the PSDs and
-  boundaries they become, and play mode hides them for the same reason.
-- The code modal edits and saves the project's real files but does not yet
-  drive the canvas, and has none of phaser-bench's Phaser-aware completions.
-  Unpinned it covers the whole shell; Pin docks it above the console.
+- Strokes do not reach a publish, and play mode is a publish now, so they do
+  not reach play either. They are scaffolding for the PSDs and boundaries they
+  become.
+- Play mode is the published game, which means it does not inherit the
+  editor's camera: it opens where the project's own scene puts it. That was a
+  deliberate trade for running the user's code, but "play from where I am
+  looking" is a real thing to want.
+- The code modal has none of phaser-bench's Phaser-aware completions, and the
+  binding runs one way: the canvas drives the code, through the generated
+  config, and code does not yet drive the canvas. Unpinned it covers the whole
+  shell; Pin docks it above the console — which is where you want it while
+  saving into a running game.
 - Re-import replaces a whole PSD. There is no diff against the previous
   parse, so a placement is matched to the new file only by its layer path.
 - The anchor mark is written on import and read on every parse after, but
@@ -2122,11 +2587,28 @@ on chrome never highlights it.
   its middle rather than sending an `art` offset, so it can land up to half a
   space from where it was drawn. A fill conversion is exact.
 - Play mode's character is a placeholder rectangle, not a sprite from the
-  template, in both styles.
-- A platformer takes a blocking boundary as its bounding box. Resolving
-  against the polygon — sloped ground — is a different feature. A collider's
-  spaces go through the same reduction, so an isometric diamond stands on its
-  box there.
+  template, in both styles. It is the template's own rectangle now, so it is at
+  least a thing you can go and change.
+- A managed block's ownership is decided by a line diff, so two identical lines
+  inside one block — a bare `}`, a blank line — can swap which of the pair is
+  called the editor's. Nothing breaks; a line you typed may simply be the
+  locked one. Reset is the way out.
+- A re-import reconciles the placements of that PSD in the **open scene**
+  only: other scenes keep the geometry they had, and a layer the new file
+  added does not appear in them. Staleness rather than corruption — the
+  placements still point at a key that exists — but it is a scene switch away
+  from being visible and there is nothing that says so.
+- The exported game places the open scene. Every scene's layers are in the
+  config and every scene's PSDs are loaded, so switching in your own code is
+  a matter of reading `config.scenes` — but the template does not, and one
+  Phaser scene per Idlewild scene, with transitions, is a feature rather than
+  a line.
+- Only `WorldScene.js` and the generated config carry managed blocks.
+  `grid.js`, `navigation.js` and `physics.js` are the project's alone, even
+  though the scaffold wrote them and the editor's config is what they read.
+- A platformer takes a blocking boundary as its bounding box, and a
+  collider's spaces go through the same reduction in `physics.js`. Resolving
+  against the polygon — sloped ground — is a different feature.
 - **Resizing a placement does not resize its collider.** The shape is a fact
   about the file and the size is a fact about the placement, so a copy scaled
   to twice the size goes on blocking the spaces the original did. Re-opening
@@ -2148,10 +2630,19 @@ on chrome never highlights it.
   nominal unit rather than on what was actually drawn. A* over single pixels
   would neither finish nor mean anything, but a coarse lattice over free-form
   geometry is a compromise, not an answer.
+- Opening a `.idlewild` from Files or the Finder is not wired: the format is
+  real and the in-app Open reads it, but there is no system file-type
+  declaration and nothing handles a file the OS hands the app.
+- An import trusts the archive's `assets/` rather than re-running the
+  pipeline over its `psd/`. That is what makes an import instant, and it means
+  an archive whose assets were stale carries the staleness across; the fix is
+  the same Re-import that fixes it anywhere else.
 - An export ships the `game/` tree as it stands on disk, which is what makes
   it the user's source — so a project scaffolded before a fix to the template
-  keeps its own copy of the old scene. `game.config.json` is the exception:
-  it is generated, and the export rewrites it every time.
+  keeps its own copy of the old scene, and its managed blocks reset to the
+  template the *current* binary holds rather than the one it was made with.
+  `game.config.json` is the exception twice over: it is generated, kept in step
+  on every save, and rewritten again on the way into the zip.
 - Pattern fills export as a flat colour, matching what the editor draws, and
   a pattern's PSD key is not among the `psdKeys` an export loads.
 - Neither the Tauri build nor the iPad target has been exercised in CI; both

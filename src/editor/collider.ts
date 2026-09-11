@@ -133,7 +133,7 @@ export function createColliderUi(options: ColliderUiOptions): ColliderUi {
   function setBlocking(key: string, blocking: boolean): void {
     const held = resolveCollider(
       options.grid,
-      options.store.layers,
+      options.store.allLayers,
       options.store.colliders,
       key,
       options.store.extrusion(key),

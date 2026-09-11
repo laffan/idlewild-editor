@@ -12,6 +12,54 @@
 .side-panel.right { width: 300px; border-left: var(--rule-chrome); }
 .side-panel.collapsed { display: none; }
 
+/* The scene dropdown, above the layer list.
+
+   A scene is the place you are in and a layer is what is in it, so the two
+   read as one column rather than two panels: the bar has the panel's own
+   ground and a rule under it, and the name is set in the heading face because
+   it is the thing this sidebar is currently about. */
+.scenes-bar {
+  flex: none;
+  min-height: var(--hit);
+  border-bottom: var(--rule-chrome);
+  display: flex;
+  align-items: stretch;
+  padding: 0 8px 0 8px;
+}
+.scene-pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  padding: 0 8px;
+  text-align: left;
+}
+.scene-pick:hover { background: var(--chrome-bg); }
+.scene-name {
+  flex: 1;
+  min-width: 0;
+  font: 700 13px/1 var(--font-heading);
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scene-rename {
+  flex: 1;
+  min-width: 0;
+  margin: 6px 0;
+  border: 1px solid var(--color-neutral-700);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  font: 700 13px/1 var(--font-heading);
+  letter-spacing: 0.04em;
+  padding: 0 8px;
+}
+
 .panel-head {
   min-height: 60px;
   flex: none;

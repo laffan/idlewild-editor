@@ -155,7 +155,7 @@ export class PsdPlacements {
    */
   private syncCollider(key: string): void {
     if (this.host.store.collider(key)?.edited) return;
-    const unit = unitOfKey(this.host.store.layers, key);
+    const unit = unitOfKey(this.host.store.allLayers, key);
     if (!unit) return;
     this.host.store.setCollider(
       key,
@@ -222,20 +222,26 @@ export class PsdPlacements {
     this.host.docRenderer.detachKey(from);
     evictPsd(this.host.scene, this.plugin(), from, this.otherPsdKeys(from));
 
+    // Across every scene, not just the one on screen: a file is one file for
+    // the project, and a placement in another scene left pointing at a key
+    // that has gone can never render.
+    this.host.store.updatePlacementsEverywhere((placement) => {
+      if (placement.psdKey !== from) return null;
+      // The layer inside the file is renamed with it when it was named after
+      // it — every converted image, sketch and generated PSD is — and a
+      // placement points at its layer by that name, so it follows. A layer
+      // someone named in Photoshop is left alone at both ends.
+      return placement.layerPath === from
+        ? { psdKey: to, layerPath: to }
+        : { psdKey: to };
+    });
+
+    // Only the open scene's are on the canvas to be redrawn; the rest are
+    // placed from the document when their scene is next opened.
     const moved: Array<{ layerId: string; placement: Placement }> = [];
     for (const layer of this.host.store.layers) {
       for (const placement of layer.placements) {
-        if (placement.psdKey !== from) continue;
-        // The layer inside the file is renamed with it when it was named
-        // after it — every converted image, sketch and generated PSD is —
-        // and a placement points at its layer by that name, so it follows.
-        // A layer someone named in Photoshop is left alone at both ends.
-        const patch =
-          placement.layerPath === from
-            ? { psdKey: to, layerPath: to }
-            : { psdKey: to };
-        this.host.store.updatePlacement(layer.id, placement.id, patch);
-        moved.push({ layerId: layer.id, placement: { ...placement, ...patch } });
+        if (placement.psdKey === to) moved.push({ layerId: layer.id, placement });
       }
     }
 
@@ -390,8 +396,11 @@ export class PsdPlacements {
       }
     }
 
+    // Every scene's keys, not the open scene's: a PSD standing in a scene
+    // nobody has looked at this session is still in the export, and a
+    // collider nothing ever wrote is a file that blocks nothing there.
     const keys = new Set<string>();
-    for (const layer of this.host.store.layers) {
+    for (const layer of this.host.store.allLayers) {
       for (const placement of layer.placements) keys.add(placement.psdKey);
     }
     for (const key of keys) {
