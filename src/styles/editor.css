@@ -242,6 +242,69 @@
   color: var(--chrome-dim);
 }
 
+/* The extrude mode bar.
+
+   A row across the bottom of the canvas column rather than a sheet: the shape
+   being built is the thing both buttons are about, and a modal over it would
+   hide what it was asking about. It is the counterpart to the scrim the scene
+   draws — chrome saying the canvas is in a mode, and the one place to leave
+   it. No safe-area inset: the console drawer is a row below this one, so the
+   bottom edge of the screen is never what it sits against. */
+.extrude-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 52px;
+  display: flex;
+  align-items: stretch;
+  background: var(--chrome-bg);
+  border-top: var(--rule-chrome);
+  z-index: 8;
+}
+.extrude-bar.hidden { display: none; }
+.extrude-title {
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  font: 600 14px var(--font-heading);
+  color: var(--chrome-text);
+}
+.extrude-size {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-left: var(--rule-chrome);
+  font-size: 10px;
+  color: var(--chrome-dim);
+}
+.extrude-spacer { flex: 1; min-width: 8px; }
+.extrude-bar button {
+  min-width: 96px;
+  padding: 0 18px;
+  border: 0;
+  border-left: var(--rule-chrome);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 14px var(--font-heading);
+}
+.extrude-bar button:hover { background: var(--chrome-rule); }
+.extrude-bar .extrude-apply { background: var(--color-accent); color: #fff; }
+.extrude-bar .extrude-apply:hover {
+  background: var(--color-accent-600);
+}
+/* Nothing to apply yet: the plate has been chosen but never pulled. */
+.extrude-bar .extrude-apply[disabled] {
+  background: var(--chrome-rule);
+  color: var(--chrome-dim);
+}
+
+/* While a shape is being pulled, the selection that started it is gone and
+   its action bar with it. The rail stays: the camera has to stay reachable,
+   because a solid is built from more than one angle. */
+.editor-canvas-wrap.extruding .selection-actions,
+.editor-canvas-wrap.extruding .edge-toggle { display: none; }
+
 /* Edge toggles.
    Anchored below the tool rail rather than at dead centre: the rail is five
    56px items starting 16px down, so a centred toggle collided with its last

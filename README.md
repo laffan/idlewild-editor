@@ -42,11 +42,22 @@ remaining pieces are wired to real slots rather than mocked.
   it asks for a patch of grid, in the grid's own shape, taking the ground
   rather than whatever is standing on it. Pan drags the camera, and holding
   space borrows it from wherever you are
-- Press and hold to ask for a patch of grid, and get Fill, Add Image and
-  Generate PSD over it
+- Press and hold to ask for a patch of grid, and get Fill, Add Image,
+  Generate PSD and Extrude over it
 - Fill a selection with any colour, from a full picker with recent swatches
 - Generate PSD makes an empty file the size and shape of the selected grid
   area, already marked and anchored — somewhere to go and paint
+- Extrude mode pulls a prototype solid out of the grid. The rest of the canvas
+  dims, a bar along the bottom offers Apply and Cancel, and the selected
+  spaces become a plate to drag: on an isometric project it stands up as a
+  shaded block of cubes, on an orthogonal one it fills the spaces the way it
+  was pulled. You are not stuck with the first pull — hold on the shape to
+  take hold of another face, which picks the spaces you can *see* rather than
+  the ground under the pointer, and pull that one somewhere else. So a wall
+  goes up, and then a few of its top tiles go out sideways as an overhang. A
+  face pushed back the way it came carves instead of adding, which is how a
+  pull too far is corrected. Apply writes the shape as a PSD, marked and
+  anchored on the spaces it was built over, and places it where it stood
 - Drag placed images, fills and boundaries, snapped to the grid; resize images
   from their corner handles, or freely from the inspector
 - A placed PSD moves as one thing: every layer it came in with drags and

@@ -11,7 +11,7 @@ import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
 import { DrawingLayer } from "../drawing";
-import { CodeModal } from "../code/code-modal";
+import { CodePanel } from "./code-panel";
 import { Inspector } from "./inspector";
 import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
@@ -27,6 +27,7 @@ import { openPsdExternally, refreshPsd } from "./psd-actions";
 import { PsdLayerEditor } from "./psd-layers";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
+import { createExtrudeUi } from "./extrude";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import {
   openAddImage,
@@ -53,7 +54,6 @@ export async function mountEditor(
 
   let activeLayerId = store.layers[0]?.id ?? "";
   let mode: EditorMode = "edit";
-  let codeModal: CodeModal | null = null;
   let handle: GameHandle | null = null;
   let drawing: DrawingLayer | null = null;
 
@@ -162,6 +162,17 @@ export async function mountEditor(
       if (selection?.kind !== "region" || !scene) return;
       void generatePsdForRegion(meta.id, grid, scene, selection.from, selection.to);
     },
+    onExtrude: () => extrude.open(),
+  });
+
+  // Extrude mode: the bar along the bottom of the canvas, and the two ways
+  // out of it. The mode itself is the scene's — see game/extrude-mode.ts.
+  const extrude = createExtrudeUi({
+    projectId: meta.id,
+    grid,
+    host: canvasWrap,
+    scene: () => handle?.scene ?? null,
+    useSelectTool: () => applyTool("select", false),
   });
 
   // Pencil, eraser and lasso hand the pointer to the drawing layer; select
@@ -220,7 +231,7 @@ export async function mountEditor(
     {
       onBack: () => void leave(),
       onMode: (next) => setMode(next),
-      onCode: () => toggleCode(),
+      onCode: () => code.toggle(),
       onPasteImage: () => intake.paste(),
       onPublish: () => openPublish(meta.id, meta.name),
       onOptions: () => openProjectOptions(meta, store.layers.length),
@@ -270,10 +281,6 @@ export async function mountEditor(
   });
   terminal.mountResizeHandle(consoleResizer.handle);
 
-  // The docked code panel's own divider. It is built up front so its stored
-  // height survives closing and reopening the modal within a session.
-  let codeResizer: ReturnType<typeof createResizer> | null = null;
-
   const shell = h(
     "div",
     { class: "editor" },
@@ -289,6 +296,10 @@ export async function mountEditor(
     ),
     terminal.root,
   );
+
+  // Where the code modal sits in the shell, and what pinning it does to the
+  // rows around it. Built after the shell because both are facts about it.
+  const code = new CodePanel(meta.id, shell, terminal.root);
 
   // A paste and a drop are the same import: the bytes become a PSD, marked
   // with the grid spaces they landed on, and placed on the layer being worked
@@ -338,6 +349,7 @@ export async function mountEditor(
     onViewport: (view) => drawing?.sync(view),
     onDetachCopy: (layerId, placementId, key) =>
       void detach(layerId, placementId, key),
+    onExtrudeChange: () => extrude.sync(),
   });
   handle.scene.activeLayerId = activeLayerId;
 
@@ -604,54 +616,6 @@ export async function mountEditor(
     }
   }
 
-  function toggleCode(): void {
-    if (codeModal) {
-      closeCode();
-      return;
-    }
-    codeModal = new CodeModal(
-      meta.id,
-      () => closeCode(),
-      (pinned) => setCodePinned(pinned),
-    );
-    shell.appendChild(codeModal.root);
-  }
-
-  function closeCode(): void {
-    codeModal?.destroy();
-    codeModal = null;
-    codeResizer?.destroy();
-    codeResizer = null;
-  }
-
-  /**
-   * Move the code panel between floating over the canvas and sitting as a row
-   * of the shell above the console. Docked it takes a divider of its own, so
-   * the two stacked panels are sized the same way.
-   */
-  function setCodePinned(pinned: boolean): void {
-    if (!codeModal) return;
-
-    if (!pinned) {
-      codeResizer?.destroy();
-      codeResizer = null;
-      shell.appendChild(codeModal.root);
-      return;
-    }
-
-    codeResizer = createResizer({
-      target: codeModal.root,
-      axis: "height",
-      edge: "start",
-      min: 140,
-      max: 720,
-      storageKey: "codeHeight",
-    });
-    shell.insertBefore(codeResizer.handle, terminal.root);
-    shell.insertBefore(codeModal.root, terminal.root);
-    codeResizer.restore();
-  }
-
   async function saveThumbnail(): Promise<void> {
     if (!handle) return;
     try {
@@ -677,9 +641,10 @@ export async function mountEditor(
     layers.destroy();
     inspector.destroy();
     playPad.destroy();
+    extrude.destroy();
     drawing?.destroy();
     drawing = null;
-    closeCode();
+    code.destroy();
     terminal.destroy();
     leftResizer.destroy();
     rightResizer.destroy();

@@ -20,6 +20,7 @@ import { PlayController, type PlayMode } from "./play-controller";
 import { PlatformerController } from "./play-platformer";
 import type { PlayInput } from "./platformer";
 import { DragController } from "./drag";
+import { ExtrudeMode } from "./extrude-mode";
 import { PsdPlacements } from "./psd-placements";
 import { instanceMembers, instanceOf } from "./instance";
 import type { Viewport } from "../drawing";
@@ -48,6 +49,8 @@ export interface WorldSceneConfig {
    * original's PSD. The editor owns the duplication because it owns the IPC.
    */
   onDetachCopy?: (layerId: string, placementId: string, key: string) => void;
+  /** Extrude mode has started, finished, or changed what it is holding. */
+  onExtrudeChange?: () => void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -71,6 +74,8 @@ export class WorldScene extends Phaser.Scene {
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
   private drag!: DragController;
+  /** The prototype solid being pulled out of the grid, when one is. */
+  extrude!: ExtrudeMode;
   private psds!: PsdPlacements;
   /** Set once the camera is where it should stay — restored, or user-moved. */
   private cameraPlaced = false;
@@ -128,6 +133,17 @@ export class WorldScene extends Phaser.Scene {
         this.config.onDetachCopy?.(layerId, placementId, key),
       onDragStateChange: (dragging) => this.config.onDragStateChange(dragging),
     });
+    this.extrude = new ExtrudeMode({
+      scene: this,
+      grid: this.grid,
+      zoom: () => this.cameras.main.zoom,
+      worldAt: (x, y) => this.worldAt(x, y),
+      clearSelection: () => {
+        this.marquee.cancel();
+        this.setSelection({ kind: "none" });
+      },
+      onChange: () => this.config.onExtrudeChange?.(),
+    });
 
     const saved = this.store.doc.camera;
     if (saved) {
@@ -145,10 +161,17 @@ export class WorldScene extends Phaser.Scene {
     this.rig = new CameraRig(this.game.canvas, {
       onTap: (x, y) => this.handleTap(x, y),
       onDoubleTap: (x, y) => this.handleDoubleTap(x, y),
+      // Extrude mode is asked first at every stage: while it is up it owns the
+      // canvas, and a pull is a drag of the face it is already holding.
       onDragStart: (x, y, modifiers) =>
-        this.mode !== "play" && this.drag.begin(x, y, modifiers),
-      onDragMove: (x, y) => this.drag.move(x, y),
-      onDragEnd: () => this.drag.end(),
+        this.mode !== "play" &&
+        (this.extrude.beginPull(x, y) || this.drag.begin(x, y, modifiers)),
+      onDragMove: (x, y) => {
+        if (!this.extrude.movePull(x, y)) this.drag.move(x, y);
+      },
+      onDragEnd: () => {
+        if (!this.extrude.endPull()) this.drag.end();
+      },
       onMarqueeStart: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
       onMarqueeMove: (x, y) => this.extendMarquee(x, y),
       onMarqueeEnd: () => this.endMarquee(),
@@ -269,6 +292,7 @@ export class WorldScene extends Phaser.Scene {
     this.gridRenderer.invalidate();
     // Selection chrome is sized against the zoom, so it has to be redrawn.
     this.overlay.render(this.selection, this.store, camera.zoom, this.adjusting);
+    this.extrude.refresh();
   }
 
   /** Re-centre on the origin while the viewport is still settling. */
@@ -312,6 +336,10 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
+    // While a shape is being extruded, a tap takes hold of one of its spaces
+    // rather than reaching past it for whatever is on the document.
+    if (this.extrude.tap(screenX, screenY)) return;
+
     // Tapping an image selects it; otherwise fall through to the grid.
     const hit = this.docRenderer.pick(world.x, world.y);
     if (hit) {
@@ -354,10 +382,12 @@ export class WorldScene extends Phaser.Scene {
     fromHold: boolean,
   ): void {
     if (this.mode === "play") return;
+    if (this.extrude.beginSelect(screenX, screenY)) return;
     this.setSelection(this.marquee.begin(this.worldAt(screenX, screenY), fromHold));
   }
 
   private extendMarquee(screenX: number, screenY: number): void {
+    if (this.extrude.extendSelect(screenX, screenY)) return;
     const next = this.marquee.extend(
       this.worldAt(screenX, screenY),
       this.cameras.main.zoom,
@@ -367,6 +397,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** What the box caught — `game/marquee.ts` decides, this applies it. */
   private endMarquee(): void {
+    if (this.extrude.endSelect()) return;
     const next = this.marquee.end(this.store.layers);
     if (next) this.setSelection(next);
   }
@@ -601,6 +632,8 @@ export class WorldScene extends Phaser.Scene {
     // from a drag that ended in Play would never be cleared.
     this.markDrop(null);
     this.marquee.cancel();
+    // Nothing half-built survives a trip through play mode.
+    this.extrude.stop();
     if (mode === "play") {
       this.setSelection({ kind: "none" });
       this.play.start();
@@ -635,6 +668,7 @@ export class WorldScene extends Phaser.Scene {
     this.rig.destroy();
     this.drops.destroy();
     this.marquee.destroy();
+    this.extrude.destroy();
     this.docRenderer.destroy();
   }
 }

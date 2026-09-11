@@ -235,6 +235,7 @@ contract:
 | Space held | Borrow Pan until it is released |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
 | Hold ~320 ms, still | Begin a grid selection where the finger is, with its action bar |
+| Either of those, in extrude mode | Take hold of a face of the shape, or pull the one already held |
 | Tap | Pick the image under the finger, else the boundary, else the fill, else clear |
 | Double-tap a placed PSD | Open it up into its own layers |
 | Ctrl/⌘ + wheel | Zoom (WebKit reports a trackpad pinch this way) |
@@ -1274,11 +1275,15 @@ the corner the placement's x/y describes, so box and image agree.
 
 ### The floating action bar
 
-Fill, Add Image and Generate PSD, over a region selection. All three turn
-*this much space* into something, which is the test for belonging there —
+Fill, Add Image, Generate PSD and Extrude, over a region selection. All four
+turn *this much space* into something, which is the test for belonging there —
 Export failed it (it sends content out rather than making any) and moved to
 the inspector's region panel, where the rest of what is true about a
 selection already lives.
+
+Extrude is the one that is not always there. It needs a lattice to stack on,
+and a blank project's spaces are single world pixels, so the button is built
+only where `Grid.snaps`.
 
 **Generate PSD** is an empty PSD the size and shape of the selection: the
 shortcut for filling it transparent and converting that fill, with neither
@@ -1401,6 +1406,116 @@ Since depth is now the position in an ordering rather than a world
 coordinate, a placement's Y no longer leaks into the number. It used to: at
 `DEPTH_STRIDE` of 1000, anything below y = 1000 on a lower document layer
 drew over a higher one.
+
+## Extrude mode
+
+Pulling a prototype solid out of the grid, and applying it as a PSD. Entered
+from the action bar over a held selection, which becomes the plate to pull.
+
+### The model is voxels, and the two templates share it
+
+A shape is a set of integer `(cx, cy, cz)` triples — the project's own grid
+coordinates, plus a level counting up from the ground (`lib/extrude.ts`). It
+is the same bargain `Grid` already makes: one integer space, and the
+projection appears only where something is drawn.
+
+That is what lets the two templates share every operation. Isometric has a
+**level height** of half a tile's width, which is what makes one voxel read as
+a cube on the usual 2:1 diamond; orthogonal has a level height of zero, so
+every voxel stays at `cz = 0`, the vertical walls are degenerate and never
+drawn, and a pull along a grid axis is exactly *fill the spaces that way*.
+`axesFor` is the whole of the difference: six directions where there is
+height, four where there is not.
+
+A pull's direction is read off the drag rather than picked from a control.
+Every axis is a direction on screen, and the finger is going whichever one the
+drag projects furthest along. Under an isometric template those directions are
+63° apart — down-right, straight down, down-left — which is far enough to tell
+a pull sideways from a pull downward without asking anyone to be precise, and
+the projection is divided by the camera zoom so a pull counts spaces rather
+than pixels.
+
+Three things can happen, and which one falls out of what is already there
+rather than out of a mode to pick:
+
+- **A plate becomes solid as it is pulled.** The first step lays the selected
+  spaces themselves down, so one step up and one step down are the same
+  single layer and every further step goes the way it was pulled.
+- **A face pulled away from the solid adds** spaces ahead of it.
+- **A face pulled into the solid takes them away**, which is what makes a face
+  pushed back the way it came undo itself. Only when *every* space ahead of
+  the face is occupied: a top face pulled sideways off the edge of a block is
+  someone widening the block, not carving it.
+
+### Why not three.js
+
+The view is one fixed axonometric projection of axis-aligned boxes. Every face
+is a quad whose corners are known exactly, hidden-surface removal is *is there
+a neighbour on that side?*, and a painter's sort on `cx + cy + cz` is not an
+approximation of the right answer, it is the right answer — step once along
+the view ray and all three rise together, so a voxel in front of another
+always sorts after it. Against that, a second renderer would mean a WebGL
+context beside Phaser's, a camera slaved to Phaser's, and a readback path to
+get the pixels into a PSD, for geometry that comes out of six integers.
+
+Only three of a voxel's six sides ever face this camera — the top and the
+walls towards `+cx` and `+cy` — and each is emitted only where there is no
+neighbour against it, so an interior face costs nothing.
+
+### Picking is the drawing read backwards
+
+`shapeFaces` returns the surface sorted back to front, so walking it *front to
+back* and taking the first polygon that contains the point answers "what is
+under the finger" with exactly the geometry that was put on the screen. There
+is no second ray to keep in step with the renderer, and the awkward case
+solves itself: the top of a five-level block is drawn 160px above the ground
+it stands on, and a sweep across it takes the spaces the user can see rather
+than the ones underneath the pointer.
+
+A sweep that runs off the shape onto bare grid falls back to `worldToCell`, so
+one drag can start on the ground and finish on the solid.
+
+### A hold still asks for spaces, even on the held face
+
+A pointer that goes down on the held face starts a pull — but only
+provisionally. It carries a hold timer of the same 320 ms the rig uses, and a
+finger that has not moved by the time it fires turns the gesture into a
+selection sweep instead. Without that, the top of a shape that had just been
+pulled up was the one place a new selection could not be started, which is
+exactly where the next one usually starts.
+
+The mode therefore owns the pointer at every stage, and `world-scene.ts` asks
+it first: `beginPull` before `drag.begin`, `beginSelect` before the marquee,
+`tap` before the document is hit-tested.
+
+### The dim, and where it sits
+
+The scrim is a `Graphics` at `setScrollFactor(0)` filling a rectangle far
+larger than any viewport, so a pan or a zoom needs no redraw at all. Depths
+put it above everything the document renders and below the solid, its
+highlight, and the marquee — the rubber band stays visible over the shape it
+is being dragged across. It is drawn in the scene rather than as a CSS
+overlay for the obvious reason: the canvas is one element, and a CSS scrim
+would dim the shape along with everything else.
+
+### Apply
+
+The fourth bridge into the PSD pipeline, beside an image import, a lassoed
+sketch and a fill — and written against the same helpers, so a block-out
+pulled out of the grid arrives at the same resolution as everything beside it.
+The pixels come from walking the same face list the canvas drew, in the same
+order, with the same palette, because the point of Apply is to keep what the
+user is looking at.
+
+The footprint marks the spaces the solid **stands on**, not the ones its walls
+reach across on screen: a tall block is anchored to the ground it was built
+from, which is where it has to come back down. `shapeBounds` is taken from
+every voxel rather than from the visible faces, because the underside of the
+lowest layer is never drawn and a box that stopped at what is drawn would clip
+it off the bottom of the file.
+
+Nothing reaches the document until Apply. The shape lives in the mode object,
+so Cancel is dropping it and entering play mode drops it too.
 
 ## The iPad's safe area
 
@@ -1591,3 +1706,12 @@ on chrome never highlights it.
 - Dropping several files at once takes the first one the pipeline can read.
   A drop is one gesture landing on one space, and a run of images would need
   somewhere to put the rest.
+- An extrusion applies as flat artwork. The shape it was built from is not
+  kept anywhere, so a PSD cannot be opened back up into the solid that made
+  it — Apply is a one-way door, the same one a fill conversion is.
+- Extrude mode has no undo of its own, so a pull too far is corrected by
+  pulling the face back, which the carve rule makes exact. Cancel is the only
+  way back to nothing.
+- An extrusion is greybox: one palette, three shades, no way to colour it.
+  What comes out is a stand-in to paint over in Photoshop rather than
+  finished artwork, which is what the marks in the file are for.

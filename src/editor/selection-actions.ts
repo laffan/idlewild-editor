@@ -1,12 +1,16 @@
 /**
  * The floating action bar over a grid selection: Fill, Add Image, Generate
- * PSD. Follows the selection as the camera moves.
+ * PSD and Extrude. Follows the selection as the camera moves.
  *
- * All three are ways of turning "this much space" into something: a colour, a
- * file from disk, or an empty PSD to go and paint. Export used to sit here
- * and is gone — sending a PNG *out* is the opposite of what the other two do,
- * and it belonged with the selection about as much as Save As belongs on a
- * shape.
+ * All four are ways of turning "this much space" into something: a colour, a
+ * file from disk, an empty PSD to go and paint, or a solid pulled up off the
+ * grid. Export used to sit here and is gone — sending a PNG *out* is the
+ * opposite of what the others do, and it belonged with the selection about as
+ * much as Save As belongs on a shape.
+ *
+ * Extrude is the one that is not always there. It needs a lattice to stack
+ * on, and a blank project's spaces are single world pixels, so it is offered
+ * on the two templates that snap and left off the one that does not.
  */
 
 import { h } from "../lib/dom";
@@ -27,6 +31,7 @@ export interface SelectionActionCallbacks {
   onFill: () => void;
   onAddImage: () => void;
   onGeneratePsd: () => void;
+  onExtrude: () => void;
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -50,6 +55,7 @@ export class SelectionActions {
       h("button", { text: "Fill", onClick: callbacks.onFill }),
       h("button", { text: "Add Image", onClick: callbacks.onAddImage }),
       h("button", { text: "Generate PSD", onClick: callbacks.onGeneratePsd }),
+      grid.snaps && h("button", { text: "Extrude", onClick: callbacks.onExtrude }),
       this.size,
     );
   }
