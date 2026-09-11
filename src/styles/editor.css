@@ -417,9 +417,75 @@
   font-size: 11px;
   padding-top: 1px;
 }
+.terminal-level.log { color: var(--color-neutral-400); }
 .terminal-level.info { color: var(--color-neutral-500); }
 .terminal-level.warn { color: var(--color-accent-400); }
 .terminal-level.error { color: var(--color-accent); }
+
+/* A line that knows where it was written says so by being the way back to
+   it. The chip is the whole target: it is already the one fixed-width thing
+   on the row, and a finger finds it without reading. */
+button.terminal-level {
+  border: 0;
+  padding: 1px 0 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+button.terminal-level.linked {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+button.terminal-level.linked:hover { color: var(--chrome-text); }
+
+/* ── A logged value, opened a level at a time ──────────────────────────────
+   The palette is the system's own: warm accent for the literals you read,
+   neutrals for the structure around them. One hue, as everywhere else, with
+   weight and italics doing the work a second hue would do elsewhere. */
+.lt { display: inline; }
+.lt-head {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lt-arrow {
+  display: inline-block;
+  width: 12px;
+  font-size: 9px;
+  text-align: center;
+  color: var(--color-neutral-600);
+}
+.lt-label {
+  color: var(--color-neutral-500);
+  font-style: italic;
+  margin-right: 4px;
+}
+.lt-head:hover .lt-label,
+.lt-head:hover .lt-preview { color: var(--chrome-text); }
+.lt-preview { color: var(--color-neutral-500); }
+.lt-children {
+  /* Indented off the triangle, with a rule to follow back up to the parent
+     when a tree is four deep and the keys are short. */
+  margin-left: 5px;
+  padding-left: 16px;
+  border-left: 1px solid var(--chrome-rule);
+}
+.lt-row { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lt-key { color: var(--color-neutral-400); }
+.lt-string { color: var(--color-accent-400); }
+.lt-number { color: var(--color-neutral-100); }
+.lt-bool { color: var(--color-neutral-100); font-weight: 600; }
+.lt-empty { color: var(--color-neutral-600); font-style: italic; }
+.lt-other { color: var(--color-neutral-500); }
+.lt-more { color: var(--color-neutral-600); font-style: italic; }
 .terminal-message {
   color: var(--color-neutral-300);
   white-space: pre-wrap;

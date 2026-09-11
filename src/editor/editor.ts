@@ -58,7 +58,10 @@ export async function mountEditor(
   let drawing: DrawingLayer | null = null;
 
   const canvasWrap = h("div", { class: "editor-canvas-wrap" });
-  const terminal = new Terminal();
+  // The console's level chip is a link when the line came from a file the
+  // code modal can open. `code` is built further down, once there is a shell
+  // to put it in; this only runs when something is clicked.
+  const terminal = new Terminal((site) => code.openAt(site.path, site.line));
 
   const layers = new LayersPanel(store, {
     getActiveLayerId: () => activeLayerId,

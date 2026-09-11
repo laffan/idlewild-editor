@@ -10,16 +10,39 @@
  * one you debug your own code with, and it arrives verbatim, which is why it
  * is worth being able to hide the first.
  *
- * Format directives are interpreted rather than printed. Phaser's own boot
- * banner is a `%c`-styled string with two CSS arguments; joining the raw
- * arguments dumped a wall of `background-image: url("data:image/png;base64…`
- * into the drawer on every launch.
+ * A line is a list of **parts**, not a string. An argument that is an object
+ * is snapshotted (`log-value.ts`) and kept as a value the drawer can open a
+ * level at a time, the way a browser console does; everything else is text,
+ * with the styling a `%c` run asked for. Phaser's boot banner is a `%c`
+ * string with two CSS arguments — joined naively it dumps a base64
+ * `background-image` across the drawer on every launch, so the directives are
+ * interpreted and the style filtered down to colour and weight.
+ *
+ * A JS line can also carry the **site** it was logged from, which is what
+ * makes its level chip a link into the code modal. Only the game frame knows
+ * its own, because only it is running files the modal can open.
  */
 
-export type LogLevel = "info" | "warn" | "error";
+import { snapshot, text, type LogValue } from "./log-value";
+
+/**
+ * `log` and `info` are both `console`'s, and browsers show them differently
+ * for a reason: `console.log` is what you write while debugging and
+ * `console.info` is what a library announces itself with. The editor's own
+ * commentary is `info`.
+ */
+export type LogLevel = "log" | "info" | "warn" | "error";
 
 /** Who said it — the editor, or the JavaScript console. */
 export type LogSource = "app" | "js";
+
+/** Where in the project a line was logged from. */
+export interface LogSite {
+  /** Relative to `game/`, as the code modal names files. */
+  path: string;
+  line: number;
+  column?: number;
+}
 
 /** A run of text with optional inline CSS, as `%c` produces. */
 export interface LogSegment {
@@ -27,13 +50,26 @@ export interface LogSegment {
   style?: string;
 }
 
+/** One piece of a line: a run of text, or a value you can open. */
+export type LogPart =
+  | ({ kind: "text" } & LogSegment)
+  | { kind: "value"; value: LogValue };
+
 export interface LogEntry {
   t: string;
   level: LogLevel;
   source: LogSource;
-  segments: LogSegment[];
+  parts: LogPart[];
   /** The whole line as plain text, for copying and searching. */
   message: string;
+  /** The file and line it came from, when that is a file we can open. */
+  site?: LogSite;
+}
+
+/** What a caller may say about a line beyond its level. */
+export interface LogOptions {
+  source?: LogSource;
+  site?: LogSite;
 }
 
 const MAX_ENTRIES = 500;
@@ -47,19 +83,20 @@ function stamp(): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-/** Record a line, saying where it came from. */
+/** Record a line, saying where it came from and where it was written. */
 export function logFrom(
-  source: LogSource,
+  options: LogOptions,
   level: LogLevel,
   ...args: unknown[]
 ): void {
-  const segments = formatArgs(args);
+  const parts = formatArgs(args);
   entries.push({
     t: stamp(),
     level,
-    source,
-    segments,
-    message: segments.map((s) => s.text).join(""),
+    source: options.source ?? "app",
+    parts,
+    message: parts.map(plain).join(""),
+    ...(options.site ? { site: options.site } : {}),
   });
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
   for (const listener of listeners) listener(entries);
@@ -67,7 +104,7 @@ export function logFrom(
 
 /** The editor talking about itself. */
 export function log(level: LogLevel, ...args: unknown[]): void {
-  logFrom("app", level, ...args);
+  logFrom({ source: "app" }, level, ...args);
 }
 
 export const info = (...args: unknown[]) => log("info", ...args);
@@ -78,21 +115,23 @@ export const error = (...args: unknown[]) => log("error", ...args);
  * Apply console format directives, the way a browser console would.
  *
  * Only the first argument is a format string, and only when it contains a
- * directive; everything left over is appended space-separated.
+ * directive; everything left over is appended space-separated. An object
+ * among those leftovers becomes a part of its own rather than being flattened
+ * into the sentence, because that is the part you want to open.
  */
-export function formatArgs(args: unknown[]): LogSegment[] {
+export function formatArgs(args: unknown[]): LogPart[] {
   const [first, ...rest] = args;
   if (typeof first !== "string" || !/%[scdifoOj%]/.test(first)) {
-    return [{ text: args.map(stringify).join(" ") }];
+    return spaced(args);
   }
 
-  const segments: LogSegment[] = [];
+  const parts: LogPart[] = [];
   let style: string | undefined;
   let buffer = "";
   let argIndex = 0;
 
   const flush = () => {
-    if (buffer) segments.push(style ? { text: buffer, style } : { text: buffer });
+    if (buffer) parts.push({ kind: "text", text: buffer, ...(style ? { style } : {}) });
     buffer = "";
   };
 
@@ -135,19 +174,69 @@ export function formatArgs(args: unknown[]): LogSegment[] {
         buffer += String(Number(value));
         break;
       case "s":
-        buffer += typeof value === "string" ? value : stringify(value);
+        buffer += typeof value === "string" ? value : text(take(value));
         break;
       default:
-        buffer += stringify(value);
+        // `%o`, `%O` and `%j` are the directives that mean "show me the
+        // object", so they are the ones that keep it openable.
+        flush();
+        parts.push({ kind: "value", value: take(value) });
         break;
     }
   }
 
   flush();
-  for (const extra of rest.slice(argIndex)) {
-    segments.push({ text: ` ${stringify(extra)}` });
+  // Arguments the format string did not consume, appended the way a browser
+  // appends them — after a space, and still openable if they are objects.
+  const leftovers = rest.slice(argIndex);
+  if (leftovers.length > 0) {
+    if (parts.length > 0) parts.push({ kind: "text", text: " " });
+    parts.push(...spaced(leftovers));
   }
-  return segments;
+  return parts;
+}
+
+/** Arguments as parts, one space between them. */
+function spaced(args: unknown[]): LogPart[] {
+  const parts: LogPart[] = [];
+  args.forEach((arg, index) => {
+    if (index > 0) parts.push({ kind: "text", text: " " });
+    const value = take(arg);
+    parts.push(
+      value.t === "string"
+        ? { kind: "text", text: value.v }
+        : { kind: "value", value },
+    );
+  });
+  return parts;
+}
+
+/**
+ * Snapshot an argument, unless it has already been snapshotted somewhere
+ * else — the game frame flattens its own before posting them, because it
+ * cannot send the objects themselves.
+ */
+function take(arg: unknown): LogValue {
+  return isLogValue(arg) ? arg : snapshot(arg);
+}
+
+/** Whether this is already one of ours, rather than something to flatten. */
+export function isLogValue(arg: unknown): arg is LogValue {
+  if (!arg || typeof arg !== "object") return false;
+  const tag = (arg as { t?: unknown }).t;
+  return (
+    tag === "string" ||
+    tag === "number" ||
+    tag === "boolean" ||
+    tag === "empty" ||
+    tag === "other" ||
+    tag === "object" ||
+    tag === "array"
+  );
+}
+
+function plain(part: LogPart): string {
+  return part.kind === "text" ? part.text : text(part.value);
 }
 
 /**
@@ -169,23 +258,6 @@ function sanitiseStyle(css: string): string | undefined {
     kept.push(`${name}:${value}`);
   }
   return kept.length > 0 ? kept.join(";") : undefined;
-}
-
-function stringify(value: unknown): string {
-  if (typeof value === "string") return value;
-  // With its stack: an error in the user's own code is the line this drawer
-  // exists for, and `TypeError: undefined is not an object` with no frame
-  // under it names nothing you can go and look at.
-  if (value instanceof Error) {
-    return value.stack || `${value.name}: ${value.message}`;
-  }
-  if (value === undefined) return "undefined";
-  if (value === null) return "null";
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
 }
 
 export function subscribe(listener: (entries: LogEntry[]) => void): () => void {
@@ -211,10 +283,15 @@ export function clearLog(): void {
  * it is: the browser console, as the browser would have shown it. The
  * editor's own commentary goes through `info`/`warn`/`error` and never
  * touches `console`, so the two never have to be told apart after the fact.
+ *
+ * No site travels with these. The frames behind them are this bundle's, and
+ * the code modal opens the project's files — a link into a minified chunk
+ * would be a link to nowhere.
  */
 export function captureConsole(): void {
-  const levels: Array<[LogLevel, "log" | "info" | "warn" | "error"]> = [
-    ["info", "log"],
+  const levels: Array<[LogLevel, "log" | "info" | "warn" | "error" | "debug"]> = [
+    ["log", "log"],
+    ["log", "debug"],
     ["info", "info"],
     ["warn", "warn"],
     ["error", "error"],
@@ -223,14 +300,14 @@ export function captureConsole(): void {
     const original = console[method].bind(console);
     console[method] = (...args: unknown[]) => {
       original(...args);
-      logFrom("js", level, ...args);
+      logFrom({ source: "js" }, level, ...args);
     };
   }
 
   window.addEventListener("error", (event) => {
-    logFrom("js", "error", event.error ?? event.message);
+    logFrom({ source: "js" }, "error", event.error ?? event.message);
   });
   window.addEventListener("unhandledrejection", (event) => {
-    logFrom("js", "error", "Unhandled rejection:", event.reason);
+    logFrom({ source: "js" }, "error", "Unhandled rejection:", event.reason);
   });
 }

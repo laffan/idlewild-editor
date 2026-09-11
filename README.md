@@ -155,8 +155,9 @@ remaining pieces are wired to real slots rather than mocked.
 - `js/game.config.json` — the document in the shape the project's code reads
   it — is rewritten on every save, so the file the code modal opens describes
   the canvas beside it and the game you play is the game you built
-- Code modal: the project's real file tree in CodeMirror 6, full-screen or
-  pinned above the console. New File and New Folder sit in its header; rename,
+- Code modal: the project's real file tree in CodeMirror 6, pinned above the
+  console by default — code here is code about the canvas beside it — or
+  full-screen. New File and New Folder sit in its header; rename,
   duplicate, delete and dragging files between folders are on the rows, in a
   column with a divider of its own
 - The editor and you do not fight over the code. A scaffolded file marks the
@@ -178,6 +179,14 @@ remaining pieces are wired to real slots rather than mocked.
   `console.log` in your `WorldScene.js` shows up where you are looking. **App**
   and **JS** toggles on the right of its header bar, when it is open, filter
   one from the other
+- Log an object and you get an object: a disclosure triangle, a one-line
+  preview, and its contents a level at a time, with keys, strings, numbers and
+  nulls each shown as what they are. Classes say which class they are, a Map
+  and a Set open like anything else, and a cycle says so rather than hanging
+- **LOG** beside a line from your own code is a link to the line that wrote
+  it: it opens the file in the code modal and puts the caret on it. Works for
+  warnings and errors too, and steps over Phaser's own frames — a
+  `console.log` reached through a callback still names the line you typed
 - Publish: a zipped project carrying both runtimes and the document, so the
   exported game opens showing what the editor showed
 

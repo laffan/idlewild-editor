@@ -1972,11 +1972,15 @@ only those two exact names.
 
 The frame is a different origin, so the editor cannot read its console. It
 reports instead: `templates/play/console-bridge.js` wraps `console.*`, listens
-for `error` and `unhandledrejection`, and posts each call to the parent as an
-array of **already-stringified** arguments. Stringified there rather than
-cloned, because a structured clone of a live Phaser object throws and a clone
-of a scene would carry the whole game across to be printed as one line. Errors
-keep their stack, which is the argument that matters.
+for `error` and `unhandledrejection`, and posts each call to the parent.
+
+It works out two things the editor cannot. Each argument is **flattened** into
+the tagged shape `lib/log-value.ts` describes, because a structured clone of a
+live Phaser object throws and a clone of a scene would carry the whole game
+across to be printed as one line. And each call's **site** — the file and line
+it was written on — is read out of a thrown error's stack and mapped back to a
+path inside `game/`, which is what makes the drawer's level chip a link into
+the code modal.
 
 `file_server.rs` injects the bridge at the top of `<head>`, and only for a
 request carrying `?idlewild=console` — which only `game-frame.ts` sends. So the
@@ -1984,6 +1988,10 @@ project's `index.html` says nothing about it, and the page that publishes is
 byte for byte the page that was edited. First in the head on purpose: a boot
 failure in the very first module is exactly what it exists to report.
 
+`game-frame.ts` checks what arrives rather than trusting it — the path is
+about to be handed to the code modal to open — and unwraps a top-level string
+back to a plain one, because the first argument of a call is a *format string*
+when it has directives in it and Phaser's boot banner is exactly that.
 Arriving in the drawer, those lines are tagged **JS** — see
 [Console](#console).
 
@@ -2083,6 +2091,12 @@ would quietly stop offering its Reset there.
 
 ## Pinning and unpinning the code panel
 
+**It opens pinned.** Code in this editor is code about the thing beside it:
+the config follows the canvas, a save while a game is up restarts it, and a
+console line opens the file it was written in — all of which you want to be
+looking at while it happens. Floating is one tap away and the choice is
+remembered (`codePinned`), so pinned is the default rather than the rule.
+
 Docked, the panel is a row of the shell and its divider writes an inline
 `height` on it. Floating, it is `position: absolute; inset: 0` — and an
 absolutely positioned box given top, bottom *and* a height is over-constrained,
@@ -2109,6 +2123,64 @@ Output uses Fira Code (bundled, not fetched — the editor works offline) and
 opts back into text selection, which the shell suppresses globally so a drag
 on chrome never highlights it.
 
+### A line is parts, not a string
+
+An entry carries a list of **parts**: runs of text, with whatever styling a
+`%c` asked for, and *values* — arguments that were objects, which the drawer
+draws as a tree you can open a level at a time (`editor/log-tree.ts`), with
+keys, strings, numbers, booleans and nulls each shown as what they are.
+Children are built on first open, so a five-hundred-line drawer has not built
+any of them.
+
+The value in a part is a **snapshot**, never the object (`lib/log-value.ts`).
+Two reasons, and the second is the hard one: the drawer keeps its last 500
+lines, so live references would pin every sprite ever logged; and the game
+frame is a different origin, which can only post — and a structured clone of a
+Phaser scene throws before it gets anywhere.
+
+The snapshot is tagged rather than plain JSON, because the tags are the things
+a console is for. `"5"` is not `5`; `NaN` and `-0` do not survive a JSON round
+trip; a class instance says which class (`Body {vx: 0, vy: 12}`) where a plain
+object stays unlabelled; a `Map` or `Set` is opened, since Phaser is full of
+both and `Map {}` says nothing; and `[Circular]` is a cut cycle rather than a
+string that happens to read that way. `seen` is the chain of *ancestors*, not
+everything visited, so the same sprite logged twice side by side is shown
+twice. Depth caps at 4, entries at 100, and what was cut is counted rather
+than quietly dropped.
+
+A snapshot shows what was true when the line was written, where devtools shows
+what is true when you open it. That is a difference worth knowing and, for a
+game mutating one sprite sixty times a second, mostly an improvement.
+
+**The same flattening exists twice.** The bridge cannot import
+`log-value.ts` — different origin, plain injected script — so it carries its
+own copy, and hangs it off `window.__idlewildSnapshot` before it looks for a
+parent. `__tests__/log-value.test.ts` runs both over the same fixtures, which
+is what holds one contract across two implementations.
+
+### LOG is a link
+
+`console.log` is labelled **LOG**, not INFO: `log` is what you write while
+debugging and `info` is what a library announces itself with, and the editor's
+own commentary is the second kind. So `LogLevel` has both.
+
+Where a line came from a file the code modal can open, its level chip *is* the
+way back to it — the fastest thing in a console is the one that answers "where
+did this come from". The bridge reads the site out of a thrown error's stack
+with one regex for two engines (JSC writes `fn@url:line:col`, V8 writes
+`    at fn (url:line:col)`), and steps over two kinds of frame that are never
+the answer: its own, and anything under `lib/`. That second skip is why a
+`console.log` reached through a Phaser callback still reports the line you
+wrote. `siteIn` is pure and exposed for the same reason the snapshot is;
+`__tests__/console-site.test.ts` puts real stacks from both engines through
+it.
+
+Clicking the chip opens the code modal — pinned, if it was not already up — at
+that file, centres the line and selects it, so the active-line highlight lands
+on it rather than leaving you to count rows. The editor's own JS lines carry
+no site: the frames behind them are this bundle's, and a link into a minified
+chunk is a link to nowhere.
+
 ### App and JS
 
 The drawer does double duty, so every entry carries a `source` and the header
@@ -2118,12 +2190,14 @@ carries a toggle for each.
 call in this codebase, plus psd-to-json's progress, which arrives from Rust as
 `psd-log-line`. **JS** is the JavaScript console — whatever `console.*` is
 handed in this page, plus everything the game frame forwards, plus uncaught
-errors and rejected promises from both.
+errors and rejected promises from both. The App half is all `info`, which is
+what makes the JS half's `log` legible beside it.
 
 The two are told apart at the call site rather than afterwards: the editor's
 own commentary goes through `info`/`warn`/`error` and never touches `console`,
-and `captureConsole` tags what it wraps. `logFrom(source, level, …)` is the one
-entry point that says which.
+and `captureConsole` tags what it wraps. `logFrom({ source, site }, level, …)`
+is the one entry point that says which, and the only one that can attach a
+site.
 
 The toggles are right-aligned in the header bar and appear only while the
 drawer is open — a filter on output you cannot see is chrome for nothing. The

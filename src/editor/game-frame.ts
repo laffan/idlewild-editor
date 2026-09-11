@@ -17,12 +17,14 @@
  *
  * The frame is a different origin, so its console is forwarded rather than
  * read — `templates/play/console-bridge.js`, injected only for the request
- * this makes.
+ * this makes. It arrives already flattened: each argument as a value the
+ * drawer can open, and the file and line the call was written on.
  */
 
 import { h } from "../lib/dom";
 import { assetBase } from "../lib/ipc";
 import * as log from "../lib/log";
+import type { LogValue } from "../lib/log-value";
 
 /** What the injected bridge posts, and nothing else is listened to. */
 const CONSOLE_MESSAGE = "idlewild-game-console";
@@ -121,16 +123,55 @@ export class GameFrame {
    * Filtered by shape rather than by origin: the frame's origin is the asset
    * server's loopback port, which this window would have to ask Rust for
    * again to compare against, and the only thing accepted is a message whose
-   * `source` is the bridge's and whose arguments are already strings.
+   * `source` is the bridge's and whose arguments are values of the shape
+   * `log-value.ts` describes.
    */
   private readonly onMessage = (event: MessageEvent): void => {
     const data = event.data as
-      | { source?: string; level?: string; args?: unknown }
+      | { source?: string; level?: string; args?: unknown; site?: unknown }
       | null;
     if (!data || data.source !== CONSOLE_MESSAGE) return;
     if (!Array.isArray(data.args)) return;
-    const level =
-      data.level === "warn" || data.level === "error" ? data.level : "info";
-    log.logFrom("js", level, ...data.args);
+
+    const args = (data.args as unknown[])
+      .filter(log.isLogValue)
+      // A top-level string goes back to being a plain one, because the first
+      // argument of a call is a *format string* when it has directives in it
+      // — and Phaser's boot banner is exactly that. Wrapped, it would print
+      // its own CSS.
+      .map((value) => (value.t === "string" ? value.v : (value as LogValue)));
+
+    log.logFrom(
+      { source: "js", ...(readSite(data.site) ?? {}) },
+      readLevel(data.level),
+      ...args,
+    );
+  };
+}
+
+function readLevel(raw: unknown): log.LogLevel {
+  return raw === "warn" || raw === "error" || raw === "info" ? raw : "log";
+}
+
+/**
+ * Where the bridge says the call was written, if it says anything usable.
+ *
+ * Checked rather than trusted: this arrives over `postMessage`, and the path
+ * is about to be handed to the code modal to open. A path that climbs out of
+ * `game/` is not a file the modal has any business showing.
+ */
+function readSite(raw: unknown): { site: log.LogSite } | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { path, line, column } = raw as Record<string, unknown>;
+  if (typeof path !== "string" || !path || path.includes("..")) return null;
+  if (typeof line !== "number" || !Number.isFinite(line) || line < 1) return null;
+  return {
+    site: {
+      path,
+      line: Math.floor(line),
+      ...(typeof column === "number" && Number.isFinite(column)
+        ? { column: Math.floor(column) }
+        : {}),
+    },
   };
 }

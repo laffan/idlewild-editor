@@ -234,6 +234,28 @@ export class CodeModal {
     return this.pinned;
   }
 
+  /**
+   * Open a file and put the caret on one of its lines.
+   *
+   * What the console's level chip does: a `console.log` in the project's own
+   * code knows where it was written, and the shortest way to say so is to
+   * show it. The line is centred and selected, so the active-line highlight
+   * lands on it rather than leaving you to count rows.
+   */
+  async openAt(path: string, line: number): Promise<void> {
+    if (this.openPath !== path) await this.openFile(path);
+    const view = this.view;
+    if (!view || this.openPath !== path) return;
+    const info = view.state.doc.line(
+      Math.max(1, Math.min(view.state.doc.lines, line)),
+    );
+    view.dispatch({
+      selection: { anchor: info.from, head: info.to },
+      effects: EditorView.scrollIntoView(info.from, { y: "center" }),
+    });
+    view.focus();
+  }
+
   /** Show or hide the reference along the bottom. */
   setDocsOpen(open: boolean): void {
     if (open === this.docsOpen) return;
@@ -248,6 +270,10 @@ export class CodeModal {
 
   private async reloadFiles(): Promise<void> {
     const files = await this.tree.reload();
+    // Something asked for a file while the tree was loading — a console line
+    // opening the place it was written, which is a better answer than the
+    // one this would have picked.
+    if (this.openToken > 0) return;
     const first = files.find((f) => !f.isDir && f.path.endsWith("WorldScene.js"));
     if (first) void this.openFile(first.path);
   }

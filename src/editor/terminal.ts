@@ -10,11 +10,18 @@
  * **JS** is the console. Either can be turned off, and the choice is
  * remembered; they only appear while the drawer is open, because a filter on
  * something you cannot see is chrome for nothing.
+ *
+ * A line is drawn from its parts: text runs carry whatever styling a `%c`
+ * asked for, and an argument that was an object is a tree you can open
+ * (`log-tree.ts`). Where the line came from a file the code modal can open,
+ * its level chip is a link to that line — which is what the **LOG** beside a
+ * `console.log` in your own `WorldScene.js` is for.
  */
 
 import { listen } from "@tauri-apps/api/event";
 import { clear, h, ICONS, icon } from "../lib/dom";
 import * as log from "../lib/log";
+import { renderValue } from "./log-tree";
 
 const STORAGE_KEY = "consoleSources";
 
@@ -30,8 +37,11 @@ export class Terminal {
   private resizeHandle: HTMLElement | null = null;
   private unlistenLog: (() => void) | null = null;
   private unsubscribe: (() => void) | null = null;
+  /** Take me to the line that wrote this, if anything can. */
+  private readonly onOpenSource: ((site: log.LogSite) => void) | null;
 
-  constructor() {
+  constructor(onOpenSource: ((site: log.LogSite) => void) | null = null) {
+    this.onOpenSource = onOpenSource;
     this.chevron = h("span", {}, icon(ICONS.chevronUp, 14, "#9b9797"));
     this.body = h("div", { class: "terminal-body scroll hidden" });
     this.filters = h(
@@ -127,12 +137,13 @@ export class Terminal {
     for (const entry of entries) {
       if (!this.shown.has(entry.source)) continue;
       const message = h("span", { class: "terminal-message" });
-      // Segments carry the styling from any `%c` runs in the original call.
-      for (const segment of entry.segments) {
+      for (const part of entry.parts) {
         message.appendChild(
-          segment.style
-            ? h("span", { style: segment.style, text: segment.text })
-            : document.createTextNode(segment.text),
+          part.kind === "value"
+            ? renderValue(part.value)
+            : part.style
+              ? h("span", { style: part.style, text: part.text })
+              : document.createTextNode(part.text),
         );
       }
 
@@ -141,12 +152,35 @@ export class Terminal {
           "div",
           { class: `terminal-line ${entry.source}` },
           h("span", { class: "terminal-time", text: entry.t }),
-          h("span", { class: `terminal-level ${entry.level}`, text: entry.level }),
+          this.levelChip(entry),
           message,
         ),
       );
     }
     this.body.scrollTop = this.body.scrollHeight;
+  }
+
+  /**
+   * The level, and where the line was written.
+   *
+   * A `console.log` in the project's own code knows its file and line, so its
+   * chip is the way back to it — the fastest thing in a console is the one
+   * that answers "where did this come from". Everything else is a plain
+   * label: the editor's own lines have no file to open, and neither does a
+   * frame inside the vendored Phaser.
+   */
+  private levelChip(entry: log.LogEntry): HTMLElement {
+    const { site } = entry;
+    if (!site || !this.onOpenSource) {
+      return h("span", { class: `terminal-level ${entry.level}`, text: entry.level });
+    }
+    return h("button", {
+      class: `terminal-level ${entry.level} linked`,
+      type: "button",
+      text: entry.level,
+      title: `${site.path}:${site.line}`,
+      onClick: () => this.onOpenSource?.(site),
+    });
   }
 
   destroy(): void {

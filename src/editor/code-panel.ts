@@ -12,10 +12,17 @@
  * The divider is rebuilt on each pin rather than kept, and its height is
  * restored from storage — which is what makes the docked panel come back the
  * size it was left at, within a session and across them.
+ *
+ * It opens **pinned**. Code in this editor is code about the thing beside it:
+ * the config follows the canvas, and a save while a game is up restarts it —
+ * both of which you want to be looking at. Floating is still one tap away,
+ * and which way it was left is remembered.
  */
 
 import { CodeModal } from "../code/code-modal";
 import { createResizer, type Resizer } from "./resizer";
+
+const PINNED_KEY = "codePinned";
 
 export class CodePanel {
   private readonly projectId: string;
@@ -64,7 +71,16 @@ export class CodePanel {
       (pinned) => this.setPinned(pinned),
       this.onSaved,
     );
+    // Appended before it is pinned: pinning moves the panel into a row of the
+    // shell, and there has to be something to move.
     this.shell.appendChild(this.modal.root);
+    this.modal.setPinned(readPinned());
+  }
+
+  /** Open a file at a line, opening the panel first if it is not up. */
+  openAt(path: string, line: number): void {
+    if (!this.modal) this.show();
+    void this.modal?.openAt(path, line);
   }
 
   /**
@@ -82,6 +98,7 @@ export class CodePanel {
   private setPinned(pinned: boolean): void {
     const modal = this.modal;
     if (!modal) return;
+    writePinned(pinned);
 
     if (!pinned) {
       this.resizer?.destroy();
@@ -101,5 +118,22 @@ export class CodePanel {
     this.shell.insertBefore(this.resizer.handle, this.before);
     this.shell.insertBefore(modal.root, this.before);
     this.resizer.restore();
+  }
+}
+
+/** Which way the panel was left. Pinned for anyone who has not said. */
+function readPinned(): boolean {
+  try {
+    return window.localStorage.getItem(PINNED_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writePinned(pinned: boolean): void {
+  try {
+    window.localStorage.setItem(PINNED_KEY, String(pinned));
+  } catch {
+    // Private browsing, or a quota. It still pins for this session.
   }
 }
