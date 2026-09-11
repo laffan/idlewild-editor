@@ -16,6 +16,12 @@ import config from "./game.config.json" with { type: "json" };
 //
 // This is the program the editor's Play runs, over the project's own files.
 //
+// `config.layers` is the layers of the scene the editor has open, which is
+// the one this places. `config.scenes` carries every scene the project has —
+// id, name and layers — and `config.activeScene` says which of them
+// `config.layers` mirrors, so switching to another one in your own code is a
+// matter of reading its layers and placing them the same way.
+//
 // Lines between an `idlewild:begin` and its `idlewild:end` belong to the
 // editor: they read the config it writes beside this file, and the code modal
 // shows them read-only with a Reset beside each block. Everything else here is

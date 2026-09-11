@@ -3,7 +3,7 @@ import { DocStore } from "../../lib/doc-store";
 import { Grid } from "../../lib/grid";
 import { parseManifest } from "../../lib/manifest";
 import { reconcilePlacements } from "../reconcile";
-import type { GameDoc, Placement } from "../../lib/types";
+import type { StoredDoc, Placement } from "../../lib/types";
 
 // `DocStore` debounces its autosave on window timers, and this runs in node.
 // A stub rather than a real clock: the point here is what reconciliation
@@ -65,7 +65,7 @@ function placement(psdKey: string, layerPath: string): Placement {
 }
 
 function store(...placements: Placement[]): DocStore {
-  const doc: GameDoc = {
+  const doc: StoredDoc = {
     version: 1,
     projection: "isometric",
     gridSize: 64,

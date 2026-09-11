@@ -164,8 +164,22 @@ pub fn write_doc(id: &str, doc_json: &str) -> Result<(), String> {
     if let Ok(mut meta) = read_meta(id) {
         meta.updated_at = now_ms();
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(doc_json) {
-            if let Some(layers) = value.get("layers").and_then(|l| l.as_array()) {
-                meta.layer_count = layers.len() as u32;
+            // Every scene's layers, because the home screen's count is about
+            // the project rather than about whichever scene was left open.
+            // A document written before scenes still keeps them at the top.
+            let counted = value
+                .get("scenes")
+                .and_then(|s| s.as_array())
+                .map(|scenes| {
+                    scenes
+                        .iter()
+                        .filter_map(|scene| scene.get("layers")?.as_array())
+                        .map(|layers| layers.len())
+                        .sum::<usize>()
+                })
+                .or_else(|| value.get("layers").and_then(|l| l.as_array()).map(Vec::len));
+            if let Some(count) = counted {
+                meta.layer_count = count as u32;
             }
         }
         write_meta(&meta)?;

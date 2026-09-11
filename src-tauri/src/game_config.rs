@@ -11,7 +11,11 @@
 //! drift.
 //!
 //! The config is a *projection* of the document, not a second copy of it: it
-//! carries what `WorldScene.js` reads and nothing else. So the document stays
+//! carries what `WorldScene.js` reads and nothing else. Since scenes, `layers`
+//! means *the open scene's* layers — which is what that field has always meant
+//! in practice and what every project's own copy of the scene file reads — and
+//! `scenes` carries all of them beside it for code that wants to place
+//! somewhere else. So the document stays
 //! opaque to Rust except for these fields, and every one of them is optional
 //! — a document written by a build that did not have zones, or instances, or
 //! rectangle fills still exports.
@@ -42,7 +46,16 @@ const SPAN_MARGIN: i64 = 4;
 /// The config a fresh project scaffolds with: the shape of the space, and
 /// nothing in it.
 pub fn empty(projection: Projection, genre: Genre, grid_size: u32) -> Value {
-    config(projection, genre, grid_size, MIN_SPAN, json!([]), json!([]))
+    config(
+        projection,
+        genre,
+        grid_size,
+        MIN_SPAN,
+        json!([]),
+        json!([]),
+        json!([{ "id": "scene-main", "name": "Main", "layers": [] }]),
+        json!("scene-main"),
+    )
 }
 
 /// The config an export ships: the same fields, filled in from `doc.json`.
@@ -53,18 +66,36 @@ pub fn empty(projection: Projection, genre: Genre, grid_size: u32) -> Value {
 pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String> {
     let doc: Document = serde_json::from_str(doc_json)
         .map_err(|e| format!("Cannot read this project's document: {e}"))?;
+    let scenes = doc.scenes();
 
+    // Every scene's keys, not just the open one's. The scene the editor is
+    // looking at is the one the game places, but a project that switches
+    // scenes in its own code needs the textures for the one it switches to —
+    // and loading them is cheap beside finding out at the switch that they
+    // are not there.
     let mut keys: Vec<String> = Vec::new();
-    for layer in &doc.layers {
-        for placement in &layer.placements {
-            if !keys.contains(&placement.psd_key) {
-                keys.push(placement.psd_key.clone());
+    for scene in &scenes {
+        for layer in &scene.layers {
+            for placement in &layer.placements {
+                if !keys.contains(&placement.psd_key) {
+                    keys.push(placement.psd_key.clone());
+                }
             }
         }
     }
 
-    let span = span_for(&doc, meta.grid_size);
-    let layers: Vec<Value> = doc.layers.iter().map(Layer::to_config).collect();
+    let span = span_for(&scenes, meta.grid_size);
+    let active = doc
+        .active_scene_id
+        .clone()
+        .filter(|id| scenes.iter().any(|s| s.id.as_deref() == Some(id.as_str())))
+        .or_else(|| scenes.first().and_then(|s| s.id.clone()))
+        .unwrap_or_default();
+
+    let open = scenes
+        .iter()
+        .find(|s| s.id.as_deref() == Some(active.as_str()))
+        .or_else(|| scenes.first());
 
     Ok(config(
         meta.projection,
@@ -72,10 +103,22 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
         meta.grid_size,
         span,
         json!(keys),
-        json!(layers),
+        json!(open.map(|s| s.layers.iter().map(Layer::to_config).collect::<Vec<_>>())
+            .unwrap_or_default()),
+        json!(scenes.iter().map(Scene::to_config).collect::<Vec<_>>()),
+        json!(active),
     ))
 }
 
+/// The file, in the order it reads.
+///
+/// `layers` is the **open scene's** layers, at the top level because it is
+/// what every project's own `WorldScene.js` reads and has always read — a
+/// project scaffolded before scenes existed keeps its own copy of that file,
+/// and moving the field would have broken it. `scenes` carries all of them
+/// beside it, for code that wants to place somewhere else, and `activeScene`
+/// says which one `layers` mirrors.
+#[allow(clippy::too_many_arguments)]
 fn config(
     projection: Projection,
     genre: Genre,
@@ -83,6 +126,8 @@ fn config(
     span: i64,
     psd_keys: Value,
     layers: Value,
+    scenes: Value,
+    active_scene: Value,
 ) -> Value {
     json!({
         "projection": projection.as_str(),
@@ -92,6 +137,8 @@ fn config(
         "spawn": { "cx": 0, "cy": 0 },
         "psdKeys": psd_keys,
         "layers": layers,
+        "scenes": scenes,
+        "activeScene": active_scene,
         "psdPipeline": "psd-to-json@tauri"
     })
 }
@@ -104,12 +151,14 @@ fn config(
 /// and a world pixel is a cell divided by the grid size. Under a blank
 /// projection a *document* cell is one pixel, which is why fill cells are
 /// absent there and the world-pixel path is what measures the content.
-fn span_for(doc: &Document, grid_size: u32) -> i64 {
+fn span_for(scenes: &[Scene], grid_size: u32) -> i64 {
     let size = grid_size.max(1) as f64;
     let mut reach = 0f64;
     let mut cells = |cx: f64, cy: f64| reach = reach.max(cx.abs()).max(cy.abs());
 
-    for layer in &doc.layers {
+    // Over every scene, because the span is also the bounds the character may
+    // walk: a scene switch must not land it outside the world.
+    for layer in scenes.iter().flat_map(|scene| &scene.layers) {
         for fill in &layer.fills {
             for cell in &fill.cells {
                 cells(cell.cx, cell.cy);
@@ -140,12 +189,58 @@ fn span_for(doc: &Document, grid_size: u32) -> i64 {
 // ── the half of the document the exported scene reads ───────────────────────
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Document {
+    #[serde(default)]
+    scenes: Vec<Scene>,
+    #[serde(default)]
+    active_scene_id: Option<String>,
+    /// Where layers lived before scenes. A document is migrated the first
+    /// time the editor opens it, but this runs on the way *in* as well — so
+    /// a project that has not been opened since still exports what is in it.
     #[serde(default)]
     layers: Vec<Layer>,
 }
 
-#[derive(Debug, Default, Deserialize)]
+impl Document {
+    /// The scenes this document has, or the one it implies.
+    fn scenes(&self) -> Vec<Scene> {
+        if !self.scenes.is_empty() {
+            return self.scenes.clone();
+        }
+        vec![Scene {
+            id: Some("scene-main".into()),
+            name: "Main".into(),
+            layers: self.layers.clone(),
+        }]
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct Scene {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default = "unnamed")]
+    name: String,
+    #[serde(default)]
+    layers: Vec<Layer>,
+}
+
+impl Scene {
+    fn to_config(&self) -> Value {
+        json!({
+            "id": self.id,
+            "name": self.name,
+            "layers": self.layers.iter().map(Layer::to_config).collect::<Vec<_>>(),
+        })
+    }
+}
+
+fn unnamed() -> String {
+    "Scene".into()
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Layer {
     #[serde(default = "yes")]
@@ -176,7 +271,7 @@ impl Layer {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Fill {
     #[serde(default)]
@@ -204,7 +299,7 @@ impl Fill {
 /// manifest exported — their ratio is the scale, exactly as the editor's own
 /// renderer works it out. Sending the ratio instead would hide where it comes
 /// from in a file whose whole job is to be readable.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Placement {
     #[serde(default)]
@@ -240,7 +335,7 @@ impl Placement {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Zone {
     #[serde(default)]

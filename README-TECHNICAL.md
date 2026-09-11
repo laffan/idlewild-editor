@@ -223,6 +223,73 @@ Both fields are optional on disk (`#[serde(default)]` on the Rust side,
 `genre?:` on the TypeScript one) so every project written before the choice
 existed still loads, as top down — which is what it has always been.
 
+### Scenes
+
+A scene is what Phaser means by one: a set of layers and a canvas of its own.
+A project is several places — a title screen, a cave, the overworld — sharing
+a grid, a genre and a pile of PSDs, but not a single thing standing on them.
+
+```text
+GameDoc
+  scenes: [ { id, name, layers: [...], camera? }, ... ]
+  activeSceneId
+  extrusions        ← document-level: a PSD is the project's, not a scene's
+```
+
+**`DocStore.layers` and `layer(id)` answer about the active scene, and their
+signatures did not change.** That is the whole design: the Phaser scene, the
+three panels, the renderers, the drag controller and the overlay never had to
+learn that scenes exist. Switching scenes is this one object answering
+differently, not thirty call sites asking a new question — which is why the
+existing suite passed on the new model unmodified.
+
+**Two events, because two things happen.** `change` means the document moved:
+re-read it. `scene` means everything on the canvas is now about somewhere
+else: rebuild. `change` fires first, so a listener that re-reads runs before
+one that redraws. `WorldScene.reloadScene` is the redraw — it cancels
+everything half-done (a drag, a marquee, an extrusion, an opened-up PSD),
+clears the selection, and then gets the demolition free: the renderer keys its
+placements by placement id and destroys every one it no longer finds in the
+document, which after a switch is all of them.
+
+**The camera rides the scene**, because a scene is a place and coming back to
+it should be coming back to where you were standing.
+
+**A duplicate gets ids of its own, all the way down** — layers, fills,
+placements, zones and strokes. Two scenes sharing a placement id would be one
+rendered object belonging to both, showing whichever was drawn last. A unit
+(the placements one PSD arrived as, which drag together) is remapped rather
+than copied, or the duplicate's parts would each think they belong to the
+original's unit.
+
+#### What is the scene's, and what is the project's
+
+`psd/` is one directory for the project, so a *file* is project-wide while a
+*placement* is a scene's. Three edits are about the file and therefore about
+every scene: renaming a PSD, re-anchoring an extrusion, and counting how many
+placements draw one layer (the inspector's "editing one edits both", which
+under-counting would point the wrong way). They go through
+`updatePlacementsEverywhere` and `everyPlacement` and write once.
+
+Renaming is the one where scene-scoping would have been corruption rather
+than staleness: a placement in another scene left pointing at a key that has
+gone can never render, and there is nothing on screen to say why.
+
+#### Documents written before scenes
+
+`withScenes` folds a legacy document's top-level `layers` and `camera` into
+one scene called **Main** — which is what they always were, named for the
+first time, and the same name a fresh project's first scene gets, so the two
+kinds of project read the same afterwards. It also repairs an `activeSceneId`
+naming a scene that is not there, because hand-edited documents are a thing
+this app invites. `StoredDoc` is the type at that boundary: a document as it
+may arrive from disk, with the two fields a pre-scenes project lacks made
+optional, so the migration is a conversion rather than a cast.
+
+Rust reads both shapes too. The config is regenerated on the way *in* as well
+as on every save, so a project that has not been opened since the change still
+exports what is in it.
+
 ### Autosave
 
 `DocStore` debounces writes 800 ms and flushes on navigation. Camera moves set
@@ -1235,10 +1302,11 @@ string in a JSON message first.
   game/                    the project's own code, as it was edited
 ```
 
-**Extrusions travel in `doc.json`.** `GameDoc.extrusions` maps a PSD key to
-the voxels its solid was built from and the space it was anchored to, and an
-extruded layer's way back into extrude mode is that record plus the PSD it
-wrote — the cube in the inspector's layer list, and the shape that opens when
+**Extrusions travel in `doc.json`**, and so do every scene and the one that
+was open. `GameDoc.extrusions` maps a PSD key to the voxels its solid was
+built from and the space it was anchored to — document-level, because a PSD
+is the project's rather than a scene's — and an extruded layer's way back into
+extrude mode is that record plus the PSD it wrote — the cube in the inspector's layer list, and the shape that opens when
 you click it. Both halves are in the archive, and the map is keyed by *file
 stem* rather than by anything about this install, so a re-opened project can
 still take hold of a face and pull it. `tests/archive.rs` pins that, because a
@@ -2341,6 +2409,16 @@ frame is the point of the JS half.
   inside one block — a bare `}`, a blank line — can swap which of the pair is
   called the editor's. Nothing breaks; a line you typed may simply be the
   locked one. Reset is the way out.
+- A re-import reconciles the placements of that PSD in the **open scene**
+  only: other scenes keep the geometry they had, and a layer the new file
+  added does not appear in them. Staleness rather than corruption — the
+  placements still point at a key that exists — but it is a scene switch away
+  from being visible and there is nothing that says so.
+- The exported game places the open scene. Every scene's layers are in the
+  config and every scene's PSDs are loaded, so switching in your own code is
+  a matter of reading `config.scenes` — but the template does not, and one
+  Phaser scene per Idlewild scene, with transitions, is a feature rather than
+  a line.
 - Only `WorldScene.js` and the generated config carry managed blocks.
   `grid.js`, `navigation.js` and `physics.js` are the project's alone, even
   though the scaffold wrote them and the editor's config is what they read.

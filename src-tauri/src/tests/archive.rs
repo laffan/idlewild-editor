@@ -16,28 +16,56 @@ use crate::store;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// A document with something of every kind in it, extrusion included.
+/// A document with something of every kind in it: two scenes, an extrusion,
+/// and a placement of the extruded file in each of them.
 fn document() -> String {
     serde_json::json!({
-        "version": 1,
+        "version": 2,
         "projection": "isometric",
         "genre": "topdown",
         "gridSize": 64,
-        "layers": [{
-            "id": "layer-terrain",
-            "name": "Terrain",
-            "locked": false,
-            "visible": true,
-            "fills": [{ "id": "f1", "cells": [{ "cx": 1, "cy": 2 }], "color": "#ec3013" }],
-            "placements": [{
-                "id": "p1",
-                "psdKey": "tower",
-                "layerPath": "G | extrude-tower/S | shape-tower",
-                "x": 64.0, "y": 64.0, "width": 128.0, "height": 192.0
-            }],
-            "zones": [],
-            "strokes": []
-        }],
+        "activeSceneId": "scene-cave",
+        "scenes": [
+            {
+                "id": "scene-main",
+                "name": "Main",
+                "camera": { "x": 10.0, "y": 20.0, "zoom": 2.0 },
+                "layers": [{
+                    "id": "layer-terrain",
+                    "name": "Terrain",
+                    "locked": false,
+                    "visible": true,
+                    "fills": [{ "id": "f1", "cells": [{ "cx": 1, "cy": 2 }], "color": "#ec3013" }],
+                    "placements": [{
+                        "id": "p1",
+                        "psdKey": "tower",
+                        "layerPath": "G | extrude-tower/S | shape-tower",
+                        "x": 64.0, "y": 64.0, "width": 128.0, "height": 192.0
+                    }],
+                    "zones": [],
+                    "strokes": []
+                }]
+            },
+            {
+                "id": "scene-cave",
+                "name": "Cave",
+                "layers": [{
+                    "id": "layer-walls",
+                    "name": "Walls",
+                    "locked": false,
+                    "visible": true,
+                    "fills": [],
+                    "placements": [{
+                        "id": "p2",
+                        "psdKey": "tower",
+                        "layerPath": "G | extrude-tower/S | shape-tower",
+                        "x": 0.0, "y": 0.0, "width": 128.0, "height": 192.0
+                    }],
+                    "zones": [],
+                    "strokes": []
+                }]
+            }
+        ],
         "extrusions": {
             "tower": {
                 "voxels": ["0,0,0", "0,0,1", "1,0,0"],
@@ -107,7 +135,20 @@ fn a_project_survives_a_round_trip_through_an_idlewild_file() {
                 .expect("document should be JSON");
         assert_eq!(doc["extrusions"]["tower"]["voxels"][1], "0,0,1");
         assert_eq!(doc["extrusions"]["tower"]["anchor"]["cx"], 1);
-        assert_eq!(doc["layers"][0]["placements"][0]["psdKey"], "tower");
+
+        // Every scene, the one that was open, and each scene's own camera —
+        // a scene is a place, and you come back to where you were standing.
+        assert_eq!(doc["scenes"].as_array().map(Vec::len), Some(2));
+        assert_eq!(doc["activeSceneId"], "scene-cave");
+        assert_eq!(doc["scenes"][0]["camera"]["zoom"], 2.0);
+        assert_eq!(
+            doc["scenes"][0]["layers"][0]["placements"][0]["psdKey"],
+            "tower",
+        );
+        assert_eq!(
+            doc["scenes"][1]["layers"][0]["placements"][0]["psdKey"],
+            "tower",
+        );
 
         // The source PSD: the whole reason this format exists beside the
         // site export, which carries processed output and nothing to edit.
@@ -133,6 +174,8 @@ fn a_project_survives_a_round_trip_through_an_idlewild_file() {
         .expect("config should be JSON");
         assert_eq!(config["psdKeys"][0], "tower");
         assert_eq!(config["grid"], 64);
+        assert_eq!(config["scenes"].as_array().map(Vec::len), Some(2));
+        assert_eq!(config["activeScene"], "scene-cave");
 
         store::delete_project(&opened.id).ok();
     });

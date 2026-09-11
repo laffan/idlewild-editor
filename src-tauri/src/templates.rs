@@ -38,23 +38,34 @@ pub const P2P_UMD: &str = include_str!("../vendor/psd-to-phaser.umd.js");
 /// scripts/vendor-p2p.mjs.
 pub const PHASER: &str = include_str!("../vendor/phaser.min.js");
 
-/// The document a fresh project opens with: one empty terrain layer.
+/// The document a fresh project opens with: one scene, one empty layer.
+///
+/// A project is one place until it is two, so the first scene is called Main
+/// — which is also the name a project written before scenes gets when the
+/// editor migrates it, so the two kinds of project read the same afterwards.
 pub fn starter_doc(projection: Projection, genre: Genre, grid_size: u32) -> String {
     let doc = json!({
-        "version": 1,
+        "version": 2,
         "projection": projection.as_str(),
         "genre": genre.as_str(),
         "gridSize": grid_size,
-        "layers": [
+        "activeSceneId": "scene-main",
+        "scenes": [
             {
-                "id": "layer-terrain",
-                "name": "Terrain",
-                "locked": false,
-                "visible": true,
-                "fills": [],
-                "placements": [],
-                "zones": [],
-                "strokes": []
+                "id": "scene-main",
+                "name": "Main",
+                "layers": [
+                    {
+                        "id": "layer-terrain",
+                        "name": "Terrain",
+                        "locked": false,
+                        "visible": true,
+                        "fills": [],
+                        "placements": [],
+                        "zones": [],
+                        "strokes": []
+                    }
+                ]
             }
         ]
     });

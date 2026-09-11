@@ -321,6 +321,18 @@ export async function mountEditor(
   // also when a code modal showing that file has gone stale.
   store.addEventListener("saved", () => code.refreshGenerated());
 
+  // A scene switch is a clean canvas. The Phaser scene rebuilds itself off
+  // the same event; what the shell owes it is the shared state that names a
+  // layer — which layer new work lands on, which one the ink is on, and an
+  // inspector still describing something that has gone.
+  store.addEventListener("scene", () => {
+    setActiveLayer(store.layers[0]?.id ?? "");
+    layers.render();
+    inspector.setSelection({ kind: "none" });
+    actions.update({ kind: "none" }, null);
+    log.info(`Scene · ${store.activeScene.name}`);
+  });
+
   // A paste and a drop are the same import: the bytes become a PSD, marked
   // with the grid spaces they landed on, and placed on the layer being worked
   // on. A drop that lands on an image already there offers to replace the

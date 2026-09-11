@@ -106,10 +106,17 @@ remaining pieces are wired to real slots rather than mocked.
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork
   re-anchors to it — which is how you make something stand on its tile
-- Layers: drag by the grip to reorder, rename, lock, hide, with live counts
-  and an expandable list of what is on each one — selecting there selects on
-  the canvas, and a placed PSD listed under a layer has a grip of its own that
-  carries it to whichever layer you let go over
+- **Scenes**, the way Phaser means them: a set of layers and a canvas of its
+  own. A project is several places — a title screen, a cave, the overworld —
+  sharing a grid, a genre and a pile of PSDs but not a single thing standing
+  on them. The dropdown at the top of the left sidebar switches between them
+  and holds New, Rename, Duplicate and Delete; each scene remembers where you
+  were standing in it. A duplicate is a real copy, not a second name for the
+  same thing
+- Layers, under the scene they belong to: drag by the grip to reorder, rename,
+  lock, hide, with live counts and an expandable list of what is on each one —
+  selecting there selects on the canvas, and a placed PSD listed under a layer
+  has a grip of its own that carries it to whichever layer you let go over
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass
@@ -144,6 +151,9 @@ remaining pieces are wired to real slots rather than mocked.
   to the system editor on macOS and to the share sheet on iPadOS. Re-import
   asks where the edited file came back from — Files, the photo library or the
   clipboard — and replaces it under the same key, re-running the pipeline
+- The exported game places the scene you have open, and carries the rest: the
+  config holds every scene's layers and loads every scene's PSDs, so switching
+  in your own code is a matter of reading `config.scenes`
 - Play runs **the project's own code**: the `game/` tree you see in the code
   modal, loaded over the local server exactly the way a published export loads
   it, in a frame over the canvas. Save a file while it is up and the game
@@ -211,6 +221,8 @@ remaining pieces are wired to real slots rather than mocked.
   the editor writes, and code does not yet drive the canvas
 - Play starting from the camera the editor is looking through, rather than
   where the project's own scene opens
+- One Phaser scene per Idlewild scene in the exported game, with transitions
+  between them — today the template places the open one
 - Sloped ground for the platformer: a blocking boundary is currently taken as
   its bounding box
 - rsync publish targets

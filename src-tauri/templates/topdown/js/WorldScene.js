@@ -2,9 +2,11 @@ import { createGrid } from "./grid.js";
 import { findPath } from "./navigation.js";
 import config from "./game.config.json" with { type: "json" };
 
-// The top-down template. One scene serves all three projections: the
-// difference between diamonds, squares and bare pixels lives in grid.js, and
-// the projection reaches it through the config the editor wrote.
+// The top-down template. One *Phaser* scene serves all three projections —
+// the difference between diamonds, squares and bare pixels lives in grid.js,
+// and the projection reaches it through the config the editor wrote. That is
+// a different sense of the word from the editor's scenes, which are places in
+// your project; this one class places whichever of them is open.
 //
 // A blank project has no lattice to draw and none to walk, so it draws no
 // grid and navigates on a square lattice of the project's nominal unit — the
@@ -12,6 +14,12 @@ import config from "./game.config.json" with { type: "json" };
 // template that does not snap.
 //
 // This is the program the editor's Play runs, over the project's own files.
+//
+// `config.layers` is the layers of the scene the editor has open, which is
+// the one this places. `config.scenes` carries every scene the project has —
+// id, name and layers — and `config.activeScene` says which of them
+// `config.layers` mirrors, so switching to another one in your own code is a
+// matter of reading its layers and placing them the same way.
 //
 // Lines between an `idlewild:begin` and its `idlewild:end` belong to the
 // editor: they read the config it writes beside this file, and the code modal

@@ -3,7 +3,7 @@ import type Phaser from "phaser";
 import { DocStore } from "../../lib/doc-store";
 import { Grid } from "../../lib/grid";
 import { DocRenderer, type PlacedObject } from "../doc-renderer";
-import type { GameDoc, Placement } from "../../lib/types";
+import type { StoredDoc, Placement } from "../../lib/types";
 
 /** Enough of a Graphics for the renderer to draw fills and zones into. */
 function graphics(): Phaser.GameObjects.Graphics {
@@ -86,7 +86,7 @@ function placement(id: string, instance: string): Placement {
   };
 }
 
-function doc(...placements: Placement[]): GameDoc {
+function doc(...placements: Placement[]): StoredDoc {
   return {
     version: 1,
     projection: "isometric",

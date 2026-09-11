@@ -11,7 +11,7 @@
 
 import Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { Grid, cellsInRange } from "../lib/grid";
+import { Grid } from "../lib/grid";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
@@ -23,6 +23,7 @@ import { Marquee } from "./marquee";
 import { DragController } from "./drag";
 import { ExtrudeMode } from "./extrude-mode";
 import { PsdPlacements } from "./psd-placements";
+import { fillRegion } from "./fill-region";
 import { instanceMembers, instanceOf } from "./instance";
 import type { Viewport } from "../drawing";
 
@@ -137,7 +138,7 @@ export class WorldScene extends Phaser.Scene {
       onChange: () => this.config.onExtrudeChange?.(),
     });
 
-    const saved = this.store.doc.camera;
+    const saved = this.store.activeScene.camera;
     if (saved) {
       this.cameras.main.setZoom(saved.zoom);
       this.cameras.main.centerOn(saved.x, saved.y);
@@ -189,9 +190,44 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.store.addEventListener("change", () => this.refresh());
+    // A different scene is not a changed document, it is a different canvas.
+    this.store.addEventListener("scene", () => this.reloadScene());
     this.psds.migrate();
     void this.psds.loadAll();
     this.refresh();
+  }
+
+  /**
+   * The active scene has changed: everything on the canvas is now about
+   * somewhere else.
+   *
+   * Nothing half-done survives the move — a drag, a marquee, an extrusion in
+   * progress and an opened-up PSD are all about objects that are on their way
+   * out. Then `render()` does the demolition for free: the renderer keys its
+   * placements by placement id and destroys every one it no longer finds in
+   * the document, which after a switch is all of them. `loadAll` puts the new
+   * scene's up, loading any PSD this session has not needed yet.
+   */
+  reloadScene(): void {
+    this.drag.cancel();
+    this.markDrop(null);
+    this.marquee.cancel();
+    this.extrude.stop();
+    this.adjusting = null;
+    this.setSelection({ kind: "none" });
+    this.activeLayerId = this.store.layers[0]?.id ?? "";
+
+    this.docRenderer.render();
+    void this.psds.loadAll();
+
+    // Where you were standing in the scene you are arriving in — or the
+    // origin, for one nobody has looked at yet.
+    const saved = this.store.activeScene.camera;
+    this.cameraPlaced = true;
+    this.cameras.main.setZoom(saved?.zoom ?? 1);
+    this.cameras.main.centerOn(saved?.x ?? 0, saved?.y ?? 0);
+    this.gridRenderer.invalidate();
+    this.config.onCameraChange();
   }
 
   override update(_time: number, _delta: number): void {
@@ -546,28 +582,15 @@ export class WorldScene extends Phaser.Scene {
   /** Fill the current region selection on the active layer. */
   fillSelection(color: string, walkable: boolean): void {
     if (this.selection.kind !== "region") return;
-    const layer = this.store.layer(this.activeLayerId);
-    if (!layer || layer.locked) {
-      log.warn("The active layer is locked");
-      return;
-    }
-    // A snapping project fills the spaces it covers, so an irregular run of
-    // them stays irregular. A blank one fills the rectangle that was dragged:
-    // its cells are single pixels, and one record per covered pixel would put
-    // a hundred thousand of them in a document that means "this box".
-    const shape = this.grid.snaps
-      ? { cells: [...cellsInRange(this.selection.from, this.selection.to)] }
-      : {
-          cells: [],
-          rect: this.grid.rangeBounds(this.selection.from, this.selection.to),
-        };
-    const fill = this.store.addFill(layer.id, {
-      ...shape,
-      kind: "color",
+    const next = fillRegion(
+      this.store,
+      this.grid,
+      this.activeLayerId,
+      this.selection,
       color,
       walkable,
-    });
-    this.setSelection({ kind: "fill", layerId: layer.id, fillId: fill.id });
+    );
+    if (next) this.setSelection(next);
   }
 
   /**

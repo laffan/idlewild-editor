@@ -4,40 +4,56 @@
  */
 
 const DOC = {
-  version: 1,
+  version: 2,
   // Overridable so the harness can be pointed at a blank or platformer
   // project without a second fixture — see harness/main.ts.
   projection: (window as any).__projection ?? "isometric",
   genre: (window as any).__genre ?? "topdown",
   gridSize: (window as any).__gridSize ?? 64,
-  layers: [
+  activeSceneId: "scene-main",
+  scenes: [
+    // Two scenes, so switching between them can be driven here: one with
+    // everything in it, one empty, which is what a clean canvas looks like.
     {
-      id: "layer-1", name: "Foreground", locked: false, visible: true,
-      fills: [{ id: "fill-1", cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }], kind: "color", color: "#ec3013", walkable: true }],
-      // Two layers of one file, sharing an instance: on the canvas they are
-      // one placed PSD, and a double-tap is what takes them apart.
-      placements: [
-        { id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
-        { id: "place-2", psdKey: "tower", layerPath: "roof", x: 16, y: -24, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
-      ],
-      // A boundary, so selecting and dragging one can be driven here.
-      zones: [
+      id: "scene-main",
+      name: "Main",
+      layers: [
         {
-          id: "zone-1",
-          name: "Dock edge",
-          blocking: true,
-          points: [
-            { x: 160, y: 0 },
-            { x: 288, y: 64 },
-            { x: 160, y: 128 },
-            { x: 32, y: 64 },
+          id: "layer-1", name: "Foreground", locked: false, visible: true,
+          fills: [{ id: "fill-1", cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }], kind: "color", color: "#ec3013", walkable: true }],
+          // Two layers of one file, sharing an instance: on the canvas they
+          // are one placed PSD, and a double-tap is what takes them apart.
+          placements: [
+            { id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
+            { id: "place-2", psdKey: "tower", layerPath: "roof", x: 16, y: -24, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
           ],
+          // A boundary, so selecting and dragging one can be driven here.
+          zones: [
+            {
+              id: "zone-1",
+              name: "Dock edge",
+              blocking: true,
+              points: [
+                { x: 160, y: 0 },
+                { x: 288, y: 64 },
+                { x: 160, y: 128 },
+                { x: 32, y: 64 },
+              ],
+            },
+          ],
+          strokes: [],
         },
+        { id: "layer-2", name: "Ground", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
+        { id: "layer-3", name: "Backdrop", locked: true, visible: false, fills: [], placements: [], zones: [], strokes: [] },
       ],
-      strokes: [],
     },
-    { id: "layer-2", name: "Ground", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
-    { id: "layer-3", name: "Backdrop", locked: true, visible: false, fills: [], placements: [], zones: [], strokes: [] },
+    {
+      id: "scene-cave",
+      name: "Cave",
+      layers: [
+        { id: "layer-cave", name: "Walls", locked: false, visible: true, fills: [], placements: [], zones: [], strokes: [] },
+      ],
+    },
   ],
 };
 

@@ -5,6 +5,16 @@
  * object rather than writing through it. That is Hush's load-bearing
  * invariant, and the drawing engine's identity diff will depend on it when
  * the stroke port lands.
+ *
+ * Layers hang off a **scene**, and every layer method here works on the
+ * active one. That is deliberate: `layers` and `layer(id)` read the same as
+ * they always did, so the scene, the panels and the renderers never had to
+ * learn that scenes exist — switching scenes is this object answering
+ * differently, not thirty call sites asking a new question.
+ *
+ * A switch fires `scene` as well as `change`. `change` means the document
+ * moved; `scene` means everything on the canvas is now about somewhere else,
+ * which is a redraw rather than a refresh — see `WorldScene.reloadScene`.
  */
 
 import type {
@@ -16,6 +26,8 @@ import type {
   Layer,
   Placement,
   Projection,
+  Scene,
+  StoredDoc,
   Stroke,
   Zone,
 } from "./types";
@@ -36,15 +48,15 @@ export class DocStore extends EventTarget {
   private saveTimer: number | null = null;
   private dirty = false;
 
-  constructor(projectId: string, initial: GameDoc) {
+  constructor(projectId: string, initial: StoredDoc) {
     super();
     this.projectId = projectId;
-    this.state = initial;
+    this.state = withScenes(initial);
   }
 
   static async load(projectId: string): Promise<DocStore> {
     const body = await docIpc.read(projectId);
-    const parsed = JSON.parse(body) as GameDoc;
+    const parsed = JSON.parse(body) as StoredDoc;
     return new DocStore(projectId, parsed);
   }
 
@@ -65,13 +77,109 @@ export class DocStore extends EventTarget {
     return this.state.genre ?? "topdown";
   }
 
+  // ── scenes ────────────────────────────────────────────────────────────────
+
+  get scenes(): readonly Scene[] {
+    return this.state.scenes;
+  }
+
+  get activeSceneId(): string {
+    return this.state.activeSceneId;
+  }
+
+  /**
+   * The scene everything else means when it says "the document".
+   *
+   * Never undefined: `withScenes` guarantees at least one scene and an
+   * `activeSceneId` that names one of them, so no caller has to hold an
+   * opinion about a project with nowhere to draw.
+   */
+  get activeScene(): Scene {
+    return (
+      this.state.scenes.find((s) => s.id === this.state.activeSceneId) ??
+      this.state.scenes[0]
+    );
+  }
+
+  scene(id: string): Scene | undefined {
+    return this.state.scenes.find((s) => s.id === id);
+  }
+
+  /** Look somewhere else. Fires `scene` after `change`, so a listener that
+   *  redraws runs after one that re-reads. */
+  setActiveScene(sceneId: string): void {
+    if (sceneId === this.state.activeSceneId) return;
+    if (!this.scene(sceneId)) return;
+    this.commit({ ...this.state, activeSceneId: sceneId });
+    this.dispatchEvent(new CustomEvent("scene"));
+  }
+
+  /** A new scene, with the one empty layer a project starts with, and open. */
+  addScene(name?: string): Scene {
+    const scene: Scene = {
+      id: makeId("scene"),
+      name: name ?? `Scene ${this.state.scenes.length + 1}`,
+      layers: [emptyLayer("Terrain")],
+    };
+    this.commit({
+      ...this.state,
+      scenes: [...this.state.scenes, scene],
+      activeSceneId: scene.id,
+    });
+    this.dispatchEvent(new CustomEvent("scene"));
+    return scene;
+  }
+
+  renameScene(sceneId: string, name: string): void {
+    this.replaceScene(sceneId, (scene) => ({ ...scene, name }));
+  }
+
+  /**
+   * A copy, everything in it given ids of its own.
+   *
+   * Fresh ids rather than a structural clone, because ids are how the canvas
+   * and the inspector name things: two scenes sharing a placement id would
+   * be one rendered object that belongs to both, and switching between them
+   * would show whichever was drawn last.
+   */
+  duplicateScene(sceneId: string): Scene | undefined {
+    const source = this.scene(sceneId);
+    if (!source) return undefined;
+    const copy: Scene = {
+      id: makeId("scene"),
+      name: `${source.name} copy`,
+      layers: source.layers.map(copyLayer),
+      ...(source.camera ? { camera: source.camera } : {}),
+    };
+    const at = this.state.scenes.findIndex((s) => s.id === sceneId) + 1;
+    const scenes = [...this.state.scenes];
+    scenes.splice(at, 0, copy);
+    this.commit({ ...this.state, scenes, activeSceneId: copy.id });
+    this.dispatchEvent(new CustomEvent("scene"));
+    return copy;
+  }
+
+  removeScene(sceneId: string): void {
+    if (this.state.scenes.length <= 1) {
+      log.warn("A project keeps at least one scene");
+      return;
+    }
+    const scenes = this.state.scenes.filter((s) => s.id !== sceneId);
+    const active =
+      sceneId === this.state.activeSceneId ? scenes[0].id : this.state.activeSceneId;
+    this.commit({ ...this.state, scenes, activeSceneId: active });
+    this.dispatchEvent(new CustomEvent("scene"));
+  }
+
+  // ── layers, always the active scene's ─────────────────────────────────────
+
   /** Layers, top-first — the order the left panel shows them in. */
   get layers(): readonly Layer[] {
-    return this.state.layers;
+    return this.activeScene.layers;
   }
 
   layer(id: string): Layer | undefined {
-    return this.state.layers.find((l) => l.id === id);
+    return this.activeScene.layers.find((l) => l.id === id);
   }
 
   // ── mutation ──────────────────────────────────────────────────────────────
@@ -83,37 +191,39 @@ export class DocStore extends EventTarget {
     this.scheduleSave();
   }
 
-  private replaceLayer(layerId: string, update: (layer: Layer) => Layer): void {
+  private replaceScene(sceneId: string, update: (scene: Scene) => Scene): void {
     this.commit({
       ...this.state,
-      layers: this.state.layers.map((l) => (l.id === layerId ? update(l) : l)),
+      scenes: this.state.scenes.map((s) => (s.id === sceneId ? update(s) : s)),
     });
   }
 
+  /** Rewrite the active scene's layer list. Every layer edit lands here. */
+  private replaceLayers(update: (layers: readonly Layer[]) => Layer[]): void {
+    this.replaceScene(this.state.activeSceneId, (scene) => ({
+      ...scene,
+      layers: update(scene.layers),
+    }));
+  }
+
+  private replaceLayer(layerId: string, update: (layer: Layer) => Layer): void {
+    this.replaceLayers((layers) =>
+      layers.map((l) => (l.id === layerId ? update(l) : l)),
+    );
+  }
+
   addLayer(name?: string): Layer {
-    const layer: Layer = {
-      id: makeId("layer"),
-      name: name ?? `Layer ${this.state.layers.length + 1}`,
-      locked: false,
-      visible: true,
-      fills: [],
-      placements: [],
-      zones: [],
-      strokes: [],
-    };
-    this.commit({ ...this.state, layers: [layer, ...this.state.layers] });
+    const layer = emptyLayer(`Layer ${this.layers.length + 1}`, name);
+    this.replaceLayers((layers) => [layer, ...layers]);
     return layer;
   }
 
   removeLayer(layerId: string): void {
-    if (this.state.layers.length <= 1) {
-      log.warn("A project keeps at least one layer");
+    if (this.layers.length <= 1) {
+      log.warn("A scene keeps at least one layer");
       return;
     }
-    this.commit({
-      ...this.state,
-      layers: this.state.layers.filter((l) => l.id !== layerId),
-    });
+    this.replaceLayers((layers) => layers.filter((l) => l.id !== layerId));
   }
 
   renameLayer(layerId: string, name: string): void {
@@ -130,7 +240,7 @@ export class DocStore extends EventTarget {
 
   /** Move a layer by `delta` places in the top-first list. */
   moveLayer(layerId: string, delta: number): void {
-    const from = this.state.layers.findIndex((l) => l.id === layerId);
+    const from = this.layers.findIndex((l) => l.id === layerId);
     if (from < 0) return;
     this.reorderLayer(layerId, from + delta);
   }
@@ -141,14 +251,14 @@ export class DocStore extends EventTarget {
    * refused, so a drag that overshoots the end of the list still lands.
    */
   reorderLayer(layerId: string, toIndex: number): void {
-    const layers = [...this.state.layers];
+    const layers = [...this.layers];
     const from = layers.findIndex((l) => l.id === layerId);
     if (from < 0) return;
     const to = Math.max(0, Math.min(layers.length - 1, toIndex));
     if (to === from) return;
     const [moved] = layers.splice(from, 1);
     layers.splice(to, 0, moved);
-    this.commit({ ...this.state, layers });
+    this.replaceLayers(() => layers);
   }
 
   addFill(layerId: string, fill: Omit<FillPatch, "id">): FillPatch {
@@ -229,9 +339,8 @@ export class DocStore extends EventTarget {
     );
     if (!placement) return;
 
-    this.commit({
-      ...this.state,
-      layers: this.state.layers.map((l) => {
+    this.replaceLayers((layers) =>
+      layers.map((l) => {
         if (l.id === fromLayerId) {
           return { ...l, placements: l.placements.filter((p) => p.id !== placementId) };
         }
@@ -244,7 +353,56 @@ export class DocStore extends EventTarget {
         }
         return l;
       }),
-    });
+    );
+  }
+
+  /**
+   * Every placement in the project, scene by scene.
+   *
+   * PSDs are project-wide — `psd/` is one directory — so the questions about
+   * them are too. "How many placements draw this layer?" is not a question
+   * about the canvas you happen to be looking at.
+   */
+  *everyPlacement(): Generator<{
+    sceneId: string;
+    layerId: string;
+    placement: Placement;
+  }> {
+    for (const scene of this.state.scenes) {
+      for (const layer of scene.layers) {
+        for (const placement of layer.placements) {
+          yield { sceneId: scene.id, layerId: layer.id, placement };
+        }
+      }
+    }
+  }
+
+  /**
+   * Patch placements across every scene, in one write.
+   *
+   * `claim` returns what to change about a placement, or null to leave it.
+   * This is for the edits that are about a *file* rather than about a canvas:
+   * a PSD renamed under the placement you can see is renamed under every
+   * placement of it in every other scene too, and one left pointing at a key
+   * that has gone can never render with nothing on screen to say why.
+   */
+  updatePlacementsEverywhere(
+    claim: (placement: Placement) => Partial<Placement> | null,
+  ): void {
+    let touched = false;
+    const scenes = this.state.scenes.map((scene) => ({
+      ...scene,
+      layers: scene.layers.map((layer) => ({
+        ...layer,
+        placements: layer.placements.map((placement) => {
+          const patch = claim(placement);
+          if (!patch) return placement;
+          touched = true;
+          return { ...placement, ...patch };
+        }),
+      })),
+    }));
+    if (touched) this.commit({ ...this.state, scenes });
   }
 
   removePlacement(layerId: string, placementId: string): void {
@@ -316,10 +474,21 @@ export class DocStore extends EventTarget {
     }));
   }
 
-  /** Camera position rides the document but must never mark it content-dirty
-   *  on its own — a pan-only session should not queue a save storm. */
+  /**
+   * Camera position rides the *scene* — a scene is a place, and coming back
+   * to it should be coming back to where you were standing. It must never
+   * mark the document content-dirty on its own, though: a pan-only session
+   * should not queue a save storm, so this writes through rather than
+   * committing.
+   */
   setCamera(x: number, y: number, zoom: number): void {
-    this.state = { ...this.state, camera: { x, y, zoom } };
+    const activeId = this.state.activeSceneId;
+    this.state = {
+      ...this.state,
+      scenes: this.state.scenes.map((s) =>
+        s.id === activeId ? { ...s, camera: { x, y, zoom } } : s,
+      ),
+    };
     this.dirty = true;
   }
 
@@ -356,4 +525,90 @@ export class DocStore extends EventTarget {
     }
     await this.save();
   }
+}
+
+/**
+ * A document with scenes in it, whatever it arrived as.
+ *
+ * Projects written before scenes existed keep their layers and their camera
+ * at the top level. Those become one scene called Main — which is what they
+ * always were, named for the first time. A document that already has scenes
+ * is checked rather than trusted: an `activeSceneId` naming a scene that is
+ * not there would be an editor with nowhere to draw, and hand-edited
+ * documents are a thing this app invites.
+ */
+export function withScenes(doc: StoredDoc): GameDoc {
+  const { layers: legacyLayers, camera: legacyCamera, ...rest } = doc;
+
+  const scenes =
+    Array.isArray(doc.scenes) && doc.scenes.length > 0
+      ? doc.scenes
+      : [
+          {
+            id: makeId("scene"),
+            name: "Main",
+            layers: legacyLayers ?? [emptyLayer("Terrain")],
+            ...(legacyCamera ? { camera: legacyCamera } : {}),
+          },
+        ];
+
+  const named = doc.activeSceneId;
+  const active =
+    named && scenes.some((s) => s.id === named) ? named : scenes[0].id;
+
+  return { ...rest, version: 2, scenes, activeSceneId: active };
+}
+
+/** The one layer a scene is never without. */
+function emptyLayer(fallback: string, name?: string): Layer {
+  return {
+    id: makeId("layer"),
+    name: name ?? fallback,
+    locked: false,
+    visible: true,
+    fills: [],
+    placements: [],
+    zones: [],
+    strokes: [],
+  };
+}
+
+/**
+ * A layer and everything on it, under new ids.
+ *
+ * Strokes are copied too. They are the one thing that does not reach a
+ * publish, but a duplicated scene you then drew over would otherwise share
+ * its ink with the original — the strokes are stored by id and the drawing
+ * layer diffs by identity.
+ */
+function copyLayer(layer: Layer): Layer {
+  return {
+    ...layer,
+    id: makeId("layer"),
+    fills: layer.fills.map((fill) => ({ ...fill, id: makeId("fill") })),
+    placements: copyPlacements(layer.placements),
+    zones: layer.zones.map((zone) => ({ ...zone, id: makeId("zone") })),
+    strokes: layer.strokes.map((stroke) => ({ ...stroke, id: makeId("stroke") })),
+  };
+}
+
+/**
+ * Placements, with their units kept together.
+ *
+ * The placements one PSD arrived as share an `instance`, and that is what
+ * makes them drag as one thing. Minting a fresh id per placement without
+ * remapping the instance would leave a copy whose parts each think they
+ * belong to the original's unit.
+ */
+function copyPlacements(placements: readonly Placement[]): Placement[] {
+  const units = new Map<string, string>();
+  return placements.map((placement) => {
+    const copy: Placement = { ...placement, id: makeId("place") };
+    if (placement.instance) {
+      const mapped = units.get(placement.instance) ?? makeId("unit");
+      units.set(placement.instance, mapped);
+      copy.instance = mapped;
+    }
+    return copy;
+  });
 }

@@ -171,14 +171,16 @@ export async function applyExtrusion(
   }
 }
 
-/** Point every placement on a key at the space its artwork now hangs from. */
+/**
+ * Point every placement on a key at the space its artwork now hangs from.
+ *
+ * Every scene's, because the file is the project's: an extrusion re-applied
+ * moves the artwork under every placement of it, wherever that placement is.
+ */
 function reanchor(store: DocStore, key: string, anchor: Cell): void {
-  for (const layer of store.layers) {
-    for (const placement of layer.placements) {
-      if (placement.psdKey !== key) continue;
-      store.updatePlacement(layer.id, placement.id, { anchor });
-    }
-  }
+  store.updatePlacementsEverywhere((placement) =>
+    placement.psdKey === key ? { anchor } : null,
+  );
 }
 
 /**

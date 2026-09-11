@@ -36,7 +36,11 @@ fn starter_documents_carry_the_chosen_template_and_grid() {
     assert_eq!(value["projection"], "isometric");
     assert_eq!(value["genre"], "topdown");
     assert_eq!(value["gridSize"], 128);
-    assert_eq!(value["layers"].as_array().map(Vec::len), Some(1));
+    // One scene, holding the one layer a project starts with.
+    assert_eq!(value["scenes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(value["scenes"][0]["name"], "Main");
+    assert_eq!(value["activeSceneId"], value["scenes"][0]["id"]);
+    assert_eq!(value["scenes"][0]["layers"].as_array().map(Vec::len), Some(1));
 
     // Both axes reach the document, because the editor reads its play mode
     // out of it rather than out of the project's meta.
@@ -547,5 +551,140 @@ fn both_scenes_mark_the_same_blocks_and_close_every_one() {
             ],
             "{genre:?} marks a different set of blocks",
         );
+    }
+}
+
+/// The config, once a project is several places.
+///
+/// `layers` stays the *open* scene's, because that is what every project's
+/// own `WorldScene.js` reads and a project scaffolded before scenes kept its
+/// own copy of that file. `scenes` carries all of them beside it, and the PSD
+/// keys cover every scene so a switch in someone's own code has its textures.
+#[test]
+fn the_config_carries_every_scene_and_places_the_open_one() {
+    let meta = store::create_project("Scened", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        store::write_doc(
+            &meta.id,
+            &serde_json::json!({
+                "version": 2,
+                "projection": "orthogonal",
+                "genre": "topdown",
+                "gridSize": 32,
+                "activeSceneId": "scene-cave",
+                "scenes": [
+                    {
+                        "id": "scene-main",
+                        "name": "Main",
+                        "layers": [{
+                            "id": "l1", "name": "Terrain", "visible": true,
+                            "fills": [], "zones": [], "strokes": [],
+                            "placements": [{
+                                "id": "p1", "psdKey": "tower", "layerPath": "tower",
+                                "x": 0.0, "y": 0.0, "width": 32.0, "height": 32.0
+                            }]
+                        }]
+                    },
+                    {
+                        "id": "scene-cave",
+                        "name": "Cave",
+                        "layers": [{
+                            "id": "l2", "name": "Walls", "visible": true,
+                            "fills": [], "zones": [], "strokes": [],
+                            "placements": [{
+                                "id": "p2", "psdKey": "stalactite", "layerPath": "stalactite",
+                                "x": 64.0, "y": 64.0, "width": 32.0, "height": 32.0
+                            }]
+                        }]
+                    }
+                ]
+            })
+            .to_string(),
+        )
+        .expect("document should save");
+
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&meta.id, "js/game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+
+        assert_eq!(config["activeScene"], "scene-cave");
+        assert_eq!(config["scenes"].as_array().map(Vec::len), Some(2));
+        assert_eq!(config["scenes"][0]["name"], "Main");
+        assert_eq!(config["scenes"][1]["name"], "Cave");
+
+        // `layers` is the open scene's, not the first one's.
+        assert_eq!(config["layers"][0]["placements"][0]["psdKey"], "stalactite");
+
+        // Every scene's keys, so switching does not need a reload.
+        let keys: Vec<&str> = config["psdKeys"]
+            .as_array()
+            .expect("psdKeys")
+            .iter()
+            .filter_map(|k| k.as_str())
+            .collect();
+        assert!(keys.contains(&"tower"), "keys were {keys:?}");
+        assert!(keys.contains(&"stalactite"), "keys were {keys:?}");
+
+        // Layers are counted across the project rather than per scene: the
+        // home screen's number is about the project.
+        assert_eq!(store::read_meta(&meta.id).expect("meta").layer_count, 2);
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// A project written before scenes still exports what is in it.
+///
+/// The editor migrates a document the first time it opens one, but the config
+/// is regenerated on the way *in* as well — so this runs against a document
+/// that has never been through the frontend.
+#[test]
+fn a_document_written_before_scenes_still_reaches_the_config() {
+    let meta = store::create_project("Legacy doc", Projection::Blank, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        store::write_doc(
+            &meta.id,
+            &serde_json::json!({
+                "version": 1,
+                "projection": "blank",
+                "genre": "topdown",
+                "gridSize": 32,
+                "layers": [{
+                    "id": "l1", "name": "Terrain", "visible": true,
+                    "fills": [], "zones": [], "strokes": [],
+                    "placements": [{
+                        "id": "p1", "psdKey": "hut", "layerPath": "hut",
+                        "x": 0.0, "y": 0.0, "width": 32.0, "height": 32.0
+                    }]
+                }]
+            })
+            .to_string(),
+        )
+        .expect("document should save");
+
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&meta.id, "js/game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+
+        assert_eq!(config["psdKeys"][0], "hut");
+        assert_eq!(config["layers"][0]["placements"][0]["psdKey"], "hut");
+        // One scene, named the same thing the editor's own migration names it.
+        assert_eq!(config["scenes"].as_array().map(Vec::len), Some(1));
+        assert_eq!(config["scenes"][0]["name"], "Main");
+        assert_eq!(config["activeScene"], "scene-main");
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
     }
 }
