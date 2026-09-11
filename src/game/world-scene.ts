@@ -11,10 +11,11 @@ import { Grid, cellsInRange } from "../lib/grid";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
-import { DocRenderer, pickPlacementsIn } from "./doc-renderer";
+import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
 import { DropTargets, type PlacedTarget } from "./drop-target";
+import { Marquee } from "./marquee";
 import { PlayController, type PlayMode } from "./play-controller";
 import { PlatformerController } from "./play-platformer";
 import type { PlayInput } from "./platformer";
@@ -62,23 +63,13 @@ export class WorldScene extends Phaser.Scene {
   private docRenderer!: DocRenderer;
   private overlay!: SelectionOverlay;
   private drops!: DropTargets;
+  private marquee!: Marquee;
   private play!: PlayMode;
   /** Held movement, written by the editor's play pad and its keyboard. */
   private playInput: PlayInput = { left: false, right: false, jump: false };
 
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
-  private marqueeAnchor: Cell | null = null;
-  /**
-   * Whether the region selected was *asked for*, rather than dragged through.
-   *
-   * A finger held still means "this much space" — Fill, Add Image and
-   * Generate PSD are what it is for, and the action bar offers them. A drag
-   * under the Select tool means "whatever is in here", and its region is only
-   * what is left when the box caught nothing: putting a bar of things to make
-   * over it interrupts a gesture that was about picking things up.
-   */
-  private held = false;
   private drag!: DragController;
   private psds!: PsdPlacements;
   /** Set once the camera is where it should stay — restored, or user-moved. */
@@ -117,6 +108,7 @@ export class WorldScene extends Phaser.Scene {
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
     this.drops = new DropTargets(this.add.graphics(), this.store);
+    this.marquee = new Marquee(this.add.graphics(), this.grid);
     // Which play mode this project has is a property of the project, decided
     // when it was created and carried in the document ever since.
     this.play =
@@ -362,42 +354,21 @@ export class WorldScene extends Phaser.Scene {
     fromHold: boolean,
   ): void {
     if (this.mode === "play") return;
-    const cell = this.grid.worldToCell(this.worldAt(screenX, screenY));
-    this.marqueeAnchor = cell;
-    this.held = fromHold;
-    this.setSelection({ kind: "region", from: cell, to: cell });
+    this.setSelection(this.marquee.begin(this.worldAt(screenX, screenY), fromHold));
   }
 
   private extendMarquee(screenX: number, screenY: number): void {
-    if (!this.marqueeAnchor) return;
-    const cell = this.grid.worldToCell(this.worldAt(screenX, screenY));
-    this.setSelection({ kind: "region", from: this.marqueeAnchor, to: cell });
+    const next = this.marquee.extend(
+      this.worldAt(screenX, screenY),
+      this.cameras.main.zoom,
+    );
+    if (next) this.setSelection(next);
   }
 
-  /**
-   * What the box caught.
-   *
-   * A marquee over images is a way of picking several of them up; a marquee
-   * over empty grid is a way of saying "this much space", which is what Fill,
-   * Add Image and Generate PSD act on. Both are the same gesture, and the
-   * answer is decided by what is under it at the end rather than by a
-   * modifier nobody would find.
-   */
+  /** What the box caught — `game/marquee.ts` decides, this applies it. */
   private endMarquee(): void {
-    const anchor = this.marqueeAnchor;
-    this.marqueeAnchor = null;
-    if (!anchor || this.selection.kind !== "region") return;
-
-    // The marquee's own shape, which under an isometric template is a
-    // diamond — the box around it reaches a long way past what was dragged.
-    const outline = this.grid.rangePolygon(this.selection.from, this.selection.to);
-    const caught = pickPlacementsIn(this.store.layers, outline);
-    if (!caught) return;
-    this.setSelection({
-      kind: "placements",
-      layerId: caught.layerId,
-      ids: caught.ids,
-    });
+    const next = this.marquee.end(this.store.layers);
+    if (next) this.setSelection(next);
   }
 
   setSelection(selection: Selection): void {
@@ -539,7 +510,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** Screen position for the floating action bar over a region selection. */
   selectionScreenAnchor(): { x: number; y: number; width: number } | null {
-    if (this.selection.kind !== "region" || !this.held) return null;
+    if (this.selection.kind !== "region" || !this.marquee.held) return null;
     const bounds = this.grid.rangeBounds(this.selection.from, this.selection.to);
     const camera = this.cameras.main;
     const rect = this.game.canvas.getBoundingClientRect();
@@ -629,6 +600,7 @@ export class WorldScene extends Phaser.Scene {
     // Nothing can be dropped on a running game, so a highlight left over
     // from a drag that ended in Play would never be cleared.
     this.markDrop(null);
+    this.marquee.cancel();
     if (mode === "play") {
       this.setSelection({ kind: "none" });
       this.play.start();
@@ -662,6 +634,7 @@ export class WorldScene extends Phaser.Scene {
     this.scale.off(Phaser.Scale.Events.RESIZE, this.recentreUntilTouched, this);
     this.rig.destroy();
     this.drops.destroy();
+    this.marquee.destroy();
     this.docRenderer.destroy();
   }
 }

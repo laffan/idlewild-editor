@@ -252,30 +252,43 @@ inputs, every frame.
 
 ### What a marquee catches
 
-A marquee is one gesture with two possible answers, and which one it gives is
-decided by what is under it when it is released rather than by a modifier
-nobody would find. Over images it selects them — a `placements` selection,
-which drags and deletes as a group. Over empty grid it stays a `region`,
-which is what Fill, Add Image and Generate PSD act on.
+Select has two gestures, and they ask different questions — which is why
+`game/marquee.ts` draws them differently and answers them differently.
 
-**How the marquee began decides whether the action bar appears.** A finger
-held still means *this much space*, and the bar's three actions are what that
-is for. A drag under the Select tool means *whatever is in here* — putting a
-bar of things to make over it interrupts a gesture that was about picking
-things up, and it appeared even when the box caught images and the bar had
-nothing to do with the selection that resulted. So `onMarqueeStart` carries
-`fromHold`, the scene remembers it, and `selectionScreenAnchor` returns null
-for a region that was dragged rather than asked for — the same null it
-already returned for a selection the bar has nothing to say about.
+**Press and hold asks for a patch of grid.** Fill, Add Image and Generate PSD
+act on it, so it is measured in spaces and drawn as the grid draws them:
+under an isometric template, a diamond. It stays a `region` when it catches
+nothing, because the space it covers is the thing it was for, and the
+floating action bar appears over it.
 
-`pickPlacementsIn` takes the marquee's **own outline**, not the box around it.
-Under an isometric template the marquee is a diamond and the box around that
-diamond reaches a long way past what was dragged: hit-testing the box let a
-marquee in one corner of the screen pick up images in another. It is the same
-mistake, in a different place, as the one that put a 132 × 136 sketch into an
-832 × 416 PSD. A placement counts when the marquee *overlaps* it rather than
-contains it — dragging a box that swallows everything whole is the fiddly
-half of every marquee, and nothing here is small enough to catch by accident.
+**A drag asks what is in here.** The things it catches are images sitting at
+world coordinates that owe the grid nothing, so a drag is a plain rectangle —
+the one that was dragged, pixel for pixel, with no lattice to round to. What
+it catches *is* the answer: a `placements` selection, which drags and deletes
+as a group, or `none` if it caught nothing, which is what tapping empty space
+means too. No action bar: putting a bar of things to make over it interrupts
+a gesture that was about picking things up.
+
+Both used to be the same gesture in two moods, both rounded to cells. On an
+isometric project that meant dragging a box and watching a diamond appear
+somewhere near it, reaching a long way past the corner you started from and
+catching images you could see were outside it.
+
+The dragged band is deliberately **not** a `Selection`. It is a gesture still
+happening: it draws into graphics of its own, in world coordinates so a
+camera that moves under it leaves it over the same ground, and nothing is
+chosen until the finger comes up — which also means the inspector is no
+longer rebuilt on every frame of a drag for a thing that is not selected yet.
+
+`pickPlacementsIn` takes the marquee's **own outline** either way, not the box
+around it. A dragged rectangle is its own box, so that costs nothing there;
+a held diamond's bounding box reaches a long way past what was dragged, and
+hit-testing it let a marquee in one corner of the screen pick up images in
+another. It is the same mistake, in a different place, as the one that put a
+132 × 136 sketch into an 832 × 416 PSD. A placement counts when the marquee
+*overlaps* it rather than contains it — dragging a box that swallows
+everything whole is the fiddly half of every marquee, and nothing here is
+small enough to catch by accident.
 
 The catch is one layer's worth, chosen by the same front-most-wins rule a tap
 follows, so a marquee over a stack picks the layer you would have hit by
@@ -1102,7 +1115,7 @@ Apple arms without a Mac; neither one links, and neither is a substitute for
 running it on a device.
 
 `vitest` covers the pure halves — the grid projection, fill geometry,
-picking (a point's and a marquee's), resize geometry, the unit arithmetic
+picking (a point's and both marquees'), resize geometry, the unit arithmetic
 behind a placed PSD, what the clipboard hands a paste and where that paste
 lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest

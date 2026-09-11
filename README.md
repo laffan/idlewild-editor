@@ -37,8 +37,9 @@ remaining pieces are wired to real slots rather than mocked.
 - A full-width header carrying the project and the Edit/Play toggle, with
   Code, Publish and Project Options behind its menu. It insets itself out of
   the iPad's status bar, as the console drawer does out of the home indicator
-- Infinite grid, two-finger zoom, tap-to-pick. Select drags a box around
-  things — several images at once, or a patch of grid; Pan drags the camera,
+- Infinite grid, two-finger zoom, tap-to-pick. Select drags a plain rectangle
+  around things to pick up several images at once; press and hold instead and
+  it asks for a patch of grid, in the grid's own shape. Pan drags the camera,
   and holding space borrows it from wherever you are
 - Press and hold to ask for a patch of grid, and get Fill, Add Image and
   Generate PSD over it
