@@ -189,9 +189,10 @@ export interface Layer {
  * the *file*: two placements of one PSD are two views of the same solid, and
  * continuing either of them rewrites the file both draw.
  *
- * Dropped the moment the file stops being the editor's own output — a
- * re-import, or a rewrite of its layer stack — because a greybox someone has
- * since painted over is no longer the thing the shape describes.
+ * It outlives everything that happens to the file. A re-parse, a re-import, a
+ * layer stack rewritten in the inspector: none of them change the key, and
+ * the key is what this hangs from — which is the point, because the way back
+ * into extrude mode is no use if editing the artwork takes it away.
  */
 export interface Extrusion {
   /** Voxel keys, as `lib/extrude.ts` writes them: `"cx,cy,cz"`. */

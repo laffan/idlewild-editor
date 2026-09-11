@@ -1639,10 +1639,17 @@ touching the document, so a cancelled session leaves no trace — and it is
 derived from the mode's state on every change rather than switched on and off
 at each call site, so however the session ends the placement comes back.
 
-**The record is dropped the moment the file stops being the editor's own
-output** — a re-import, or a rewrite of its layer stack from the inspector.
-A greybox someone has since painted over is no longer the thing the shape
-describes, and re-applying it would throw the painting away.
+**The record outlives everything that happens to the file.** A re-parse, a
+re-import, a layer stack rewritten in the inspector: none of them change the
+key, and the key is what it hangs from. That is the point — a way back into
+extrude mode that editing the artwork takes away is no way back at all, and
+the first pass dropped the record on exactly those edits for fear of
+overwriting hand-painted work. The fear is real and is now stated where it
+belongs, in the gaps below, rather than enforced by taking the feature away.
+
+The key is also the more durable anchor than the placement would be:
+reconciliation can remove a placement and adopt a replacement with a new id
+when a layer is renamed outside the app, and the key does not move.
 
 ### Layers the app owns the name of
 
@@ -1665,33 +1672,45 @@ An owned layer may offer something in its place, which is the other half of
 why the rule exists: the extrusion's row carries the cube that reopens the
 mode that wrote it.
 
-### One re-parse, one extra row
+### One re-parse, one placed object per layer in the file
 
-Reconciliation had two halves that disagreed about what counts as placed.
-`reviseExisting` looked a placement's path up in `manifest.all` — every layer,
-marks and nested layers included — while `adoptNewLayers` walked
-`placeableLayers`, which is top-level and pixels only. A placement standing on
-one of the marks therefore survived revision *and* left adoption seeing nothing
-on the artwork, so it added a second placement for it. One re-parse, one extra
-row in the layer list, and nothing new on the canvas — because the extra
-placement drew a point.
+A re-parse turned one placed PSD into three: the artwork, and one apiece for
+the two orienting marks. The extra two drew nothing, because psd-to-json
+exports no pixels for a point or a zone — so the symptom was rows appearing in
+the layer list with nothing to show for them on the canvas.
 
-Two changes close it. Adoption now treats a top-level layer as taken when a
-placement stands on it **or on anything nested under it**, so a group whose
-child is placed is not a layer that has appeared. And revision **repoints** a
-placement standing on a layer with no pixels onto the file's first placeable
-one, keeping its id, instance and anchor: that placement was drawing an empty
-group, which is the thing `placeableLayers` exists to refuse.
+The cause is one bare string. `category` is what decides whether a layer is
+artwork or metadata, it comes from a separate program on its own release
+schedule, and `parseManifest` read it strictly: anything it did not recognise
+fell to the default, `"group"`, which is placeable. So a spelling this parser
+did not know — capitalised, plural, or carried under `type` — made every layer
+in the file placeable, and `adoptNewLayers` dutifully gave each one a placement
+of its own. Reading it strictly did not fail loudly; it failed by
+*multiplying*.
 
-How one comes to be there is the migration early builds needed —
-`layerPath: "root"` was repointed at the file's *first* layer, and for
-everything this editor generates that is one of the two marks drawn over the
+Two things close it, and both are worth having on their own account.
+`CATEGORIES` is now a table of every spelling to answer to, falling back to
+`type` the way psd-to-phaser itself does and treating `tile` and `tileset`
+alike, as it also does. And `placeableLayers` refuses the editor's own marks
+**by name** whatever category the manifest gives them — `anchor` and `grid`
+are reserved, which is the same fact the inspector states when it will not let
+them be renamed.
+
+Two smaller disagreements were fixed alongside. Adoption treats a top-level
+layer as taken when a placement stands on it **or on anything nested under
+it**, so a group whose child is placed is not a layer that has appeared. And
+revision **repoints** a placement standing on a layer with no pixels onto the
+file's first placeable one, keeping its id, instance and anchor — that
+placement was drawing an empty group, which is the thing `placeableLayers`
+exists to refuse. One comes to be there through the migration early builds
+needed: `layerPath: "root"` was repointed at the file's *first* layer, which
+for everything this editor generates is one of the marks drawn over the
 artwork.
 
 The reconciliation is `game/reconcile.ts`, split out of `psd-loader.ts`
 because that file imports Phaser for its side of the loading contract and none
 of this touches a canvas. The same bargain `instance.ts` and `resize.ts`
-already make, and it is what lets the case above be a test.
+already make, and it is what lets all of the above be tests.
 
 ## The iPad's safe area
 
@@ -1882,16 +1901,12 @@ on chrome never highlights it.
 - Dropping several files at once takes the first one the pipeline can read.
   A drop is one gesture landing on one space, and a run of images would need
   somewhere to put the rest.
-- Reordering an extruded PSD's layers from the inspector drops the record
-  behind it, so the cube goes and the shape can no longer be carried on. The
-  rewrite cannot tell a reorder from an edit that makes the file somebody
-  else's, and it says nothing when it happens — the disappearing icon is the
-  only notice.
 - Continuing an extrusion rewrites the whole PSD, so anything added to that
-  file by hand goes with it. The record is dropped on a re-import or a layer
-  rewrite, which covers the round trip through Photoshop the editor knows
-  about — but a file edited and saved without being re-imported is still
-  overwritten, and the canvas was showing stale artwork for it anyway.
+  file by hand goes with it: the shape is regenerated into the artwork layer
+  and both marks, and nothing else survives. The record deliberately outlives
+  every edit to the file, so it is the one place the editor lets you overwrite
+  your own work — Apply on a continued extrusion is the destructive step, and
+  it does not ask.
 - A continued extrusion keeps whatever scale its placement was resized to, so
   a block-out scaled to 80% comes back at 80% rather than snapping to the
   grid. The shape is right and the displayed size is the user's; they are only

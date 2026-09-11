@@ -289,3 +289,84 @@ describe("stackOrder", () => {
     expect([...stackOrder(parseManifest(CONVERTED_PNG))]).toEqual([["build", 0]]);
   });
 });
+
+/**
+ * The category is one bare string from another program on its own release
+ * schedule, and reading it strictly does not fail loudly: an unrecognised
+ * spelling falls to "group", which is placeable, so every layer in the file
+ * — the two orienting marks included — arrives on the grid as a placed object
+ * of its own. A re-parse then looks like the PSD multiplying.
+ */
+describe("categories the parser will answer to", () => {
+    function shapes(): Record<string, string> {
+    const withKey = (key: string, map: (v: string) => string) =>
+      JSON.stringify({
+        name: "hut",
+        width: 128,
+        height: 160,
+        layers: [
+          { name: "anchor", [key]: map("point"), x: 0, y: 0, width: 12, height: 12 },
+          { name: "grid", [key]: map("zone"), x: 0, y: 0, width: 64, height: 32 },
+          { name: "hut", [key]: map("sprite"), x: 0, y: 0, width: 128, height: 160 },
+        ],
+      });
+    return {
+      "as written": withKey("category", (v) => v),
+      capitalised: withKey("category", (v) => v[0].toUpperCase() + v.slice(1)),
+      plural: withKey("category", (v) => `${v}s`),
+      "under type": withKey("type", (v) => v),
+      "with spaces": withKey("category", (v) => ` ${v} `),
+    };
+  }
+
+  it("places the artwork and nothing else, however it is spelled", () => {
+    for (const [label, json] of Object.entries(shapes())) {
+      const placed = placeableLayers(parseManifest(json)).map((l) => l.path);
+      expect(placed, label).toEqual(["hut"]);
+    }
+  });
+
+  it("still finds the anchor mark, so the artwork lands on its space", () => {
+    expect(parseManifest(shapes().plural).anchor).toEqual({ x: 0, y: 0 });
+    expect(parseManifest(shapes()["under type"]).anchor).toEqual({ x: 0, y: 0 });
+  });
+
+  it("reads tilesets under either of the names the runtime takes", () => {
+    const tiles = JSON.stringify({
+      name: "ground",
+      width: 64,
+      height: 64,
+      layers: [{ name: "ground", category: "tile", x: 0, y: 0, width: 64, height: 64 }],
+    });
+    expect(parseManifest(tiles).top[0].category).toBe("tileset");
+  });
+
+  it("refuses the marks by name even where the category says otherwise", () => {
+    // The one case the spellings above cannot cover: a file that calls its
+    // mark a sprite. The names are the app's, so they are not artwork here.
+    const lying = JSON.stringify({
+      name: "hut",
+      width: 128,
+      height: 160,
+      layers: [
+        { name: "anchor", category: "sprite", x: 0, y: 0, width: 12, height: 12 },
+        { name: "grid", category: "sprite", x: 0, y: 0, width: 64, height: 32 },
+        { name: "hut", category: "sprite", x: 0, y: 0, width: 128, height: 160 },
+      ],
+    });
+    expect(placeableLayers(parseManifest(lying)).map((l) => l.path)).toEqual(["hut"]);
+  });
+
+  it("leaves a file that is nothing but marks placeable, rather than empty", () => {
+    // `placeableLayers` falls back to every top-level layer when the filter
+    // leaves nothing: a placement of something is recoverable, and a PSD that
+    // silently places nothing is not.
+    const bare = JSON.stringify({
+      name: "marks",
+      width: 64,
+      height: 32,
+      layers: [{ name: "grid", category: "zone", x: 0, y: 0, width: 64, height: 32 }],
+    });
+    expect(placeableLayers(parseManifest(bare))).toHaveLength(1);
+  });
+});

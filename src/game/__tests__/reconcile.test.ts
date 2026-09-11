@@ -146,3 +146,35 @@ describe("re-parsing a PSD", () => {
     expect(paths(s)).toEqual([]);
   });
 });
+
+/**
+ * The shape a re-parse actually arrived in: the category spelled in a way
+ * this parser did not recognise, so every layer in the file counted as
+ * placeable and reconciliation adopted one placed object per PSD layer.
+ */
+describe("a manifest whose categories are spelled differently", () => {
+  const LOOSE = JSON.stringify({
+    name: "extrude-abc",
+    width: 128,
+    height: 160,
+    layers: [
+      { name: "anchor", category: "Point", x: 60, y: 76, width: 12, height: 12 },
+      { name: "grid", category: "Zones", x: 32, y: 64, width: 64, height: 32 },
+      { name: "extrude-abc", category: "Sprite", x: 0, y: 0, width: 128, height: 160 },
+    ],
+  });
+
+  it("does not turn one placed PSD into one per layer", () => {
+    const s = store(placement("extrude-abc", "extrude-abc"));
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(LOOSE));
+    expect(paths(s)).toEqual(["extrude-abc"]);
+  });
+
+  it("is the same on a second and third re-parse", () => {
+    const s = store(placement("extrude-abc", "extrude-abc"));
+    for (let i = 0; i < 3; i++) {
+      reconcilePlacements(s, grid, "extrude-abc", parseManifest(LOOSE));
+    }
+    expect(paths(s)).toEqual(["extrude-abc"]);
+  });
+});
