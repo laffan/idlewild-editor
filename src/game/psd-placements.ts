@@ -13,6 +13,7 @@ import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
+import { defaultCollider, placementsBox } from "../lib/collider";
 import {
   parseManifest,
   placeableLayers,
@@ -129,6 +130,12 @@ export class PsdPlacements {
       last = placement;
     }
 
+    // What the file blocks, before anyone has said otherwise. Written here
+    // rather than left to be derived on demand so that everything reading the
+    // document downstream — play mode, the export, the inspector — reads one
+    // answer rather than three implementations of the same guess.
+    this.syncCollider(key);
+
     if (last) {
       this.host.setSelection({
         kind: "placement",
@@ -136,6 +143,53 @@ export class PsdPlacements {
         placementId: last.id,
       });
     }
+  }
+
+  /**
+   * Write the default collider for a key, unless someone has edited it.
+   *
+   * An edited collider is an answer; a default is only a guess that has not
+   * been corrected yet, so it is recomputed whenever the thing it was guessed
+   * from changes — the artwork's footprint on a re-import, the solid's ground
+   * on a second Apply.
+   */
+  private syncCollider(key: string): void {
+    if (this.host.store.collider(key)?.edited) return;
+    const unit = this.unitOf(key);
+    if (!unit) return;
+    this.host.store.setCollider(
+      key,
+      defaultCollider(
+        this.host.grid,
+        unit.anchor,
+        placementsBox(unit.placements),
+        this.host.store.extrusion(key),
+      ),
+    );
+  }
+
+  /**
+   * One placed unit of a PSD: the placements it is made of, and the space
+   * they hang from.
+   *
+   * The first one found. A collider is a fact about the file rather than
+   * about any one placement of it, so where two copies of a PSD disagree
+   * about their own size the first is as good an answer as the second — and
+   * both of them are the same artwork.
+   */
+  private unitOf(key: string): { anchor: Cell; placements: Placement[] } | null {
+    for (const layer of this.host.store.layers) {
+      const first = layer.placements.find((p) => p.psdKey === key);
+      if (!first) continue;
+      const unit = instanceOf(first);
+      return {
+        anchor: first.anchor,
+        placements: layer.placements.filter(
+          (p) => p.psdKey === key && instanceOf(p) === unit,
+        ),
+      };
+    }
+    return null;
   }
 
   /**
@@ -172,6 +226,10 @@ export class PsdPlacements {
         if (placement.psdKey === key) this.placeOne(layer.id, placement);
       }
     }
+    // The artwork has just changed shape, and a default collider is a
+    // statement about the artwork — so it follows the file rather than
+    // staying where the old one was.
+    this.syncCollider(key);
     this.host.docRenderer.render();
   }
 
@@ -209,6 +267,8 @@ export class PsdPlacements {
     // moves with the file rather than being left pointing at a name that has
     // gone.
     this.host.store.copyExtrusion(from, to, false);
+    // And what it blocks, which is keyed by the file for the same reason.
+    this.host.store.copyCollider(from, to, false);
 
     await this.load(to);
     for (const { layerId, placement } of moved) this.placeOne(layerId, placement);
@@ -311,6 +371,13 @@ export class PsdPlacements {
    *
    * **Stacking.** Placements made before the PSD's own layer order was
    * recorded get it from the order they are in, which was the manifest's.
+   *
+   * **Colliders.** Every placed key that has no record gets the same default
+   * a fresh import would: an extrusion blocks the spaces it stands on, and
+   * anything else blocks the spaces its artwork covers. Done on open rather
+   * than lazily, because a collider that appeared the first time something
+   * asked for it would make a project play differently depending on what had
+   * been looked at.
    */
   migrate(): void {
     for (const layer of this.host.store.layers) {
@@ -345,6 +412,14 @@ export class PsdPlacements {
           });
         });
       }
+    }
+
+    const keys = new Set<string>();
+    for (const layer of this.host.store.layers) {
+      for (const placement of layer.placements) keys.add(placement.psdKey);
+    }
+    for (const key of keys) {
+      if (!this.host.store.collider(key)) this.syncCollider(key);
     }
   }
 

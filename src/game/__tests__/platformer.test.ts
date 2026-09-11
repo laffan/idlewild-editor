@@ -10,7 +10,7 @@ import {
   type PlayInput,
 } from "../platformer";
 import { Grid } from "../../lib/grid";
-import type { Layer, Rect } from "../../lib/types";
+import type { Layer, Placement, Rect } from "../../lib/types";
 
 const STILL: PlayInput = { left: false, right: false, jump: false };
 const FRAME = 1 / 60;
@@ -229,6 +229,51 @@ describe("solidsFromDocument", () => {
         ],
       }),
     ]);
+    expect(solids).toEqual([]);
+  });
+
+  it("stands on a placed PSD's collider, once per unit", () => {
+    const placed = (id: string, instance: string): Placement => ({
+      id,
+      psdKey: "tower",
+      layerPath: id,
+      x: 0,
+      y: 0,
+      width: 32,
+      height: 32,
+      anchor: { cx: 1, cy: 2 },
+      instance,
+    });
+    const solids = solidsFromDocument(
+      grid,
+      [layer({ placements: [placed("wall", "u1"), placed("roof", "u1")] })],
+      { tower: { cells: [{ cx: 0, cy: 0 }], blocking: true } },
+    );
+    // Anchored at 1,2 on a 32px grid, and one box rather than two.
+    expect(solids).toEqual([{ x: 32, y: 64, width: 32, height: 32 }]);
+  });
+
+  it("walks through a collider that has been switched off", () => {
+    const solids = solidsFromDocument(
+      grid,
+      [
+        layer({
+          placements: [
+            {
+              id: "p",
+              psdKey: "path",
+              layerPath: "path",
+              x: 0,
+              y: 0,
+              width: 32,
+              height: 32,
+              anchor: { cx: 0, cy: 0 },
+            },
+          ],
+        }),
+      ],
+      { path: { cells: [{ cx: 0, cy: 0 }], blocking: false } },
+    );
     expect(solids).toEqual([]);
   });
 });

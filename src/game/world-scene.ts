@@ -20,7 +20,7 @@ import { PlayController, type PlayMode } from "./play-controller";
 import { PlatformerController } from "./play-platformer";
 import type { PlayInput } from "./platformer";
 import { DragController } from "./drag";
-import { ExtrudeMode } from "./extrude-mode";
+import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
 import { instanceMembers, instanceOf } from "./instance";
 import type { Viewport } from "../drawing";
@@ -51,6 +51,8 @@ export interface WorldSceneConfig {
   onDetachCopy?: (layerId: string, placementId: string, key: string) => void;
   /** Extrude mode has started, finished, or changed what it is holding. */
   onExtrudeChange?: () => void;
+  /** Collider mode has started, finished, or changed the spaces it holds. */
+  onColliderChange?: () => void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -74,8 +76,8 @@ export class WorldScene extends Phaser.Scene {
   private mode: EditorMode = "edit";
   private selection: Selection = { kind: "none" };
   private drag!: DragController;
-  /** The prototype solid being pulled out of the grid, when one is. */
-  extrude!: ExtrudeMode;
+  /** The modes that take the canvas over: extrude, and collider. */
+  modes!: CanvasModes;
   private psds!: PsdPlacements;
   /** Set once the camera is where it should stay — restored, or user-moved. */
   private cameraPlaced = false;
@@ -133,7 +135,7 @@ export class WorldScene extends Phaser.Scene {
         this.config.onDetachCopy?.(layerId, placementId, key),
       onDragStateChange: (dragging) => this.config.onDragStateChange(dragging),
     });
-    this.extrude = new ExtrudeMode({
+    this.modes = new CanvasModes({
       scene: this,
       grid: this.grid,
       zoom: () => this.cameras.main.zoom,
@@ -142,7 +144,8 @@ export class WorldScene extends Phaser.Scene {
         this.marquee.cancel();
         this.setSelection({ kind: "none" });
       },
-      onChange: () => this.config.onExtrudeChange?.(),
+      onExtrudeChange: () => this.config.onExtrudeChange?.(),
+      onColliderChange: () => this.config.onColliderChange?.(),
     });
 
     const saved = this.store.doc.camera;
@@ -161,16 +164,17 @@ export class WorldScene extends Phaser.Scene {
     this.rig = new CameraRig(this.game.canvas, {
       onTap: (x, y) => this.handleTap(x, y),
       onDoubleTap: (x, y) => this.handleDoubleTap(x, y),
-      // Extrude mode is asked first at every stage: while it is up it owns the
-      // canvas, and a pull is a drag of the face it is already holding.
+      // The two canvas modes are asked before anything else at every stage:
+      // whichever is up owns the pointer, and what it does with a drag — paint
+      // a space, pull the face it is already holding — is the mode itself.
       onDragStart: (x, y, modifiers) =>
         this.mode !== "play" &&
-        (this.extrude.beginPull(x, y) || this.drag.begin(x, y, modifiers)),
+        (this.modes.beginDrag(x, y) || this.drag.begin(x, y, modifiers)),
       onDragMove: (x, y) => {
-        if (!this.extrude.movePull(x, y)) this.drag.move(x, y);
+        if (!this.modes.moveDrag(x, y)) this.drag.move(x, y);
       },
       onDragEnd: () => {
-        if (!this.extrude.endPull()) this.drag.end();
+        if (!this.modes.endDrag()) this.drag.end();
       },
       onMarqueeStart: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
       onMarqueeMove: (x, y) => this.extendMarquee(x, y),
@@ -292,7 +296,7 @@ export class WorldScene extends Phaser.Scene {
     this.gridRenderer.invalidate();
     // Selection chrome is sized against the zoom, so it has to be redrawn.
     this.overlay.render(this.selection, this.store, camera.zoom, this.adjusting);
-    this.extrude.refresh();
+    this.modes.refresh();
   }
 
   /** Re-centre on the origin while the viewport is still settling. */
@@ -336,9 +340,10 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    // While a shape is being extruded, a tap takes hold of one of its spaces
-    // rather than reaching past it for whatever is on the document.
-    if (this.extrude.tap(screenX, screenY)) return;
+    // While a collider is being drawn, a tap paints the space under the
+    // finger; while a shape is being extruded, it takes hold of one of the
+    // shape's faces. Either way it never reaches the document underneath.
+    if (this.modes.tap(screenX, screenY)) return;
 
     // Tapping an image selects it; otherwise fall through to the grid.
     const hit = this.docRenderer.pick(world.x, world.y);
@@ -382,12 +387,12 @@ export class WorldScene extends Phaser.Scene {
     fromHold: boolean,
   ): void {
     if (this.mode === "play") return;
-    if (this.extrude.beginSelect(screenX, screenY)) return;
+    if (this.modes.beginSelect(screenX, screenY)) return;
     this.setSelection(this.marquee.begin(this.worldAt(screenX, screenY), fromHold));
   }
 
   private extendMarquee(screenX: number, screenY: number): void {
-    if (this.extrude.extendSelect(screenX, screenY)) return;
+    if (this.modes.extendSelect(screenX, screenY)) return;
     const next = this.marquee.extend(
       this.worldAt(screenX, screenY),
       this.cameras.main.zoom,
@@ -397,7 +402,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** What the box caught — `game/marquee.ts` decides, this applies it. */
   private endMarquee(): void {
-    if (this.extrude.endSelect()) return;
+    if (this.modes.endSelect()) return;
     const next = this.marquee.end(this.store.layers);
     if (next) this.setSelection(next);
   }
@@ -440,6 +445,9 @@ export class WorldScene extends Phaser.Scene {
    */
   private handleDoubleTap(screenX: number, screenY: number): void {
     if (this.mode === "play") return;
+    // A second tap inside collider mode is a second space painted, not a
+    // request to open the PSD under it up into its layers.
+    if (this.modes.collider.active) return;
     const world = this.worldAt(screenX, screenY);
     const hit = this.docRenderer.pick(world.x, world.y);
     if (!hit) return;
@@ -642,7 +650,7 @@ export class WorldScene extends Phaser.Scene {
     this.markDrop(null);
     this.marquee.cancel();
     // Nothing half-built survives a trip through play mode.
-    this.extrude.stop();
+    this.modes.stop();
     if (mode === "play") {
       this.setSelection({ kind: "none" });
       this.play.start();
@@ -677,7 +685,7 @@ export class WorldScene extends Phaser.Scene {
     this.rig.destroy();
     this.drops.destroy();
     this.marquee.destroy();
-    this.extrude.destroy();
+    this.modes.destroy();
     this.docRenderer.destroy();
   }
 }

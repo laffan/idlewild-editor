@@ -85,20 +85,62 @@ export function createGrid(projection, size) {
           },
         ];
       }
-      return (fill.cells ?? []).map((c) => {
-        const flat = this.cellPolygon(c.cx, c.cy);
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        for (let i = 0; i < flat.length; i += 2) {
-          minX = Math.min(minX, flat[i]);
-          maxX = Math.max(maxX, flat[i]);
-          minY = Math.min(minY, flat[i + 1]);
-          maxY = Math.max(maxY, flat[i + 1]);
-        }
-        return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-      });
+      return (fill.cells ?? []).map((c) => this.cellBox(c.cx, c.cy));
+    },
+
+    /** The box around one space, which is what a collision is tested against. */
+    cellBox(cx, cy) {
+      const flat = this.cellPolygon(cx, cy);
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (let i = 0; i < flat.length; i += 2) {
+        minX = Math.min(minX, flat[i]);
+        maxX = Math.max(maxX, flat[i]);
+        minY = Math.min(minY, flat[i + 1]);
+        maxY = Math.max(maxY, flat[i + 1]);
+      }
+      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+    },
+
+    /**
+     * The spaces a placed PSD's collider blocks, where it stands.
+     *
+     * The editor stores a collider as offsets from the space its artwork
+     * hangs from — see src/lib/collider.ts — so the placement's anchor is
+     * what turns them back into places on this grid. Keep the two in step.
+     */
+    colliderCells(collider, anchor) {
+      const at = anchor ?? { cx: 0, cy: 0 };
+      return (collider?.cells ?? []).map((c) => ({
+        cx: c.cx + at.cx,
+        cy: c.cy + at.cy,
+      }));
+    },
+
+    /**
+     * The same, as world boxes.
+     *
+     * A collider on a project that does not snap is one rectangle rather than
+     * a run of spaces, measured from the anchor in the same units — a cell
+     * there is one world pixel.
+     */
+    colliderBoxes(collider, anchor) {
+      if (!collider) return [];
+      const at = anchor ?? { cx: 0, cy: 0 };
+      if (collider.rect) {
+        const world = this.cellToWorld(at.cx, at.cy);
+        return [
+          {
+            x: collider.rect.x + world.x,
+            y: collider.rect.y + world.y,
+            width: collider.rect.width,
+            height: collider.rect.height,
+          },
+        ];
+      }
+      return this.colliderCells(collider, at).map((c) => this.cellBox(c.cx, c.cy));
     },
   };
 }

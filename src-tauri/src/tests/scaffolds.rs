@@ -345,6 +345,86 @@ fn an_export_carries_the_document_in_its_config() {
     }
 }
 
+/// What a placed PSD blocks has to reach the exported game, or a published
+/// project walks through the towers the editor walks around.
+///
+/// The collider rides on the first placement of each unit and on none of the
+/// others: a PSD placed as three layers is one thing standing on one patch of
+/// ground, and three copies of that patch would be three identical rectangles
+/// in the runtime's solid list.
+#[test]
+fn an_export_carries_what_each_placed_psd_blocks() {
+    let meta = store::create_project("Colliders", Projection::Isometric, Genre::Topdown, 64)
+        .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let doc = serde_json::json!({
+            "version": 1,
+            "projection": "isometric",
+            "gridSize": 64,
+            "colliders": {
+                "tower": { "cells": [{ "cx": 0, "cy": 0 }, { "cx": 1, "cy": 0 }], "blocking": true },
+                "path": { "cells": [{ "cx": 0, "cy": 0 }], "blocking": false }
+            },
+            "layers": [{
+                "id": "layer-1",
+                "name": "Terrain",
+                "locked": false,
+                "visible": true,
+                "fills": [],
+                "placements": [
+                    {
+                        "id": "p1", "instance": "u1", "psdKey": "tower",
+                        "layerPath": "tower", "x": 0.0, "y": 0.0,
+                        "width": 64.0, "height": 64.0, "anchor": { "cx": 2, "cy": 3 }
+                    },
+                    {
+                        "id": "p2", "instance": "u1", "psdKey": "tower",
+                        "layerPath": "roof", "x": 0.0, "y": 0.0,
+                        "width": 64.0, "height": 64.0, "anchor": { "cx": 2, "cy": 3 }
+                    },
+                    {
+                        "id": "p3", "instance": "u2", "psdKey": "path",
+                        "layerPath": "path", "x": 0.0, "y": 0.0,
+                        "width": 64.0, "height": 64.0, "anchor": { "cx": 0, "cy": 0 }
+                    }
+                ],
+                "zones": [],
+                "strokes": []
+            }]
+        });
+        store::write_doc(&meta.id, &doc.to_string()).expect("document should write");
+
+        let zip = publish::build_zip(&meta.id).expect("zip should build");
+        let config: serde_json::Value = serde_json::from_str(
+            &read_from_zip(&zip, "colliders/js/game.config.json")
+                .expect("the archive should carry a config"),
+        )
+        .expect("config should be JSON");
+
+        let placements = &config["layers"][0]["placements"];
+        // Offsets and the anchor, unresolved: adding them up needs the
+        // projection, which lives in the runtime's own grid.js.
+        assert_eq!(placements[0]["anchor"], serde_json::json!({ "cx": 2.0, "cy": 3.0 }));
+        assert_eq!(placements[0]["collider"]["blocking"], true);
+        assert_eq!(
+            placements[0]["collider"]["cells"],
+            serde_json::json!([{ "cx": 0.0, "cy": 0.0 }, { "cx": 1.0, "cy": 0.0 }])
+        );
+        // The second layer of the same unit carries none.
+        assert!(placements[1]["collider"].is_null());
+        // A walkable one still travels: the runtime reads `blocking`, and a
+        // collider dropped here could not be switched back on without a
+        // re-export.
+        assert_eq!(placements[2]["collider"]["blocking"], false);
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 /// A document that will not parse is not a reason to hand back nothing: the
 /// export is still a runnable game, just an empty one.
 #[test]

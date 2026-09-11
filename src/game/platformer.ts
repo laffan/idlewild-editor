@@ -15,8 +15,9 @@
  * exported game. Keep the two in step.
  */
 
+import { colliderBoxes, documentColliders } from "../lib/collider";
 import type { Grid } from "../lib/grid";
-import type { Layer, Rect } from "../lib/types";
+import type { Collider, Layer, Rect } from "../lib/types";
 
 /** Pixels per second squared. Tuned against a 64px grid. */
 export const GRAVITY = 2200;
@@ -80,18 +81,24 @@ export function createBody(
 /**
  * The ground, read out of the document.
  *
- * A fill marked not-walkable and a boundary marked blocking are the same two
- * things a top-down project routes *around*; side-on they are what you stand
- * on. One document, read as a floor plan or as a cross-section — which is the
- * whole of what the genre changes.
+ * A fill marked not-walkable, a boundary marked blocking and a placed PSD's
+ * collider are the three things a top-down project routes *around*; side-on
+ * they are what you stand on. One document, read as a floor plan or as a
+ * cross-section — which is the whole of what the genre changes.
  *
- * A boundary is reduced to its bounding box. A platformer's collisions are
- * boxes, and a sloped polygon resolved as a box is at least predictable;
- * resolving against the polygon itself is a different feature.
+ * A boundary is reduced to its bounding box, and so is each space of a
+ * collider. A platformer's collisions are boxes, and a sloped polygon — or an
+ * isometric diamond — resolved as a box is at least predictable; resolving
+ * against the shape itself is a different feature.
+ *
+ * `colliders` is the document's own map, keyed by PSD key. The exported
+ * game's copy of this function takes them off each placement instead, because
+ * `game_config.json` resolves them at export time — see `game_config.rs`.
  */
 export function solidsFromDocument(
   grid: Grid,
   layers: readonly Layer[],
+  colliders?: Record<string, Collider>,
 ): Rect[] {
   const solids: Rect[] = [];
   for (const layer of layers) {
@@ -110,6 +117,12 @@ export function solidsFromDocument(
       if (!zone.blocking || zone.points.length < 3) continue;
       solids.push(polygonBounds(zone.points));
     }
+  }
+
+  // One unit at a time rather than one placement: a PSD placed as three
+  // layers is three rectangles in the document and one thing on the grid.
+  for (const placed of documentColliders(layers, colliders)) {
+    solids.push(...colliderBoxes(grid, placed.collider, placed.anchor));
   }
   return solids;
 }

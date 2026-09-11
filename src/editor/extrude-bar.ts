@@ -42,32 +42,32 @@ export class ExtrudeBar {
   private readonly apply: HTMLButtonElement;
 
   constructor(callbacks: ExtrudeBarCallbacks) {
-    this.size = h("div", { class: "extrude-size" });
+    this.size = h("div", { class: "mode-size" });
     this.backfaces = h("button", {
-      class: "extrude-toggle",
+      class: "bar-toggle",
       text: "Backfaces",
       title: "See through the shape and pick its far side — or hold ⌘",
       "aria-pressed": "false",
       onClick: callbacks.onToggleBackfaces,
     });
     this.erase = h("button", {
-      class: "extrude-toggle",
+      class: "bar-toggle",
       text: "Erase",
       title: "Rub out spaces one at a time",
       "aria-pressed": "false",
       onClick: callbacks.onToggleErase,
     });
     this.apply = h("button", {
-      class: "extrude-apply",
+      class: "mode-apply",
       text: "Apply",
       onClick: callbacks.onApply,
     });
     this.root = h(
       "div",
-      { class: "extrude-bar hidden" },
-      h("div", { class: "extrude-title", text: "Extrude Mode" }),
+      { class: "mode-bar hidden" },
+      h("div", { class: "mode-title", text: "Extrude Mode" }),
       this.size,
-      h("div", { class: "extrude-spacer" }),
+      h("div", { class: "mode-spacer" }),
       this.backfaces,
       this.erase,
       h("button", { text: "Cancel", onClick: callbacks.onCancel }),

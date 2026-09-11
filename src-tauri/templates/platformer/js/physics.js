@@ -41,10 +41,14 @@ export function createBody(x, y, width, height) {
 /**
  * The ground, read out of the document.
  *
- * A fill marked not-walkable and a boundary marked blocking are the same two
- * things a top-down project routes *around*; side-on they are what you stand
- * on. A boundary is reduced to its bounding box — collisions here are boxes,
- * and a sloped polygon resolved as a box is at least predictable.
+ * A fill marked not-walkable, a boundary marked blocking and a placed PSD's
+ * collider are the three things a top-down project routes *around*; side-on
+ * they are what you stand on. A boundary is reduced to its bounding box, and
+ * so is each space of a collider — collisions here are boxes, and a sloped
+ * polygon or an isometric diamond resolved as a box is at least predictable.
+ *
+ * A collider rides on the first placement of each unit, so a PSD placed as
+ * three layers contributes its ground once rather than three times.
  */
 export function solidsFromDocument(grid, layers) {
   const solids = [];
@@ -54,6 +58,14 @@ export function solidsFromDocument(grid, layers) {
     for (const fill of layer.fills ?? []) {
       if (fill.walkable) continue;
       for (const box of grid.fillBoxes(fill)) solids.push(box);
+    }
+
+    for (const placement of layer.placements ?? []) {
+      const collider = placement.collider;
+      if (!collider || !collider.blocking) continue;
+      for (const box of grid.colliderBoxes(collider, placement.anchor)) {
+        solids.push(box);
+      }
     }
 
     for (const zone of layer.zones ?? []) {

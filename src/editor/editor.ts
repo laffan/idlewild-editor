@@ -28,6 +28,7 @@ import { PsdLayerEditor, psdLayerOwner } from "./psd-layers";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
 import { createExtrudeUi } from "./extrude";
+import { createColliderUi } from "./collider";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import {
   openAddImage,
@@ -99,6 +100,8 @@ export async function mountEditor(
       if (handle.scene.adjustingInstance) handle.scene.stopAdjusting();
       else handle.scene.startAdjusting();
     },
+    onToggleCollider: (key, blocking) => store.setColliderBlocking(key, blocking),
+    onEditCollider: () => collider.open(),
     onStrokesToPsd: () => void strokesToPsd(),
     onStrokesToZone: () => strokesToZone(),
     onFillToPsd: () => void fillToPsd(),
@@ -173,6 +176,17 @@ export async function mountEditor(
   // out of it. The mode itself is the scene's — see game/extrude-mode.ts.
   const extrude = createExtrudeUi({
     projectId: meta.id,
+    store,
+    grid,
+    host: canvasWrap,
+    scene: () => handle?.scene ?? null,
+    useSelectTool: () => applyTool("select", false),
+  });
+
+  // Collider mode: the other bar along the bottom, entered from the
+  // inspector's Collider section rather than from a selection, because a
+  // collider is about a file that is already on the grid.
+  const collider = createColliderUi({
     store,
     grid,
     host: canvasWrap,
@@ -355,6 +369,7 @@ export async function mountEditor(
     onDetachCopy: (layerId, placementId, key) =>
       void detach(layerId, placementId, key),
     onExtrudeChange: () => extrude.sync(),
+    onColliderChange: () => collider.sync(),
   });
   handle.scene.activeLayerId = activeLayerId;
 
@@ -578,6 +593,9 @@ export async function mountEditor(
       // A copy of an extruded PSD is an extrusion of its own, and carrying
       // one on must rewrite the file this placement actually draws.
       store.copyExtrusion(key, copy.key);
+      // The copy blocks what the original blocked: it is the same artwork
+      // standing on the same spaces until someone changes one of them.
+      store.copyCollider(key, copy.key);
       await handle?.scene.repointPlacement(
         { kind: "placement", layerId, placementId },
         copy.key,
@@ -650,6 +668,7 @@ export async function mountEditor(
     inspector.destroy();
     playPad.destroy();
     extrude.destroy();
+    collider.destroy();
     drawing?.destroy();
     drawing = null;
     code.destroy();

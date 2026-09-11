@@ -4,7 +4,8 @@
  * cells.
  *
  * The navigation grid is derived from the document rather than stored: a cell
- * is blocked if a non-walkable fill covers it, or a blocking zone contains it.
+ * is blocked if a non-walkable fill covers it, a blocking zone contains it, or
+ * a placed PSD's collider stands on it.
  *
  * It is not always the *editor's* grid. A blank project addresses single
  * pixels, and a search over a pixel lattice would neither finish nor mean
@@ -14,6 +15,11 @@
  */
 
 import type Phaser from "phaser";
+import {
+  blockedColliderCells,
+  colliderBoxes,
+  documentColliders,
+} from "../lib/collider";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, cellKey, rectContains } from "../lib/grid";
 import type { Cell, Point, Rect } from "../lib/types";
@@ -116,6 +122,35 @@ export class PlayController implements PlayMode {
         for (const cell of this.cellsUnderZone(zone.points)) {
           this.blocked.add(cellKey(cell));
         }
+      }
+    }
+    this.blockColliders();
+  }
+
+  /**
+   * The spaces placed PSDs stand on.
+   *
+   * Taken as cells wherever the document has cells: the nav lattice *is* the
+   * editor's grid on a snapping project, so a collider's spaces are already
+   * the answer — and reducing an isometric diamond to its bounding box first
+   * would block the neighbours its corners reach into.
+   *
+   * On a blank project there are no spaces to take. A collider there is the
+   * box the artwork covers, and navigation runs on a square lattice of the
+   * project's nominal unit, so the box goes through the same reduction a
+   * rectangle fill does.
+   */
+  private blockColliders(): void {
+    const colliders = this.store.colliders;
+    if (this.grid.snaps) {
+      for (const key of blockedColliderCells(this.store.layers, colliders)) {
+        this.blocked.add(key);
+      }
+      return;
+    }
+    for (const placed of documentColliders(this.store.layers, colliders)) {
+      for (const box of colliderBoxes(this.grid, placed.collider, placed.anchor)) {
+        for (const cell of this.cellsUnderRect(box)) this.blocked.add(cellKey(cell));
       }
     }
   }

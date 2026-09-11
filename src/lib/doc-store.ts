@@ -9,6 +9,7 @@
 
 import type {
   Cell,
+  Collider,
   Extrusion,
   FillPatch,
   GameDoc,
@@ -289,6 +290,46 @@ export class DocStore extends EventTarget {
     const next = { ...this.state.extrusions, [to]: held };
     if (!keepOriginal) delete next[from];
     this.commit({ ...this.state, extrusions: next });
+  }
+
+  // ── colliders ─────────────────────────────────────────────────────────────
+
+  /** What a placed PSD blocks, if the document has been told. */
+  collider(key: string): Collider | undefined {
+    return this.state.colliders?.[key];
+  }
+
+  get colliders(): Record<string, Collider> | undefined {
+    return this.state.colliders;
+  }
+
+  setCollider(key: string, collider: Collider): void {
+    this.commit({
+      ...this.state,
+      colliders: { ...this.state.colliders, [key]: collider },
+    });
+  }
+
+  /** Toggle one between blocking and walkable, keeping its shape. */
+  setColliderBlocking(key: string, blocking: boolean): void {
+    const held = this.state.colliders?.[key];
+    if (!held || held.blocking === blocking) return;
+    this.setCollider(key, { ...held, blocking });
+  }
+
+  /**
+   * Carry the record with the file, when the file is renamed or copied.
+   *
+   * A copy is a file of its own from here on — that is what breaking a
+   * reference means — so it takes the collider the original had and the two
+   * part company from then on.
+   */
+  copyCollider(from: string, to: string, keepOriginal = true): void {
+    const held = this.state.colliders?.[from];
+    if (!held) return;
+    const next = { ...this.state.colliders, [to]: held };
+    if (!keepOriginal) delete next[from];
+    this.commit({ ...this.state, colliders: next });
   }
 
   /** Replace a layer's strokes wholesale — how the drawing layer writes. */

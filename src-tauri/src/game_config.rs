@@ -13,8 +13,9 @@
 //! rectangle fills still exports.
 
 use crate::project::{Genre, ProjectMeta, Projection};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 
 /// How far out the grid is drawn and the character may walk, in cells.
 ///
@@ -52,7 +53,11 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
     }
 
     let span = span_for(&doc, meta.grid_size);
-    let layers: Vec<Value> = doc.layers.iter().map(Layer::to_config).collect();
+    let layers: Vec<Value> = doc
+        .layers
+        .iter()
+        .map(|layer| layer.to_config(&doc.colliders))
+        .collect();
 
     Ok(config(
         meta.projection,
@@ -131,6 +136,9 @@ fn span_for(doc: &Document, grid_size: u32) -> i64 {
 struct Document {
     #[serde(default)]
     layers: Vec<Layer>,
+    /// What each placed PSD blocks, by key — see `lib/collider.ts`.
+    #[serde(default)]
+    colliders: HashMap<String, Collider>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -150,15 +158,35 @@ impl Layer {
     /// A hidden layer keeps its place in the list, because the list is what
     /// gives every layer its depth — dropping one here would move everything
     /// behind it forward.
-    fn to_config(&self) -> Value {
+    ///
+    /// A collider rides on the *first* placement of each unit and on none of
+    /// the others. A PSD with three layers is three placements of one thing
+    /// standing on one patch of ground, and three copies of that patch would
+    /// be three identical rectangles in the exported game's solid list.
+    fn to_config(&self, colliders: &HashMap<String, Collider>) -> Value {
+        let mut seen: HashSet<&str> = HashSet::new();
+        let placements: Vec<Value> = self
+            .placements
+            .iter()
+            .map(|placement| {
+                let unit = if placement.instance.is_empty() {
+                    placement.id.as_str()
+                } else {
+                    placement.instance.as_str()
+                };
+                let collider = if seen.insert(unit) {
+                    colliders.get(&placement.psd_key)
+                } else {
+                    None
+                };
+                placement.to_config(collider)
+            })
+            .collect();
+
         json!({
             "visible": self.visible,
             "fills": self.fills.iter().map(Fill::to_config).collect::<Vec<_>>(),
-            "placements": self
-                .placements
-                .iter()
-                .map(Placement::to_config)
-                .collect::<Vec<_>>(),
+            "placements": placements,
             "zones": self.zones.iter().map(Zone::to_config).collect::<Vec<_>>(),
         })
     }
@@ -196,6 +224,13 @@ impl Fill {
 #[serde(rename_all = "camelCase")]
 struct Placement {
     #[serde(default)]
+    id: String,
+    /// Which placed unit this belongs to. Empty on a document written before
+    /// units existed, where a placement is a unit of one and its own id says
+    /// so — the same fallback `game/instance.ts` makes.
+    #[serde(default)]
+    instance: String,
+    #[serde(default)]
     psd_key: String,
     #[serde(default)]
     layer_path: String,
@@ -211,10 +246,21 @@ struct Placement {
     natural_width: Option<f64>,
     #[serde(default)]
     natural_height: Option<f64>,
+    /// The space the artwork hangs from, which a collider is measured against.
+    #[serde(default)]
+    anchor: Cell,
 }
 
 impl Placement {
-    fn to_config(&self) -> Value {
+    /// The anchor and the collider travel together and unresolved, in the
+    /// cell offsets the document stores.
+    ///
+    /// Adding them up needs the projection — an isometric anchor's world
+    /// position is a diamond transform of two integers — and the projection
+    /// lives in `grid.js`, which the exported game already carries. Resolving
+    /// here would mean a second copy of that arithmetic in Rust, to be kept
+    /// in step with the one the runtime uses.
+    fn to_config(&self, collider: Option<&Collider>) -> Value {
         json!({
             "psdKey": self.psd_key,
             "layerPath": self.layer_path,
@@ -224,8 +270,25 @@ impl Placement {
             "height": self.height,
             "naturalWidth": self.natural_width,
             "naturalHeight": self.natural_height,
+            "anchor": self.anchor,
+            "collider": collider,
         })
     }
+}
+
+/// What a placed PSD blocks: grid spaces, as offsets from its anchor.
+///
+/// `rect` is the shape a project whose grid does not snap gets instead, in
+/// the same units — a cell there is one world pixel. Both are carried through
+/// verbatim; see `lib/collider.ts` for what they mean.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+struct Collider {
+    #[serde(default)]
+    cells: Vec<Cell>,
+    #[serde(default)]
+    rect: Option<Rect>,
+    #[serde(default)]
+    blocking: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]

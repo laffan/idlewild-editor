@@ -3,8 +3,8 @@
  *
  * The counterpart to `play-controller.ts`, which walks a character over the
  * grid. Here the same document is read side-on: gravity pulls down the
- * screen, and every non-walkable fill and blocking boundary is ground rather
- * than an obstacle to route around.
+ * screen, and every non-walkable fill, blocking boundary and placed PSD's
+ * collider is ground rather than an obstacle to route around.
  *
  * The maths is in `platformer.ts`, kept pure and tested. This is the part
  * that owns a rectangle on the scene and the camera that follows it.
@@ -93,6 +93,10 @@ export class PlatformerController implements PlayMode {
   tap(_world: Point): void {}
 
   private rebuildSolids(): void {
-    this.solids = solidsFromDocument(this.grid, this.store.layers);
+    this.solids = solidsFromDocument(
+      this.grid,
+      this.store.layers,
+      this.store.colliders,
+    );
   }
 }

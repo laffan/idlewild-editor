@@ -46,13 +46,13 @@ export interface ExtrudeUi {
 export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
   const bar = new ExtrudeBar({
     onApply: () => void apply(),
-    onCancel: () => options.scene()?.extrude.stop(),
+    onCancel: () => options.scene()?.modes.extrude.stop(),
     onToggleBackfaces: () => {
-      const mode = options.scene()?.extrude;
+      const mode = options.scene()?.modes.extrude;
       mode?.setBackfaces(!mode.xray);
     },
     onToggleErase: () => {
-      const mode = options.scene()?.extrude;
+      const mode = options.scene()?.modes.extrude;
       mode?.setTool(mode.erasing ? "pull" : "erase");
     },
   });
@@ -68,7 +68,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
    * never sees the keyup, so blur releases it too.
    */
   function peek(on: boolean): void {
-    options.scene()?.extrude.setPeek(on);
+    options.scene()?.modes.extrude.setPeek(on);
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -85,7 +85,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
 
   function sync(): void {
     const scene = options.scene();
-    const mode = scene?.extrude;
+    const mode = scene?.modes.extrude;
     const active = mode?.active ?? false;
     // A solid being carried on with stands on exactly the ground its own flat
     // artwork covers, so the placement steps aside while the work goes on.
@@ -112,7 +112,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
       return;
     }
     options.useSelectTool();
-    scene.extrude.start(selection.from, selection.to);
+    scene.modes.startExtrude(selection.from, selection.to);
     sync();
   }
 
@@ -144,7 +144,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
       cy: placement.anchor.cy - held.anchor.cy,
     });
     options.useSelectTool();
-    scene.extrude.resume(shape, {
+    scene.modes.resumeExtrude(shape, {
       key: placement.psdKey,
       instance: instanceOf(placement),
       layerId: selection.layerId,
@@ -165,7 +165,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
    */
   async function apply(): Promise<void> {
     const scene = options.scene();
-    const shape = scene?.extrude.shape;
+    const shape = scene?.modes.extrude.shape;
     if (!scene || !shape) return;
     const written = await applyExtrusion(
       options.projectId,
@@ -173,10 +173,10 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
       options.grid,
       scene,
       shape,
-      scene.extrude.target,
+      scene.modes.extrude.target,
     );
     if (!written) return;
-    scene.extrude.stop();
+    scene.modes.extrude.stop();
     sync();
   }
 
@@ -188,7 +188,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
-      options.scene()?.extrude.stop();
+      options.scene()?.modes.extrude.stop();
       options.host.classList.remove("extruding");
       bar.destroy();
     },

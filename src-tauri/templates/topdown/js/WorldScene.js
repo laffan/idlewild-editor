@@ -6,6 +6,10 @@ import config from "./game.config.json" with { type: "json" };
 // difference between diamonds, squares and bare pixels lives in grid.js, and
 // the projection reaches it through the config the editor wrote.
 //
+// What the character routes around: a fill marked not-walkable, and the
+// collider of every placed PSD — the spaces the editor says that file stands
+// on.
+//
 // A blank project has no lattice to draw and none to walk, so it draws no
 // grid and navigates on a square lattice of the project's nominal unit —
 // the same substitution the editor's own play mode makes.
@@ -23,6 +27,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create() {
+    this.readColliders();
     this.drawGrid();
     this.placeDocument();
     this.spawnCharacter();
@@ -118,11 +123,51 @@ export class WorldScene extends Phaser.Scene {
     this.characterCell = path[path.length - 1];
   }
 
+  /**
+   * The spaces placed PSDs block, worked out once.
+   *
+   * A collider rides on the first placement of each unit, as offsets from the
+   * space that unit hangs from — the editor stores it that way so a file can
+   * be dropped twice and block the same shape both times. Resolving them here
+   * rather than inside `isWalkable` matters: that runs once per node of every
+   * search, and the document does not change while a published game is
+   * running.
+   *
+   * Cells where there are cells, boxes where there are not. On a snapping
+   * project the character walks the same lattice the collider was drawn on,
+   * so the spaces *are* the answer — and reducing an isometric diamond to its
+   * box first would block the neighbours its corners reach into.
+   */
+  readColliders() {
+    this.blockedCells = new Set();
+    this.colliderBoxes = [];
+    for (const layer of config.layers ?? []) {
+      if (layer.visible === false) continue;
+      for (const placement of layer.placements ?? []) {
+        const collider = placement.collider;
+        if (!collider || !collider.blocking) continue;
+        if (this.grid.snaps && !collider.rect) {
+          for (const cell of this.grid.colliderCells(collider, placement.anchor)) {
+            this.blockedCells.add(`${cell.cx},${cell.cy}`);
+          }
+        } else {
+          this.colliderBoxes.push(
+            ...this.grid.colliderBoxes(collider, placement.anchor),
+          );
+        }
+      }
+    }
+  }
+
   isWalkable(cx, cy) {
     const span = config.gridSpan ?? 24;
     if (Math.abs(cx) > span || Math.abs(cy) > span) return false;
+    if (this.blockedCells.has(`${cx},${cy}`)) return false;
 
     const centre = this.nav.cellCentre(cx, cy);
+    for (const box of this.colliderBoxes) {
+      if (contains(box, centre)) return false;
+    }
     for (const layer of config.layers ?? []) {
       for (const fill of layer.fills ?? []) {
         if (fill.walkable) continue;

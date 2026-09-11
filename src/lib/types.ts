@@ -207,6 +207,44 @@ export interface Extrusion {
   anchor: Cell;
 }
 
+/**
+ * The grid spaces a placed PSD blocks: its collider.
+ *
+ * Keyed by PSD key rather than carried on a placement, for the reason an
+ * extrusion is: the shape is a fact about the *file*. A tree that blocks the
+ * one space it stands on blocks it wherever it is put, and the two copies of
+ * a referenced PSD are two views of the same thing.
+ *
+ * The spaces are **offsets from the space the artwork is anchored to**, so a
+ * placement that has been dragged carries its collider with it without
+ * anything having to be rewritten. Absolute coordinates would have to be
+ * re-based on every drag, and two placements of one file could not share
+ * them at all.
+ */
+export interface Collider {
+  /** Cell offsets from the anchor. `{cx: 0, cy: 0}` is the anchor itself. */
+  cells: Cell[];
+  /**
+   * Set instead of `cells` on a project whose grid does not snap, where the
+   * collider is the box the artwork covers — measured from the anchor, in
+   * cell units, which on a blank project are world pixels. A cell there is
+   * one pixel, so a list of covered spaces would be a hundred thousand
+   * records saying "this box" — the same bargain `FillPatch` makes.
+   */
+  rect?: Rect;
+  /** Whether those spaces stop a character at all. */
+  blocking: boolean;
+  /**
+   * Set once someone has edited the shape by hand.
+   *
+   * Applying an extrusion again recomputes the default, because the solid it
+   * is derived from has just changed — but only while it is still a default.
+   * An edited collider is someone's answer, and a second Apply is not a
+   * reason to throw it away.
+   */
+  edited?: boolean;
+}
+
 export interface CameraState {
   x: number;
   y: number;
@@ -227,6 +265,12 @@ export interface GameDoc {
    * before extrude mode existed, and on every project that has never used it.
    */
   extrusions?: Record<string, Extrusion>;
+  /**
+   * What each placed PSD blocks, by key. Absent on documents written before
+   * colliders existed; the scene fills one in per placed key on open, from
+   * the same defaults a fresh import gets.
+   */
+  colliders?: Record<string, Collider>;
 }
 
 /** What the inspector is currently describing. */

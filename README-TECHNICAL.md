@@ -199,9 +199,9 @@ either side of every wall until this existed.
 
 `genre` decides the scene a project scaffolds and the play mode the editor
 runs, and nothing else. Both read the same document: a fill marked
-not-walkable and a boundary marked blocking are what a top-down character
-routes *around* and what a side-on character stands *on* — a floor plan or a
-cross-section, the same geometry either way.
+not-walkable, a boundary marked blocking and a placed PSD's collider are what
+a top-down character routes *around* and what a side-on character stands *on*
+— a floor plan or a cross-section, the same geometry either way.
 
 Isometric and platformer is the one pair not offered. Gravity has no
 direction on a diamond grid seen from above, so the New Game sheet greys the
@@ -1166,6 +1166,7 @@ exports. What it carries:
 | `fills[]` | painted, and a non-walkable one is an obstacle or the ground |
 | `placements[]` | `P2P.place`, positioned, scaled, given a depth |
 | `zones[]` | a blocking one is ground in a platformer |
+| a placement's `collider` | the spaces that file blocks, as offsets from its `anchor` |
 | `gridSpan` | how far the grid is drawn and the character may walk |
 
 A placement carries the size it is *displayed* at beside the size the manifest
@@ -1844,6 +1845,123 @@ because that file imports Phaser for its side of the loading contract and none
 of this touches a canvas. The same bargain `instance.ts` and `resize.ts`
 already make, and it is what lets all of the above be tests.
 
+## Colliders
+
+What a placed PSD stops. Until this existed the only geometry in a document
+that a character could not walk through was a fill marked not-walkable or a
+boundary drawn by hand, so every image on the grid was scenery and a tower was
+something to walk through.
+
+### It is a fact about the file, and it is stored as offsets
+
+`GameDoc.colliders` is keyed by PSD key, beside `extrusions` and for the same
+reason: two placements of one file are two views of the same thing, and a tree
+that blocks the space it stands on blocks it wherever it is put. A copy made
+by Remove Reference takes the collider with it and the two part company from
+then on, which is what breaking a reference means everywhere else.
+
+The spaces are **offsets from the anchor** — `{cx: 0, cy: 0}` is the space the
+artwork hangs from. That is what lets a placement be dragged without anything
+being rewritten, and it is what lets two placements of one file share one
+record at all. `lib/collider.ts` is the arithmetic, and everything that reads
+a collider goes through it: `colliderCells` for a top-down character routing
+around spaces, `colliderBoxes` for a side-on one standing on rectangles.
+
+A project whose grid does not snap has no spaces to name, so its collider is a
+`rect` instead — measured from the anchor in the same units, since a cell
+there is one world pixel. The same either-or `FillPatch` already carries, for
+the same reason: a hundred thousand one-pixel records is not a document.
+
+### The defaults, and why they are written rather than derived
+
+Every placed key has a record. It is written when the PSD is placed, again
+when the artwork changes under it, and backfilled on open for every document
+written before this existed (`PsdPlacements.migrate`, beside the instance and
+stacking migrations). Deriving it on demand instead would make a project play
+differently depending on what had been looked at, and would put the same guess
+in three places — the editor's two play modes and the exported game.
+
+What the guess is depends on how the PSD was made:
+
+- **An extrusion** is a solid whose shape is known exactly, so the default is
+  the spaces its voxels rest on at **level zero** — `groundOffsets`. That is
+  one rule with two readings. Under an isometric template it is the blocks
+  that touch the ground, which is the 3D logic the mode was pulled with: an
+  arch pulled up and over blocks its piers and not the road between them, and
+  a shape hanging in the air with nothing at level zero blocks nothing, which
+  is the honest reading of a shape you can walk under. Under an orthogonal one
+  every voxel is at level zero already — `levelHeight` is 0 there — so the
+  whole shape is a collider and nothing needed a second rule to say so.
+- **Anything else** — an import, a converted sketch, a converted fill — has
+  only its artwork, so the default is the spaces that artwork covers:
+  `cellsUnderBox` over the unit's own box, the same function the footprint
+  mark in the file is drawn from. Past `MAX_COLLIDER_CELLS` it falls back to
+  the box, because a default derived from something somebody resized to the
+  width of a continent should not be a hundred thousand records.
+
+Blocking, in every case. A placed thing being solid is what makes the toggle
+worth having — a document where nothing collides until each file has been
+visited one at a time is the state this exists to end — and it is the default
+a fresh fill already takes.
+
+`edited` is what keeps the two halves apart. A default is a guess that has not
+been corrected yet, so it is recomputed whenever the thing it was guessed from
+changes: the artwork's footprint on a re-import, the solid's ground on a
+second Apply. An edited collider is somebody's answer, and neither of those is
+a reason to throw it away. Apply sets it only when the shape actually differs
+from the default, so drawing a space and rubbing it out again leaves a default
+that still follows its artwork.
+
+### Collider mode
+
+Extrude mode one dimension down, and deliberately the same shape: a scrim, a
+bar along the bottom, the mode owning the pointer while it is up, and nothing
+reaching the document until Apply. `game/collider-mode.ts` holds the spaces in
+absolute grid coordinates because that is what the pointer hands over; Apply
+turns them back into offsets.
+
+What differs is the middle of the bar. Extrude's toggles describe the *view* —
+see through the shape, rub spaces out — and these describe the *edit*: Add and
+Remove are a pair with a pressed state because one of them is always true, and
+Reset is a plain button because it happens once and is over. The dim is
+lighter than extrude mode's, because there the solid replaces what is under it
+and here the artwork *is* what you are aiming at.
+
+Both tools are idempotent, and that is load-bearing rather than tidy: the
+gesture arbiter reports a press that never moved as a drag **and** as a tap,
+so a click paints the same space twice. Adding an added space or removing a
+removed one has to be nothing, or every click would undo itself.
+
+The mode is refused where the grid does not snap, as extrude mode is, and the
+inspector replaces the button with the reason rather than offering it and
+declining.
+
+**`game/canvas-modes.ts` is what asks them.** Two modes that own the canvas
+now, entered from places that have no reason to know about each other — the
+floating action bar, and a row of the inspector — so entering one leaves the
+other there rather than by convention. It is also the one place the scene asks
+"has a mode claimed this gesture": three call sites deciding for themselves is
+how a mode ends up owning drags but not taps.
+
+### What reads it
+
+The editor's two play modes read the document directly: `PlayController` adds
+the blocked cells to its navigation set, and `solidsFromDocument` adds the
+boxes to the platformer's ground. Both take spaces as spaces wherever the
+document has them — reducing an isometric diamond to its bounding box first
+would block the neighbours its corners reach into — and fall back to boxes
+only on a blank project, where navigation runs on a square lattice of the
+project's nominal unit anyway.
+
+The exported game reads it off each placement, because `game_config.rs`
+resolves *which* placement carries it at export time: a collider rides on the
+first placement of each unit and on none of the others, so a PSD placed as
+three layers contributes its ground once rather than three times. What it does
+not resolve is the arithmetic — the offsets and the anchor travel unresolved,
+because adding them up needs the projection, and the projection lives in the
+runtime's own `grid.js`. Doing it in Rust would mean a second copy of
+`cellToWorld` to keep in step with the one the game already has.
+
 ## The iPad's safe area
 
 `viewport-fit=cover` hands the webview the whole screen, status bar and home
@@ -2006,7 +2124,22 @@ on chrome never highlights it.
 - Play mode's character is a placeholder rectangle, not a sprite from the
   template, in both styles.
 - A platformer takes a blocking boundary as its bounding box. Resolving
-  against the polygon — sloped ground — is a different feature.
+  against the polygon — sloped ground — is a different feature. A collider's
+  spaces go through the same reduction, so an isometric diamond stands on its
+  box there.
+- **Resizing a placement does not resize its collider.** The shape is a fact
+  about the file and the size is a fact about the placement, so a copy scaled
+  to twice the size goes on blocking the spaces the original did. Re-opening
+  the collider and drawing the difference is the way round it; making it
+  follow the scale would mean the two copies of a referenced PSD could no
+  longer share one record.
+- A collider record outlives the last placement of its key, the way an
+  extrusion's solid does. Nothing reads it while nothing is placed, and
+  placing the file again finds the shape it had.
+- A collider on a project whose grid does not snap is the artwork's box and
+  cannot be edited: there are no spaces to paint. The box follows the artwork
+  as it is dragged, so the honest gap is that it cannot be made tighter than
+  the picture.
 - Renaming a PSD moves the file, not the layer inside it, so a renamed file
   keeps the layer path it was imported under. That is what makes the rename
   safe for every placement on it; the inspector's PSD layer list is where the

@@ -17,6 +17,7 @@ import {
   renderZone,
   type PanelSurface,
 } from "./inspect-panels";
+import { colliderSection, fillColliderSection } from "./inspect-collider";
 import { scaleOf, sizeControls } from "./inspect-transform";
 import { openPsdLabel, refreshPsdLabel } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
@@ -29,6 +30,10 @@ import { describeFill, type FillPatch, type Placement, type Selection } from "..
 export interface InspectorCallbacks {
   onFillColor: (color: string) => void;
   onToggleWalkable: (walkable: boolean) => void;
+  /** Switch a placed PSD's collider on or off, without changing its shape. */
+  onToggleCollider: (key: string, blocking: boolean) => void;
+  /** Open the selected PSD's collider up to be drawn on the grid. */
+  onEditCollider: () => void;
   /** Hand the PSD to the OS: a desktop editor, or an iPadOS share sheet. */
   onOpenPsd: (key: string) => void;
   /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
@@ -415,18 +420,19 @@ export class Inspector {
     }
     this.row("Colour", fill.color ?? "—");
     this.row("Pattern", fill.patternKey ?? "—");
-    this.row("Walkable", fill.walkable ? "Yes" : "No");
     this.fillSection(fill);
+
+    // What it stops, under the same heading a placed PSD's says it under.
+    this.body.appendChild(
+      fillColliderSection(fill, (walkable) =>
+        this.callbacks.onToggleWalkable(walkable),
+      ),
+    );
 
     this.body.appendChild(
       h(
         "div",
         { class: "inspect-section" },
-        h("button", {
-          class: "panel-btn",
-          text: fill.walkable ? "Make blocking" : "Make walkable",
-          onClick: () => this.callbacks.onToggleWalkable(!fill.walkable),
-        }),
         // A fill is a fast way to block a shape out on the grid; this is
         // what turns the block-out into something an artist can paint.
         h("button", {
@@ -556,6 +562,19 @@ export class Inspector {
     };
     this.row("Source", `${Math.round(source.w)} × ${Math.round(source.h)} px`);
     this.row("Scale", `${Math.round(scaleOf(placement) * 100)}%`);
+
+    // What the file stops. Above the layer stack because it is a fact about
+    // the thing on the grid rather than about the file's contents, and below
+    // Transform because where it stands is what it blocks.
+    this.body.appendChild(
+      colliderSection({
+        grid: this.grid,
+        psdKey: placement.psdKey,
+        collider: this.store.collider(placement.psdKey),
+        onToggle: (key, blocking) => this.callbacks.onToggleCollider(key, blocking),
+        onEdit: () => this.callbacks.onEditCollider(),
+      }),
+    );
 
     // The stack inside the file. It sits above the buttons that send the file
     // out, because most of what anyone opened Photoshop for — reordering,
