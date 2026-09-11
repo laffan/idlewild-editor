@@ -1,9 +1,11 @@
 /**
  * The Select tool's two gestures, which ask different questions.
  *
- * **Press and hold** asks for a patch of grid. Fill, Add Image and Generate
- * PSD act on it, so it is measured in spaces and drawn as the grid draws
- * them — under an isometric template, a diamond.
+ * **Press and hold** asks for a patch of grid, and that is all it ever
+ * answers with. Fill, Add Image and Generate PSD act on it, so it is measured
+ * in spaces and drawn as the grid draws them — under an isometric template, a
+ * diamond. Holding over a building to fill the ground under it is the
+ * ordinary reason to hold, so what is standing there is not what it selects.
  *
  * **A drag** asks *what is in here*, and the things it catches are images
  * sitting at world coordinates that owe the grid nothing. So a drag is a
@@ -32,9 +34,8 @@ export class Marquee {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly grid: Grid;
 
-  /** Held mode: the cell the gesture started on, and the one it is over. */
+  /** Held mode: the cell the gesture started on. */
   private anchor: Cell | null = null;
-  private corner: Cell | null = null;
   /** Dragged mode: where the finger went down, and the box since. */
   private from: Point | null = null;
   private box: Rect | null = null;
@@ -69,7 +70,6 @@ export class Marquee {
     }
     const cell = this.grid.worldToCell(at);
     this.anchor = cell;
-    this.corner = cell;
     return { kind: "region", from: cell, to: cell };
   }
 
@@ -89,45 +89,39 @@ export class Marquee {
       return null;
     }
     if (!this.anchor) return null;
-    this.corner = this.grid.worldToCell(to);
-    return { kind: "region", from: this.anchor, to: this.corner };
+    return { kind: "region", from: this.anchor, to: this.grid.worldToCell(to) };
   }
 
   /**
    * What the box caught, or null to leave the selection as it stands.
    *
-   * A dragged rectangle is only ever about the things in it: what it catches
-   * is the selection, and catching nothing is a selection of nothing — which
-   * is what tapping empty space means too. A held patch is a piece of space
-   * in its own right, so there what it caught wins if it caught anything and
-   * the patch stands if it did not.
+   * Only a drag catches anything. It is about the things inside it: what it
+   * finds is the selection, and finding nothing is a selection of nothing —
+   * which is what tapping empty space means too.
+   *
+   * A hold never catches. It asked for a piece of space and the space is the
+   * answer, whatever happens to be standing on it: asking for the ground
+   * under a building in order to fill it, add an image to it or generate a
+   * PSD over it is the ordinary reason to hold, and taking the building
+   * instead makes the gesture unusable exactly where it is most wanted.
+   * There is already a way to pick things up, and it is the other gesture.
    */
   end(layers: readonly Layer[]): Selection | null {
-    if (this.from) {
-      const box = this.box;
+    if (!this.from) {
       this.cancel();
-      const caught = box ? pickPlacementsIn(layers, rectPoints(box)) : null;
-      return caught
-        ? { kind: "placements", layerId: caught.layerId, ids: caught.ids }
-        : { kind: "none" };
+      return null;
     }
-
-    const anchor = this.anchor;
-    const corner = this.corner;
+    const box = this.box;
     this.cancel();
-    if (!anchor || !corner) return null;
-    // The held marquee's own shape, which under an isometric template is a
-    // diamond — the box around it reaches a long way past what was dragged.
-    const caught = pickPlacementsIn(layers, this.grid.rangePolygon(anchor, corner));
+    const caught = box ? pickPlacementsIn(layers, rectPoints(box)) : null;
     return caught
       ? { kind: "placements", layerId: caught.layerId, ids: caught.ids }
-      : null;
+      : { kind: "none" };
   }
 
   /** Abandon whatever is up — a change of mode, a teardown. */
   cancel(): void {
     this.anchor = null;
-    this.corner = null;
     this.from = null;
     this.box = null;
     this.graphics.clear();

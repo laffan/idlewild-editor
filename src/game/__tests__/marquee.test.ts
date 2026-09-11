@@ -80,8 +80,9 @@ describe("rectPoints", () => {
  * The two Select gestures, over the same two points, on an isometric grid.
  *
  * This is the whole difference: a drag is the rectangle it was dragged and
- * catches what is inside *that*, where a held selection is a patch of grid
- * and is a diamond reaching a long way past the corner it started from.
+ * catches what is inside *that*, where a hold is a patch of grid — a diamond
+ * reaching a long way past the corner it started from — and catches nothing
+ * at all, because the space is what it was asked for.
  */
 describe("Marquee", () => {
   const grid = new Grid("isometric", 64);
@@ -117,12 +118,10 @@ describe("Marquee", () => {
       to: { cx: 0, cy: 0 },
     });
     const extended = marquee.extend(finish);
-    expect(extended?.kind).toBe("region");
-    // Everything the diamond covers, which is more than the rectangle did.
-    expect(marquee.end(layers(middle, beyond))).toEqual({
-      kind: "placements",
-      layerId: "l1",
-      ids: ["middle", "beyond"],
+    expect(extended).toEqual({
+      kind: "region",
+      from: { cx: 0, cy: 0 },
+      to: grid.worldToCell(finish),
     });
   });
 
@@ -133,13 +132,20 @@ describe("Marquee", () => {
     expect(marquee.end(layers(beyond))).toEqual({ kind: "none" });
   });
 
-  it("a hold that caught nothing leaves its patch of grid standing", () => {
-    // Which is what Fill, Add Image and Generate PSD act on — so the answer
-    // is "leave the selection alone", not "select nothing".
+  it("a hold leaves its patch of grid standing, whatever is on it", () => {
+    // Null means "leave the selection alone", and the selection is the
+    // region `extend` already handed over. Holding over a building to fill
+    // the ground under it is the ordinary reason to hold, so the building is
+    // not what comes back — there is another gesture for picking things up.
     const marquee = new Marquee(graphics(), grid);
     marquee.begin(start, true);
     marquee.extend(finish);
-    expect(marquee.end(layers())).toBeNull();
+    expect(marquee.end(layers(middle, beyond))).toBeNull();
+
+    const empty = new Marquee(graphics(), grid);
+    empty.begin(start, true);
+    empty.extend(finish);
+    expect(empty.end(layers())).toBeNull();
   });
 
   it("remembers which gesture it was, for the floating action bar", () => {

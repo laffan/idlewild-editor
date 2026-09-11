@@ -294,11 +294,14 @@ inputs, every frame.
 Select has two gestures, and they ask different questions — which is why
 `game/marquee.ts` draws them differently and answers them differently.
 
-**Press and hold asks for a patch of grid.** Fill, Add Image and Generate PSD
-act on it, so it is measured in spaces and drawn as the grid draws them:
-under an isometric template, a diamond. It stays a `region` when it catches
-nothing, because the space it covers is the thing it was for, and the
-floating action bar appears over it.
+**Press and hold asks for a patch of grid**, and a patch of grid is all it
+ever answers with. Fill, Add Image and Generate PSD act on it, so it is
+measured in spaces and drawn as the grid draws them: under an isometric
+template, a diamond. It stays a `region` whatever is standing on the spaces it
+covers — holding over a building to fill the ground under it is the ordinary
+reason to hold, and handing back the building instead would make the gesture
+unusable exactly where it is most wanted. The floating action bar appears over
+it, every time.
 
 **A drag asks what is in here.** The things it catches are images sitting at
 world coordinates that owe the grid nothing, so a drag is a plain rectangle —
@@ -319,15 +322,15 @@ camera that moves under it leaves it over the same ground, and nothing is
 chosen until the finger comes up — which also means the inspector is no
 longer rebuilt on every frame of a drag for a thing that is not selected yet.
 
-`pickPlacementsIn` takes the marquee's **own outline** either way, not the box
-around it. A dragged rectangle is its own box, so that costs nothing there;
-a held diamond's bounding box reaches a long way past what was dragged, and
-hit-testing it let a marquee in one corner of the screen pick up images in
-another. It is the same mistake, in a different place, as the one that put a
-132 × 136 sketch into an 832 × 416 PSD. A placement counts when the marquee
-*overlaps* it rather than contains it — dragging a box that swallows
-everything whole is the fiddly half of every marquee, and nothing here is
-small enough to catch by accident.
+`pickPlacementsIn` therefore hears from the drag alone, and takes the
+rectangle's four corners. A placement counts when the rectangle *overlaps* it
+rather than contains it — dragging a box that swallows everything whole is the
+fiddly half of every marquee, and nothing here is small enough to catch by
+accident. It still takes an outline rather than a box because it once served
+the held diamond too, whose bounding box reaches a long way past what was
+dragged: hit-testing that box let a marquee in one corner of the screen pick
+up images in another, the same mistake, in a different place, as the one that
+put a 132 × 136 sketch into an 832 × 416 PSD.
 
 The catch is one layer's worth, chosen by the same front-most-wins rule a tap
 follows, so a marquee over a stack picks the layer you would have hit by

@@ -39,8 +39,9 @@ remaining pieces are wired to real slots rather than mocked.
   the iPad's status bar, as the console drawer does out of the home indicator
 - Infinite grid, two-finger zoom, tap-to-pick. Select drags a plain rectangle
   around things to pick up several images at once; press and hold instead and
-  it asks for a patch of grid, in the grid's own shape. Pan drags the camera,
-  and holding space borrows it from wherever you are
+  it asks for a patch of grid, in the grid's own shape, taking the ground
+  rather than whatever is standing on it. Pan drags the camera, and holding
+  space borrows it from wherever you are
 - Press and hold to ask for a patch of grid, and get Fill, Add Image and
   Generate PSD over it
 - Fill a selection with any colour, from a full picker with recent swatches
