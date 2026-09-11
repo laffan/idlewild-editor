@@ -62,7 +62,7 @@ interface DragState {
 /** A placement being carried from one layer to another. */
 interface ItemDragState {
   layerId: string;
-  placementId: string;
+  placementIds: string[];
   pointerId: number;
   /** The layer the pointer is currently over, if any. */
   target: string | null;
@@ -171,15 +171,14 @@ export class LayersPanel {
         // coordinates that no layer owns, so moving one is a change of draw
         // order alone and the reorder above already covers it.
         const draggable =
-          item.selection.kind === "placement" ? item.selection : null;
+          item.selection.kind === "placement" ? item.members ?? [] : null;
         group.appendChild(
           renderLayerItem(
             item,
             isSelected(item, selection),
             (next) => this.callbacks.onSelectItem(next),
             draggable
-              ? (event) =>
-                  this.beginItemDrag(event, draggable.layerId, draggable.placementId)
+              ? (event) => this.beginItemDrag(event, layer.id, draggable)
               : undefined,
           ),
         );
@@ -354,7 +353,7 @@ export class LayersPanel {
   private beginItemDrag(
     event: PointerEvent,
     layerId: string,
-    placementId: string,
+    placementIds: string[],
   ): void {
     if (this.drag || this.itemDrag) return;
     event.preventDefault();
@@ -381,7 +380,7 @@ export class LayersPanel {
     this.body.classList.add("carrying");
     this.itemDrag = {
       layerId,
-      placementId,
+      placementIds,
       pointerId,
       target: null,
       release: () => {
@@ -427,7 +426,7 @@ export class LayersPanel {
     }
 
     if (target && target !== drag.layerId) {
-      this.store.movePlacement(drag.layerId, drag.placementId, target);
+      this.store.movePlacements(drag.layerId, drag.placementIds, target);
       // Follow it: the row the finger let go of is now under a different
       // layer, and leaving the selection pointing at the old one would show
       // the inspector an image that is no longer there.
@@ -435,7 +434,7 @@ export class LayersPanel {
       this.callbacks.onSelectItem({
         kind: "placement",
         layerId: target,
-        placementId: drag.placementId,
+        placementId: drag.placementIds[0],
       });
     }
     // A cancelled drop still has to put the list back the way it was: the

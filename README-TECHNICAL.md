@@ -1455,10 +1455,12 @@ gesture, different question: a layer takes a *position* in the list, an image
 takes a *layer*, so one moves through the DOM as it goes and the other lights
 up its destination. The grip is there for the same reason it is on a layer
 row — the panel scrolls, and a row that took the pointer outright would take
-the scroll with it. `movePlacement` changes which list the record lives in and
-nothing else, because a layer is draw order and visibility, not position; the
-placement lands at the end of the destination's list, drawing over what was
-already there, which is what a drop onto a layer means everywhere else here.
+the scroll with it. `movePlacements` changes which list the records live in
+and nothing else, because a layer is draw order and visibility, not position;
+they land at the end of the destination's list, drawing over what was already
+there, which is what a drop onto a layer means everywhere else here. The whole
+unit goes and the unit survives: the row is the file, so the drop is about the
+file.
 Only placements are carried: a fill is a run of grid spaces and a boundary is
 a polygon, both addressed in world coordinates no layer owns, so moving one
 between layers is a change of draw order and the reorder above already covers
@@ -1574,10 +1576,33 @@ survive a *tap that was offered to the drag controller first*, which is why
 `camera-rig.ts` tracks whether a drag ever moved and reports a drag that did
 not as a tap.
 
-Carrying a placement to another layer in the left panel takes it out of its
-unit — `movePlacement` strips `instance` — because a unit is made together on
-one layer and a member that has moved away is no longer part of what the rest
-of them are.
+Carrying a placed PSD to another layer in the left panel takes the unit with
+it, `instance` and all. The panel lists one row per placed *file* rather than
+one per layer inside it, so what the gesture picks up is the file — see
+**Two senses of "layer"** below.
+
+### Two senses of "layer", and why the panels must not mix them
+
+A **document layer** is Phaser's idea: draw order and visibility over anything
+at all, and it is what the left panel lists. A **PSD layer** is Photoshop's,
+and it is the inspector's subject — the stack inside one file, which the
+inspector lists and rewrites.
+
+The two met by accident. Placing a PSD makes one placement per placeable layer
+in the file, and `layerItems` listed placements — so a three-layer tower put
+three rows named `tower.psd` under Foreground, which reads as three towers and
+is really one file's insides leaking into the panel about the canvas. The rows
+are **units** now, one per placed file: `placedUnits` groups a layer's
+placements by `instance`, and the row carries every member id in `members`.
+
+That list is what makes the row behave like the thing it names. The canvas
+selects whichever member the pointer landed on — a tap on the roof selects the
+roof's placement — so a row matching only the id inside its own selection went
+dark when you clicked the thing it was about; `isSelected` asks whether the
+selection is *any* member. The grip carries all of them, which is why
+`movePlacements` takes a list. And the detail column says "3 layers" rather
+than naming one of them, because how deep a file is belongs in the panel that
+can open it.
 
 ### What is drawn over what
 

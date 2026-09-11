@@ -3,10 +3,21 @@
  * boundaries. Selecting one here is the same as selecting it on the canvas —
  * useful when a thing is off-screen, underneath something else, or failed to
  * render.
+ *
+ * **A placed PSD is one row, whatever is inside it.** The two things this
+ * editor calls a layer are different things and must not be listed as one: a
+ * *document* layer is Phaser's idea — draw order and visibility over anything
+ * at all — and a *PSD* layer is Photoshop's, which is the inspector's subject
+ * and nobody else's. Placing a PSD makes one placement per placeable layer in
+ * the file, so listing placements put a file's insides in the panel that is
+ * about the canvas: three rows under Foreground for one tower somebody
+ * dropped there. So the rows here are **units** — see `game/instance.ts` —
+ * which is also what the canvas selects, drags and deletes.
  */
 
 import { h, ICONS, icon } from "../lib/dom";
-import { describeFill, type Layer, type Selection } from "../lib/types";
+import { instanceOf } from "../game/instance";
+import { describeFill, type Layer, type Placement, type Selection } from "../lib/types";
 
 export interface LayerItem {
   /** What selecting this row means. */
@@ -16,28 +27,35 @@ export interface LayerItem {
   path: string | readonly string[];
   /** Drawn as a colour chip instead of an icon, for fills. */
   swatch?: string;
+  /**
+   * Every placement the row stands for.
+   *
+   * One for most things and several for a placed PSD, which is why the row
+   * carries them rather than the id inside its selection: the canvas selects
+   * whichever member the pointer landed on, so a row that matched only its
+   * own would go dark when you clicked the thing it is about — and a drag has
+   * to carry the whole file rather than the layer of it the row happens to
+   * name.
+   */
+  members?: string[];
 }
 
 /** Everything on a layer that can be selected, in the order it draws. */
 export function layerItems(layer: Layer): LayerItem[] {
   const items: LayerItem[] = [];
 
-  for (const placement of layer.placements) {
-    // The layer path repeats the key for a converted image; only show it when
-    // it says something the key does not.
-    const detail =
-      placement.layerPath && placement.layerPath !== placement.psdKey
-        ? placement.layerPath
-        : `${Math.round(placement.width)}×${Math.round(placement.height)}`;
+  for (const unit of placedUnits(layer)) {
+    const [first] = unit;
     items.push({
       selection: {
         kind: "placement",
         layerId: layer.id,
-        placementId: placement.id,
+        placementId: first.id,
       },
-      label: `${placement.psdKey}.psd`,
-      detail,
+      label: `${first.psdKey}.psd`,
+      detail: describeUnit(unit),
       path: ICONS.file,
+      members: unit.map((p) => p.id),
     });
   }
 
@@ -61,6 +79,41 @@ export function layerItems(layer: Layer): LayerItem[] {
   }
 
   return items;
+}
+
+/**
+ * A layer's placed PSDs, one entry per unit, in the order they draw.
+ *
+ * Grouped by `instance` and kept in first-seen order rather than sorted: the
+ * list is about where things are in the layer, and the first member of a unit
+ * is where that unit starts.
+ */
+function placedUnits(layer: Layer): Placement[][] {
+  const units = new Map<string, Placement[]>();
+  for (const placement of layer.placements) {
+    const unit = units.get(instanceOf(placement));
+    if (unit) unit.push(placement);
+    else units.set(instanceOf(placement), [placement]);
+  }
+  return [...units.values()];
+}
+
+/**
+ * What the row says beside the filename.
+ *
+ * How many layers the file put on the canvas, when it put down more than one
+ * — which says the thing is a stack without listing the stack, and the
+ * inspector is where that is opened up. A single-layer file has nothing to
+ * count, so it says the layer path when that adds anything to the key (a file
+ * placed by one of its inner layers) and its size when it does not, which is
+ * every converted image.
+ */
+function describeUnit(unit: readonly Placement[]): string {
+  if (unit.length > 1) return `${unit.length} layers`;
+  const [placement] = unit;
+  return placement.layerPath && placement.layerPath !== placement.psdKey
+    ? placement.layerPath
+    : `${Math.round(placement.width)}×${Math.round(placement.height)}`;
 }
 
 /**
@@ -123,16 +176,20 @@ export function renderLayerItem(
 /** Whether a selection points at this item, so the row can show as current. */
 export function isSelected(item: LayerItem, selection: Selection): boolean {
   const a = item.selection;
-  // Several images caught by a marquee light up every row they cover, which
-  // is the one place the row's kind and the selection's differ.
+  // A placed PSD is one row and several placements, so the row is about any
+  // of them: the canvas selects whichever layer of the file the pointer
+  // landed on. The same list answers a marquee, which is the one place the
+  // row's kind and the selection's differ.
+  const members = item.members ?? [];
   if (a.kind === "placement" && selection.kind === "placements") {
-    return selection.ids.includes(a.placementId);
+    return selection.ids.some((id) => members.includes(id));
   }
   if (a.kind !== selection.kind) return false;
   switch (a.kind) {
     case "placement":
       return (
-        selection.kind === "placement" && a.placementId === selection.placementId
+        selection.kind === "placement" &&
+        members.includes(selection.placementId)
       );
     case "fill":
       return selection.kind === "fill" && a.fillId === selection.fillId;

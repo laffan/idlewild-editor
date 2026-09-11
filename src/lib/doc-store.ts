@@ -326,31 +326,38 @@ export class DocStore extends EventTarget {
   }
 
   /**
-   * Carry a placement from one layer to another, keeping its geometry.
+   * Carry a placed PSD from one layer to another, keeping its geometry.
    *
    * A layer is draw order and visibility, not position — so the only thing
-   * that changes is which list the record lives in, and it lands at the end
+   * that changes is which list the records live in, and they land at the end
    * of the destination's, drawing over what was already there. That is what a
    * drop onto a layer means everywhere else in this editor.
+   *
+   * Every member of the unit goes, and the unit survives the trip. The panel
+   * lists one row per placed *file* rather than one per layer inside it — the
+   * two senses of the word are different things — so a drop is a statement
+   * about the file, and a tower that arrived on Foreground as one thing has
+   * to arrive on Background as one thing too.
    */
-  movePlacement(fromLayerId: string, placementId: string, toLayerId: string): void {
+  movePlacements(
+    fromLayerId: string,
+    placementIds: readonly string[],
+    toLayerId: string,
+  ): void {
     if (fromLayerId === toLayerId) return;
-    const placement = this.layer(fromLayerId)?.placements.find(
-      (p) => p.id === placementId,
+    const carried = new Set(placementIds);
+    const moving = this.layer(fromLayerId)?.placements.filter((p) =>
+      carried.has(p.id),
     );
-    if (!placement) return;
+    if (!moving || moving.length === 0) return;
 
     this.replaceLayers((layers) =>
       layers.map((l) => {
         if (l.id === fromLayerId) {
-          return { ...l, placements: l.placements.filter((p) => p.id !== placementId) };
+          return { ...l, placements: l.placements.filter((p) => !carried.has(p.id)) };
         }
         if (l.id === toLayerId) {
-          // Out of its unit as well as its layer: the placements of one PSD
-          // are one thing on the canvas because they were placed together on
-          // one layer, and this is the gesture that says otherwise.
-          const { instance: _instance, ...moved } = placement;
-          return { ...l, placements: [...l.placements, moved] };
+          return { ...l, placements: [...l.placements, ...moving] };
         }
         return l;
       }),

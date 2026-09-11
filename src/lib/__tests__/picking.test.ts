@@ -8,7 +8,7 @@ import {
   pointInPolygon,
 } from "../../game/doc-renderer";
 import { Grid } from "../grid";
-import { layerItems } from "../../editor/layer-items";
+import { isSelected, layerItems } from "../../editor/layer-items";
 import type { Layer, Placement, Zone } from "../types";
 
 function placement(id: string, x: number, y: number): Placement {
@@ -202,6 +202,62 @@ describe("layerItems", () => {
 
   it("is empty for an empty layer", () => {
     expect(layerItems(layer("l1"))).toEqual([]);
+  });
+
+  /**
+   * The two senses of "layer" must not meet. A *document* layer is Phaser's —
+   * draw order over anything at all — and the panel that lists them is about
+   * the canvas; a *PSD* layer is Photoshop's, and belongs to the inspector.
+   * Placing a PSD makes one placement per placeable layer in the file, so a
+   * list of placements put three rows under Foreground for one tower.
+   */
+  it("lists a placed PSD as one row, whatever is inside it", () => {
+    const members = ["tower", "roof", "sign"].map((path) => ({
+      ...placement("tower", 0, 0),
+      id: path,
+      layerPath: path,
+      instance: "unit-1",
+    }));
+    const items = layerItems(layer("l1", { placements: members }));
+
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe("tower.psd");
+    expect(items[0].detail).toBe("3 layers");
+    expect(items[0].members).toEqual(["tower", "roof", "sign"]);
+  });
+
+  it("still lists two placements of one file as two things", () => {
+    const items = layerItems(
+      layer("l1", {
+        placements: [
+          { ...placement("tower", 0, 0), id: "a", instance: "unit-1" },
+          { ...placement("tower", 200, 0), id: "b", instance: "unit-2" },
+        ],
+      }),
+    );
+    expect(items.map((i) => i.members)).toEqual([["a"], ["b"]]);
+  });
+
+  it("lights the row for whichever layer of the file the canvas selected", () => {
+    const [item] = layerItems(
+      layer("l1", {
+        placements: [
+          { ...placement("tower", 0, 0), id: "a", instance: "unit-1" },
+          { ...placement("tower", 0, 0), id: "b", instance: "unit-1" },
+        ],
+      }),
+    );
+    // The canvas selects whichever member the pointer landed on, and the row
+    // is about the file rather than about that member.
+    expect(
+      isSelected(item, { kind: "placement", layerId: "l1", placementId: "b" }),
+    ).toBe(true);
+    expect(
+      isSelected(item, { kind: "placements", layerId: "l1", ids: ["b"] }),
+    ).toBe(true);
+    expect(
+      isSelected(item, { kind: "placement", layerId: "l1", placementId: "z" }),
+    ).toBe(false);
   });
 });
 

@@ -129,7 +129,10 @@ remaining pieces are wired to real slots rather than mocked.
 - Layers, under the scene they belong to: drag by the grip to reorder, rename,
   lock, hide, with live counts and an expandable list of what is on each one —
   selecting there selects on the canvas, and a placed PSD listed under a layer
-  has a grip of its own that carries it to whichever layer you let go over
+  has a grip of its own that carries it to whichever layer you let go over.
+  The two senses of the word stay apart: a layer here is Phaser's — draw order
+  over anything at all — so a placed PSD is **one row** however many layers are
+  inside the file, and the stack inside it belongs to the inspector
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass
