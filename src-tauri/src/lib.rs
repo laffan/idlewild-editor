@@ -305,32 +305,83 @@ fn create_psd_from_rgba(
     })
 }
 
-/// Rewrite the layers this editor generated in a PSD it already wrote,
-/// keeping every other layer in the file.
+/// One raster layer of a generated group, as it crosses the bridge.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PartPayload {
+    name: String,
+    rgba_base64: String,
+}
+
+fn decode_parts(parts: Vec<PartPayload>) -> Result<Vec<psd_write::Part>, String> {
+    use base64::Engine;
+    parts
+        .into_iter()
+        .map(|part| {
+            base64::engine::general_purpose::STANDARD
+                .decode(&part.rgba_base64)
+                .map(|rgba| psd_write::Part {
+                    name: part.name,
+                    rgba,
+                })
+                .map_err(|e| format!("Bad pixel data: {e}"))
+        })
+        .collect()
+}
+
+/// A PSD whose artwork is a group of raster layers rather than one sprite.
 ///
-/// What `create_psd_from_rgba` cannot do. That one writes the file from
-/// nothing, which is right for an import and wrong for a second Apply: a
-/// layer painted over the greybox in Photoshop would not be preserved, it
-/// would simply not be there any more. See `psd_write::rewrite_marked`.
+/// What an extrusion writes: a silhouette, its shading and the lines between
+/// its spaces, as three layers somebody can take apart. Parts arrive top-first,
+/// as Photoshop's panel lists them.
 #[tauri::command]
-fn rewrite_psd_from_rgba(
+fn create_psd_group_from_rgba(
+    app: tauri::AppHandle,
+    id: String,
+    name: String,
+    width: u32,
+    height: u32,
+    parts: Vec<PartPayload>,
+    marks: AnchorMarks,
+) -> Result<ImportResult, String> {
+    let key = psd_write::sanitise_stem(&name);
+    let parts = decode_parts(parts)?;
+    let psd_bytes = psd_write::psd_from_parts_marked(&key, width, height, &parts, &marks)?;
+    let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
+    std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
+
+    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
+    Ok(ImportResult {
+        key,
+        width,
+        height,
+        manifest,
+    })
+}
+
+/// Rewrite the group this editor generated in a PSD it already wrote, keeping
+/// every other layer in the file.
+///
+/// What `create_psd_group_from_rgba` cannot do. That one writes the file from
+/// nothing, which is right for an import and wrong for a second Apply: a layer
+/// painted over the greybox in Photoshop would not be preserved, it would
+/// simply not be there any more. See `psd_write::rewrite_parts_marked`.
+#[tauri::command]
+fn rewrite_psd_group_from_rgba(
     app: tauri::AppHandle,
     id: String,
     key: String,
     width: u32,
     height: u32,
-    rgba_base64: String,
+    parts: Vec<PartPayload>,
     marks: AnchorMarks,
 ) -> Result<ImportResult, String> {
-    use base64::Engine;
-    let rgba = base64::engine::general_purpose::STANDARD
-        .decode(&rgba_base64)
-        .map_err(|e| format!("Bad pixel data: {e}"))?;
-
+    let parts = decode_parts(parts)?;
     let path = psd_pipeline::psd_path(&id, &key)?;
     let existing =
         std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
-    let rebuilt = psd_write::rewrite_marked(&existing, &key, width, height, rgba, &marks)?;
+    let rebuilt =
+        psd_write::rewrite_parts_marked(&existing, &key, width, height, &parts, &marks)?;
     std::fs::write(&path, rebuilt).map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
 
     let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
@@ -567,7 +618,8 @@ pub fn run() {
             read_clipboard,
             read_dropped_file,
             create_psd_from_rgba,
-            rewrite_psd_from_rgba,
+            create_psd_group_from_rgba,
+            rewrite_psd_group_from_rgba,
             reprocess_psd,
             reimport_psd,
             duplicate_psd,

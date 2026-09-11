@@ -254,19 +254,24 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         manifest: markedManifest(String(a.name), a.width, a.height, a.marks),
       };
     }
-    // Rewriting keeps the layers it did not write, which the stub shows by
-    // holding on to any extra layer a script added under that key.
-    case "rewrite_psd_from_rgba": {
+    // An extrusion's artwork is a group of parts. Both routes record what
+    // they were sent, so a script can read the shape of the file back.
+    case "create_psd_group_from_rgba":
+    case "rewrite_psd_group_from_rgba": {
       const a = args as any;
+      const key = String(a.key ?? a.name);
       (window as any).__lastRgba = {
-        width: a.width, height: a.height, name: a.key, marks: a.marks ?? null,
+        width: a.width, height: a.height, name: key, marks: a.marks ?? null,
+        parts: (a.parts ?? []).map((p: any) => p.name),
       };
-      (window as any).__rewrites = ((window as any).__rewrites ?? 0) + 1;
+      if (cmd === "rewrite_psd_group_from_rgba") {
+        (window as any).__rewrites = ((window as any).__rewrites ?? 0) + 1;
+      }
       return {
-        key: String(a.key),
+        key,
         width: a.width,
         height: a.height,
-        manifest: markedManifest(String(a.key), a.width, a.height, a.marks),
+        manifest: markedManifest(key, a.width, a.height, a.marks),
       };
     }
     case "read_psd_bytes": return "AAAA";
@@ -276,15 +281,26 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       // so it has the stack those always have: the artwork under both marks.
       const asked = String((args as any).key);
       if (asked !== "tower") {
+        // A generated file: the marks, then the artwork group and its parts.
+        // Grouped files come back read-only, because the inspector edits a
+        // flat list and could not say what is inside what.
+        const suffix = asked.replace(/^extrude-/, "");
+        const part = (name: string, index: number) => ({
+          name: `S | ${name}-${suffix}`, category: "sprite", index,
+          visible: true, opacity: 255, width: 128, height: 192, x: 0, y: 0,
+        });
         return {
-          key: asked, width: 128, height: 192, writable: true, blockedBy: null,
+          key: asked, width: 128, height: 192,
+          writable: false,
+          blockedBy: "This PSD uses layer groups, so its names and order cannot be edited here.",
           layers: [
             { name: "P | anchor", category: "point", index: 0, visible: true,
               opacity: 255, width: 12, height: 12, x: 58, y: 90 },
             { name: "Z | grid", category: "zone", index: 1, visible: true,
               opacity: 255, width: 64, height: 32, x: 32, y: 80 },
-            { name: `S | ${asked}`, category: "sprite", index: 2, visible: true,
+            { name: `G | ${asked}`, category: "group", index: 2, visible: true,
               opacity: 255, width: 128, height: 192, x: 0, y: 0 },
+            part("lines", 3), part("shading", 4), part("shape", 5),
           ],
         };
       }
@@ -292,7 +308,7 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         key: asked, width: 128, height: 192,
         writable: (window as any).__psdWritable ?? true,
         blockedBy: (window as any).__psdWritable === false
-          ? "This PSD uses layer groups, which a rewrite would flatten."
+          ? "This PSD uses layer groups, so its names and order cannot be edited here."
           : null,
         layers: PSD_LAYERS.map((l, index) => ({
           index, name: l.name, visible: true, opacity: 255,

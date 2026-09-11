@@ -128,6 +128,43 @@ export function isMarkLayer(name: string): boolean {
   );
 }
 
+/**
+ * What an extrusion's artwork is made of, top-first as Photoshop lists it.
+ *
+ * Not one picture. A silhouette, the shading that makes it read as a solid,
+ * and the lines between its spaces — three things somebody opening the file
+ * wants to take separately: recolour the shape, drop the lines, repaint the
+ * shading by hand. They go into the PSD as a group of sprites named after the
+ * file, so psd-to-phaser places them together and the layers panel lists them
+ * under the one thing they add up to.
+ */
+export const EXTRUSION_PARTS = ["lines", "shading", "shape"] as const;
+
+export type ExtrusionPart = (typeof EXTRUSION_PARTS)[number];
+
+const EXTRUDE_PREFIX = "extrude-";
+
+/**
+ * What one part is called inside a PSD.
+ *
+ * `extrude-mtx2vyzs` holds `lines-mtx2vyzs`, `shading-mtx2vyzs` and
+ * `shape-mtx2vyzs`: the key's own suffix, so a glance at any of them says
+ * which file it belongs to. A key that is not one of ours keeps its whole
+ * name, which is the only thing that can be said about it.
+ */
+export function extrusionPartName(key: string, part: ExtrusionPart): string {
+  const suffix = key.startsWith(EXTRUDE_PREFIX)
+    ? key.slice(EXTRUDE_PREFIX.length)
+    : key;
+  return `${part}-${suffix}`;
+}
+
+/** Whether a layer is one of the parts the editor writes for this key. */
+export function isExtrusionPart(key: string, name: string): boolean {
+  const named = name.trim().toLowerCase();
+  return EXTRUSION_PARTS.some((part) => extrusionPartName(key, part) === named);
+}
+
 function findAnchor(all: readonly ManifestLayer[]): { x: number; y: number } | null {
   const point = all.find(
     (l) => l.category === "point" && l.name.toLowerCase() === ANCHOR_LAYER,

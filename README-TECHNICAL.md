@@ -1583,6 +1583,29 @@ The pixels come from walking the same face list the canvas drew, in the same
 order, with the same palette, because the point of Apply is to keep what the
 user is looking at.
 
+**The artwork is a group, not a sprite.** An extrusion is not one picture, and
+flattening it threw that away before anyone saw the file. So the face list is
+walked three times and the parts go in as `G | extrude-…` holding
+`S | lines-…`, `S | shading-…` and `S | shape-…`, top-first as Photoshop
+lists them:
+
+- **shape** is every face in the one flat tone — the silhouette.
+- **shading** is the walls in their own tones over it, which is what makes it
+  read as a solid. A flat projection has none, and gets an empty layer rather
+  than a different stack.
+- **lines** are the edges between spaces.
+
+Stacked in that order they composite to exactly what the canvas drew; taken
+apart they are three things worth having separately. Every part is written at
+the **same size and the same offset**, which is not housekeeping: psd-to-phaser
+places a group as a Phaser Group and resizing one scales each child about its
+own origin, so children with different origins would drift apart. Identical
+geometry makes that operation exact.
+
+The group is named after the key, which is also what the lone sprite was
+called — so a document written before this keeps working, because a
+placement's `layerPath` still resolves.
+
 The footprint marks the spaces the solid **stands on**, not the ones its walls
 reach across on screen: a tall block is anchored to the ground it was built
 from, which is where it has to come back down. `shapeBounds` is taken from
@@ -1622,14 +1645,24 @@ A resumed session holds **nothing**. There is no plate to pull, the shape is
 already there, and guessing which of its faces someone came back for would be
 worse than letting the next tap say.
 
-**Apply rewrites the file rather than replacing it.** `create_psd_from_rgba`
-builds a PSD from nothing — artwork, footprint, anchor — which is right for an
-import and wrong for a second Apply: a layer painted over the greybox in
-Photoshop would not be preserved, it would simply not be there any more. So
-there is a second command. `psd_write::rewrite_marked` parses the file that is
-already on disk, regenerates the three layers this editor owns *each in the
-place it held in the stack*, and carries every other layer across with its
-pixels, position, name, opacity, visibility and blend mode.
+**Apply rewrites the file rather than replacing it.**
+`create_psd_group_from_rgba` builds a PSD from nothing — the group, the
+footprint, the anchor — which is right for an import and wrong for a second
+Apply: a layer painted over the greybox in Photoshop would not be preserved,
+it would simply not be there any more. So there is a second command.
+`psd_write::rewrite_parts_marked` parses the file that is already on disk,
+regenerates the group's contents and both marks *each in the place they held
+in the stack*, and carries every other layer across with its pixels, position,
+name, opacity, visibility and blend mode — **nesting included**. Groups are
+the one thing it had to learn, because the artwork it regenerates is one:
+`Rebuild::items` reads a level of the stack by placing layers and groups in
+the same index space (a group sits where its topmost child does) and sorting,
+which is what interleaves them the way Photoshop shows them.
+
+A file written before extrusions were groups has its artwork as a lone
+top-level sprite named after the key. That layer is one of ours, so it is
+dropped and the group takes its place — which migrates the file the first time
+it is carried on.
 
 **The anchor is what the preserved layers hang from.** A shape pulled further
 out grows the canvas, which moves every canvas coordinate in the file — but
@@ -1637,11 +1670,16 @@ not relative to the anchor mark, which is the fixed point the whole marks
 design is built on. So a preserved layer moves by the distance the anchor
 moved, and the wall someone painted stays on the wall the greybox drew.
 
-It is refused outright for a file the fork cannot rebuild — groups, masks,
-clipping — for the same reason `psd_layers` refuses a rename of one: it would
-come back flattened, having quietly lost work. Which is why the mode now stays
-up until the file is written: a refusal that arrived after the session had
-closed would have taken the shape with it.
+It is refused for a file carrying masks or clipping, which `LayerBuilder`
+cannot express — the reason `psd_layers` refuses a rename of one. Groups are
+no longer on that list, which is why there are now two guards:
+`unrebuildable_because` is what a rewrite asks, and `unwritable_because` adds
+groups on top of it for the *inspector*, which edits a flat list of layers and
+has no way to say that one is inside another. So an extrusion is read-only in
+the layer list and still carries its cube, which is the honest pair of answers.
+
+Either way the mode stays up until the file is written: a refusal arriving
+after the session had closed would have taken the shape with it.
 
 The one thing that has to happen before the reload is the anchor on the
 *document* side: a footprint that has grown past where it started moves the
@@ -1923,11 +1961,14 @@ on chrome never highlights it.
 - Dropping several files at once takes the first one the pipeline can read.
   A drop is one gesture landing on one space, and a run of images would need
   somewhere to put the rest.
-- Continuing an extrusion is refused on a PSD the fork cannot rebuild —
-  groups, masks, clipping — because rewriting one would flatten it. The cube
-  is still offered on such a file and Apply says why it will not write, which
-  is one step later than it could be: the layer list already knows the file is
-  unwritable when it draws the row.
+- Continuing an extrusion is refused on a PSD carrying masks or clipping,
+  which the fork cannot express. The cube is still offered on such a file and
+  Apply says why it will not write, which is one step later than it could be.
+- An extrusion's PSD is a grouped file, so the inspector lists it read-only:
+  the layer names and order are not editable there, ours or anyone else's, and
+  renaming the *file* no longer renames the group inside it. The list is flat
+  and cannot express nesting, which is the thing to fix — the rewrite already
+  round-trips a tree.
 - A preserved layer that hung off the edge of the old canvas is cropped to it,
   because `crop` reads from the canvas-sized buffer the fork hands back and
   what was outside it was never in that buffer. The same is true of a rename,

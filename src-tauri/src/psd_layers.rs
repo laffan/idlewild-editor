@@ -196,13 +196,31 @@ pub(crate) fn crop(
     (x0, y0, width, height, out)
 }
 
-/// The reason a file cannot be rewritten, or None when it can.
+/// The reason the *inspector* cannot rewrite a file, or None when it can.
+///
+/// Stricter than `unrebuildable_because` by one case, and the difference is
+/// what the two are for. The inspector edits a **flat list** of layers: it has
+/// no way to say that a layer is inside a group, so a file with groups would
+/// come back with all of them gone. A rewrite that builds the tree itself has
+/// no such problem, which is why an extrusion — a group by construction — can
+/// still be carried on in a file this reports read-only.
 pub(crate) fn unwritable_because(doc: &Psd) -> Option<String> {
     if !doc.group_ids_in_order().is_empty() {
         return Some(
-            "This PSD uses layer groups, which a rewrite would flatten.".to_string(),
+            "This PSD uses layer groups, so its names and order cannot be edited here."
+                .to_string(),
         );
     }
+    unrebuildable_because(doc)
+}
+
+/// The reason a file cannot be rebuilt at all, or None when it can.
+///
+/// Masks and clipping are none of what `LayerBuilder` can express, so a file
+/// using them would come back having quietly lost work. Groups are not on the
+/// list: `GroupBuilder` expresses those, and `psd_write::rewrite_parts_marked`
+/// walks the tree and puts it back.
+pub(crate) fn unrebuildable_because(doc: &Psd) -> Option<String> {
     for layer in doc.layers() {
         if layer.mask().is_some() || layer.has_vector_mask() {
             return Some(format!(

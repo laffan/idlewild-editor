@@ -13,6 +13,14 @@
  * is to keep what the user is looking at, and a second renderer that agreed
  * with the first only most of the time would be worse than no preview.
  *
+ * It is walked three times, though, because an extrusion is not one picture.
+ * The **shape** is every face in the one flat tone: the silhouette. The
+ * **shading** is the walls in their own tones over it, which is what makes it
+ * read as a solid. The **lines** are the edges between spaces. Stacked in
+ * that order they composite to exactly what the canvas drew — and taken
+ * apart, they are three things worth having separately in Photoshop:
+ * recolour the shape, drop the lines, repaint the shading by hand.
+ *
  * The solid itself is written into the document beside the placement, keyed
  * by the PSD it became. Pixels cannot say where the columns were, so without
  * that record Apply is a one-way door; with it, the same shape can be opened
@@ -23,7 +31,12 @@
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { cellsBounds } from "../lib/grid";
-import { psd, toBase64 } from "../lib/ipc";
+import { psd, toBase64, type PsdPart } from "../lib/ipc";
+import {
+  EXTRUSION_PARTS,
+  extrusionPartName,
+  type ExtrusionPart,
+} from "../lib/manifest";
 import type { Cell, Point, Rect } from "../lib/types";
 import * as log from "../lib/log";
 import {
@@ -90,10 +103,23 @@ export async function applyExtrusion(
     return false;
   }
 
-  const rgba = rasterise(grid, shape, bounds, width, height);
-  if (!rgba) {
-    log.error("Could not rasterise the extrusion");
-    return false;
+  // The key names the parts, so it is settled before they are drawn. Rust
+  // sanitises what it is handed, and this is already only lowercase letters,
+  // digits and a hyphen, so what comes back is what went in.
+  const key = target ? target.key : `extrude-${Date.now().toString(36)}`;
+  const parts: PsdPart[] = [];
+  for (const part of EXTRUSION_PARTS) {
+    const rgba = rasterise(grid, shape, bounds, width, height, part);
+    if (!rgba) {
+      log.error("Could not rasterise the extrusion");
+      return false;
+    }
+    parts.push({
+      name: extrusionPartName(key, part),
+      rgbaBase64: toBase64(
+        new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength),
+      ),
+    });
   }
 
   try {
@@ -105,28 +131,18 @@ export async function applyExtrusion(
     const anchorWorld = grid.cellToWorld(anchor);
     const art: Point = { x: bounds.x - anchorWorld.x, y: bounds.y - anchorWorld.y };
 
-    const pixels = toBase64(
-      new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength),
-    );
     // The footprint marks the spaces the solid *stands on*, not the ones its
     // walls reach across on screen: a tall block is anchored to the ground it
     // was built from, which is where it has to come back down.
     const marks = scaleMarks(marksForCells(grid, cells, anchor, art), EXPORT_SCALE);
 
     // Carrying one on **rewrites** the file rather than replacing it. Both
-    // regenerate the artwork layer and both marks; only the rewrite keeps the
-    // rest of the stack, which is the difference between carrying a shape on
-    // and quietly throwing away an afternoon in Photoshop.
+    // regenerate the group and both marks; only the rewrite keeps the rest of
+    // the stack, which is the difference between carrying a shape on and
+    // quietly throwing away an afternoon in Photoshop.
     const result = target
-      ? await psd.rewriteFromRgba(projectId, target.key, width, height, pixels, marks)
-      : await psd.fromRgba(
-          projectId,
-          `extrude-${Date.now().toString(36)}`,
-          width,
-          height,
-          pixels,
-          marks,
-        );
+      ? await psd.rewriteParts(projectId, key, width, height, parts, marks)
+      : await psd.fromParts(projectId, key, width, height, parts, marks);
 
     // Written before the artwork is placed, not after: placing selects the
     // new PSD, and the inspector builds its layer list from that selection —
@@ -165,13 +181,20 @@ function reanchor(store: DocStore, key: string, anchor: Cell): void {
   }
 }
 
-/** The exact drawing the canvas made, on a transparent ground, cropped to it. */
+/**
+ * One layer of the drawing the canvas made, on a transparent ground.
+ *
+ * All three are the same size and the same offset, which is what lets them be
+ * stacked without arithmetic — and, once they are a group on the canvas, what
+ * makes resizing that group exact.
+ */
 function rasterise(
   grid: Grid,
   shape: VoxelSet,
   bounds: Rect,
   width: number,
   height: number,
+  part: ExtrusionPart,
 ): Uint8ClampedArray | null {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -188,10 +211,18 @@ function rasterise(
   ctx.lineJoin = "round";
 
   for (const face of shapeFaces(grid, shape)) {
-    ctx.fillStyle = SHADE_COLORS[face.shade];
     trace(ctx, face.points);
-    ctx.fill();
-    ctx.stroke();
+    if (part === "lines") {
+      ctx.stroke();
+    } else if (part === "shape") {
+      // The silhouette, in the one tone the top faces take: the shading
+      // below paints the walls over it, so the two together are the drawing.
+      ctx.fillStyle = SHADE_COLORS.top;
+      ctx.fill();
+    } else if (face.shade !== "top") {
+      ctx.fillStyle = SHADE_COLORS[face.shade];
+      ctx.fill();
+    }
   }
 
   return ctx.getImageData(0, 0, width, height).data;

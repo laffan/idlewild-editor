@@ -27,7 +27,7 @@
  */
 
 import { clear, h, ICONS, icon } from "../lib/dom";
-import { isMarkLayer } from "../lib/manifest";
+import { isExtrusionPart, isMarkLayer } from "../lib/manifest";
 import { psd, type PsdLayerInfo, type PsdLayerList } from "../lib/ipc";
 import * as log from "../lib/log";
 
@@ -69,9 +69,13 @@ export interface PsdLayerEditorCallbacks {
  *
  * The two orienting marks on any file it wrote — `P | anchor` is looked up by
  * name on every parse, and renaming it silently costs the artwork its
- * alignment on the next re-import — and the artwork layer of an extrusion,
- * which Apply regenerates under the file's own key. That last one is also the
- * way back in: its row carries the button that reopens the solid.
+ * alignment on the next re-import — and, on an extrusion, the group holding
+ * its artwork and every part inside it. Apply regenerates all four under the
+ * file's own key, so a new name would survive exactly one Apply.
+ *
+ * The group is also the way back in: its row carries the button that reopens
+ * the solid. On the group rather than on a part because the group is the
+ * thing the parts add up to, and it is the row a placement points at.
  */
 export function psdLayerOwner(
   layer: PsdLayerInfo,
@@ -90,15 +94,21 @@ export function psdLayerOwner(
           : "The editor writes this mark — it cannot be renamed",
     };
   }
-  if (isExtrusion && layer.category === "sprite" && named === key.toLowerCase()) {
+  if (!isExtrusion) return null;
+
+  // The group the parts live in, which is what a placement points at.
+  if (named === key.toLowerCase()) {
     return {
-      reason: "Extrude mode writes this layer — it cannot be renamed",
+      reason: "Extrude mode writes this group — it cannot be renamed",
       action: {
         icon: ICONS.box,
         label: "Continue extruding this shape",
         run: onExtrude,
       },
     };
+  }
+  if (isExtrusionPart(key, named)) {
+    return { reason: "Extrude mode writes this layer — it cannot be renamed" };
   }
   return null;
 }

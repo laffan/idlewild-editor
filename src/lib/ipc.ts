@@ -110,6 +110,12 @@ export interface PsdLayerEdit {
   name: string;
 }
 
+/** One raster layer of a generated group. The name is the exported one. */
+export interface PsdPart {
+  name: string;
+  rgbaBase64: string;
+}
+
 export interface ImportResult {
   key: string;
   width: number;
@@ -272,30 +278,54 @@ export const psd = {
       marks,
     }),
   /**
-   * Rewrite the layers this editor generated in a PSD it already wrote,
-   * keeping every other layer in the file.
+   * A PSD whose artwork is a *group* of raster layers rather than one sprite.
    *
-   * The difference from `fromRgba` is what happens to work someone did in
+   * What an extrusion writes. Every part is the same size and sits at the
+   * same offset, which is what makes resizing the placed group exact —
+   * psd-to-phaser scales each child about its own origin, so children with
+   * different origins would drift apart. Parts are sent top-first, as
+   * Photoshop's panel lists them.
+   */
+  fromParts: (
+    id: string,
+    name: string,
+    width: number,
+    height: number,
+    parts: PsdPart[],
+    marks: AnchorMarks,
+  ) =>
+    invoke<ImportResult>("create_psd_group_from_rgba", {
+      id,
+      name,
+      width,
+      height,
+      parts,
+      marks,
+    }),
+  /**
+   * Rewrite that group in a PSD this editor already wrote, keeping every
+   * other layer in the file.
+   *
+   * The difference from `fromParts` is what happens to work someone did in
    * Photoshop between one write and the next. That builds a file from
    * nothing; this rebuilds the one that is there, so a layer painted over a
-   * generated block-out survives the block-out being regenerated. Takes a
-   * key rather than a name — the file exists, so there is nothing to
-   * sanitise or to make unique.
+   * generated block-out survives the block-out being regenerated. Takes a key
+   * rather than a name — the file exists, so there is nothing to sanitise.
    */
-  rewriteFromRgba: (
+  rewriteParts: (
     id: string,
     key: string,
     width: number,
     height: number,
-    rgbaBase64: string,
+    parts: PsdPart[],
     marks: AnchorMarks,
   ) =>
-    invoke<ImportResult>("rewrite_psd_from_rgba", {
+    invoke<ImportResult>("rewrite_psd_group_from_rgba", {
       id,
       key,
       width,
       height,
-      rgbaBase64,
+      parts,
       marks,
     }),
   /** The PSD's real layer stack, top-first, and whether it can be rewritten. */

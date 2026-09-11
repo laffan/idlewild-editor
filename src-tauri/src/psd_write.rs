@@ -10,7 +10,7 @@
 
 use crate::{psd_layers, psd_marks};
 use image::GenericImageView;
-use psd::{LayerBuilder, Psd, PsdBuilder};
+use psd::{GroupBuilder, LayerBuilder, Psd, PsdBuilder};
 use serde::Deserialize;
 use std::path::Path;
 
@@ -96,15 +96,88 @@ pub fn psd_from_rgba_marked(
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
 }
 
+/// One raster layer of a generated group, as the editor sends it.
+///
+/// The name is the exported one — `shape-mtx2vyzs` — and the pipe prefix is
+/// added here, because what the pipeline makes of a layer is this side's
+/// business and what to call it is the editor's.
+pub struct Part {
+    pub name: String,
+    pub rgba: Vec<u8>,
+}
+
+/// A PSD whose artwork is a *group* of raster layers, plus the marks.
+///
+/// An extrusion is not one picture. It is a silhouette, the shading that
+/// makes it read as a solid, and the lines between its spaces — three things
+/// somebody opening the file will want to take separately: recolour the
+/// shape, drop the lines, repaint the shading by hand. Writing them as one
+/// flattened sprite threw that away before anyone saw the file.
+///
+/// Every part is written at the **same size and the same offset**, which is
+/// not an accident. psd-to-phaser places a group as a Phaser Group, and
+/// resizing one scales each child about its own origin — so children with
+/// different origins drift apart as it is scaled. Identical geometry makes
+/// that operation exact instead: the same scale about the same origin.
+pub fn psd_from_parts_marked(
+    name: &str,
+    width: u32,
+    height: u32,
+    parts: &[Part],
+    marks: &AnchorMarks,
+) -> Result<Vec<u8>, String> {
+    let layout = psd_marks::layout(width, height, marks);
+    let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
+    builder.add_group(parts_group(name, width, height, parts, &layout)?);
+    for layer in psd_marks::layers(&layout, marks) {
+        builder.add_layer(layer);
+    }
+    builder
+        .to_bytes()
+        .map_err(|e| format!("Failed to write PSD: {e:?}"))
+}
+
+/// The generated group, artwork parts and all.
+fn parts_group(
+    key: &str,
+    width: u32,
+    height: u32,
+    parts: &[Part],
+    layout: &psd_marks::Layout,
+) -> Result<GroupBuilder, String> {
+    if parts.is_empty() {
+        return Err("A generated group needs at least one layer".to_string());
+    }
+    let expected = (width as usize) * (height as usize) * 4;
+    let mut group = GroupBuilder::new(format!("G | {key}"));
+    // The parts arrive top-first, as Photoshop's panel lists them, and
+    // `add_layer` stacks bottom-up.
+    for part in parts.iter().rev() {
+        if part.rgba.len() != expected {
+            return Err(format!(
+                "\"{}\" is {} bytes, expected {expected} for {width}x{height}",
+                part.name,
+                part.rgba.len()
+            ));
+        }
+        group = group.add_layer(
+            LayerBuilder::new(format!("S | {}", part.name))
+                .rgba(width, height, part.rgba.clone())
+                .at(layout.art_left, layout.art_top),
+        );
+    }
+    Ok(group)
+}
+
 /// Rewrite the layers this editor generates, leaving every other layer alone.
 ///
-/// The difference between this and calling `psd_from_rgba_marked` again is the
-/// whole point of it. That writes a *new* file — artwork, anchor, footprint —
-/// so a layer someone added in Photoshop after the first Apply is not
-/// preserved, it is simply not there any more. This rebuilds the file the
-/// editor already wrote: the three generated layers come back regenerated,
-/// each in the place it held in the stack, and everything else is carried
-/// across as it was.
+/// The difference between this and calling `psd_from_parts_marked` again is
+/// the whole point of it. That writes a *new* file — the generated group and
+/// both marks — so a layer someone added in Photoshop after the first Apply
+/// is not preserved, it is simply not there any more. This rebuilds the file
+/// the editor already wrote: the group's contents and both marks come back
+/// regenerated, each in the place it held in the stack, and everything else
+/// is carried across as it was, nesting included.
 ///
 /// **The anchor is what everything else hangs from.** A shape pulled further
 /// out grows the canvas, which moves every canvas coordinate in the file —
@@ -113,32 +186,29 @@ pub fn psd_from_rgba_marked(
 /// anchor moved, and a wall someone painted over the greybox stays on the
 /// greybox.
 ///
-/// Refused outright for a file the fork cannot rebuild — groups, masks,
-/// clipping — for the reason `psd_layers` refuses a rename of one: it would
-/// come back flattened, having quietly lost work.
-pub fn rewrite_marked(
+/// A file written before extrusions were groups has its artwork as a lone
+/// top-level sprite named after the key. That layer is one of ours, so it is
+/// dropped and the group takes its place — which migrates the file the first
+/// time it is carried on.
+///
+/// Refused for a file carrying masks or clipping, for the reason
+/// `psd_layers` refuses a rename of one: the fork cannot express them, so a
+/// rebuild would come back having quietly lost work. Groups it *can* express,
+/// which is what makes this possible at all.
+pub fn rewrite_parts_marked(
     existing: &[u8],
-    name: &str,
+    key: &str,
     width: u32,
     height: u32,
-    rgba: Vec<u8>,
+    parts: &[Part],
     marks: &AnchorMarks,
 ) -> Result<Vec<u8>, String> {
-    let expected = (width as usize) * (height as usize) * 4;
-    if rgba.len() != expected {
-        return Err(format!(
-            "RGBA buffer is {} bytes, expected {expected} for {width}x{height}",
-            rgba.len()
-        ));
-    }
-
     let doc = Psd::from_bytes(existing).map_err(|e| format!("Cannot parse the PSD: {e}"))?;
-    if let Some(reason) = psd_layers::unwritable_because(&doc) {
+    if let Some(reason) = psd_layers::unrebuildable_because(&doc) {
         return Err(reason);
     }
 
     let layout = psd_marks::layout(width, height, marks);
-    let (old_w, old_h) = (doc.width(), doc.height());
     // How far the anchor moved, which is how far everything hanging from it
     // moves with it. No anchor in the old file means nothing to measure
     // against, and leaving the other layers where they are is the only
@@ -147,60 +217,61 @@ pub fn rewrite_marked(
         Some((x, y)) => (layout.anchor_x - x, layout.anchor_y - y),
         None => (0, 0),
     };
+    let rebuild = Rebuild {
+        doc: &doc,
+        dx,
+        dy,
+        old_w: doc.width(),
+        old_h: doc.height(),
+        key,
+    };
 
-    let mut artwork = Some(
-        LayerBuilder::new(format!("S | {name}"))
-            .rgba(width, height, rgba)
-            .at(layout.art_left, layout.art_top),
-    );
+    let mut group = Some(parts_group(key, width, height, parts, &layout)?);
     let mut anchor = Some(psd_marks::anchor_layer(&layout));
     let mut zone = psd_marks::zone_layer(&layout, marks);
 
     let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
-    // A file with no artwork layer of ours is not one we wrote. Put it at the
-    // bottom, where a generated file has it, rather than on top of work that
-    // was there first.
-    if !doc.layers().iter().any(|l| is_artwork(l.name(), name)) {
-        if let Some(art) = artwork.take() {
-            builder.add_layer(art);
+    // A file with no artwork of ours is not one we wrote. Put the group at the
+    // bottom, where a generated file has it, rather than over work that was
+    // there first.
+    if !rebuild.items(None).iter().any(|item| rebuild.is_ours(item)) {
+        if let Some(built) = group.take() {
+            builder.add_group(built);
         }
     }
 
-    // `layers()` reads top-first and `add_layer` stacks bottom-up, so the
-    // walk is reversed — the same round trip `psd_layers::write` makes.
-    for layer in doc.layers().iter().rev() {
-        let generated = if is_artwork(layer.name(), name) {
-            artwork.take()
-        } else if is_named(layer.name(), "anchor") {
-            anchor.take()
-        } else if is_grid(layer.name()) {
-            // A footprint that has nothing to draw leaves the old one out
-            // rather than keeping a stale one: the shape it described is gone.
-            zone.take().or(None)
-        } else {
-            None
-        };
-        if let Some(built) = generated {
-            builder.add_layer(built);
-            continue;
+    // Top-first as the panel reads, and `add_*` stacks bottom-up.
+    for item in rebuild.items(None).into_iter().rev() {
+        match item {
+            Item::Group(id) if rebuild.is_ours(&Item::Group(id)) => {
+                if let Some(built) = group.take() {
+                    builder.add_group(built);
+                }
+            }
+            Item::Group(id) => {
+                builder.add_group(rebuild.group(id));
+            }
+            Item::Layer(idx) => {
+                let layer = doc.layer_by_idx(idx);
+                if is_named(layer.name(), "anchor") {
+                    if let Some(built) = anchor.take() {
+                        builder.add_layer(built);
+                    }
+                } else if is_grid(layer.name()) {
+                    if let Some(built) = zone.take() {
+                        builder.add_layer(built);
+                    }
+                } else if is_named(layer.name(), key) {
+                    // The lone sprite an older extrusion wrote. The group
+                    // stands where it stood.
+                    if let Some(built) = group.take() {
+                        builder.add_group(built);
+                    }
+                } else if let Some(built) = rebuild.layer(idx) {
+                    builder.add_layer(built);
+                }
+            }
         }
-        if is_grid(layer.name()) || is_named(layer.name(), "anchor") {
-            // One of ours, regenerated already or no longer wanted.
-            continue;
-        }
-
-        let (left, top, w, h, pixels) = psd_layers::crop(layer, old_w, old_h);
-        if w == 0 || h == 0 {
-            continue;
-        }
-        builder.add_layer(
-            LayerBuilder::new(layer.name())
-                .rgba(w, h, pixels)
-                .at(left + dx, top + dy)
-                .opacity(layer.opacity())
-                .visible(layer.visible())
-                .blend_mode(layer.blend_mode()),
-        );
     }
 
     // Anything the old file did not have goes on top, where a generated file
@@ -215,6 +286,101 @@ pub fn rewrite_marked(
     builder
         .to_bytes()
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
+}
+
+/// One thing at a level of the stack: a layer, or a group and its contents.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Item {
+    Layer(usize),
+    Group(u32),
+}
+
+/// Carrying an existing file's layers across into a new one.
+struct Rebuild<'a> {
+    doc: &'a Psd,
+    dx: i32,
+    dy: i32,
+    old_w: u32,
+    old_h: u32,
+    key: &'a str,
+}
+
+impl Rebuild<'_> {
+    /// What sits directly at one level, top-first as the panel reads.
+    ///
+    /// There is no single ordered list of *items* to read: layers come
+    /// top-first by index, groups come bottom-first by id. Both can be placed
+    /// in the layer index space, though — a group sits where its topmost
+    /// child does — so sorting on that interleaves them the way Photoshop
+    /// shows them.
+    fn items(&self, parent: Option<u32>) -> Vec<Item> {
+        let mut out: Vec<(usize, Item)> = Vec::new();
+        for (idx, layer) in self.doc.layers().iter().enumerate() {
+            if layer.parent_id() == parent {
+                out.push((idx, Item::Layer(idx)));
+            }
+        }
+        for (id, group) in self.doc.groups() {
+            if group.parent_id() == parent {
+                out.push((group.contained_layers().start, Item::Group(*id)));
+            }
+        }
+        out.sort_by_key(|(at, _)| *at);
+        out.into_iter().map(|(_, item)| item).collect()
+    }
+
+    /// Whether this is the group the editor generates for this key.
+    fn is_ours(&self, item: &Item) -> bool {
+        match item {
+            Item::Group(id) => self
+                .doc
+                .groups()
+                .get(id)
+                .is_some_and(|g| is_named(g.name(), self.key)),
+            Item::Layer(idx) => is_named(self.doc.layer_by_idx(*idx).name(), self.key),
+        }
+    }
+
+    /// One group carried across whole, contents and nesting included.
+    fn group(&self, id: u32) -> GroupBuilder {
+        let source = self.doc.groups().get(&id);
+        let name = source.map(|g| g.name().to_string()).unwrap_or_default();
+        let mut built = GroupBuilder::new(name);
+        if let Some(group) = source {
+            built = built
+                .opacity(group.opacity())
+                .visible(group.visible())
+                .blend_mode(group.blend_mode());
+        }
+        for item in self.items(Some(id)).into_iter().rev() {
+            match item {
+                Item::Group(child) => built = built.add_group(self.group(child)),
+                Item::Layer(idx) => {
+                    if let Some(layer) = self.layer(idx) {
+                        built = built.add_layer(layer);
+                    }
+                }
+            }
+        }
+        built
+    }
+
+    /// One layer carried across, moved by however far the anchor moved.
+    fn layer(&self, idx: usize) -> Option<LayerBuilder> {
+        let layer = self.doc.layer_by_idx(idx);
+        let (left, top, w, h, pixels) = psd_layers::crop(layer, self.old_w, self.old_h);
+        if w == 0 || h == 0 {
+            return None;
+        }
+        Some(
+            LayerBuilder::new(layer.name())
+                .rgba(w, h, pixels)
+                .at(left + self.dx, top + self.dy)
+                .opacity(layer.opacity())
+                .visible(layer.visible())
+                .blend_mode(layer.blend_mode()),
+        )
+    }
 }
 
 /// The anchor mark's centre in canvas coordinates, which is what psd-to-json
@@ -239,10 +405,6 @@ fn is_grid(layer_name: &str) -> bool {
         let n = n.to_ascii_lowercase();
         n == "grid" || n.starts_with("grid-")
     })
-}
-
-fn is_artwork(layer_name: &str, key: &str) -> bool {
-    is_named(layer_name, key)
 }
 
 /// Turn whatever a file picker handed back into a path that can be opened.

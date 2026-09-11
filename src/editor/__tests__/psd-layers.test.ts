@@ -59,13 +59,22 @@ describe("psdLayerOwner", () => {
     expect(owner(layer("Z | grid", "zone"), false)?.reason).toContain("cannot be renamed");
   });
 
-  it("owns an extrusion's artwork, and offers the way back into the mode", () => {
-    const held = owner(layer("S | extrude-abc", "sprite"));
+  it("owns an extrusion's group, and offers the way back into the mode", () => {
+    const held = owner(layer("G | extrude-abc", "group"));
     expect(held?.action?.label).toContain("Continue extruding");
   });
 
-  it("leaves the same layer alone on a PSD that is not an extrusion", () => {
-    expect(owner(layer("S | extrude-abc", "sprite"), false)).toBeNull();
+  it("owns every part inside it, without repeating the button", () => {
+    for (const name of ["S | shape-abc", "S | shading-abc", "S | lines-abc"]) {
+      const held = owner(layer(name, "sprite"));
+      expect(held?.reason, name).toContain("cannot be renamed");
+      expect(held?.action, name).toBeUndefined();
+    }
+  });
+
+  it("leaves the same layers alone on a PSD that is not an extrusion", () => {
+    expect(owner(layer("G | extrude-abc", "group"), false)).toBeNull();
+    expect(owner(layer("S | shape-abc", "sprite"), false)).toBeNull();
   });
 
   it("leaves everything the author named alone", () => {
