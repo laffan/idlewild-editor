@@ -441,10 +441,16 @@
   align-items: center;
   gap: 4px;
   padding: 5px 6px 5px 0;
-  border-bottom: 1px solid var(--chrome-rule);
+  border-top: 1px solid var(--chrome-rule);
   background: transparent;
 }
-.psd-layer-row:last-child { border-bottom: 0; }
+/* The rule is on the top edge rather than the bottom because a folded
+   group's contents are still in the list, hidden: the first row always
+   shows and the last one may not, so only the top is safe to special-case. */
+.psd-layer-row:first-child { border-top: 0; }
+/* `display: flex` above outranks the browser's own rule for [hidden], so a
+   folded row needs saying twice or it stays on screen. */
+.psd-layer-row[hidden] { display: none; }
 
 /* `touch-action: none` is what makes a drag on the iPad a reorder rather
    than a scroll of the inspector behind it. */
@@ -513,8 +519,27 @@
    the row's depth, so the only thing a rule has to carry is that the row
    itself is the heading of what follows. */
 .psd-layer-row.group { background: color-mix(in srgb, var(--chrome-rule) 45%, transparent); }
-.psd-layer-row.group > svg { flex: none; color: var(--color-neutral-500); }
 .psd-layer-row.group .psd-layer-name { font-weight: 600; }
+
+/* The fold sits on the group's second line, so the name stays level with
+   every other name in the list — a heading pushed further right than the
+   rows under it reads as being inside something itself. */
+.psd-layer-fold {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 0;
+  padding: 0;
+  margin-left: -2px;
+  background: transparent;
+  color: var(--color-neutral-600);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.psd-layer-fold > svg { flex: none; }
+.psd-layer-fold:hover { color: var(--chrome-text); }
+.psd-layer-fold:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 
 /* A layer psd-to-json will not export reads as an aside; the two orienting
    marks are the app's own and say so in the accent. */

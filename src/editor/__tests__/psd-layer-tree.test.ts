@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   blockLength,
   dropSlots,
+  hiddenBy,
   moveBlock,
   siblingSpan,
 } from "../psd-layer-tree";
@@ -155,5 +156,46 @@ describe("a move through any legal slot", () => {
         }
       }
     }
+  });
+});
+
+describe("folding a group away", () => {
+  /** Fold the rows at these indices, and say which rows that hides. */
+  const fold = (rows: { depth: number }[], ...shut: number[]) =>
+    hiddenBy(rows, (_row, at) => shut.includes(at));
+
+  it("hides nothing when nothing is folded", () => {
+    expect(fold(STACK)).toEqual([false, false, false, false, false, false]);
+  });
+
+  it("hides a group's contents and nothing beside them", () => {
+    expect(fold(STACK, 2)).toEqual([false, false, false, true, true, true]);
+  });
+
+  it("leaves the group itself showing, because it is the way back", () => {
+    expect(fold(STACK, 2)[2]).toBe(false);
+  });
+
+  it("hides a nested group along with everything in it", () => {
+    // Group B at row 3 holds a layer and group C, which holds two more.
+    expect(fold(NESTED, 3)).toEqual([
+      false, false, false, false, true, true, true, true, false,
+    ]);
+  });
+
+  it("folds the inner group alone without touching the outer one", () => {
+    expect(fold(NESTED, 5)).toEqual([
+      false, false, false, false, false, false, true, true, false,
+    ]);
+  });
+
+  it("does not unfold a child by folding its parent", () => {
+    // Both shut: the outer fold wins, and the inner one is simply not asked.
+    // So opening the outer group back up finds the inner one still shut.
+    expect(fold(NESTED, 3, 5)).toEqual(fold(NESTED, 3));
+  });
+
+  it("is parallel to the rows, so the list and the model stay in step", () => {
+    expect(fold(NESTED, 3)).toHaveLength(NESTED.length);
   });
 });

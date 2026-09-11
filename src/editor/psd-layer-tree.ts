@@ -8,6 +8,10 @@
  * because the awkward parts are the arithmetic, and arithmetic is worth
  * testing without a DOM.
  *
+ * Folding is the same reading of the depths from the other side: a group
+ * hides the block under it, and everything in a hidden block stays hidden
+ * whatever it says about itself.
+ *
  * Reordering works on **blocks**, never on single rows. Dragging a group has
  * to take what is inside it — a group torn away from its contents is not an
  * edit anyone meant to make — and a block only ever lands among its own
@@ -85,4 +89,31 @@ export function moveBlock<T>(
   const rest = [...rows.slice(0, at), ...rows.slice(at + size)];
   const target = to > at ? to - size : to;
   return [...rest.slice(0, target), ...block, ...rest.slice(target)];
+}
+
+/**
+ * Which rows are hidden by the groups that are folded shut.
+ *
+ * Parallel to `rows`, because the panel renders every row either way — a
+ * hidden one keeps its place in the list so the model and the DOM stay one
+ * to one, and the drag can go on indexing one against the other.
+ *
+ * A group inside a folded group is hidden whether or not it is folded
+ * itself, which is why this is a walk rather than a union of blocks: the
+ * inner one's own state is not consulted until its parent is open again,
+ * and so folding a parent never silently unfolds a child.
+ */
+export function hiddenBy<T extends TreeRow>(
+  rows: readonly T[],
+  folded: (row: T, at: number) => boolean,
+): boolean[] {
+  const out: boolean[] = [];
+  let under: number | null = null;
+  rows.forEach((row, at) => {
+    const inside = under !== null && row.depth > under;
+    if (!inside) under = null;
+    out.push(inside);
+    if (!inside && folded(row, at)) under = row.depth;
+  });
+  return out;
 }

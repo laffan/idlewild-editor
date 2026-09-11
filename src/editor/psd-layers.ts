@@ -37,6 +37,7 @@ import { clear, h, ICONS, icon } from "../lib/dom";
 import {
   blockLength,
   dropSlots,
+  hiddenBy,
   moveBlock,
 } from "./psd-layer-tree";
 import { isExtrusionPart, isMarkLayer } from "../lib/manifest";
@@ -168,6 +169,17 @@ export class PsdLayerEditor {
   private rows: Row[] = [];
   private drag: DragState | null = null;
   private busy = false;
+  /**
+   * The groups that are folded shut, by the name the file holds them under.
+   *
+   * By name rather than by index because the list is re-read on every
+   * rewrite and every re-parse, and an index means something different after
+   * each of those while a name does not. The name as *read*, not as typed,
+   * so a group does not spring open while someone is renaming it — Apply
+   * carries the fold over to the new name. Two groups sharing a name fold
+   * together, which is a truthful answer to an ambiguous file.
+   */
+  private collapsed = new Set<string>();
 
   constructor(
     projectId: string,
@@ -262,7 +274,15 @@ export class PsdLayerEditor {
     this.status.classList.toggle("blocked", !stack.writable);
 
     clear(this.list);
-    for (const row of this.rows) this.list.appendChild(this.rowEl(row, stack));
+    // Every row is rendered whether or not it shows, so the list and the
+    // model stay one to one — the drag indexes one against the other, and a
+    // folded group would otherwise shift everything under it out of step.
+    const hidden = hiddenBy(this.rows, (row) => this.isFolded(row));
+    this.rows.forEach((row, at) => {
+      const el = this.rowEl(row, stack);
+      el.hidden = hidden[at];
+      this.list.appendChild(el);
+    });
     if (this.rows.length === 0) {
       this.list.appendChild(
         h("div", { class: "psd-layers-status m", text: "No layers." }),
@@ -298,7 +318,6 @@ export class PsdLayerEditor {
             icon(ICONS.grip, 14),
           )
         : h("div", { class: "psd-layer-grip" }),
-      group ? icon(ICONS.folder, 13) : null,
       h(
         "div",
         { class: "psd-layer-main" },
@@ -315,12 +334,14 @@ export class PsdLayerEditor {
             if (event.key === "Enter") (event.target as HTMLInputElement).blur();
           },
         }),
-        h("div", {
-          class: "psd-layer-meta m",
-          text: group
-            ? `group · ${this.heldBy(row)}`
-            : `${row.source.category} · ${row.source.width} × ${row.source.height}`,
-        }),
+        group
+          ? this.foldEl(row)
+          : h("div", {
+              class: "psd-layer-meta m",
+              text:
+                `${row.source.category} · ` +
+                `${row.source.width} × ${row.source.height}`,
+            }),
       ),
       owner?.action
         ? h(
@@ -401,6 +422,14 @@ export class PsdLayerEditor {
       log.info(`Rewrote ${this.key}.psd — ${edits.length} layers`);
       this.callbacks.onWritten(manifest, this.renames());
       this.busy = false;
+      // A folded group that has just been renamed is still folded, so the
+      // fold moves to the name the file now holds it under.
+      for (const row of this.rows) {
+        const after = row.name.trim();
+        if (after !== row.source.name && this.collapsed.delete(row.source.name)) {
+          this.collapsed.add(after);
+        }
+      }
       // The indices every edit is named by have just moved, so the file is
       // read again rather than guessed at.
       await this.load();
@@ -425,16 +454,49 @@ export class PsdLayerEditor {
   // ── reordering ────────────────────────────────────────────────────────────
 
   /**
-   * What a group holds, for its own line of type.
+   * A group's second line, which is also the handle that folds it away.
    *
-   * Its size is the box its contents cover, which the row already carries,
-   * but a count is the thing anyone actually wants from a collapsed-looking
-   * row — and it is the one number that says the drag will take them along.
+   * On the meta line rather than beside the grip, where it would push the
+   * name over too — and a name sitting further right than every other name
+   * reads as the group itself being inside something.
+   *
+   * The count is of layers, so a group holding a group counts what is in
+   * neither of them; the fold takes the whole block regardless, which is
+   * what the indent under it already shows.
    */
-  private heldBy(row: Row): string {
+  private foldEl(row: Row): HTMLElement {
     const at = this.rows.indexOf(row);
-    const inside = at < 0 ? 0 : blockLength(this.rows, at) - 1;
-    return `${inside} ${inside === 1 ? "layer" : "layers"}`;
+    const block = at < 0 ? 1 : blockLength(this.rows, at);
+    const layers = this.rows
+      .slice(at + 1, at + block)
+      .filter((held) => !held.source.isGroup).length;
+    const label = `group · ${layers} ${layers === 1 ? "layer" : "layers"}`;
+    if (block < 2) return h("div", { class: "psd-layer-meta m", text: label });
+
+    const shut = this.isFolded(row);
+    return h(
+      "button",
+      {
+        class: "psd-layer-meta m psd-layer-fold",
+        "aria-expanded": shut ? "false" : "true",
+        title: shut ? "Show what is inside" : "Hide what is inside",
+        onClick: () => this.fold(row),
+      },
+      icon(shut ? ICONS.chevronRight : ICONS.chevronDown, 12),
+      h("span", { text: label }),
+    );
+  }
+
+  private isFolded(row: Row): boolean {
+    return row.source.isGroup && this.collapsed.has(row.source.name);
+  }
+
+  /** Fold a group away, or open it back up. */
+  private fold(row: Row): void {
+    if (!this.collapsed.delete(row.source.name)) {
+      this.collapsed.add(row.source.name);
+    }
+    this.render();
   }
 
   /**
@@ -556,13 +618,28 @@ export class PsdLayerEditor {
     this.markDragged();
   }
 
-  /** Where a slot sits on screen: the top of the row that would follow it. */
+  /**
+   * Where a slot sits on screen: the top of the first row after it that is
+   * actually showing, or the bottom of the list if there is none.
+   *
+   * A folded group's contents are still in the list, with no box to measure —
+   * so a slot is found by looking past them rather than at them.
+   */
   private slotY(slot: number): number {
-    const children = this.list.children;
-    const at = children[slot];
-    if (at instanceof HTMLElement) return at.getBoundingClientRect().top;
-    const last = children[children.length - 1];
-    return last instanceof HTMLElement ? last.getBoundingClientRect().bottom : 0;
+    const children = [...this.list.children];
+    for (let i = slot; i < children.length; i++) {
+      const el = children[i];
+      if (el instanceof HTMLElement && !el.hidden) {
+        return el.getBoundingClientRect().top;
+      }
+    }
+    for (let i = children.length - 1; i >= 0; i--) {
+      const el = children[i];
+      if (el instanceof HTMLElement && !el.hidden) {
+        return el.getBoundingClientRect().bottom;
+      }
+    }
+    return 0;
   }
 
   /** Show the whole block as picked up, not just the row under the grip. */

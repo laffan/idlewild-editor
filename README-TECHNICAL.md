@@ -592,7 +592,9 @@ and so there is no gap to honour.
 is the arithmetic, kept apart from the panel and tested without a DOM:
 `blockLength` is a row plus everything indented under it, `siblingSpan` is the
 run either side of a row that never goes shallower, `dropSlots` is the start of
-each sibling block plus the end of that run, and `moveBlock` does the move.
+each sibling block plus the end of that run, `moveBlock` does the move, and
+`hiddenBy` is the same reading of the depths from the other side — which rows
+a set of folded groups takes off the screen.
 Two rules fall out of it. Dragging a group takes what is inside it — a group
 torn away from its contents is not an edit anyone meant to make. And the last
 slot is the *span's* end rather than the list's, so a part cannot be dragged
@@ -606,6 +608,22 @@ half of one. The block goes to the *nearest* slot rather than whichever one
 the pointer has crossed, because the slots open to a block are not every row
 boundary — a rule about passing the midpoint of whatever sits under the
 pointer would refuse to commit while the pointer was over a group's contents.
+
+**A folded group's rows stay in the list.** They are rendered `hidden` rather
+than left out, so the model and the DOM stay one to one and the drag can go on
+indexing one against the other; only `slotY` had to learn about it, looking
+past a hidden row to the first one with a box to measure. The separator moved
+from each row's bottom edge to its top for the same reason — the first row
+always shows and the last one may not.
+
+The fold sits on the group's **second line**, beside `group · 3 layers`,
+rather than beside the grip where it would push the name over too: a heading
+further right than the rows beneath it reads as being inside something itself.
+Which groups are folded is held by the name the file holds them under, not by
+index, because the list is re-read on every rewrite and every re-parse and an
+index means something different after each of those. The name as *read* rather
+than as typed, so a group does not spring open mid-rename; Apply moves the
+fold to the new name.
 
 Three details in that rebuild are silent when wrong, and each cost a test:
 
@@ -2021,6 +2039,9 @@ on chrome never highlights it.
 - Renaming an extrusion's *file* no longer renames the group inside it. The
   group is named for the key the file had when it was written, and only Apply
   renames it.
+- Two groups sharing a name fold and unfold together, because a fold is held
+  by name. Photoshop allows the duplicate; the alternative keys all come apart
+  on a re-parse, which is the case the folds are most worth keeping through.
 - The layer list shows nesting and reorders within a level, but offers no way
   to move a layer into or out of a group. That is a different gesture — a
   horizontal one, or a drop onto the group row — and a drag that could do it
