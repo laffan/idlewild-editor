@@ -6,16 +6,20 @@ import {
   describeShape,
   extrude,
   faceOf,
+  facePatch,
   groundPatch,
+  isRear,
   levelHeight,
   MAX_VOXELS,
   patchFaces,
   pickPull,
+  shadeFor,
   shapeBounds,
   shapeCells,
   shapeFaces,
   surfacePatch,
   voxelKey,
+  type AxisId,
   type ExtrudeState,
   type Voxel,
 } from "../extrude";
@@ -259,5 +263,114 @@ describe("what a shape says about itself", () => {
     expect(describeShape(iso, tower)).toBe("2 spaces · 3 levels");
     expect(describeShape(ortho, new Set(voxels([0, 0, 0])))).toBe("1 space");
     expect(describeShape(iso, new Set())).toBe("nothing yet");
+  });
+});
+
+describe("facePatch — a sweep in the plane of the face it started on", () => {
+  /** A single column ten levels tall on the space at the origin. */
+  const tower: ReadonlySet<string> = new Set(
+    Array.from({ length: 10 }, (_, cz) => voxelKey({ cx: 0, cy: 0, cz })),
+  );
+
+  it("takes a run of levels up the side of a tower", () => {
+    const patch = facePatch(
+      tower,
+      "+cx",
+      { cx: 0, cy: 0, cz: 3 },
+      { cx: 0, cy: 0, cz: 6 },
+    );
+    expect(patch.facing).toBe("+cx");
+    expect(patch.voxels.map((v) => v.cz)).toEqual([3, 4, 5, 6]);
+  });
+
+  it("takes a patch of spaces across the top of one", () => {
+    const roof = facePatch(
+      tower,
+      "+z",
+      { cx: 0, cy: 0, cz: 9 },
+      { cx: 0, cy: 0, cz: 9 },
+    );
+    expect(roof.voxels).toEqual([{ cx: 0, cy: 0, cz: 9 }]);
+  });
+
+  it("is the block that sticks out furthest, not the one that was clicked", () => {
+    // A tower with one space jutting out to the right half way up: a sweep
+    // down its +cx side takes the jutting block at that level and the tower
+    // face above and below it.
+    const stepped = new Set([...tower, voxelKey({ cx: 1, cy: 0, cz: 5 })]);
+    const patch = facePatch(
+      stepped,
+      "+cx",
+      { cx: 0, cy: 0, cz: 4 },
+      { cx: 0, cy: 0, cz: 6 },
+    );
+    expect(patch.voxels).toEqual([
+      { cx: 0, cy: 0, cz: 4 },
+      { cx: 1, cy: 0, cz: 5 },
+      { cx: 0, cy: 0, cz: 6 },
+    ]);
+  });
+
+  it("leaves out the spots in the rectangle with nothing behind them", () => {
+    const patch = facePatch(
+      tower,
+      "+cx",
+      { cx: 0, cy: 0, cz: 8 },
+      { cx: 0, cy: 3, cz: 11 },
+    );
+    // Levels 8 and 9 of the one column the tower has, and nothing else.
+    expect(patch.voxels).toEqual([
+      { cx: 0, cy: 0, cz: 8 },
+      { cx: 0, cy: 0, cz: 9 },
+    ]);
+  });
+
+  it("reads the far side from the other end", () => {
+    const wide = new Set(
+      [0, 1, 2].map((cx) => voxelKey({ cx, cy: 0, cz: 0 })),
+    );
+    expect(facePatch(wide, "+cx", { cx: 0, cy: 0, cz: 0 }, { cx: 0, cy: 0, cz: 0 }))
+      .toMatchObject({ voxels: [{ cx: 2, cy: 0, cz: 0 }] });
+    expect(facePatch(wide, "-cx", { cx: 2, cy: 0, cz: 0 }, { cx: 2, cy: 0, cz: 0 }))
+      .toMatchObject({ voxels: [{ cx: 0, cy: 0, cz: 0 }] });
+  });
+});
+
+describe("the far side of the solid", () => {
+  const cube = new Set(voxels([0, 0, 0]));
+
+  it("names the three sides that face away from this camera", () => {
+    const axes: AxisId[] = ["+cx", "-cx", "+cy", "-cy", "+z", "-z"];
+    expect(axes.filter(isRear)).toEqual(["-cx", "-cy", "-z"]);
+  });
+
+  it("shades a wall and its opposite the same, so a shape reads as one", () => {
+    expect(shadeFor("-cx")).toBe(shadeFor("+cx"));
+    expect(shadeFor("-cy")).toBe(shadeFor("+cy"));
+    expect(shadeFor("-z")).toBe("top");
+  });
+
+  it("is left out of the ordinary view, which is what Apply rasterises", () => {
+    expect(shapeFaces(iso, cube).some((f) => f.rear)).toBe(false);
+    expect(shapeFaces(iso, cube)).toHaveLength(3);
+  });
+
+  it("is all six sides of a lone cube once it is asked for", () => {
+    const faces = shapeFaces(iso, cube, true);
+    expect(faces).toHaveLength(6);
+    expect(faces.map((f) => f.axis).sort()).toEqual(
+      ["+cx", "+cy", "+z", "-cx", "-cy", "-z"].sort(),
+    );
+  });
+
+  it("draws the far side first, so the near side can be laid over it", () => {
+    const faces = shapeFaces(iso, cube, true);
+    const lastRear = faces.map((f) => f.rear).lastIndexOf(true);
+    const firstFront = faces.map((f) => f.rear).indexOf(false);
+    expect(lastRear).toBeLessThan(firstFront);
+  });
+
+  it("has nothing to add on a flat grid, whose spaces have no sides", () => {
+    expect(shapeFaces(ortho, cube, true)).toEqual(shapeFaces(ortho, cube));
   });
 });

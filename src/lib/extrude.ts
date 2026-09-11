@@ -228,6 +228,93 @@ function offset(v: Voxel, step: Voxel, k: number): Voxel {
 }
 
 /**
+ * A voxel split into the two coordinates that run *across* an axis and the
+ * one that runs along it, and back again.
+ *
+ * Sweeping a face is a rectangle in the plane the face lies in, and searching
+ * for a face is a walk along the axis it points down. Writing both against
+ * `u`, `v` and `w` is what lets one pair of functions serve all six
+ * directions instead of three copies with the coordinates permuted.
+ */
+function across(axis: AxisId, voxel: Voxel): { u: number; v: number; w: number } {
+  if (axis === "+cx" || axis === "-cx") {
+    return { u: voxel.cy, v: voxel.cz, w: voxel.cx };
+  }
+  if (axis === "+cy" || axis === "-cy") {
+    return { u: voxel.cx, v: voxel.cz, w: voxel.cy };
+  }
+  return { u: voxel.cx, v: voxel.cy, w: voxel.cz };
+}
+
+function rebuild(axis: AxisId, u: number, v: number, w: number): Voxel {
+  if (axis === "+cx" || axis === "-cx") return { cx: w, cy: u, cz: v };
+  if (axis === "+cy" || axis === "-cy") return { cx: u, cy: w, cz: v };
+  return { cx: u, cy: v, cz: w };
+}
+
+/**
+ * Where the shape's `axis` face is, at every spot in the plane it faces.
+ *
+ * The outermost voxel along the axis, per position: nothing lies beyond it in
+ * that direction, so its face on that side is by definition the exposed one.
+ * That is the whole of "the wall you can see" — read down `+z` it is the top
+ * of each column, and read along `+cx` it is the face of whichever block
+ * sticks out furthest that way.
+ *
+ * One pass over the shape rather than a search per position, because this
+ * runs on every pointer move of a sweep.
+ */
+function exposed(shape: VoxelSet, axis: AxisId): Map<string, number> {
+  const outward = across(axis, STEPS[axis]).w;
+  const best = new Map<string, number>();
+  for (const key of shape) {
+    const { u, v, w } = across(axis, parseVoxel(key));
+    const id = `${u},${v}`;
+    const held = best.get(id);
+    if (held === undefined || (outward > 0 ? w > held : w < held)) {
+      best.set(id, w);
+    }
+  }
+  return best;
+}
+
+/**
+ * What a sweep between two faces of the same orientation takes hold of.
+ *
+ * The rectangle is measured in the plane of the face rather than on the
+ * ground, which is the whole point: a sweep up the side of a tower covers a
+ * run of levels, and one across its roof covers a patch of spaces. Positions
+ * with nothing exposed at them are simply left out, so an irregular wall
+ * stays irregular.
+ */
+export function facePatch(
+  shape: VoxelSet,
+  axis: AxisId,
+  from: Voxel,
+  to: Voxel,
+): Patch {
+  const a = across(axis, from);
+  const b = across(axis, to);
+  const u0 = Math.min(a.u, b.u);
+  const u1 = Math.max(a.u, b.u);
+  const v0 = Math.min(a.v, b.v);
+  const v1 = Math.max(a.v, b.v);
+  if ((u1 - u0 + 1) * (v1 - v0 + 1) > MAX_VOXELS) {
+    return { voxels: [], virtual: false, facing: axis };
+  }
+
+  const best = exposed(shape, axis);
+  const voxels: Voxel[] = [];
+  for (let u = u0; u <= u1; u++) {
+    for (let v = v0; v <= v1; v++) {
+      const w = best.get(`${u},${v}`);
+      if (w !== undefined) voxels.push(rebuild(axis, u, v, w));
+    }
+  }
+  return { voxels, virtual: false, facing: axis };
+}
+
+/**
  * Pull the held face, and hand back the shape and the face that leaves.
  *
  * Three things can happen, and which one it is falls out of what is already
@@ -308,13 +395,38 @@ export interface Face {
   /** Painter's key: the larger draws later, nearer the viewer. */
   depth: number;
   /**
-   * The voxel it belongs to.
+   * The voxel it belongs to, and which of its sides this is.
    *
    * Which is what makes this list a hit-test as well as a drawing: walked
    * front to back, the first face containing a point is the one the user can
    * see there, so picking asks the same question the screen already answered.
+   * The axis comes with it because a face is only half-identified by the
+   * voxel — the wall you clicked and the roof above it are different things
+   * to take hold of.
    */
   voxel: Voxel;
+  axis: AxisId;
+  /** Whether it faces away from this camera: only X-ray mode draws these. */
+  rear: boolean;
+}
+
+/**
+ * The three sides that face away from this fixed camera.
+ *
+ * Every voxel has six, and three of them — the walls towards `-cx` and `-cy`
+ * and the underside — are behind the solid from here. They are never drawn in
+ * the ordinary view and never exported, but they are real faces of the shape
+ * and there is no other way to pull the far side of a box outward, which is
+ * what backface mode is for.
+ */
+export function isRear(axis: AxisId): boolean {
+  return axis === "-cx" || axis === "-cy" || axis === "-z";
+}
+
+/** Which of the three shades a side takes. Opposite walls share one. */
+export function shadeFor(axis: AxisId): "top" | "right" | "left" {
+  if (axis === "+z" || axis === "-z") return "top";
+  return axis === "+cx" || axis === "-cx" ? "right" : "left";
 }
 
 function lift(points: readonly Point[], level: number, height: number): Point[] {
@@ -347,37 +459,58 @@ export function faceOf(grid: Grid, v: Voxel, axis: AxisId): Point[] {
 }
 
 /**
- * Every face of the shape that can actually be seen, back to front.
+ * Every exposed face of the shape, back to front.
  *
- * Only three of a voxel's six sides ever face this camera — the top and the
- * two walls towards `+cx` and `+cy` — and each of those is drawn only where
- * there is no neighbour against it, so an interior face costs nothing. The
- * sort is `cx + cy + cz` ascending: step once along the view ray and all
- * three rise together, so a voxel in front of another always sorts after it.
+ * A face is emitted only where there is no neighbour against it, so an
+ * interior face costs nothing. The sort is `cx + cy + cz` ascending: step once
+ * along the view ray and all three rise together, so a voxel in front of
+ * another always sorts after it. Within one voxel the order is rear walls,
+ * front walls, then the top it sits under — which is why the three groups get
+ * a half-step either side of the voxel's own depth.
+ *
+ * Ordinarily only three of a voxel's six sides are wanted: the top and the
+ * walls towards `+cx` and `+cy`, which are the ones this camera can see.
+ * `includeRear` adds the other three, for X-ray mode and for nothing else —
+ * Apply rasterises the ordinary view, so it must never ask for them. A flat
+ * projection has none to add: its spaces have no sides, so there is nothing
+ * behind them to reach.
  */
-export function shapeFaces(grid: Grid, shape: VoxelSet): Face[] {
+export function shapeFaces(
+  grid: Grid,
+  shape: VoxelSet,
+  includeRear = false,
+): Face[] {
   const solid = levelHeight(grid) > 0;
   const faces: Face[] = [];
+
+  const add = (v: Voxel, axis: AxisId, depth: number): void => {
+    const step = STEPS[axis];
+    if (shape.has(voxelKey(offset(v, step, 1)))) return;
+    faces.push({
+      points: faceOf(grid, v, axis),
+      shade: shadeFor(axis),
+      depth,
+      voxel: v,
+      axis,
+      rear: isRear(axis),
+    });
+  };
+
   for (const key of shape) {
     const v = parseVoxel(key);
     const depth = v.cx + v.cy + v.cz;
+    // Only where there is height. A flat extrusion is a patch of ground with
+    // nothing behind it, so its "rear" faces are the same squares again.
+    if (includeRear && solid) {
+      add(v, "-cx", depth - 0.5);
+      add(v, "-cy", depth - 0.5);
+      add(v, "-z", depth - 0.5);
+    }
     if (solid) {
-      if (!shape.has(voxelKey({ cx: v.cx + 1, cy: v.cy, cz: v.cz }))) {
-        faces.push({ points: faceOf(grid, v, "+cx"), shade: "right", depth, voxel: v });
-      }
-      if (!shape.has(voxelKey({ cx: v.cx, cy: v.cy + 1, cz: v.cz }))) {
-        faces.push({ points: faceOf(grid, v, "+cy"), shade: "left", depth, voxel: v });
-      }
+      add(v, "+cx", depth);
+      add(v, "+cy", depth);
     }
-    if (!shape.has(voxelKey({ cx: v.cx, cy: v.cy, cz: v.cz + 1 }))) {
-      // After the walls of the same voxel, which it sits on top of.
-      faces.push({
-        points: faceOf(grid, v, "+z"),
-        shade: "top",
-        depth: depth + 0.5,
-        voxel: v,
-      });
-    }
+    add(v, "+z", depth + 0.5);
   }
   return faces.sort((a, b) => a.depth - b.depth);
 }

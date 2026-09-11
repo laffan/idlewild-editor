@@ -196,3 +196,195 @@ describe("taking hold of another face", () => {
     expect(mode.shape?.size).toBe(7);
   });
 });
+
+/**
+ * Points on the geometry of a 64px isometric grid, so a test can name a face
+ * by what is drawn there. Half-width 32, half-height 16, one level 32 tall.
+ */
+const at = {
+  /** The middle of the `+cx` wall of the voxel at (cx, cy, cz). */
+  rightWall: (cx: number, cy: number, cz: number) => ({
+    x: (cx - cy) * 32 + 16,
+    y: (cx + cy) * 16 + 8 - (cz + 0.5) * 32,
+  }),
+  /** The middle of the `-cx` wall, which only X-ray mode can reach. */
+  backWall: (cx: number, cy: number, cz: number) => ({
+    x: (cx - cy) * 32 - 16,
+    y: (cx + cy) * 16 - 8 - (cz + 0.5) * 32,
+  }),
+  /** The middle of the top face. */
+  roof: (cx: number, cy: number, cz: number) => ({
+    x: (cx - cy) * 32,
+    y: (cx + cy) * 16 - (cz + 1) * 32,
+  }),
+};
+
+/** A single column ten levels tall on the space at the origin. */
+function tenHigh(): ExtrudeMode {
+  const { mode } = started1x1();
+  mode.beginPull(0, 0);
+  mode.movePull(0, -320);
+  mode.endPull();
+  return mode;
+}
+
+function started1x1(): { mode: ExtrudeMode; host: ReturnType<typeof makeHost> } {
+  const host = makeHost(iso);
+  const mode = new ExtrudeMode(host);
+  mode.start({ cx: 0, cy: 0 }, { cx: 0, cy: 0 });
+  return { mode, host };
+}
+
+describe("building on the sides of what is already there", () => {
+  it("takes hold of a wall part way up, and pulls it out sideways", () => {
+    const mode = tenHigh();
+    expect(mode.shape?.size).toBe(10);
+
+    // Three levels from the bottom, on the wall rather than the roof.
+    const grab = at.rightWall(0, 0, 3);
+    mode.tap(grab.x, grab.y);
+    mode.beginPull(grab.x, grab.y);
+    // Ten spaces along +cx, which runs down-right at (32, 16) a step.
+    mode.movePull(grab.x + 320, grab.y + 160);
+    mode.endPull();
+
+    expect(mode.shape?.size).toBe(20);
+    expect(mode.summary).toBe("11 spaces · 10 levels");
+  });
+
+  it("then takes a run of the arm's roof and stands that up too", () => {
+    const mode = tenHigh();
+    const grab = at.rightWall(0, 0, 3);
+    mode.tap(grab.x, grab.y);
+    mode.beginPull(grab.x, grab.y);
+    mode.movePull(grab.x + 320, grab.y + 160);
+    mode.endPull();
+
+    // Five spaces of the arm's roof, swept from the second to the sixth.
+    const from = at.roof(2, 0, 3);
+    const to = at.roof(6, 0, 3);
+    mode.beginSelect(from.x, from.y);
+    mode.extendSelect(to.x, to.y);
+    mode.endSelect();
+    mode.beginPull(from.x, from.y);
+    mode.movePull(from.x, from.y - 64);
+    mode.endPull();
+
+    // Two more levels on each of the five.
+    expect(mode.shape?.size).toBe(30);
+  });
+
+  it("sweeps a run of levels up one wall", () => {
+    const mode = tenHigh();
+    const from = at.rightWall(0, 0, 2);
+    const to = at.rightWall(0, 0, 5);
+    mode.beginSelect(from.x, from.y);
+    mode.extendSelect(to.x, to.y);
+    mode.endSelect();
+    mode.beginPull(from.x, from.y);
+    mode.movePull(from.x + 32, from.y + 16);
+    mode.endPull();
+    // Four levels of wall, each pushed one space out.
+    expect(mode.shape?.size).toBe(14);
+  });
+});
+
+describe("the far side of the shape", () => {
+  /** Take hold at a point and pull one space along -cx, up-left on screen. */
+  function pullBack(mode: ExtrudeMode, from: { x: number; y: number }): void {
+    mode.tap(from.x, from.y);
+    mode.beginPull(from.x, from.y);
+    mode.movePull(from.x - 32, from.y - 16);
+    mode.endPull();
+  }
+
+  it("is out of reach until backfaces are asked for", () => {
+    const mode = tenHigh();
+    // Nothing of the tower is drawn over its own far wall, so this reaches
+    // past it to the bare grid behind — which starts a plate of its own
+    // rather than taking hold of the wall.
+    pullBack(mode, at.backWall(0, 0, 3));
+    expect(mode.shape?.has("-1,0,3")).toBe(false);
+  });
+
+  it("pulls a back wall outward, away from the camera", () => {
+    const mode = tenHigh();
+    mode.setBackfaces(true);
+    expect(mode.xray).toBe(true);
+    pullBack(mode, at.backWall(0, 0, 3));
+    expect(mode.shape?.has("-1,0,3")).toBe(true);
+    expect(mode.shape?.size).toBe(11);
+  });
+
+  it("is borrowed by the modifier key for as long as it is held", () => {
+    const mode = tenHigh();
+    mode.setPeek(true);
+    expect(mode.xray).toBe(true);
+    mode.setPeek(false);
+    expect(mode.xray).toBe(false);
+  });
+
+  it("has nothing to offer where the spaces have no sides", () => {
+    const host = makeHost(new Grid("orthogonal", 64));
+    const mode = new ExtrudeMode(host);
+    mode.start({ cx: 0, cy: 0 }, { cx: 1, cy: 1 });
+    expect(mode.hasBackfaces).toBe(false);
+    mode.setBackfaces(true);
+    expect(mode.xray).toBe(false);
+  });
+});
+
+describe("erasing", () => {
+  it("takes the space under the pointer, one at a time", () => {
+    const mode = tenHigh();
+    mode.setTool("erase");
+    expect(mode.erasing).toBe(true);
+
+    const roof = at.roof(0, 0, 9);
+    mode.beginPull(roof.x, roof.y);
+    mode.endPull();
+    expect(mode.shape?.size).toBe(9);
+  });
+
+  it("does not take a second space on the tap that follows the press", () => {
+    const mode = tenHigh();
+    mode.setTool("erase");
+    const roof = at.roof(0, 0, 9);
+    mode.beginPull(roof.x, roof.y);
+    mode.endPull();
+    // The rig reports a drag that never moved as a tap; it must not erase
+    // the space that has just been uncovered.
+    mode.tap(roof.x, roof.y);
+    expect(mode.shape?.size).toBe(9);
+  });
+
+  it("reaches the far side too, once backfaces are on", () => {
+    const mode = tenHigh();
+    mode.setBackfaces(true);
+    mode.setTool("erase");
+    const behind = at.backWall(0, 0, 4);
+    mode.beginPull(behind.x, behind.y);
+    mode.endPull();
+    expect(mode.shape?.size).toBe(9);
+  });
+
+  it("trims a plate that has not been pulled yet", () => {
+    const { mode } = started();
+    mode.setTool("erase");
+    expect(mode.summary).toBe("nothing yet");
+    // The plate is four spaces; the middle of cell 0,0 is one of them.
+    mode.beginPull(0, 0);
+    mode.endPull();
+    mode.beginPull(0, 0);
+    mode.movePull(0, -320);
+    mode.endPull();
+    // Erasing is still the tool, so nothing was pulled — and had the space
+    // been left on the plate, pulling would have raised four columns.
+    expect(mode.shape).toBeNull();
+    mode.setTool("pull");
+    mode.beginPull(32, 16);
+    mode.movePull(32, 16 - 32);
+    mode.endPull();
+    expect(mode.shape?.size).toBe(3);
+  });
+});

@@ -48,6 +48,15 @@ function rgb(css: string): number {
  */
 const SCRIM = 20_000;
 
+/**
+ * How much of the near side survives in X-ray mode.
+ *
+ * Enough to keep the shape readable as a solid — take it much lower and the
+ * far side stops looking like the *inside* of anything — and thin enough that
+ * a back wall behind it is plainly there to be clicked.
+ */
+const FRONT_ALPHA = 0.26;
+
 export class ExtrudeRender {
   private readonly grid: Grid;
   private readonly dim: Phaser.GameObjects.Graphics;
@@ -65,21 +74,32 @@ export class ExtrudeRender {
   }
 
   /**
-   * @param faces the shape's visible surface, back to front. Handed in rather
+   * @param faces the shape's exposed surface, back to front. Handed in rather
    *        than derived, because the mode above has already worked it out to
    *        hit-test against and there is no sense in building it twice.
    * @param zoom camera zoom, so the hairlines between spaces keep their
    *        weight on screen rather than thickening as the camera comes in.
+   * @param xray whether the solid is being seen through. The faces that point
+   *        away from the camera are only in the list at all in that case, and
+   *        they are drawn first and solid while the near side is drawn over
+   *        them thinly — which is what makes the far side both visible and
+   *        worth clicking on.
    */
-  render(faces: readonly Face[], patch: Patch | null, zoom: number): void {
+  render(
+    faces: readonly Face[],
+    patch: Patch | null,
+    zoom: number,
+    xray = false,
+  ): void {
     this.dim.setVisible(true);
     const scale = 1 / zoom;
 
     const g = this.solid;
     g.clear();
     for (const face of faces) {
-      g.fillStyle(SHADES[face.shade], 1);
-      g.lineStyle(1 * scale, EDGE, 0.5);
+      const solid = !xray || face.rear;
+      g.fillStyle(SHADES[face.shade], solid ? 1 : FRONT_ALPHA);
+      g.lineStyle(1 * scale, EDGE, solid ? 0.5 : 0.35);
       polygon(g, face.points, true);
     }
 

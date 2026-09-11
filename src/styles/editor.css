@@ -289,6 +289,14 @@
   font: 600 14px var(--font-heading);
 }
 .extrude-bar button:hover { background: var(--chrome-rule); }
+
+/* The two toggles. They describe the canvas rather than doing anything to it,
+   so they carry a pressed state the way the rail's tools do. */
+.extrude-bar .extrude-toggle { min-width: 0; color: var(--chrome-dim); }
+.extrude-bar .extrude-toggle[aria-pressed="true"] {
+  background: var(--color-accent);
+  color: #fff;
+}
 .extrude-bar .extrude-apply { background: var(--color-accent); color: #fff; }
 .extrude-bar .extrude-apply:hover {
   background: var(--color-accent-600);

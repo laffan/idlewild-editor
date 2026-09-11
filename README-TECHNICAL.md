@@ -236,6 +236,7 @@ contract:
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
 | Hold ~320 ms, still | Begin a grid selection where the finger is, with its action bar |
 | Either of those, in extrude mode | Take hold of a face of the shape, or pull the one already held |
+| ⌘ (or Ctrl) held, in extrude mode | Borrow X-ray, so the far side is what a click lands on |
 | Tap | Pick the image under the finger, else the boundary, else the fill, else clear |
 | Double-tap a placed PSD | Open it up into its own layers |
 | Ctrl/⌘ + wheel | Zoom (WebKit reports a trackpad pinch this way) |
@@ -1469,11 +1470,75 @@ back* and taking the first polygon that contains the point answers "what is
 under the finger" with exactly the geometry that was put on the screen. There
 is no second ray to keep in step with the renderer, and the awkward case
 solves itself: the top of a five-level block is drawn 160px above the ground
-it stands on, and a sweep across it takes the spaces the user can see rather
-than the ones underneath the pointer.
+it stands on, and a click on it is about the column it belongs to rather than
+about the ground the pointer happens to be over.
 
-A sweep that runs off the shape onto bare grid falls back to `worldToCell`, so
-one drag can start on the ground and finish on the solid.
+What comes back is a face — a voxel **and** which of its sides — because a
+voxel alone only half-identifies what was clicked. The wall of a space and the
+roof above it are different things to take hold of, and pulling one is not
+pulling the other.
+
+### A sweep runs in the plane of the face it started on
+
+Which is what makes the mode worth staying in. A selection that was always a
+patch of *ground* could only ever grow the top of a shape; a selection that is
+a patch of one **face** can be a run of levels up a wall. So a tower goes up
+ten, one of its `+cx` faces three levels from the bottom is taken hold of and
+pulled ten spaces sideways, five of that arm's roof tiles are swept and stood
+up again — each step selecting in a different plane.
+
+`across` and `rebuild` in `lib/extrude.ts` are the whole of it: a voxel split
+into the two coordinates that run across an axis and the one that runs along
+it, and put back together. The sweep is a rectangle in `(u, v)`; `w` is
+searched. One pair of functions serves all six directions rather than three
+copies with the coordinates permuted.
+
+At each spot in that rectangle the face on show belongs to the **outermost**
+voxel along the axis — nothing lies beyond it, so its face on that side is by
+definition the exposed one. Read down `+z` that is the top of each column;
+read along `+cx` it is the face of whichever block sticks out furthest that
+way, so a sweep down a tower with one space jutting out of it takes the jutting
+block at that level and the tower face above and below. It is one pass over the
+shape into a map rather than a search per position, because it runs on every
+pointer move of a sweep.
+
+A sweep only grows across faces of the same orientation, and the far corner is
+the last one the pointer was actually over — so wandering onto the roof half
+way up a wall holds the selection rather than reinterpreting it. A sweep that
+began on bare grid has no face and no plane, so it falls back to a patch of
+ground, which is what the mode was entered with in the first place.
+
+### Backfaces, and the two toggles on the bar
+
+Three of a voxel's six sides face away from this fixed camera: the walls
+towards `-cx` and `-cy`, and the underside. They are never drawn in the
+ordinary view and never exported — but they are real faces of the shape, and
+there is no other way to pull the far wall of a box outward.
+
+**Backfaces** puts them in the list and takes the near ones out of it.
+`shapeFaces(grid, shape, true)` adds them at `depth − 0.5`, so one sort still
+puts every face in painter's order: rear walls, front walls, then the top the
+voxel sits under. The renderer then draws the rear side solid and the near
+side at a quarter alpha over it, which is what makes the far side both visible
+and worth clicking on — and picking is restricted to rear faces, because a
+click that landed on the near side would defeat the toggle just reached for.
+A flat projection has none of this: its spaces have no sides, so the button is
+hidden rather than disabled.
+
+The toggle is on the bar, and **⌘ (or Ctrl) borrows it while held**, the way
+space borrows Pan. Watched on the window rather than the canvas, which never
+takes focus — every pointer handler over it calls `preventDefault`, so nothing
+in the scene is ever a key event's target — and `blur` releases it, since a
+window that loses focus mid-hold never sees the keyup.
+
+**Erase** turns the pointer into a rubber. It claims every pointer-down,
+because what it acts on is wherever it is put rather than what happens to be
+held, and it takes whatever a click would have taken hold of — so in X-ray
+mode it reaches a space on the far side, which is the only way to reach one.
+The tap the rig reports after a drag that never moved is deliberately ignored
+there: rubbing out the space *behind* the one that has just gone is not what a
+single tap meant. A plate that has not been pulled yet has no faces at all, so
+there erasing trims the selection it is still made of.
 
 ### A hold still asks for spaces, even on the held face
 
@@ -1709,9 +1774,16 @@ on chrome never highlights it.
 - An extrusion applies as flat artwork. The shape it was built from is not
   kept anywhere, so a PSD cannot be opened back up into the solid that made
   it — Apply is a one-way door, the same one a fill conversion is.
-- Extrude mode has no undo of its own, so a pull too far is corrected by
-  pulling the face back, which the carve rule makes exact. Cancel is the only
-  way back to nothing.
+- Extrude mode has no undo of its own. A pull too far is corrected by pulling
+  the face back, which the carve rule makes exact, and a space too many by
+  rubbing it out; Cancel is the only way back to nothing.
+- A sweep across faces stops growing when the pointer wanders onto a face of
+  another orientation rather than following the surface round the corner.
+  Wrapping a selection around an edge is a different question from sweeping a
+  rectangle, and the rectangle is what a drag describes.
+- X-ray mode shows the far side but not the inside: a voxel walled in on every
+  side has no exposed face, so there is no way to select or rub out a space
+  buried inside a solid block.
 - An extrusion is greybox: one palette, three shades, no way to colour it.
   What comes out is a stand-in to paint over in Photoshop rather than
   finished artwork, which is what the marks in the file are for.

@@ -52,12 +52,19 @@ remaining pieces are wired to real slots rather than mocked.
   spaces become a plate to drag: on an isometric project it stands up as a
   shaded block of cubes, on an orthogonal one it fills the spaces the way it
   was pulled. You are not stuck with the first pull — hold on the shape to
-  take hold of another face, which picks the spaces you can *see* rather than
-  the ground under the pointer, and pull that one somewhere else. So a wall
-  goes up, and then a few of its top tiles go out sideways as an overhang. A
-  face pushed back the way it came carves instead of adding, which is how a
-  pull too far is corrected. Apply writes the shape as a PSD, marked and
-  anchored on the spaces it was built over, and places it where it stood
+  take hold of another face and pull that one somewhere else. What you take
+  hold of is a *side of a space*, not a patch of ground, and a sweep from it
+  runs in that face's own plane: so a wall goes up ten, one of its side faces
+  three from the bottom comes out ten sideways, five of that arm's roof tiles
+  go up again, and so on. A face pushed back the way it came carves instead of
+  adding, which is how a pull too far is corrected
+- Backfaces turns the solid see-through so the sides facing away from the
+  camera become the things a click lands on — the only way to pull the far
+  wall of a box outward. It is a toggle on the bar, and holding ⌘ borrows it
+  the way holding space borrows Pan. Erase, beside it, is a rubber: press or
+  drag and the space under the pointer goes, on the far side too
+- Apply writes the extrusion as a PSD, marked and anchored on the spaces it
+  was built over, and places it where it stood
 - Drag placed images, fills and boundaries, snapped to the grid; resize images
   from their corner handles, or freely from the inspector
 - A placed PSD moves as one thing: every layer it came in with drags and
