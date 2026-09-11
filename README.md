@@ -19,8 +19,9 @@ becomes a PSD and goes through
 psd-to-phaser integration is uniform: a screenshot and a hand-built Photoshop
 document arrive at the runtime the same way.
 
-Publishing hands you a zipped, runnable project. Direct publishing to a web
-server over rsync is planned and explicitly out of scope for now.
+Publishing hands you either a zipped runnable site or a `.idlewild` file — the
+whole project, source PSDs included, to open somewhere else. Direct publishing
+to a web server over rsync is planned and explicitly out of scope for now.
 
 ## Status
 
@@ -187,8 +188,16 @@ remaining pieces are wired to real slots rather than mocked.
   it: it opens the file in the code modal and puts the caret on it. Works for
   warnings and errors too, and steps over Phaser's own frames — a
   `console.log` reached through a callback still names the line you typed
-- Publish: a zipped project carrying both runtimes and the document, so the
-  exported game opens showing what the editor showed
+- Publish has two exits. **Export site** is a zip you can serve: the game, its
+  processed assets and both runtimes, so the exported game opens showing what
+  the editor showed. **Export project** is a `.idlewild` file — the project
+  itself, source PSDs and all, with the document, the processed assets and the
+  code as it was edited. A published site cannot give you back the file a
+  sprite was drawn in; that is what the second one is for
+- **Open**, beside New Game on the home screen, reads a `.idlewild` back in as
+  a project of its own. Everything comes with it, including the solids behind
+  extruded layers — so a shape you pulled on one machine is a shape you can go
+  on pulling on another
 
 **Next**
 
@@ -205,6 +214,9 @@ remaining pieces are wired to real slots rather than mocked.
 - Sloped ground for the platformer: a blocking boundary is currently taken as
   its bounding box
 - rsync publish targets
+- Opening a `.idlewild` straight from Files or the Finder — the format is
+  real, but it is not declared to the system and nothing handles a file the OS
+  hands the app
 
 ## Development
 

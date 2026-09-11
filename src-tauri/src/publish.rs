@@ -18,6 +18,20 @@ use std::io::Write;
 use std::path::Path;
 use zip::write::SimpleFileOptions;
 
+/// Build the zip and write it where the user asked for it.
+///
+/// The bytes are built in memory first because the archive writer wants a
+/// seekable sink and the export is assembled out of order; what this adds is
+/// that they go to disk from here rather than back through the IPC boundary
+/// as base64.
+pub fn write_zip(project_id: &str, dest: &std::path::Path) -> Result<(), String> {
+    let bytes = build_zip(project_id)?;
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(dest, bytes).map_err(|e| format!("Cannot write {dest:?}: {e}"))
+}
+
 /// Build the zip in memory and return its bytes.
 pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
     let meta = store::read_meta(project_id)?;

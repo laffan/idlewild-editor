@@ -1204,6 +1204,87 @@ against the real plugin, with the manifest artificially delayed. The editor
 waits on `psdLoadComplete` because it loads at *runtime*, long after any
 `preload()`, which is a different situation.
 
+## Publish has two exits
+
+They answer different questions, and the difference is the source PSDs.
+
+| | Carries | For |
+|---|---|---|
+| **Export site** (`.zip`) | `game/`, processed `assets/`, both runtimes, a generated config | Serving. Nothing in it is what you would edit the project with |
+| **Export project** (`.idlewild`) | the manifest, `doc.json`, `thumbnail.png`, `psd/`, `assets/`, `game/` | Opening somewhere else and carrying on |
+
+A published site cannot give back the file a sprite was drawn in. That is the
+whole reason the second format exists, and why `psd/` is in one and not the
+other.
+
+Both are written straight to the path the save dialog returned
+(`publish_site`, `export_project`). The site export used to come back across
+the IPC boundary as base64 and be written by `save_bytes`; an archive carrying
+every processed asset — let alone every source PSD — has no business being a
+string in a JSON message first.
+
+### The format
+
+```text
+<name>.idlewild            (a zip)
+  idlewild.json            format, app version, exportedAt, and the project's own fields
+  doc.json                 layers, fills, placements, zones, strokes, extrusions
+  thumbnail.png            if one has been taken
+  psd/                     the source files
+  assets/                  psd-to-json's output, so an import opens without a re-parse
+  game/                    the project's own code, as it was edited
+```
+
+**Extrusions travel in `doc.json`.** `GameDoc.extrusions` maps a PSD key to
+the voxels its solid was built from and the space it was anchored to, and an
+extruded layer's way back into extrude mode is that record plus the PSD it
+wrote — the cube in the inspector's layer list, and the shape that opens when
+you click it. Both halves are in the archive, and the map is keyed by *file
+stem* rather than by anything about this install, so a re-opened project can
+still take hold of a face and pull it. `tests/archive.rs` pins that, because a
+project that came back without them would look entirely fine right up until
+someone tried.
+
+**`meta.json` does not travel.** A project's id is a directory name in *this*
+store; carrying one across would be a second source of truth for where a
+project lives. The fields worth keeping are in the manifest and an import
+writes a fresh `meta.json` around them — new id, the original `createdAt`,
+`updatedAt` of now, since the home screen sorts by it and an import you just
+made should be the one at the top.
+
+**A format number, not a guess.** An archive from a later build is refused by
+name rather than half-read: one that silently dropped what it did not
+understand would look like a project that had lost work.
+
+### An archive is a file someone hands you
+
+`CARRIED_DIRS` and `CARRIED_FILES` are read in both directions — an export
+puts nothing else in, an import takes nothing else out — and that second half
+is the guard. On the way in, every entry goes through the zip crate's
+`enclosed_name` (which refuses absolute paths and `..`) *and* that allowlist,
+so the five things an archive is allowed to be made of are the five things it
+can write. There are ceilings on entry count and unpacked bytes for the same
+reason. A hostile zip is a test rather than an assumption
+(`an_archive_cannot_write_outside_the_project_it_claims_to_be`).
+
+An import that fails partway removes the directory it was filling: a
+half-written project in the list is worse than a failed import. A `game/` tree
+that did not arrive is scaffolded, and the config is rebuilt from the document
+that did — so an archive assembled by hand still opens.
+
+### Where it is in the app
+
+**Open**, on the home screen beside New Game. The picker is unfiltered on a
+touch device and filtered on a desktop, the same split as the editor's Add
+Image and for the same reason: iPadOS reads the filter list to decide *which
+picker* to show, and an extension it has never heard of is not a reliable way
+to ask for the document browser.
+
+`.idlewild` is not declared as a system file type. Doing so without wiring the
+open would put Idlewild in macOS's "Open with" for a file it then ignores; the
+declaration and the `RunEvent::Opened` / deep-link handling behind it belong
+together, and neither has been exercised on either platform yet.
+
 ## Testing
 
 `cargo test --lib` covers the load-bearing path: RGBA → PSD → psd-to-json →
@@ -2273,6 +2354,13 @@ frame is the point of the JS half.
   nominal unit rather than on what was actually drawn. A* over single pixels
   would neither finish nor mean anything, but a coarse lattice over free-form
   geometry is a compromise, not an answer.
+- Opening a `.idlewild` from Files or the Finder is not wired: the format is
+  real and the in-app Open reads it, but there is no system file-type
+  declaration and nothing handles a file the OS hands the app.
+- An import trusts the archive's `assets/` rather than re-running the
+  pipeline over its `psd/`. That is what makes an import instant, and it means
+  an archive whose assets were stale carries the staleness across; the fix is
+  the same Re-import that fixes it anywhere else.
 - An export ships the `game/` tree as it stands on disk, which is what makes
   it the user's source — so a project scaffolded before a fix to the template
   keeps its own copy of the old scene, and its managed blocks reset to the

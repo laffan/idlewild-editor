@@ -1,11 +1,19 @@
 /**
  * Home screen: the project list. A card per project showing its current
- * state as a thumbnail; long-press for rename and delete; New Game top right.
+ * state as a thumbnail; long-press for rename and delete; Open and New Game
+ * top right.
+ *
+ * Open reads a `.idlewild` file — the archive Publish's *Export project*
+ * writes — back in as a project of its own. It lands in the list like any
+ * other, with a fresh id, because an id is a fact about this install's store
+ * rather than about the project.
  */
 
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { onLongPress } from "../lib/gestures";
-import { projects } from "../lib/ipc";
+import { platform, projects } from "../lib/ipc";
+import { isMobile } from "../lib/platform";
 import { confirmSheet, openSheet } from "../lib/sheet";
 import type { ProjectMeta } from "../lib/types";
 import * as log from "../lib/log";
@@ -31,10 +39,21 @@ export function renderHome(
     grid,
   );
 
+  const openButton = h(
+    "button",
+    {
+      class: "btn btn-ghost push-right",
+      title: "Open a .idlewild project file",
+      onClick: () => void importProject(),
+    },
+    icon(ICONS.folder, 17),
+    h("span", { text: "Open" }),
+  );
+
   const newButton = h(
     "button",
     {
-      class: "btn btn-primary push-right",
+      class: "btn btn-primary",
       onClick: () =>
         openNewGame(async (choice) => {
           try {
@@ -69,11 +88,40 @@ export function renderHome(
         { class: "home-bar" },
         h("div", { class: "home-brand", text: "IDLEWILD" }),
         count,
+        openButton,
         newButton,
       ),
       body,
     ),
   );
+
+  /**
+   * Take a `.idlewild` file into the store, and open what came out.
+   *
+   * Unfiltered on a touch device, filtered on a desktop — the same split as
+   * the editor's Add Image, and for the same reason: iPadOS reads the filter
+   * list to decide *which picker* to show, and an extension it has never
+   * heard of is not a reliable way to ask for the document browser.
+   */
+  async function importProject(): Promise<void> {
+    try {
+      const os = await platform();
+      const picked = await openFileDialog({
+        multiple: false,
+        pickerMode: "document",
+        filters: isMobile(os)
+          ? undefined
+          : [{ name: "Idlewild project", extensions: ["idlewild"] }],
+      });
+      if (typeof picked !== "string") return;
+      const meta = await projects.import(picked);
+      log.info(`Opened ${meta.name} from ${picked}`);
+      callbacks.onOpenProject(meta);
+    } catch (err) {
+      log.error("Could not open that project:", err);
+      void reload();
+    }
+  }
 
   async function reload(): Promise<void> {
     let list: ProjectMeta[] = [];

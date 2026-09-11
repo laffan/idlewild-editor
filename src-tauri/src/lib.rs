@@ -1,6 +1,7 @@
 //! Tauri command surface. Every frontend call lands here; the modules below
 //! hold the actual work.
 
+mod archive;
 mod clipboard;
 mod file_server;
 mod game_config;
@@ -565,11 +566,27 @@ fn read_asset_data_url(id: String, relative: String) -> Result<String, String> {
 // ── export & publish ────────────────────────────────────────────────────────
 
 /// Zip the project and return it as base64 for the frontend to save or share.
+/// **Export site**: a zip you can serve.
+///
+/// Written straight to the path the save dialog gave, like the project
+/// export beside it — an archive carrying every processed asset has no
+/// business crossing the IPC boundary as base64 first.
 #[tauri::command]
-fn publish_zip(id: String) -> Result<String, String> {
-    let bytes = publish::build_zip(&id)?;
-    use base64::Engine;
-    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+fn publish_site(id: String, path: String) -> Result<(), String> {
+    publish::write_zip(&id, &psd_write::source_path(&path))
+}
+
+/// **Export project**: the project itself, as a `.idlewild` file — source
+/// PSDs included, so it can be opened somewhere else and carried on with.
+#[tauri::command]
+fn export_project(id: String, path: String) -> Result<(), String> {
+    archive::export(&id, &psd_write::source_path(&path))
+}
+
+/// Read a `.idlewild` file back in, as a new project.
+#[tauri::command]
+fn import_project(path: String) -> Result<ProjectMeta, String> {
+    archive::import(&psd_write::source_path(&path))
 }
 
 /// Write bytes the frontend produced to a path the user picked.
@@ -657,7 +674,9 @@ pub fn run() {
             psd_thumbnail,
             psd_preview,
             read_asset_data_url,
-            publish_zip,
+            publish_site,
+            export_project,
+            import_project,
             save_bytes,
         ])
         .run(tauri::generate_context!())

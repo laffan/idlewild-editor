@@ -249,6 +249,22 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       };
     }
     case "list_projects": return [];
+    // Publish's two exits write to a path the dialog stub hands back; there
+    // is no store here to write out of, so both simply succeed.
+    case "publish_site":
+    case "export_project":
+      return undefined;
+    case "import_project":
+      return {
+        id: "imported-1",
+        name: "Imported project",
+        projection: "orthogonal",
+        genre: "topdown",
+        gridSize: 64,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        layerCount: 1,
+      };
     case "list_game_files":
       return [...TREE].sort((a, b) => a.path.localeCompare(b.path));
     // A file with one managed block in it, so the code modal's read-only
