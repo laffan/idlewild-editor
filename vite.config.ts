@@ -23,6 +23,12 @@ export default defineConfig({
     // to exports, not part of this bundle.
     entries: ["index.html"],
   },
+  test: {
+    // The stylesheet tests read a real .css file through `?raw`. Vitest stubs
+    // CSS out by default, which makes that import an empty string and the
+    // assertions vacuous rather than failing.
+    css: true,
+  },
   build: {
     target: "es2022",
     sourcemap: !!process.env.TAURI_DEBUG,

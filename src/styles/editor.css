@@ -546,4 +546,50 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
    game. */
 .editor.play-mode .editor-canvas-wrap canvas { pointer-events: none; }
 
+/* ── the drawing layer ─────────────────────────────────────────────────────────
+   Hush's ink, superimposed over the game canvas. The stage is a
+   GPU-composited wrapper around a canvas that covers rather more world than
+   fits on screen: a pan or a zoom is one transform on it and touches no
+   pixels, which is the whole reason the ink can keep up with a Pencil. See
+   src/drawing/surface.ts.
+
+   Every rule here is load-bearing, and the way they fail is silent. Taken
+   out, the surface lays out in the flow *after* Phaser's canvas and its
+   stage's transform drags a 1536px backing back up over it — an invisible
+   sheet, taking pointer events, over most of the canvas. The pen draws
+   nowhere and Select and Pan stop answering wherever the sheet happens to
+   land, which is why `styles.test.ts` asserts them. */
+.draw-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  /* Inert until a drawing tool is up, so the grid tools keep the pointer. */
+  pointer-events: none;
+  overflow: hidden;
+}
+.draw-surface.active {
+  pointer-events: auto;
+  /* The layer runs its own pan and pinch; the browser must not also scroll. */
+  touch-action: none;
+  cursor: crosshair;
+}
+/* The eraser paints its own disc at the pointer, so the arrow is noise. */
+.draw-surface.active.erasing { cursor: none; }
+
+.draw-stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+.draw-stage canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+
+/* Play mode hides the tools, so it hides their layer with them. */
 .editor.play-mode .draw-surface { display: none; }
