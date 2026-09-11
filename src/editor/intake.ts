@@ -15,8 +15,10 @@
  */
 
 import type { Grid } from "../lib/grid";
+import * as log from "../lib/log";
+import { isMobile } from "../lib/platform";
 import type { WorldScene } from "../game/world-scene";
-import { listenForPaste } from "./paste";
+import { listenForPaste, listenForPasteShortcut } from "./paste";
 import {
   importPasted,
   pasteFromClipboard,
@@ -27,6 +29,8 @@ import { listenForDrop } from "./drop";
 export interface IntakeConfig {
   projectId: string;
   grid: Grid;
+  /** Which platform this is, since ⌘V means different things on each. */
+  os: string;
   /** The canvas area. A drop anywhere else is not a drop on the game. */
   canvas: HTMLElement;
   /** The live scene, or null before it has booted. */
@@ -59,16 +63,40 @@ export function startIntake(config: IntakeConfig): Intake {
     };
   };
 
+  /** Go and ask the clipboard for an image, and import whatever it hands over. */
+  const paste = (): void => {
+    const into = target();
+    if (into) void pasteFromClipboard(config.projectId, into);
+  };
+
   // Bound to the document rather than the canvas, which never holds focus:
   // every pointer handler over it calls preventDefault, so nothing in the
   // scene is ever the focused element.
   const stopPaste = listenForPaste({
     enabled: config.enabled,
     onImage: (name, file) => {
-      const paste = target();
-      if (paste) void importPasted(config.projectId, paste, name, file);
+      const into = target();
+      if (into) void importPasted(config.projectId, into, name, file);
     },
   });
+
+  // ⌘V over the canvas produces no paste event on iPadOS — WKWebView only
+  // runs the Paste command against an editable element — so there the
+  // keystroke itself is the signal, and it asks for the clipboard the way the
+  // menu item does. A Mac has the event, which carries the file with it, and
+  // binding both would import the same image twice.
+  const stopShortcut = isMobile(config.os)
+    ? listenForPasteShortcut({
+        enabled: config.enabled,
+        onPaste: () => {
+          // Said out loud because the next thing on an iPad is the system's
+          // own paste prompt: if that is declined, or never appears, this
+          // line is what says the keystroke was heard at all.
+          log.info("⌘V — reading the clipboard");
+          paste();
+        },
+      })
+    : () => {};
 
   const stopDrop = listenForDrop(config.projectId, config.canvas, {
     enabled: () => config.enabled() && !!config.scene(),
@@ -80,12 +108,10 @@ export function startIntake(config: IntakeConfig): Intake {
   });
 
   return {
-    paste: () => {
-      const paste = target();
-      if (paste) void pasteFromClipboard(config.projectId, paste);
-    },
+    paste,
     stop: () => {
       stopPaste();
+      stopShortcut();
       stopDrop();
     },
   };

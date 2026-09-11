@@ -657,13 +657,24 @@ of those lists, so `navigator.clipboard.read()` came back with items carrying
 no type this app could use, and the only honest thing the old code could say
 about that was that it had found nothing.
 
-The other half of the trap is why ⌘V is no way round it. WKWebView on iPadOS
-delivers a `paste` event only when the caret is in an editable element. The
-editor's canvas is never one — every pointer handler over it calls
-`preventDefault`, so nothing in the scene is ever focused — so on an iPad the
-paste event that *would* have carried the file never fires at all. Both web
-routes are shut, and they are shut by design rather than by a bug to work
-around.
+The other half of the trap is why ⌘V looked like no way round it. WKWebView
+on iPadOS delivers a `paste` event only when the caret is in an editable
+element. The editor's canvas is never one — every pointer handler over it
+calls `preventDefault`, so nothing in the scene is ever focused — so on an
+iPad the paste event that *would* have carried the file never fires at all.
+Both routes to the *data* are shut, and they are shut by design rather than by
+a bug to work around.
+
+The *keystroke* is a different matter, and it is what makes ⌘V work there
+anyway. WebKit dispatches DOM key events to the page before it decides what a
+key means, editable target or not — it unified those two code paths years ago
+— so the keydown arrives even though the paste does not. That is enough,
+because on an iPad the bytes were never going to come from the event: the
+shell reads the pasteboard, and the keystroke only has to say when to ask.
+`listenForPasteShortcut` is that, and `intake.ts` binds it **only** where
+`isMobile` — on a Mac the paste event arrives carrying the file, which beats
+going and asking for it, and binding both would import the same image twice.
+Auto-repeat is ignored, because one press is one image.
 
 So the shell is asked instead. `src-tauri/src/clipboard.rs` reads
 `UIPasteboard` on iOS and `NSPasteboard` on macOS through `objc2`, where there

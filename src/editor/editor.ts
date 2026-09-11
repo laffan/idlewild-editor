@@ -297,6 +297,7 @@ export async function mountEditor(
   const intake = startIntake({
     projectId: meta.id,
     grid,
+    os,
     canvas: canvasWrap,
     scene: () => handle?.scene ?? null,
     enabled: () => mode === "edit",

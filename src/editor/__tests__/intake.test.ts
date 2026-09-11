@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { describeEmpty } from "../clipboard";
 import { pickImportablePath } from "../drop";
+import { isPasteShortcut } from "../paste";
 
 /**
  * What the editor says when a clipboard read comes back with nothing.
@@ -47,5 +48,48 @@ describe("pickImportablePath", () => {
   it("has nothing to take from a drop of anything else", () => {
     expect(pickImportablePath(["/tmp/notes.txt"])).toBeNull();
     expect(pickImportablePath([])).toBeNull();
+  });
+});
+
+/**
+ * ⌘V where no paste event is coming.
+ *
+ * On iPadOS the keystroke is the whole signal — WKWebView runs the Paste
+ * command only against an editable element, so a canvas gets the keydown and
+ * never the paste — and the clipboard is read afterwards by the shell.
+ */
+describe("isPasteShortcut", () => {
+  const press = (over: Partial<KeyboardEvent>): KeyboardEvent =>
+    ({
+      key: "v",
+      code: "KeyV",
+      metaKey: false,
+      ctrlKey: false,
+      altKey: false,
+      repeat: false,
+      ...over,
+    }) as KeyboardEvent;
+
+  it("takes ⌘V and its Windows equivalent", () => {
+    expect(isPasteShortcut(press({ metaKey: true }))).toBe(true);
+    expect(isPasteShortcut(press({ ctrlKey: true }))).toBe(true);
+  });
+
+  it("reads the physical key, for a layout that puts something else there", () => {
+    expect(isPasteShortcut(press({ metaKey: true, key: "м" }))).toBe(true);
+    expect(isPasteShortcut(press({ metaKey: true, code: "Digit1", key: "V" }))).toBe(true);
+  });
+
+  it("is not V on its own, nor another ⌘ shortcut", () => {
+    expect(isPasteShortcut(press({}))).toBe(false);
+    expect(isPasteShortcut(press({ metaKey: true, key: "c", code: "KeyC" }))).toBe(false);
+  });
+
+  it("ignores ⌥⌘V, which is paste-and-match-style elsewhere", () => {
+    expect(isPasteShortcut(press({ metaKey: true, altKey: true }))).toBe(false);
+  });
+
+  it("takes one image per press, not one per repeat", () => {
+    expect(isPasteShortcut(press({ metaKey: true, repeat: true }))).toBe(false);
   });
 });

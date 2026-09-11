@@ -55,9 +55,10 @@ remaining pieces are wired to real slots rather than mocked.
   at half size because everything drawn on a retina machine is 2×
 - Paste an image or a PSD straight onto the canvas: it is imported like any
   other file — marks and all — and lands in the middle of the view, on the
-  layer you are on. ⌘V, or Paste Image in the menu where there is no ⌘. The
-  clipboard is read through the shell rather than the webview, which is what
-  makes a PSD copied in Files reachable at all on an iPad
+  layer you are on — ⌘V, or Paste Image in the menu. The clipboard is read
+  through the shell rather than the webview, which is what makes a PSD copied
+  in Files reachable at all on an iPad, where ⌘V is taken as a keyboard
+  shortcut because the webview delivers no paste event over a canvas
 - Drag a file onto the canvas and it lands where you let go of it, imported
   exactly as a paste is. Drag it over an image already there and that image
   lights up: dropping on it offers to put the new file behind it instead,

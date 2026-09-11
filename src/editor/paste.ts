@@ -16,6 +16,8 @@
  * `editor/clipboard.ts`.
  */
 
+import { isTyping } from "./shortcuts";
+
 export interface PasteCallbacks {
   /** Whether a paste should be taken at all — false in play mode. */
   enabled: () => boolean;
@@ -93,10 +95,52 @@ export function pasteName(file: File): string {
   return anonymous ? `pasted-${Date.now().toString(36)}` : stem;
 }
 
-function isTyping(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLInputElement ||
-    target instanceof HTMLTextAreaElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
-  );
+/** What ⌘V asks for where no paste event is coming. */
+export interface PasteShortcutCallbacks {
+  enabled: () => boolean;
+  /** Go and read the clipboard, as *Paste Image* in the menu does. */
+  onPaste: () => void;
+}
+
+/**
+ * ⌘V as a keyboard shortcut rather than as a paste.
+ *
+ * On iPadOS the `paste` event above never arrives: WKWebView runs the Paste
+ * editing command only against an editable element, and the canvas is never
+ * one, so ⌘V over the canvas produces no event and — before this — did
+ * nothing at all. The *keydown* is a different matter: WebKit dispatches key
+ * events to the page before it decides what they mean, editable target or
+ * not, so the keystroke is there to be read even though the paste is not.
+ *
+ * Which is enough, because the data never came from the event on that
+ * platform anyway. The shell reads the pasteboard, and this only has to say
+ * when to ask — the same thing the menu item says.
+ *
+ * Bound only where that is true. On a Mac the paste event arrives carrying
+ * the file, which is strictly better than going and asking for it, and
+ * binding both would import the same image twice.
+ */
+export function listenForPasteShortcut(
+  callbacks: PasteShortcutCallbacks,
+): () => void {
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!isPasteShortcut(event)) return;
+    if (!callbacks.enabled() || isTyping(event.target)) return;
+
+    event.preventDefault();
+    callbacks.onPaste();
+  };
+
+  document.addEventListener("keydown", onKeyDown);
+  return () => document.removeEventListener("keydown", onKeyDown);
+}
+
+/** Whether a keystroke is that shortcut, modifiers and repeats included. */
+export function isPasteShortcut(event: KeyboardEvent): boolean {
+  if (!(event.metaKey || event.ctrlKey) || event.altKey) return false;
+  // Held down, ⌘V repeats. One press is one image.
+  if (event.repeat) return false;
+  // `code` is the physical key and `key` is what it produced; a keyboard laid
+  // out for another language answers one of the two.
+  return event.code === "KeyV" || event.key.toLowerCase() === "v";
 }
