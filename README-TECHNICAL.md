@@ -2351,9 +2351,18 @@ it, because the document's save is what rewrites the config the game reads.
 
 `game/play-controller.ts`, `game/play-platformer.ts`, `game/platformer.ts`,
 `lib/pathfinding.ts` and `editor/play-pad.ts` are deleted. Each had a
-counterpart in the templates — `navigation.js`, `physics.js`, and the
-platformer scene's own on-screen pad — and the templates are what runs now.
-The editor's scene keeps one line about play mode: put the tools down.
+counterpart in the templates — `navigation.js` and `physics.js` — and the
+templates are what runs now. The editor's scene keeps one line about play
+mode: put the tools down.
+
+The platformer's own on-screen pad went the same way, a little later. Three
+buttons pinned to the viewport were a guess at a game nobody has written yet:
+a template's job is to run so there is something to change, not to decide what
+the controls of your platformer look like. `bindControls` is the keyboard and
+nothing else, and the comment over it says what putting a pad back takes. Only
+a project scaffolded after this gets the shorter file — `game/` is the user's
+copy and nothing writes into it unasked — so an existing platformer keeps its
+pad until those lines are deleted, or Reset is used on the block.
 
 ## The config the game reads
 

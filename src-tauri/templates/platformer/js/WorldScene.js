@@ -127,9 +127,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Arrow keys and WASD, plus three buttons pinned to the viewport for a
-   * touchscreen. `setScrollFactor(0)` is what keeps them still while the
-   * camera follows the character.
+   * Arrow keys and WASD.
+   *
+   * The keyboard and nothing else. There were three buttons pinned to the
+   * viewport here for a touchscreen, and they were a guess at a game nobody
+   * has written yet: a template's job is to run, not to decide what the
+   * controls of your platformer look like. Adding them back is
+   * `this.add.rectangle(...).setScrollFactor(0).setInteractive()` and a pair
+   * of `held.add` / `held.delete` handlers on the set below.
    */
   bindControls() {
     const keys = { left: false, right: false, jump: false };
@@ -164,44 +169,6 @@ export class WorldScene extends Phaser.Scene {
       held.delete(action);
       apply();
     });
-
-    const pad = [
-      { action: "left", label: "◀", x: 90 },
-      { action: "right", label: "▶", x: 210 },
-      { action: "jump", label: "▲", x: null },
-    ];
-    for (const button of pad) {
-      const zone = this.add
-        .rectangle(0, 0, 96, 96, 0x201e1d, 0.28)
-        .setScrollFactor(0)
-        .setDepth(2e6)
-        .setInteractive();
-      const glyph = this.add
-        .text(0, 0, button.label, { fontSize: "34px", color: "#f3f2f2" })
-        .setOrigin(0.5)
-        .setScrollFactor(0)
-        .setDepth(2e6 + 1);
-
-      const place = () => {
-        const y = this.scale.height - 90;
-        const x = button.x ?? this.scale.width - 90;
-        zone.setPosition(x, y);
-        glyph.setPosition(x, y);
-      };
-      place();
-      this.scale.on("resize", place);
-
-      zone.on("pointerdown", () => {
-        held.add(button.action);
-        apply();
-      });
-      const release = () => {
-        held.delete(button.action);
-        apply();
-      };
-      zone.on("pointerup", release);
-      zone.on("pointerout", release);
-    }
   }
 }
 

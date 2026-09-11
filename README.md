@@ -174,9 +174,9 @@ remaining pieces are wired to real slots rather than mocked.
   modal, loaded over the local server exactly the way a published export loads
   it, in a frame over the canvas. Save a file while it is up and the game
   restarts on what you just wrote. Top down is a character that walks the grid
-  over A*, side-on is one that runs and jumps with the arrow keys or an
-  on-screen pad — and both of those are files in the project now, so they are
-  something to change rather than something the editor does. A platformer reads
+  over A*, side-on is one that runs and jumps with the arrow keys — and both
+  of those are files in the project now, so they are something to change
+  rather than something the editor does. A platformer reads
   the same document from the side: every non-walkable fill, blocking boundary
   and placed PSD's collider is the ground it stands on rather than an obstacle
   to route around
