@@ -35,6 +35,43 @@ function placed(): PlacedObject & { visible: boolean } {
   };
 }
 
+/** A child of a placed group, as psd-to-phaser leaves one: it has a depth. */
+function child(depth: number): { depth: number; setDepth: (v: number) => void } {
+  return {
+    depth,
+    setDepth(v: number) {
+      this.depth = v;
+    },
+  };
+}
+
+/**
+ * A placed *group*, which is what psd-to-phaser hands back — and what an
+ * extrusion's artwork is, three parts deep.
+ */
+function placedGroup(...children: ReturnType<typeof child>[]): PlacedObject & {
+  children: ReturnType<typeof child>[];
+  flattened: number | null;
+} {
+  return {
+    children,
+    flattened: null,
+    setPosition: () => undefined,
+    setScale: () => undefined,
+    setDepth(v: number) {
+      // What the grafted method does: one number for every child.
+      this.flattened = v;
+      for (const c of this.children) c.setDepth(v);
+      return this;
+    },
+    setVisible: () => undefined,
+    destroy: () => undefined,
+    getChildren() {
+      return this.children;
+    },
+  };
+}
+
 function placement(id: string, instance: string): Placement {
   return {
     id,
@@ -114,5 +151,58 @@ describe("suppressing a placed unit", () => {
     renderer.suppressInstance("unit-1");
     expect(store.layers[0].placements).toHaveLength(1);
     expect(store.layers[0].placements[0]).toEqual(one);
+  });
+});
+
+/**
+ * The bug this exists for: an extrusion's three parts came back in the wrong
+ * order on the canvas while the PSD itself was right.
+ *
+ * psd-to-phaser grafts its own `setDepth` onto a Group and that one recurses,
+ * giving every child the same number — so the stacking the manifest carried
+ * was thrown away the moment the editor set the placement's depth.
+ */
+describe("depth on a placed group", () => {
+  function setUp(...depths: number[]) {
+    const one = placement("a", "unit-1");
+    const store = new DocStore("p", doc(one));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    const group = placedGroup(...depths.map(child));
+    renderer.attach("l1", one, group);
+    return group;
+  }
+
+  it("keeps the parts in the order the manifest gave them", () => {
+    // As psd-to-phaser leaves them: shape at the back, lines in front.
+    const group = setUp(0, 1, 2);
+    const after = group.children.map((c) => c.depth);
+    expect(after[0]).toBeLessThan(after[1]);
+    expect(after[1]).toBeLessThan(after[2]);
+    expect(new Set(after).size, "every part needs its own depth").toBe(3);
+  });
+
+  it("keeps them inside the placement's own step, not over the next one", () => {
+    const group = setUp(0, 1, 2);
+    const base = Math.floor(group.children[0].depth);
+    for (const c of group.children) {
+      expect(c.depth).toBeGreaterThan(base);
+      expect(c.depth).toBeLessThan(base + 1);
+    }
+  });
+
+  it("says the same thing on a repaint, having re-ranked its own numbers", () => {
+    const one = placement("a", "unit-1");
+    const store = new DocStore("p", doc(one));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    const group = placedGroup(child(2), child(0), child(1));
+    renderer.attach("l1", one, group);
+    const first = group.children.map((c) => c.depth);
+    renderer.render();
+    expect(group.children.map((c) => c.depth)).toEqual(first);
+  });
+
+  it("leaves a single-sprite placement exactly as it was", () => {
+    const group = setUp(0);
+    expect(group.flattened).not.toBeNull();
   });
 });

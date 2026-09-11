@@ -321,3 +321,105 @@ fn carry_across(doc: &Psd, into: &mut PsdBuilder) {
         into.add_layer(LayerBuilder::new(layer.name()).rgba(w, h, pixels).at(left, top));
     }
 }
+
+/// The list the inspector shows is the file's tree, not the flat run of
+/// layers `Psd::layers()` hands back — groups live in `groups()` and appear in
+/// neither, so a grouped file used to be listed with its group missing and its
+/// contents sitting at the top level beside the marks.
+#[test]
+fn the_layer_list_reads_a_grouped_file_as_a_tree() {
+    let bytes =
+        psd_write::psd_from_parts_marked("extrude-abc", 16, 16, &parts(16, 16), &square(16.0))
+            .expect("a group should be written");
+    let doc = Psd::from_bytes(&bytes).expect("the file should parse");
+
+    let shown: Vec<(String, usize, bool)> = crate::psd_layers::rows(&doc)
+        .iter()
+        .map(|row| match row.item {
+            crate::psd_layers::Item::Layer(at) => {
+                (doc.layer_by_idx(at).name().to_string(), row.depth, false)
+            }
+            crate::psd_layers::Item::Group(id) => {
+                (doc.groups()[&id].name().to_string(), row.depth, true)
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        shown,
+        vec![
+            ("P | anchor".to_string(), 0, false),
+            ("Z | grid".to_string(), 0, false),
+            ("G | extrude-abc".to_string(), 0, true),
+            ("S | lines-abc".to_string(), 1, false),
+            ("S | shading-abc".to_string(), 1, false),
+            ("S | shape-abc".to_string(), 1, false),
+        ]
+    );
+}
+
+/// And a grouped file is no longer read-only, because `write` puts the tree
+/// back rather than flattening it.
+#[test]
+fn a_grouped_file_round_trips_through_the_layer_list() {
+    use crate::project::{Genre, Projection};
+    use crate::psd_layers::{self, LayerEdit};
+    use crate::store;
+
+    let meta = store::create_project("Groups", Projection::Orthogonal, Genre::Topdown, 32)
+        .expect("project should be created");
+
+    let outcome = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            psd_write::psd_from_parts_marked("extrude-abc", 16, 16, &parts(16, 16), &square(16.0))
+                .expect("a group should be written");
+        std::fs::write(
+            store::psd_dir(id).unwrap().join("extrude-abc.psd"),
+            &bytes,
+        )
+        .expect("the file should save");
+
+        let list = psd_layers::read(id, "extrude-abc").expect("the list should read");
+        assert!(list.writable, "a grouped file is editable now: {:?}", list.blocked_by);
+        assert_eq!(list.layers.len(), 6);
+        assert!(list.layers[2].is_group);
+        assert_eq!(list.layers[3].depth, 1);
+
+        // Swap two of the parts inside the group and rename one, leaving the
+        // tree's shape alone.
+        let edits: Vec<LayerEdit> = [0usize, 1, 2, 4, 3, 5]
+            .iter()
+            .map(|&at| LayerEdit {
+                index: at,
+                name: if at == 5 {
+                    "S | base-abc".to_string()
+                } else {
+                    list.layers[at].name.clone()
+                },
+                depth: list.layers[at].depth,
+            })
+            .collect();
+        psd_layers::write(id, "extrude-abc", &edits, |_| {}).expect("the rewrite should land");
+
+        let after = psd_layers::read(id, "extrude-abc").expect("the list should read again");
+        let names: Vec<&str> = after.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "P | anchor",
+                "Z | grid",
+                "G | extrude-abc",
+                "S | shading-abc",
+                "S | lines-abc",
+                "S | base-abc",
+            ]
+        );
+        // Still one group, still holding three.
+        assert_eq!(after.layers.iter().filter(|l| l.is_group).count(), 1);
+        assert_eq!(after.layers.iter().filter(|l| l.depth == 1).count(), 3);
+    });
+
+    store::delete_project(&meta.id).ok();
+    outcome.expect("the round trip should not panic");
+}

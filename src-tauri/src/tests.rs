@@ -517,9 +517,9 @@ fn psd_layers_can_be_reordered_and_renamed() {
 
         // Write: put the sprite on top and rename it, leaving the rest alone.
         let edits = vec![
-            LayerEdit { index: 2, name: "T | hut".into() },
-            LayerEdit { index: 0, name: "P | anchor".into() },
-            LayerEdit { index: 1, name: "Z | grid".into() },
+            LayerEdit { index: 2, name: "T | hut".into(), depth: 0 },
+            LayerEdit { index: 0, name: "P | anchor".into(), depth: 0 },
+            LayerEdit { index: 1, name: "Z | grid".into(), depth: 0 },
         ];
         let manifest = psd_layers::write(id, "hut", &edits, |_| {})
             .expect("rewrite should succeed");
@@ -555,7 +555,7 @@ fn psd_layers_can_be_reordered_and_renamed() {
         assert!(psd_layers::write(
             id,
             "hut",
-            &[LayerEdit { index: 99, name: "S | x".into() }],
+            &[LayerEdit { index: 99, name: "S | x".into(), depth: 0 }],
             |_| {},
         )
         .is_err());

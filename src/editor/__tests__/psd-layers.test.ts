@@ -48,6 +48,7 @@ describe("psdLayerOwner", () => {
     return {
       index: 0, name, category,
       visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
+      isGroup: category === "group", depth: 0,
     };
   }
   const noop = () => {};

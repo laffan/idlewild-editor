@@ -12,9 +12,16 @@
  * too much to hang off a keypress. Reordering is the same drag as the layer
  * panel's, and for the same reason followed on `window`.
  *
- * A file the fork cannot rebuild without losing something — groups, masks,
- * clipping — comes back `writable: false` and is listed read-only, with the
- * reason above it. See src-tauri/src/psd_layers.rs.
+ * A file the fork cannot rebuild without losing something — masks, clipping —
+ * comes back `writable: false` and is listed read-only, with the reason above
+ * it. See src-tauri/src/psd_layers.rs.
+ *
+ * The file is a tree and this list is flat, so a group is a row of its own
+ * with its contents indented under it, exactly as Photoshop's panel reads.
+ * Reordering therefore moves **blocks**: dragging a group takes what is
+ * inside it, and a block only lands among its own siblings, so no drag can
+ * quietly move a layer into or out of a group. The arithmetic behind that is
+ * in psd-layer-tree.ts, apart from the DOM and tested without one.
  *
  * Some layers are the *app's* rather than the author's, and their names are
  * load-bearing: the two orienting marks are found by name on every re-parse,
@@ -27,6 +34,11 @@
  */
 
 import { clear, h, ICONS, icon } from "../lib/dom";
+import {
+  blockLength,
+  dropSlots,
+  moveBlock,
+} from "./psd-layer-tree";
 import { isExtrusionPart, isMarkLayer } from "../lib/manifest";
 import { psd, type PsdLayerInfo, type PsdLayerList } from "../lib/ipc";
 import * as log from "../lib/log";
@@ -113,16 +125,31 @@ export function psdLayerOwner(
   return null;
 }
 
-/** A layer as it is in the file, beside the name it is being given. */
+/**
+ * A layer as it is in the file, beside the name it is being given.
+ *
+ * `depth` is the row's own, carried here rather than read off `source` every
+ * time because it is what the tree arithmetic works on — and because a move
+ * is free to change it the day the inspector offers a way to re-parent.
+ */
 interface Row {
   source: PsdLayerInfo;
   name: string;
+  depth: number;
 }
 
-/** A reorder in flight. */
+/**
+ * A reorder in flight.
+ *
+ * `at` and `size` are the block being moved, in the order as it stands — both
+ * follow the block as it passes its siblings. `before` is the order to put
+ * back if the gesture is cancelled.
+ */
 interface DragState {
-  row: HTMLElement;
+  at: number;
+  size: number;
   pointerId: number;
+  before: Row[];
   release: () => void;
 }
 
@@ -210,10 +237,13 @@ export class PsdLayerEditor {
       return;
     }
     this.stack = stack;
-    this.rows = stack.layers.map((source) => ({ source, name: source.name }));
+    this.rows = stack.layers.map(asRow);
+    // Groups are rows too, but they are not layers, and counting them as
+    // layers would make the number disagree with what Photoshop reports.
+    const count = stack.layers.filter((layer) => !layer.isGroup).length;
     this.canvas.textContent =
       `${this.key}.psd · ${stack.width} × ${stack.height} canvas · ` +
-      `${stack.layers.length} ${stack.layers.length === 1 ? "layer" : "layers"}`;
+      `${count} ${count === 1 ? "layer" : "layers"}`;
     this.render();
   }
 
@@ -243,11 +273,17 @@ export class PsdLayerEditor {
 
   private rowEl(row: Row, stack: PsdLayerList): HTMLElement {
     const owner = this.callbacks.ownerOf?.(row.source) ?? null;
+    const group = row.source.isGroup;
     const el = h(
       "div",
       {
-        class: `psd-layer-row ${row.source.category}${owner ? " owned" : ""}`,
+        class:
+          `psd-layer-row ${row.source.category}` +
+          `${owner ? " owned" : ""}${group ? " group" : ""}`,
         dataset: { index: String(row.source.index) },
+        // The indent is the only thing saying what is inside what, so it is
+        // set here from the depth rather than in a rule per level.
+        style: { paddingLeft: `${row.depth * INDENT}px` },
       },
       stack.writable
         ? h(
@@ -262,6 +298,7 @@ export class PsdLayerEditor {
             icon(ICONS.grip, 14),
           )
         : h("div", { class: "psd-layer-grip" }),
+      group ? icon(ICONS.folder, 13) : null,
       h(
         "div",
         { class: "psd-layer-main" },
@@ -280,7 +317,9 @@ export class PsdLayerEditor {
         }),
         h("div", {
           class: "psd-layer-meta m",
-          text: `${row.source.category} · ${row.source.width} × ${row.source.height}`,
+          text: group
+            ? `group · ${this.heldBy(row)}`
+            : `${row.source.category} · ${row.source.width} × ${row.source.height}`,
         }),
       ),
       owner?.action
@@ -325,10 +364,7 @@ export class PsdLayerEditor {
           class: "panel-btn",
           text: "Revert",
           onClick: () => {
-            this.rows = stack.layers.map((source) => ({
-              source,
-              name: source.name,
-            }));
+            this.rows = stack.layers.map(asRow);
             this.render();
           },
         }),
@@ -351,6 +387,7 @@ export class PsdLayerEditor {
     const edits = this.rows.map((row) => ({
       index: row.source.index,
       name: row.name.trim(),
+      depth: row.depth,
     }));
     if (edits.some((edit) => edit.name === "")) {
       log.warn("Every layer needs a name.");
@@ -387,28 +424,75 @@ export class PsdLayerEditor {
 
   // ── reordering ────────────────────────────────────────────────────────────
 
+  /**
+   * What a group holds, for its own line of type.
+   *
+   * Its size is the box its contents cover, which the row already carries,
+   * but a count is the thing anyone actually wants from a collapsed-looking
+   * row — and it is the one number that says the drag will take them along.
+   */
+  private heldBy(row: Row): string {
+    const at = this.rows.indexOf(row);
+    const inside = at < 0 ? 0 : blockLength(this.rows, at) - 1;
+    return `${inside} ${inside === 1 ? "layer" : "layers"}`;
+  }
+
+  /**
+   * Move a block to one of the slots open to it, and say where it landed.
+   *
+   * Everything that reorders goes through here — the drag, the keyboard —
+   * so there is one answer to what a legal move is: a block lands among its
+   * own siblings or it does not move.
+   */
+  private moveTo(at: number, to: number): number {
+    const size = blockLength(this.rows, at);
+    if (size <= 0 || !dropSlots(this.rows, at).includes(to)) return at;
+    this.rows = moveBlock(this.rows, at, size, to);
+    return to > at ? to - size : to;
+  }
+
+  /**
+   * Step a block past the sibling above or below it.
+   *
+   * The slots either side of a block are the starts of its sibling blocks and
+   * the end of the run; stepping down means clearing the next block whole,
+   * which is the slot *after* the one that block starts at.
+   */
   private onGripKey(event: KeyboardEvent, row: Row): void {
     const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
     if (!delta) return;
     event.preventDefault();
-    const from = this.rows.indexOf(row);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= this.rows.length) return;
-    this.rows.splice(from, 1);
-    this.rows.splice(to, 0, row);
+
+    const at = this.rows.indexOf(row);
+    if (at < 0) return;
+    const slots = dropSlots(this.rows, at);
+    const above = slots.filter((slot) => slot < at);
+    const below = slots.filter((slot) => slot > at);
+    const to = delta < 0 ? above.at(-1) : below[1];
+    if (to === undefined) return;
+
+    const landed = this.moveTo(at, to);
     this.render();
-    const moved = this.list.children[to];
-    moved?.querySelector<HTMLElement>(".psd-layer-grip")?.focus();
+    this.list.children[landed]
+      ?.querySelector<HTMLElement>(".psd-layer-grip")
+      ?.focus();
   }
 
   /**
-   * Follow the gesture on `window`: the row is moved through the list as the
-   * pointer passes its neighbours, and a captured element that leaves the
+   * Follow the gesture on `window`: the block is moved through the list as
+   * the pointer passes its siblings, and a captured element that leaves the
    * document takes its capture with it.
+   *
+   * The order is kept in `this.rows` and the list redrawn from it, rather
+   * than the rows being shuffled in the DOM and read back: a block is several
+   * elements, and moving them one at a time is a way to end a drag holding
+   * half of one.
    */
   private beginDrag(event: PointerEvent): void {
-    const row = (event.currentTarget as HTMLElement).closest(".psd-layer-row");
-    if (!(row instanceof HTMLElement) || this.drag) return;
+    const el = (event.currentTarget as HTMLElement).closest(".psd-layer-row");
+    if (!(el instanceof HTMLElement) || this.drag) return;
+    const at = [...this.list.children].indexOf(el);
+    if (at < 0) return;
     event.preventDefault();
     event.stopPropagation();
 
@@ -429,62 +513,84 @@ export class PsdLayerEditor {
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onCancel);
 
-    row.classList.add("dragging");
     this.list.classList.add("reordering");
     this.drag = {
-      row,
+      at,
+      size: blockLength(this.rows, at),
       pointerId,
+      before: [...this.rows],
       release: () => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onCancel);
       },
     };
+    this.markDragged();
   }
 
+  /**
+   * Put the block wherever the pointer is nearest to a slot it may take.
+   *
+   * Nearest rather than crossed-over: the slots open to a block are not every
+   * row boundary, so a rule about passing the midpoint of whatever happens to
+   * be under the pointer would refuse to commit while the pointer sits over a
+   * group's contents.
+   */
   private dragTo(y: number): void {
-    if (!this.drag) return;
-    const { row } = this.drag;
+    const drag = this.drag;
+    if (!drag) return;
 
-    let before: HTMLElement | null = null;
-    for (const sibling of this.list.children) {
-      if (!(sibling instanceof HTMLElement) || sibling === row) continue;
-      const box = sibling.getBoundingClientRect();
-      if (y < box.top + box.height / 2) {
-        before = sibling;
-        break;
+    let best = drag.at;
+    let nearest = Infinity;
+    for (const slot of dropSlots(this.rows, drag.at)) {
+      const away = Math.abs(this.slotY(slot) - y);
+      if (away < nearest) {
+        nearest = away;
+        best = slot;
       }
     }
-    if (before === row.nextElementSibling) return;
-    this.list.insertBefore(row, before);
+    if (best === drag.at || best === drag.at + drag.size) return;
+
+    drag.at = this.moveTo(drag.at, best);
+    this.render();
+    this.markDragged();
+  }
+
+  /** Where a slot sits on screen: the top of the row that would follow it. */
+  private slotY(slot: number): number {
+    const children = this.list.children;
+    const at = children[slot];
+    if (at instanceof HTMLElement) return at.getBoundingClientRect().top;
+    const last = children[children.length - 1];
+    return last instanceof HTMLElement ? last.getBoundingClientRect().bottom : 0;
+  }
+
+  /** Show the whole block as picked up, not just the row under the grip. */
+  private markDragged(): void {
+    const drag = this.drag;
+    if (!drag) return;
+    for (let i = drag.at; i < drag.at + drag.size; i++) {
+      this.list.children[i]?.classList.add("dragging");
+    }
   }
 
   private endDrag(commit: boolean): void {
     if (!this.drag) return;
-    const { row, release } = this.drag;
+    const { release, before } = this.drag;
     this.drag = null;
     release();
-    row.classList.remove("dragging");
     this.list.classList.remove("reordering");
-
-    if (commit) this.takeDomOrder();
-    // The names live in the inputs the DOM already holds, so only the
-    // Apply row needs rebuilding.
-    this.updateFoot();
-    if (!commit) this.render();
+    if (!commit) this.rows = before;
+    this.render();
   }
+}
 
-  /** Read the order back off the list the drag has just rearranged. */
-  private takeDomOrder(): void {
-    const order: Row[] = [];
-    for (const el of this.list.children) {
-      if (!(el instanceof HTMLElement)) continue;
-      const index = Number(el.dataset.index);
-      const row = this.rows.find((r) => r.source.index === index);
-      if (row) order.push(row);
-    }
-    if (order.length === this.rows.length) this.rows = order;
-  }
+/** How far one level of nesting indents a row, in pixels. */
+const INDENT = 14;
+
+/** A row as it comes off a read: where it is, at the depth the file has it. */
+function asRow(source: PsdLayerInfo): Row {
+  return { source, name: source.name, depth: source.depth };
 }
 
 /**

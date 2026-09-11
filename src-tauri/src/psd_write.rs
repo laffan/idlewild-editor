@@ -8,7 +8,8 @@
 //! Layers are named with psd-to-json's pipe convention (`S | name`) so the
 //! pipeline classifies them as sprites rather than ignoring them.
 
-use crate::{psd_layers, psd_marks};
+use crate::psd_layers::{self, Item};
+use crate::psd_marks;
 use image::GenericImageView;
 use psd::{GroupBuilder, LayerBuilder, Psd, PsdBuilder};
 use serde::Deserialize;
@@ -288,13 +289,6 @@ pub fn rewrite_parts_marked(
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
 }
 
-/// One thing at a level of the stack: a layer, or a group and its contents.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Item {
-    Layer(usize),
-    Group(u32),
-}
-
 /// Carrying an existing file's layers across into a new one.
 struct Rebuild<'a> {
     doc: &'a Psd,
@@ -307,26 +301,8 @@ struct Rebuild<'a> {
 
 impl Rebuild<'_> {
     /// What sits directly at one level, top-first as the panel reads.
-    ///
-    /// There is no single ordered list of *items* to read: layers come
-    /// top-first by index, groups come bottom-first by id. Both can be placed
-    /// in the layer index space, though — a group sits where its topmost
-    /// child does — so sorting on that interleaves them the way Photoshop
-    /// shows them.
     fn items(&self, parent: Option<u32>) -> Vec<Item> {
-        let mut out: Vec<(usize, Item)> = Vec::new();
-        for (idx, layer) in self.doc.layers().iter().enumerate() {
-            if layer.parent_id() == parent {
-                out.push((idx, Item::Layer(idx)));
-            }
-        }
-        for (id, group) in self.doc.groups() {
-            if group.parent_id() == parent {
-                out.push((group.contained_layers().start, Item::Group(*id)));
-            }
-        }
-        out.sort_by_key(|(at, _)| *at);
-        out.into_iter().map(|(_, item)| item).collect()
+        psd_layers::items(self.doc, parent)
     }
 
     /// Whether this is the group the editor generates for this key.

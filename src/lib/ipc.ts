@@ -88,6 +88,10 @@ export interface PsdLayerInfo {
   y: number;
   /** What psd-to-json will make of it, read from the pipe prefix. */
   category: "sprite" | "tileset" | "group" | "point" | "zone" | "ignored";
+  /** Whether this row is a group holding the rows indented under it. */
+  isGroup: boolean;
+  /** How deep it sits: zero at the top level, one inside a group. */
+  depth: number;
 }
 
 export interface PsdLayerList {
@@ -97,17 +101,25 @@ export interface PsdLayerList {
   layers: PsdLayerInfo[];
   /**
    * False when a rewrite would lose something the fork cannot express —
-   * groups, masks, clipping. The list is then read-only and `blockedBy` says
-   * why. See src-tauri/src/psd_layers.rs.
+   * masks, clipping. The list is then read-only and `blockedBy` says why.
+   * Groups are not among them: they come back as rows of their own, with
+   * their contents indented under them. See src-tauri/src/psd_layers.rs.
    */
   writable: boolean;
   blockedBy: string | null;
 }
 
-/** A layer in the order and under the name it should end up with. */
+/**
+ * A row in the order, at the depth, and under the name it should end up with.
+ *
+ * The whole tree goes over flattened the way the inspector shows it — top
+ * first, a group followed by what is inside it — and `depth` is what says
+ * which of those it is. See src-tauri/src/psd_layers.rs.
+ */
 export interface PsdLayerEdit {
   index: number;
   name: string;
+  depth: number;
 }
 
 /** One raster layer of a generated group. The name is the exported one. */

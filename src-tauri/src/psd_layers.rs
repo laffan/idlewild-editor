@@ -5,21 +5,30 @@
 //! draw order, and the name carries psd-to-json's pipe convention, so
 //! renaming `S | tower` to `T | tower` is what turns a sprite into a tileset.
 //!
+//! ## The list is a tree
+//!
+//! `Psd::layers()` is a flat run of the layers *inside* things; the groups
+//! holding them live in `Psd::groups()` and appear in neither. So the list
+//! the inspector shows is assembled here, in the order Photoshop's panel
+//! reads: a group where its topmost child is, then its contents indented
+//! under it. `rows` is that walk, and both halves go through it — `read` to
+//! describe the file, `write` to resolve which row an edit names — so the
+//! two cannot disagree about what row 3 is.
+//!
 //! ## Why rewriting is guarded
 //!
 //! The `psd` fork writes a file by rebuilding it from RGBA. There is no way
 //! to edit a layer record in place, so a rename is a full rebuild — and a
 //! rebuild only preserves what `LayerBuilder` can express: pixels, position,
-//! name, opacity, visibility and blend mode.
+//! name, opacity, visibility and blend mode, plus the grouping `GroupBuilder`
+//! puts back.
 //!
-//! Groups, layer masks and clipping masks are none of those. A file using
-//! them would come back flattened, having quietly lost work someone did in
-//! Photoshop, so `read` reports the file unwritable instead and the inspector
-//! shows the list read-only. Every PSD this editor generates is flat, which
-//! is the case the feature is mostly for.
+//! Layer masks and clipping masks are none of those. A file using them would
+//! come back having quietly lost work someone did in Photoshop, so `read`
+//! reports it unwritable and the inspector shows the list read-only.
 
 use crate::psd_pipeline;
-use psd::{LayerBuilder, Psd, PsdBuilder};
+use psd::{GroupBuilder, LayerBuilder, Psd, PsdBuilder};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,6 +45,64 @@ pub struct PsdLayerInfo {
     pub y: i32,
     /// What psd-to-json will make of it, from the pipe prefix.
     pub category: String,
+    /// Whether this row is a group holding the rows indented under it.
+    pub is_group: bool,
+    /// How deep it sits: zero at the top level, one inside a group.
+    pub depth: usize,
+}
+
+/// One thing at a level of the stack: a layer, or a group and its contents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Item {
+    Layer(usize),
+    Group(u32),
+}
+
+/// What sits directly at one level of a file, top-first as the panel reads.
+///
+/// There is no single ordered list of *items* to read: layers come top-first
+/// by index, groups come bottom-first by id. Both can be placed in the layer
+/// index space, though — a group sits where its topmost child does — so
+/// sorting on that interleaves them the way Photoshop shows them.
+pub(crate) fn items(doc: &Psd, parent: Option<u32>) -> Vec<Item> {
+    let mut out: Vec<(usize, Item)> = Vec::new();
+    for (index, layer) in doc.layers().iter().enumerate() {
+        if layer.parent_id() == parent {
+            out.push((index, Item::Layer(index)));
+        }
+    }
+    for (id, group) in doc.groups() {
+        if group.parent_id() == parent {
+            out.push((group.contained_layers().start, Item::Group(*id)));
+        }
+    }
+    out.sort_by_key(|(at, _)| *at);
+    out.into_iter().map(|(_, item)| item).collect()
+}
+
+/// One row of the list the inspector shows: what it is, and how deep.
+pub(crate) struct Row {
+    pub item: Item,
+    pub depth: usize,
+}
+
+/// The whole file as a list of rows, top-first and depth-first.
+///
+/// The one walk both `read` and `write` use, so a row index means the same
+/// thing to each of them.
+pub(crate) fn rows(doc: &Psd) -> Vec<Row> {
+    let mut out = Vec::new();
+    walk(doc, None, 0, &mut out);
+    out
+}
+
+fn walk(doc: &Psd, parent: Option<u32>, depth: usize, out: &mut Vec<Row>) {
+    for item in items(doc, parent) {
+        out.push(Row { item, depth });
+        if let Item::Group(id) = item {
+            walk(doc, Some(id), depth + 1, out);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,13 +118,17 @@ pub struct PsdLayerList {
     pub blocked_by: Option<String>,
 }
 
-/// One layer in the order and under the name it should end up with.
+/// One row in the order, at the depth, and under the name it should end up
+/// with.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerEdit {
-    /// Where this layer is in the *current* file, as `read` numbered them.
+    /// Which row of the list `read` returned this is.
     pub index: usize,
     pub name: String,
+    /// Where it sits in the rebuilt tree. Zero is the top level.
+    #[serde(default)]
+    pub depth: usize,
 }
 
 pub fn read(project_id: &str, key: &str) -> Result<PsdLayerList, String> {
@@ -66,20 +137,46 @@ pub fn read(project_id: &str, key: &str) -> Result<PsdLayerList, String> {
     let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse {key}.psd: {e}"))?;
 
     let blocked_by = unwritable_because(&doc);
-    let layers = doc
-        .layers()
+    let layers = rows(&doc)
         .iter()
         .enumerate()
-        .map(|(index, layer)| PsdLayerInfo {
-            index,
-            name: layer.name().to_string(),
-            visible: layer.visible(),
-            opacity: layer.opacity(),
-            width: layer.width() as u32,
-            height: layer.height() as u32,
-            x: layer.layer_left(),
-            y: layer.layer_top(),
-            category: category_of(layer.name()),
+        .map(|(index, row)| match row.item {
+            Item::Layer(at) => {
+                let layer = doc.layer_by_idx(at);
+                PsdLayerInfo {
+                    index,
+                    name: layer.name().to_string(),
+                    visible: layer.visible(),
+                    opacity: layer.opacity(),
+                    width: layer.width() as u32,
+                    height: layer.height() as u32,
+                    x: layer.layer_left(),
+                    y: layer.layer_top(),
+                    category: category_of(layer.name()),
+                    is_group: false,
+                    depth: row.depth,
+                }
+            }
+            Item::Group(id) => {
+                let group = &doc.groups()[&id];
+                // A group divider carries zeroed bounds, so its size is the
+                // box its contents actually cover.
+                let (top, left, bottom, right) =
+                    doc.group_bounds(id).unwrap_or((0, 0, 0, 0));
+                PsdLayerInfo {
+                    index,
+                    name: group.name().to_string(),
+                    visible: group.visible(),
+                    opacity: group.opacity(),
+                    width: (right - left + 1).max(0) as u32,
+                    height: (bottom - top + 1).max(0) as u32,
+                    x: left,
+                    y: top,
+                    category: category_of(group.name()),
+                    is_group: true,
+                    depth: row.depth,
+                }
+            }
         })
         .collect();
 
@@ -93,14 +190,15 @@ pub fn read(project_id: &str, key: &str) -> Result<PsdLayerList, String> {
     })
 }
 
-/// Rewrite the file with the given layers, in the given order and under the
-/// given names, then run it back through psd-to-json.
+/// Rewrite the file with the given rows, in the given order, at the given
+/// depths and under the given names, then run it back through psd-to-json.
 ///
-/// `edits` is the whole stack — a layer left out of it is left out of the
-/// file, which is how a deletion would work if the inspector ever offered
-/// one. Names are trimmed but otherwise taken as typed: the pipe convention
-/// is the user's to get right, and refusing an unrecognised prefix would
-/// stop them parking a layer out of the game deliberately.
+/// `edits` is the whole tree, flattened the way the inspector shows it: top
+/// first, a group followed by what is inside it. A row left out of it is left
+/// out of the file, which is how a deletion would work if the inspector ever
+/// offered one. Names are trimmed but otherwise taken as typed: the pipe
+/// convention is the user's to get right, and refusing an unrecognised prefix
+/// would stop them parking a layer out of the game deliberately.
 pub fn write(
     project_id: &str,
     key: &str,
@@ -117,36 +215,18 @@ pub fn write(
     if edits.is_empty() {
         return Err("A PSD needs at least one layer".to_string());
     }
-
-    let (canvas_w, canvas_h) = (doc.width(), doc.height());
-    let mut builder = PsdBuilder::new(canvas_w, canvas_h);
-
-    // `layers()` reads top-first and `add_layer` stacks bottom-up, so the
-    // edited order goes back in reversed. The round trip is pinned by a test.
-    for edit in edits.iter().rev() {
-        let layer = doc
-            .layers()
-            .get(edit.index)
-            .ok_or_else(|| format!("No layer {} in {key}.psd", edit.index))?;
-
-        let name = edit.name.trim();
-        if name.is_empty() {
+    for edit in edits {
+        if edit.name.trim().is_empty() {
             return Err("A layer needs a name".to_string());
         }
+    }
 
-        let (left, top, width, height, pixels) = crop(layer, canvas_w, canvas_h);
-        if width == 0 || height == 0 {
-            // Nothing of it is on the canvas, so there is nothing to write.
-            continue;
-        }
-        builder.add_layer(
-            LayerBuilder::new(name)
-                .rgba(width, height, pixels)
-                .at(left, top)
-                .opacity(layer.opacity())
-                .visible(layer.visible())
-                .blend_mode(layer.blend_mode()),
-        );
+    let source = rows(&doc);
+    let tree = nest(edits, 0, &mut 0);
+    let mut builder = PsdBuilder::new(doc.width(), doc.height());
+    // The tree reads top-first and `add_*` stacks bottom-up.
+    for node in tree.iter().rev() {
+        emit(&doc, &source, node, &mut builder)?;
     }
 
     let rebuilt = builder
@@ -154,13 +234,104 @@ pub fn write(
         .map_err(|e| format!("Failed to write {key}.psd: {e:?}"))?;
     std::fs::write(&path, rebuilt).map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
 
-    emit_log(&format!("Rewrote psd/{key}.psd with {} layers", edits.len()));
+    emit_log(&format!("Rewrote psd/{key}.psd with {} rows", edits.len()));
     psd_pipeline::process(
         project_id,
         key,
         &psd_pipeline::ProcessOptions::default(),
         emit_log,
     )
+}
+
+/// One edited row and whatever the rows after it put inside it.
+struct Node<'a> {
+    edit: &'a LayerEdit,
+    children: Vec<Node<'a>>,
+}
+
+/// Read a flat run of rows back into the tree its depths describe.
+///
+/// A row belongs to the last row shallower than it, which is what the indent
+/// in the list is saying. Anything deeper than one step past its predecessor
+/// is taken as one step: the list cannot show a gap, so there is no gap to
+/// honour.
+fn nest<'a>(edits: &'a [LayerEdit], depth: usize, at: &mut usize) -> Vec<Node<'a>> {
+    let mut out = Vec::new();
+    while *at < edits.len() {
+        let edit = &edits[*at];
+        if edit.depth < depth {
+            break;
+        }
+        *at += 1;
+        let children = nest(edits, depth + 1, at);
+        out.push(Node { edit, children });
+    }
+    out
+}
+
+/// Put one node of the edited tree into the file being built.
+fn emit(
+    doc: &Psd,
+    source: &[Row],
+    node: &Node<'_>,
+    into: &mut PsdBuilder,
+) -> Result<(), String> {
+    match built(doc, source, node)? {
+        Some(Built::Layer(layer)) => {
+            into.add_layer(layer);
+        }
+        Some(Built::Group(group)) => {
+            into.add_group(group);
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+enum Built {
+    Layer(LayerBuilder),
+    Group(GroupBuilder),
+}
+
+fn built(doc: &Psd, source: &[Row], node: &Node<'_>) -> Result<Option<Built>, String> {
+    let row = source
+        .get(node.edit.index)
+        .ok_or_else(|| format!("No layer {} in this PSD", node.edit.index))?;
+    let name = node.edit.name.trim();
+
+    match row.item {
+        Item::Group(id) => {
+            let group = &doc.groups()[&id];
+            let mut out = GroupBuilder::new(name)
+                .opacity(group.opacity())
+                .visible(group.visible())
+                .blend_mode(group.blend_mode());
+            for child in node.children.iter().rev() {
+                match built(doc, source, child)? {
+                    Some(Built::Layer(layer)) => out = out.add_layer(layer),
+                    Some(Built::Group(inner)) => out = out.add_group(inner),
+                    None => {}
+                }
+            }
+            Ok(Some(Built::Group(out)))
+        }
+        Item::Layer(at) => {
+            let layer = doc.layer_by_idx(at);
+            let (left, top, width, height, pixels) = crop(layer, doc.width(), doc.height());
+            if width == 0 || height == 0 {
+                // Nothing of it is on the canvas, so there is nothing to write.
+                return Ok(None);
+            }
+            Ok(Some(Built::Layer(
+                LayerBuilder::new(name)
+                    .rgba(width, height, pixels)
+                    .at(left, top)
+                    .opacity(layer.opacity())
+                    .visible(layer.visible())
+                    .blend_mode(layer.blend_mode()),
+            )))
+        }
+    }
 }
 
 /// Take a layer's own rectangle out of the canvas-sized buffer `rgba()`
@@ -198,19 +369,11 @@ pub(crate) fn crop(
 
 /// The reason the *inspector* cannot rewrite a file, or None when it can.
 ///
-/// Stricter than `unrebuildable_because` by one case, and the difference is
-/// what the two are for. The inspector edits a **flat list** of layers: it has
-/// no way to say that a layer is inside a group, so a file with groups would
-/// come back with all of them gone. A rewrite that builds the tree itself has
-/// no such problem, which is why an extrusion — a group by construction — can
-/// still be carried on in a file this reports read-only.
+/// The same answer as `unrebuildable_because` now that the list is a tree and
+/// `write` puts one back. It stays a separate name because the two are asked
+/// by different callers for different reasons, and the inspector is the one
+/// that will grow another restriction first.
 pub(crate) fn unwritable_because(doc: &Psd) -> Option<String> {
-    if !doc.group_ids_in_order().is_empty() {
-        return Some(
-            "This PSD uses layer groups, so its names and order cannot be edited here."
-                .to_string(),
-        );
-    }
     unrebuildable_because(doc)
 }
 
@@ -283,6 +446,7 @@ pub fn rename_layers_named_after(
         edits.push(LayerEdit {
             index: layer.index,
             name: renamed,
+            depth: layer.depth,
         });
     }
     if !changed {

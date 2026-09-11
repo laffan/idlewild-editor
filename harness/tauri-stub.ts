@@ -55,11 +55,58 @@ const TREE: Array<{ path: string; isDir: boolean }> = [
  * A mock PSD stack for the inspector's layer editor, mutable so a reorder or
  * a rename can be driven end to end and read back.
  */
-const PSD_LAYERS: Array<{ name: string; x: number; y: number; width: number; height: number }> = [
+interface PsdRow {
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Zero at the top level, one inside a group — as Rust reports it. */
+  depth?: number;
+}
+
+const PSD_LAYERS: PsdRow[] = [
   { name: "P | anchor", x: 58, y: 90, width: 12, height: 12 },
   { name: "Z | grid", x: 32, y: 80, width: 64, height: 32 },
   { name: "S | tower", x: 0, y: 0, width: 128, height: 192 },
 ];
+
+/**
+ * A generated file's stack, one per key, kept so a reorder inside the group
+ * can be driven and read back the way `tower`'s flat one can.
+ *
+ * Every file this editor writes has the same shape — the two marks, then the
+ * artwork group with its three parts indented under it — so the stack is
+ * built from the key on first ask.
+ */
+const GENERATED = new Map<string, PsdRow[]>();
+
+function generatedStack(key: string): PsdRow[] {
+  const held = GENERATED.get(key);
+  if (held) return held;
+  const suffix = key.replace(/^extrude-/, "");
+  const stack: PsdRow[] = [
+    { name: "P | anchor", x: 58, y: 90, width: 12, height: 12 },
+    { name: "Z | grid", x: 32, y: 80, width: 64, height: 32 },
+    { name: `G | ${key}`, x: 0, y: 0, width: 128, height: 192 },
+    ...["lines", "shading", "shape"].map((part) => ({
+      name: `S | ${part}-${suffix}`, x: 0, y: 0, width: 128, height: 192,
+      depth: 1,
+    })),
+  ];
+  GENERATED.set(key, stack);
+  return stack;
+}
+
+/** What the layer list is sent: a row, at the depth the file has it. */
+function layerInfo(row: PsdRow, index: number) {
+  const category = categoryOf(row.name);
+  return {
+    index, name: row.name, visible: true, opacity: 255,
+    width: row.width, height: row.height, x: row.x, y: row.y,
+    category, isGroup: category === "group", depth: row.depth ?? 0,
+  };
+}
 
 const CATEGORIES: Record<string, string> = {
   S: "sprite", T: "tileset", G: "group", P: "point", Z: "zone",
@@ -71,10 +118,10 @@ function categoryOf(name: string): string {
   return CATEGORIES[parts[0].toUpperCase()] ?? "ignored";
 }
 
-function psdManifest(): string {
+function psdManifest(key = "tower", stack = PSD_LAYERS): string {
   return JSON.stringify({
-    name: "tower", width: 128, height: 192,
-    layers: PSD_LAYERS.filter((l) => categoryOf(l.name) !== "ignored").map((l) => ({
+    name: key, width: 128, height: 192,
+    layers: stack.filter((l) => categoryOf(l.name) !== "ignored").map((l) => ({
       name: l.name.split("|")[1].trim(),
       category: categoryOf(l.name),
       x: l.x, y: l.y, width: l.width, height: l.height,
@@ -278,50 +325,30 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     case "read_psd_layers": {
       // Only `tower` is the hand-built fixture whose stack the reorder and
       // rename paths edit. Every other key is a file this editor generated,
-      // so it has the stack those always have: the artwork under both marks.
+      // so it has the stack those always have: the artwork group under both
+      // marks, with its three parts inside it.
       const asked = String((args as any).key);
-      if (asked !== "tower") {
-        // A generated file: the marks, then the artwork group and its parts.
-        // Grouped files come back read-only, because the inspector edits a
-        // flat list and could not say what is inside what.
-        const suffix = asked.replace(/^extrude-/, "");
-        const part = (name: string, index: number) => ({
-          name: `S | ${name}-${suffix}`, category: "sprite", index,
-          visible: true, opacity: 255, width: 128, height: 192, x: 0, y: 0,
-        });
-        return {
-          key: asked, width: 128, height: 192,
-          writable: false,
-          blockedBy: "This PSD uses layer groups, so its names and order cannot be edited here.",
-          layers: [
-            { name: "P | anchor", category: "point", index: 0, visible: true,
-              opacity: 255, width: 12, height: 12, x: 58, y: 90 },
-            { name: "Z | grid", category: "zone", index: 1, visible: true,
-              opacity: 255, width: 64, height: 32, x: 32, y: 80 },
-            { name: `G | ${asked}`, category: "group", index: 2, visible: true,
-              opacity: 255, width: 128, height: 192, x: 0, y: 0 },
-            part("lines", 3), part("shading", 4), part("shape", 5),
-          ],
-        };
-      }
+      const stack = asked === "tower" ? PSD_LAYERS : generatedStack(asked);
       return {
         key: asked, width: 128, height: 192,
         writable: (window as any).__psdWritable ?? true,
         blockedBy: (window as any).__psdWritable === false
-          ? "This PSD uses layer groups, so its names and order cannot be edited here."
+          ? "This PSD uses a layer mask, so its names and order cannot be edited here."
           : null,
-        layers: PSD_LAYERS.map((l, index) => ({
-          index, name: l.name, visible: true, opacity: 255,
-          width: l.width, height: l.height, x: l.x, y: l.y,
-          category: categoryOf(l.name),
-        })),
+        layers: stack.map(layerInfo),
       };
     }
     case "write_psd_layers": {
-      const edits = (args as any).layers as Array<{ index: number; name: string }>;
-      const next = edits.map((e) => ({ ...PSD_LAYERS[e.index], name: e.name }));
-      PSD_LAYERS.splice(0, PSD_LAYERS.length, ...next);
-      return psdManifest();
+      const key = String((args as any).key);
+      const edits = (args as any).layers as Array<
+        { index: number; name: string; depth: number }
+      >;
+      const stack = key === "tower" ? PSD_LAYERS : generatedStack(key);
+      const next = edits.map((e) => ({
+        ...stack[e.index], name: e.name, depth: e.depth,
+      }));
+      stack.splice(0, stack.length, ...next);
+      return psdManifest(key, stack);
     }
     case "reprocess_psd":
       // A layer the artist added in Photoshop before saving. Pushed onto the

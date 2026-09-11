@@ -168,7 +168,7 @@ export class DocRenderer {
         view.layerId = layer.id;
         view.object.setPosition(placement.x, placement.y);
         applyScale(view.object, placement);
-        view.object.setDepth(base + step);
+        applyDepth(view.object, base + step);
         view.object.setVisible(
           layer.visible && instanceOf(placement) !== this.hidden,
         );
@@ -233,6 +233,42 @@ export class DocRenderer {
     for (const view of this.placements.values()) destroyPlaced(view.object);
     this.placements.clear();
   }
+}
+
+/**
+ * Give a placed object its depth, keeping a group's own stacking under it.
+ *
+ * psd-to-phaser grafts its own `setDepth` onto a Group, and that one recurses:
+ * every child is given the *same* number. For a PSD placed one layer at a time
+ * that was harmless — a Group of one — but an extrusion's artwork is a group
+ * of three, and one number for all of them is the stacking gone. The file was
+ * right and the canvas was wrong, which is the worst way for this to fail.
+ *
+ * So a group's children are ranked by the depth they already have — which
+ * psd-to-phaser set from the manifest's `initialDepth` when it made them — and
+ * spread across the interval below the next placement. Fractions rather than
+ * whole numbers because the placements on a document layer are one apart, and
+ * there is no room between them for anything else.
+ *
+ * Idempotent: ranking on the current depth gives the same order next time,
+ * because the spread is monotonic in the rank.
+ */
+function applyDepth(object: PlacedObject, depth: number): void {
+  const children = object.getChildren?.() ?? [];
+  if (children.length < 2) {
+    object.setDepth(depth);
+    return;
+  }
+  const ranked = [...children].sort((a, b) => depthOf(a) - depthOf(b));
+  ranked.forEach((child, rank) => {
+    const at = depth + (rank + 1) / (ranked.length + 1);
+    (child as { setDepth?: (v: number) => unknown }).setDepth?.(at);
+  });
+}
+
+function depthOf(child: unknown): number {
+  const depth = (child as { depth?: unknown }).depth;
+  return typeof depth === "number" ? depth : 0;
 }
 
 /**

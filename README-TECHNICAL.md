@@ -565,12 +565,47 @@ worth a round trip out to Photoshop and back.
 **A rename is a full rebuild.** The `psd` fork has no way to edit a layer
 record in place — it writes a file by rebuilding it from RGBA — so a rewrite
 preserves only what `LayerBuilder` can express: pixels, position, name,
-opacity, visibility, blend mode. Groups, layer masks and clipping masks are
-none of those, and a file using them would come back flattened, having
-quietly lost work someone did in Photoshop. `read` reports such a file
-`writable: false` with a sentence saying which layer and why, and the list
-is shown read-only. Every PSD this editor generates is flat, which is the
-case the feature is mostly for.
+opacity, visibility, blend mode, and the nesting `GroupBuilder` puts back.
+Layer masks and clipping masks are none of those, and a file using them would
+come back flattened, having quietly lost work someone did in Photoshop. `read`
+reports such a file `writable: false` with a sentence saying which layer and
+why, and the list is shown read-only.
+
+**The list is a tree.** `Psd::layers()` is a flat run of the layers *inside*
+things and the groups holding them live in `Psd::groups()`, appearing in
+neither — so the list the inspector shows is assembled in `psd_layers::rows`,
+in the order Photoshop's panel reads: a group where its topmost child is, then
+its contents indented under it. Both halves go through that one walk — `read`
+to describe the file, `write` to resolve which row an edit names — so the two
+cannot disagree about what row 3 is. `items` is what interleaves them: layers
+come top-first by index and groups come bottom-first by id, but a group can be
+placed in the layer index space (it sits where its topmost child does), and
+sorting on that is the panel's order.
+
+An edit carries its `depth` back, and `nest` reads the flat run of rows into
+the tree those depths describe — a row belongs to the last row shallower than
+it, which is exactly what the indent is saying. A depth more than one step
+past its predecessor is taken as one step, because the list cannot show a gap
+and so there is no gap to honour.
+
+**A drag moves blocks, and only among siblings.** `src/editor/psd-layer-tree.ts`
+is the arithmetic, kept apart from the panel and tested without a DOM:
+`blockLength` is a row plus everything indented under it, `siblingSpan` is the
+run either side of a row that never goes shallower, `dropSlots` is the start of
+each sibling block plus the end of that run, and `moveBlock` does the move.
+Two rules fall out of it. Dragging a group takes what is inside it — a group
+torn away from its contents is not an edit anyone meant to make. And the last
+slot is the *span's* end rather than the list's, so a part cannot be dragged
+out of its group and a mark cannot be dragged into one; re-parenting is a
+different gesture and is not offered yet.
+
+The panel keeps the order in `this.rows` and redraws from it, rather than
+shuffling rows in the DOM and reading the order back as it used to: a block is
+several elements, and moving them one at a time is a way to end a drag holding
+half of one. The block goes to the *nearest* slot rather than whichever one
+the pointer has crossed, because the slots open to a block are not every row
+boundary — a rule about passing the midpoint of whatever sits under the
+pointer would refuse to commit while the pointer was over a group's contents.
 
 Three details in that rebuild are silent when wrong, and each cost a test:
 
@@ -1227,8 +1262,10 @@ Re-rendering is held for the length of the drag: the panel rebuilds on every
 document change, and rebuilding under the drag would drop the element being
 held.
 
-The inspector's PSD layer list is the same gesture over a different list, and
-the code modal's file column is the same again with one difference: a file
+The inspector's PSD layer list is the same gesture over a different list, with
+the difference that its rows nest: it moves a *block* through the model and
+redraws, rather than moving one element through the DOM. The code modal's file
+column is the same again with one more difference: a file
 tree has one legal drop per row — into that folder, or beside it at that
 folder's level — rather than a position in a list, so the row under the
 pointer is highlighted instead of the dragged row being moved through the DOM.
@@ -1407,6 +1444,24 @@ Since depth is now the position in an ordering rather than a world
 coordinate, a placement's Y no longer leaks into the number. It used to: at
 `DEPTH_STRIDE` of 1000, anything below y = 1000 on a lower document layer
 drew over a higher one.
+
+**One placement can hold several sprites, and their order is its own.** A PSD
+whose layers are inside a group is placed as a single unit — an extrusion is
+three parts in one group — and psd-to-phaser hands that back as a Phaser
+`Group` with its own `setDepth` grafted on, one that **recurses**: setting a
+depth on the group gives every child the same number, which threw away the
+stacking the manifest had already applied and left the parts to Phaser's
+display-list order. The file was right and the canvas was wrong, which is the
+hard version of this bug to find.
+
+So `applyDepth` sets a group's children rather than the group: it ranks them
+by the depth they already carry and spaces them *inside* the placement's own
+step, at `depth + (rank + 1) / (n + 1)`. Fractions rather than whole numbers
+because the step between placements is one, and a unit that spilled past its
+step would sort against the placement in front of it. Ranking rather than
+assigning by index makes a repaint idempotent — the second pass reads the
+numbers the first one wrote and puts them back in the same order. A placement
+holding one object is set directly, which is every converted image.
 
 ## Extrude mode
 
@@ -1672,11 +1727,10 @@ moved, and the wall someone painted stays on the wall the greybox drew.
 
 It is refused for a file carrying masks or clipping, which `LayerBuilder`
 cannot express — the reason `psd_layers` refuses a rename of one. Groups are
-no longer on that list, which is why there are now two guards:
-`unrebuildable_because` is what a rewrite asks, and `unwritable_because` adds
-groups on top of it for the *inspector*, which edits a flat list of layers and
-has no way to say that one is inside another. So an extrusion is read-only in
-the layer list and still carries its cube, which is the honest pair of answers.
+no longer on that list, and now that the inspector's list is a tree they are
+not on its list either: `unwritable_because` asks `unrebuildable_because` and
+nothing more, so an extrusion's own file is listed the way any other file is,
+with its group indented and its cube on the group's row.
 
 Either way the mode stays up until the file is written: a refusal arriving
 after the session had closed would have taken the shape with it.
@@ -1964,11 +2018,13 @@ on chrome never highlights it.
 - Continuing an extrusion is refused on a PSD carrying masks or clipping,
   which the fork cannot express. The cube is still offered on such a file and
   Apply says why it will not write, which is one step later than it could be.
-- An extrusion's PSD is a grouped file, so the inspector lists it read-only:
-  the layer names and order are not editable there, ours or anyone else's, and
-  renaming the *file* no longer renames the group inside it. The list is flat
-  and cannot express nesting, which is the thing to fix — the rewrite already
-  round-trips a tree.
+- Renaming an extrusion's *file* no longer renames the group inside it. The
+  group is named for the key the file had when it was written, and only Apply
+  renames it.
+- The layer list shows nesting and reorders within a level, but offers no way
+  to move a layer into or out of a group. That is a different gesture — a
+  horizontal one, or a drop onto the group row — and a drag that could do it
+  by accident would be worse than not offering it.
 - A preserved layer that hung off the edge of the old canvas is cropped to it,
   because `crop` reads from the canvas-sized buffer the fork hands back and
   what was outside it was never in that buffer. The same is true of a rename,

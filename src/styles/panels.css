@@ -509,6 +509,13 @@
   outline-offset: -2px;
 }
 
+/* A group. Its contents are indented under it by an inline padding set from
+   the row's depth, so the only thing a rule has to carry is that the row
+   itself is the heading of what follows. */
+.psd-layer-row.group { background: color-mix(in srgb, var(--chrome-rule) 45%, transparent); }
+.psd-layer-row.group > svg { flex: none; color: var(--color-neutral-500); }
+.psd-layer-row.group .psd-layer-name { font-weight: 600; }
+
 /* A layer psd-to-json will not export reads as an aside; the two orienting
    marks are the app's own and say so in the accent. */
 .psd-layer-row.ignored .psd-layer-name { color: var(--chrome-dim); }

@@ -129,8 +129,11 @@ remaining pieces are wired to real slots rather than mocked.
 - The selected PSD's own layer stack, in the inspector: drag by the grip to
   reorder it, rename in place, then Apply to rewrite the file and re-run the
   pipeline. Renaming is how a sprite becomes a tileset, so it is worth having
-  without a trip to Photoshop. A PSD with groups, masks or clipping is listed
-  read-only, because a rewrite would flatten them
+  without a trip to Photoshop. Groups are listed as Photoshop shows them —
+  the group, then its contents indented under it — and a drag takes a group's
+  contents with it, landing only among the things it already sits beside. A
+  PSD with masks or clipping is listed read-only, because a rewrite would
+  flatten them
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail
