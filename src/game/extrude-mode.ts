@@ -28,8 +28,10 @@
  * Two toggles change what that means. **Backfaces** puts the three sides that
  * face away from the camera into the list and takes the near ones out of it,
  * so the solid goes see-through and the far side of a box is what a click
- * lands on. **Erase** turns the pointer into a rubber: press or drag, and
- * whatever face is under it loses its space.
+ * lands on — nothing on the near side is selectable or pullable while it is
+ * on, which is what keeps a drag meant for a back wall from grabbing the roof
+ * it happened to start over. **Erase** turns the pointer into a rubber: press
+ * or drag, and whatever face is under it loses its space.
  *
  * Nothing here touches the document. The shape lives in this object until
  * Apply turns it into a PSD, and Cancel is simply dropping it.
@@ -45,6 +47,7 @@ import {
   extrude,
   facePatch,
   groundPatch,
+  isRear,
   levelHeight,
   MAX_VOXELS,
   patchFaces,
@@ -253,6 +256,13 @@ export class ExtrudeMode {
       return true;
     }
 
+    // X-ray is for the far side and nothing else. The held face is the one
+    // thing a pointer-down claims without picking, so while it is a near face
+    // it would claim every drag that started over it — and after a pull
+    // upward that face is the whole roof, which is most of the silhouette.
+    // A back wall could then only be swept from the sliver of shape that roof
+    // did not cover.
+    if (this.xray && !isRear(this.state.patch.facing)) return false;
     if (!this.onPatch(this.host.worldAt(screenX, screenY))) return false;
     const from = { x: screenX, y: screenY };
     this.gesture = {

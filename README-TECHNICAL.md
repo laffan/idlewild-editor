@@ -1525,6 +1525,17 @@ click that landed on the near side would defeat the toggle just reached for.
 A flat projection has none of this: its spaces have no sides, so the button is
 hidden rather than disabled.
 
+**The held face is the other way in, and it has to be shut too.** A
+pointer-down claims a pull without picking anything — it only asks whether the
+point is on the face already held — so while that face is a near one it would
+claim every drag that started over it. After a pull upward the held face is
+the whole roof, which is most of the silhouette, and a back wall could then
+only be swept from the sliver the roof did not cover. So a near face is not
+pullable while X-ray is on: the drag falls through to a sweep, which picks a
+rear face as it should. A rear face stays pullable throughout, which is what
+makes ⌘ work as a momentary borrow — hold it, sweep the far wall, let go, and
+pull what is now held.
+
 The toggle is on the bar, and **⌘ (or Ctrl) borrows it while held**, the way
 space borrows Pan. Watched on the window rather than the canvas, which never
 takes focus — every pointer handler over it calls `preventDefault`, so nothing

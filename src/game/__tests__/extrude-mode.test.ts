@@ -307,6 +307,36 @@ describe("the far side of the shape", () => {
     expect(mode.shape?.has("-1,0,3")).toBe(false);
   });
 
+  it("will not let the near side be pulled while it is on", () => {
+    const mode = tenHigh();
+    const roof = at.roof(0, 0, 9);
+    // Take hold of the roof the ordinary way: a drag on it pulls it.
+    mode.tap(roof.x, roof.y);
+    expect(mode.beginPull(roof.x, roof.y)).toBe(true);
+    mode.endPull();
+
+    // With the far side asked for, that same drag is a sweep instead — the
+    // roof covers most of the silhouette, and a back wall has to be reachable
+    // from under it.
+    mode.setBackfaces(true);
+    expect(mode.beginPull(roof.x, roof.y)).toBe(false);
+
+    // And it is pullable again the moment the toggle goes off, so a face
+    // chosen while ⌘ was held can be pulled once it is released.
+    mode.setBackfaces(false);
+    expect(mode.beginPull(roof.x, roof.y)).toBe(true);
+    mode.endPull();
+  });
+
+  it("keeps a back wall pullable, which is what it was selected for", () => {
+    const mode = tenHigh();
+    mode.setBackfaces(true);
+    const behind = at.backWall(0, 0, 3);
+    mode.tap(behind.x, behind.y);
+    expect(mode.beginPull(behind.x, behind.y)).toBe(true);
+    mode.endPull();
+  });
+
   it("pulls a back wall outward, away from the camera", () => {
     const mode = tenHigh();
     mode.setBackfaces(true);
