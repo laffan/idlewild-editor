@@ -381,6 +381,10 @@
   gap: 6px;
 }
 .panel-btn:hover { background: var(--chrome-rule); }
+/* Offered but refused — the last layer of a scene, which cannot go. The
+   hint beside it says why, so the button only has to look unavailable. */
+.panel-btn[disabled] { opacity: 0.4; }
+.panel-btn[disabled]:hover { background: transparent; }
 
 /* Two halves of one action — Open PSD and its way back — share a row. */
 .panel-btn-row { display: flex; gap: 6px; }

@@ -11,6 +11,7 @@ import { clear, h } from "../lib/dom";
 import type { DrawingTool, StrokeStyle } from "../drawing";
 import { brushPanel } from "./inspect-brush";
 import {
+  renderLayer,
   renderPlacements,
   renderRegion,
   renderStrokes,
@@ -52,6 +53,15 @@ export interface InspectorCallbacks {
    */
   onToggleLayerAdjust: () => void;
   onDeleteSelection: () => void;
+  /**
+   * Get rid of a whole document layer, and everything drawn on it.
+   *
+   * Its own callback rather than a case of `onDeleteSelection`, because it is
+   * the one delete in this panel that asks first — a layer is a container and
+   * the Delete key must not reach it, which is also why `shortcuts.ts` counts
+   * a layer selection as nothing to delete.
+   */
+  onDeleteLayer: (layerId: string) => void;
   /** Write the selected grid area out as a transparent PNG. */
   onExportSelection: () => void;
   onUsePatternImage: () => void;
@@ -208,7 +218,7 @@ export class Inspector {
         else this.renderEmpty();
         break;
       case "layer":
-        this.renderLayer(this.selection.layerId);
+        renderLayer(this.surface(), this.store, this.callbacks, this.selection);
         break;
       case "region":
         renderRegion(this.surface(), this.grid, this.callbacks, this.selection);
@@ -397,19 +407,6 @@ export class Inspector {
         this.callbacks.onStrokeStyle(patch),
       ),
     );
-  }
-
-  private renderLayer(layerId: string): void {
-    const layer = this.store.layer(layerId);
-    if (!layer) return this.renderEmpty();
-    this.head("Layer", layer.name);
-    this.section("Info");
-    this.row("Locked", layer.locked ? "Yes" : "No");
-    this.row("Visible", layer.visible ? "Yes" : "No");
-    this.row("Images", String(layer.placements.length));
-    this.row("Fills", String(layer.fills.length));
-    this.row("Boundaries", String(layer.zones.length));
-    this.row("Strokes", String(layer.strokes.length));
   }
 
   private renderFill(layerId: string, fillId: string): void {

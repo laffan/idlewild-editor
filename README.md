@@ -132,7 +132,11 @@ remaining pieces are wired to real slots rather than mocked.
   has a grip of its own that carries it to whichever layer you let go over.
   The two senses of the word stay apart: a layer here is Phaser's — draw order
   over anything at all — so a placed PSD is **one row** however many layers are
-  inside the file, and the stack inside it belongs to the inspector
+  inside the file, and the stack inside it belongs to the inspector. Select a
+  layer and the inspector offers **Delete layer**, under the tally of what
+  would go with it — it asks first, and the PSDs themselves stay in the
+  project. A scene keeps its last layer, and the button says so rather than
+  disappearing
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass

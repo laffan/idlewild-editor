@@ -30,6 +30,7 @@ import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
 import { createExtrudeUi } from "./extrude";
 import { createColliderUi } from "./collider";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
+import { confirmDeleteLayer } from "./layer-actions";
 import {
   openAddImage,
   openExportSelection,
@@ -126,6 +127,7 @@ export async function mountEditor(
       inspector.updateStrokeStyle(drawing.style);
     },
     onDeleteSelection: () => deleteSelection(),
+    onDeleteLayer: (layerId) => void deleteLayer(layerId),
     onExportSelection: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;
@@ -529,6 +531,23 @@ export async function mountEditor(
       return;
     }
     handle?.scene.setSelection({ kind: "none" });
+  }
+
+  /**
+   * Get rid of a whole document layer, once `layer-actions.ts` has asked.
+   *
+   * What is left here is the shell's half: the layer that was being worked on
+   * may be the one that has gone, and a selection pointing into it certainly
+   * has, so both land on whatever remains.
+   */
+  async function deleteLayer(layerId: string): Promise<void> {
+    if (!(await confirmDeleteLayer(store, layerId))) return;
+    const next = store.layers[0]?.id ?? "";
+    setActiveLayer(next);
+    handle?.scene.setSelection(
+      next ? { kind: "layer", layerId: next } : { kind: "none" },
+    );
+    layers.render();
   }
 
   /** Hand a stroke selection to a layer as a placed PSD. */

@@ -1,8 +1,8 @@
 /**
  * The inspector's simpler panels.
  *
- * A selected region, a lasso of strokes, a boundary, and several images
- * caught by a marquee. None of them holds state — they read the document,
+ * A document layer, a selected region, a lasso of strokes, a boundary, a
+ * point and several images caught by a marquee. None of them holds state — they read the document,
  * write some rows, and offer whatever buttons make sense for the thing — so
  * they are functions over a small surface rather than methods on the panel
  * that happens to host them. `placement` and `fill` stay in `inspector.ts`,
@@ -46,6 +46,59 @@ export interface PanelActions {
   onExportSelection: () => void;
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
+  /** Get rid of a whole document layer — the shell asks before it does. */
+  onDeleteLayer: (layerId: string) => void;
+}
+
+/**
+ * A document layer: what is on it, and the way to get rid of it.
+ *
+ * The counts are the same ones the left panel puts in its grey column, said
+ * in full — and Delete layer sits under them, beside the tally of everything
+ * that would go with it. The left panel can add a layer, reorder, rename,
+ * lock and hide one; removing one is the one thing it never offered, and it
+ * belongs where the consequences are listed.
+ *
+ * Refused rather than hidden for the last layer of a scene: a button that
+ * vanishes tells nobody why.
+ */
+export function renderLayer(
+  panel: PanelSurface,
+  store: DocStore,
+  actions: PanelActions,
+  selection: Extract<Selection, { kind: "layer" }>,
+): void {
+  const layer = store.layer(selection.layerId);
+  if (!layer) return panel.empty();
+
+  panel.head("Layer", layer.name);
+  panel.section("Info");
+  panel.row("Locked", layer.locked ? "Yes" : "No");
+  panel.row("Visible", layer.visible ? "Yes" : "No");
+  panel.row("Images", String(layer.placements.length));
+  panel.row("Fills", String(layer.fills.length));
+  panel.row("Boundaries", String(layer.zones.length));
+  panel.row("Strokes", String(layer.strokes.length));
+
+  const last = store.layers.length <= 1;
+  panel.body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      last
+        ? h("div", {
+            class: "field-hint",
+            text: "A scene keeps at least one layer.",
+          })
+        : null,
+      h("button", {
+        class: "panel-btn",
+        text: "Delete layer",
+        disabled: last ? "true" : null,
+        onClick: () => actions.onDeleteLayer(layer.id),
+      }),
+    ),
+  );
 }
 
 export function renderRegion(
