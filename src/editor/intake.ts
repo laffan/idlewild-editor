@@ -58,8 +58,11 @@ export function startIntake(config: IntakeConfig): Intake {
     return {
       grid: config.grid,
       centreCell: () => scene.centreCell(),
-      placePsd: (key, manifest, at, scale) =>
-        scene.placePsd(key, manifest, at, scale),
+      // A paste has nothing to consume, so whether anything landed is
+      // already in the console rather than something to act on here.
+      placePsd: async (key, manifest, at, scale) => {
+        await scene.placePsd(key, manifest, at, scale);
+      },
     };
   };
 

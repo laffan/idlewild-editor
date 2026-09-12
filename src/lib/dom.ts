@@ -128,6 +128,16 @@ export const ICONS = {
     "m4 20 4.2-4.2",
   ],
   fill: "M6 12 12 6l6 6-6 6-6-6Zm13 4c0 1.7 1 2.6 2 2.6",
+  /* A checkerboard, for the brush that leaves a dither rather than a smudge.
+     Four filled squares of a 4×4 grid, which is the smallest arrangement that
+     reads as a pattern at 21px rather than as four dots. */
+  pixels: [
+    "M4 4h5v5H4z",
+    "M14 4h5v5h-5z",
+    "M9 9h5v5H9z",
+    "M4 14h5v5H4z",
+    "M14 14h5v5h-5z",
+  ],
   boundary: "M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4",
   /* A freehand loop closing on itself — the lasso's own gesture. */
   lasso: [

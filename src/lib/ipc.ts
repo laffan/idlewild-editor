@@ -78,6 +78,16 @@ export interface AnchorMarks {
    * the grid — see `editor/import-anchor.ts`.
    */
   margin?: { x: number; y: number };
+  /**
+   * Whether the artwork goes *above* the two marks in the file's stack.
+   *
+   * Absent is marks over artwork, where they stay visible while somebody
+   * paints underneath them — what an import or a converted fill wants. A
+   * sketch asks for the other way round, because its artwork is the one row
+   * in the file anybody would rename and the marks are read-only rows the
+   * editor owns. See `art_on_top` in src-tauri/src/psd_write.rs.
+   */
+  artOnTop?: boolean;
   cols: number;
   rows: number;
 }

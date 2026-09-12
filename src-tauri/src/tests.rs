@@ -23,6 +23,7 @@ mod painting;
 mod rewrite;
 mod scaffolds;
 mod server;
+mod sketching;
 mod stacking;
 
 use crate::project::{GameOptions, Genre, Projection};
@@ -117,6 +118,7 @@ fn psd_bytes_pass_through_instead_of_being_decoded() {
         margin: None,
         cols: 1,
         rows: 1,
+        art_on_top: false,
     };
     let marked = psd_write::psd_from_image_bytes_marked("pasted", &original, Some(&marks))
         .expect("a PSD should still be taken as it is");
@@ -537,6 +539,7 @@ fn psd_layers_can_be_reordered_and_renamed() {
             margin: None,
             cols: 1,
             rows: 1,
+            art_on_top: false,
         };
         let bytes = psd_write::psd_from_rgba_marked(
             "hut",

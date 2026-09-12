@@ -159,6 +159,7 @@ fn rewriting_refuses_a_file_it_would_flatten() {
         margin: None,
         cols: 1,
         rows: 1,
+        art_on_top: false,
     };
     let err = psd_write::rewrite_parts_marked(b"not a psd at all", "k", 8, 8, &parts(8, 8), &marks)
         .expect_err("nonsense should not be rewritten");
@@ -284,6 +285,7 @@ fn square(side: f32) -> psd_write::AnchorMarks {
         margin: None,
         cols: 1,
         rows: 1,
+        art_on_top: false,
     }
 }
 

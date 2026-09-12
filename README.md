@@ -187,7 +187,10 @@ remaining pieces are wired to real slots rather than mocked.
   orienting marks an import does — the anchor dot and the grid the sketch was
   drawn over — so there is a grid under the ink when you open it to paint.
   Its canvas is the ink plus the spaces the ink actually covers, not the
-  larger diamond enclosing them
+  larger diamond enclosing them, and the ink is the **top** layer of the
+  file: it is the one row anybody would rename, and the marks are the
+  editor's. The strokes are only consumed once the artwork is standing where
+  they were — a conversion that is refused leaves the sketch where it is
 - Inspector for layers, selections, fills, placed images, points and
   boundaries, in Info / Transform / Layers sections. A placed image's title is its filename,
   and retyping the part before `.psd` renames the file, moves its assets with
@@ -226,6 +229,22 @@ remaining pieces are wired to real slots rather than mocked.
   not the artwork: everything this editor writes has a grid space of clear
   canvas around it, and the boundary somebody draws up against had better be
   the one Photoshop would show them
+- **Hold the pen still inside a stroke** and the rest of it comes out
+  straight — a second, and the line snaps to the one between where you
+  started and where you are, and stays ruled until you lift. The next stroke
+  is back to whatever the slider says. Pause at the end of a wobbly line and
+  it straightens; pause before you draw and everything after it is ruled. It
+  is the same rule read from either end, and it is pen mode's, where a line
+  drawn against the edge of a building wants to be a line
+- A **second rail** under the first while pen mode is up, for the three
+  things that only mean something inside it. **Rub** is the same brush with
+  the paint taken out — it rubs out ink from this session, tip and pressure
+  and all. **Fill** sweeps a closed outline and fills it, landing as one
+  thing you can erase or undo like a stroke. **Pixels** swaps the tip for a
+  hard checker, so what it leaves is a dither rather than a smudge. Pressing
+  the one that is down puts the plain pencil back. All three are first cuts —
+  a bucket that floods the area under a tap, and an eraser that reaches the
+  artwork already inside the file, are the versions after these
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail

@@ -21,6 +21,7 @@ import { Surface, type Viewport } from "./surface";
 import {
   beginDraw,
   beginErase,
+  beginFill,
   beginLasso,
   drawEraserCursor,
   type ToolSession,
@@ -38,6 +39,13 @@ export interface DrawingCallbacks {
 export class DrawingLayer {
   readonly root: HTMLElement;
   style: StrokeStyle = { ...DEFAULT_STYLE };
+
+  /**
+   * How long a still hold inside a stroke straightens the rest of it, in
+   * milliseconds. Zero is off, which is everywhere but pen mode — see
+   * `DrawOptions.straightenAfterMs`.
+   */
+  straightenHoldMs = 0;
 
   /** Exposed so an export renders with the brush PNGs this layer has
    *  already decoded, rather than rebuilding the cache from its fallbacks. */
@@ -205,7 +213,16 @@ export class DrawingLayer {
     pressure: number,
   ): ToolSession {
     if (tool === "pencil") {
-      return beginDraw(this.store, this.surface, this.atlas, this.style, x, y, pressure);
+      return beginDraw(
+        this.store,
+        this.surface,
+        this.atlas,
+        this.style,
+        x,
+        y,
+        pressure,
+        { straightenAfterMs: this.straightenHoldMs },
+      );
     }
     if (tool === "eraser") {
       return beginErase(
@@ -217,6 +234,9 @@ export class DrawingLayer {
         x,
         y,
       );
+    }
+    if (tool === "fill") {
+      return beginFill(this.store, this.surface, this.style, x, y);
     }
     return beginLasso(this.store, this.surface, this.callbacks.onSelect, x, y);
   }

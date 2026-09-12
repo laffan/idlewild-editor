@@ -36,6 +36,28 @@ export interface ToolSession {
 
 // ── pencil ──────────────────────────────────────────────────────────────────
 
+/** How far the pen may stray and still count as held still, in screen px. */
+const HOLD_SLOP_PX = 6;
+
+export interface DrawOptions {
+  /**
+   * Hold the pen still this long inside a stroke and the rest of it comes out
+   * straight. Zero is off.
+   *
+   * The gesture is the one this editor uses everywhere else — press and wait —
+   * and it is latched rather than momentary: once it fires, the stroke is
+   * straight until the pen comes up, and the next stroke starts again at
+   * whatever the slider says. Pause at the end of a wobbly line and it snaps;
+   * pause before drawing and everything after it is a ruled line. Both are the
+   * same rule read from different ends.
+   *
+   * "Still" rather than merely "down", because a stroke that took longer than
+   * a second to draw is an ordinary stroke and straightening it would be the
+   * editor overruling the hand.
+   */
+  straightenAfterMs?: number;
+}
+
 export function beginDraw(
   store: StrokeStore,
   surface: Surface,
@@ -44,15 +66,20 @@ export function beginDraw(
   x: number,
   y: number,
   pressure: number,
+  options: DrawOptions = {},
 ): ToolSession {
   const points: InkPoint[] = [{ x, y, pressure }];
+
+  // Latched by the hold below, and read by `shaped` rather than written into
+  // the style: it is true of this stroke and nothing else.
+  let straight = false;
 
   // The samples as the stroke will be *kept*, which is also what is drawn
   // while it is in flight. Smoothing is applied here rather than at render
   // time so the ink under the pointer is the ink that lands in the document —
   // at 100 the preview is already the straight line it will become, which is
   // the only way a setting like this can be aimed.
-  const shaped = () => smoothPoints(points, style.smoothing);
+  const shaped = () => smoothPoints(points, straight ? 100 : style.smoothing);
 
   const paint = () => {
     const ctx = surface.beginLive();
@@ -61,15 +88,44 @@ export function beginDraw(
   };
   paint();
 
+  const holdMs = options.straightenAfterMs ?? 0;
+  let timer: number | null = null;
+  // Where the hold is being measured from. The pen is never perfectly still,
+  // so it is a slop radius rather than an equality — and in world units,
+  // because the tolerance that matters is what the hand can see.
+  let held = { x, y };
+
+  const arm = (): void => {
+    if (!holdMs || straight) return;
+    if (timer !== null) window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      timer = null;
+      straight = true;
+      // Snap now rather than at the next sample: the whole point of the hold
+      // is that nothing is moving, so nothing else would repaint.
+      paint();
+    }, holdMs);
+  };
+  const disarm = (): void => {
+    if (timer !== null) window.clearTimeout(timer);
+    timer = null;
+  };
+  arm();
+
   return {
     move(mx, my, mp) {
       const last = points[points.length - 1];
       // Sub-pixel samples cost a stamp each and change nothing visible.
       if (Math.hypot(mx - last.x, my - last.y) < 0.5) return;
       points.push({ x: mx, y: my, pressure: mp });
+      if (Math.hypot(mx - held.x, my - held.y) > surface.worldPerScreenPixel * HOLD_SLOP_PX) {
+        held = { x: mx, y: my };
+        arm();
+      }
       paint();
     },
     end() {
+      disarm();
       surface.clearLive();
       if (points.length < 2) {
         // A tap is not a stroke. Two points is the minimum the streamline
@@ -169,6 +225,61 @@ export function drawEraserCursor(surface: Surface, x: number, y: number): void {
   ctx.strokeStyle = ACCENT;
   ctx.stroke();
   surface.endLive();
+}
+
+// ── fill ────────────────────────────────────────────────────────────────────
+
+/**
+ * Sweep a closed outline and it fills.
+ *
+ * The lasso's gesture with the opposite ending: that one *finds* the strokes
+ * inside the loop, this one *becomes* one. Which makes it the smallest fill
+ * worth having — everything else in the engine already knows what to do with
+ * a stroke, so it previews, undoes, erases, exports and applies without a
+ * line of new plumbing anywhere. A bucket that floods the area under a tap is
+ * the next version of this, and it needs a raster of the session to flood.
+ */
+export function beginFill(
+  store: StrokeStore,
+  surface: Surface,
+  style: StrokeStyle,
+  x: number,
+  y: number,
+): ToolSession {
+  const points: InkPoint[] = [{ x, y, pressure: 1 }];
+
+  const paint = () => {
+    const ctx = surface.beginLive();
+    // The shape as it will land, not an outline of where it is being swept:
+    // a fill that previewed as a line would be a fill you had to imagine.
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.closePath();
+    ctx.fillStyle = style.color;
+    ctx.globalAlpha = 0.7;
+    ctx.fill("nonzero");
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = surface.worldPerScreenPixel * 1.5;
+    ctx.strokeStyle = ACCENT;
+    ctx.stroke();
+    surface.endLive();
+  };
+
+  return {
+    move(mx, my) {
+      const last = points[points.length - 1];
+      if (Math.hypot(mx - last.x, my - last.y) < 1) return;
+      points.push({ x: mx, y: my, pressure: 1 });
+      paint();
+    },
+    end() {
+      surface.clearLive();
+      // Three points is the least that encloses anything; a tap is a miss.
+      if (points.length < 3) return;
+      store.add(toFlat(points), { ...style, mode: "fill" });
+    },
+  };
 }
 
 // ── lasso ───────────────────────────────────────────────────────────────────

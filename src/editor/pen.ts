@@ -43,6 +43,19 @@ import type { Stroke } from "../lib/types";
 import type { PsdLayerInfo } from "../lib/ipc";
 import type { WorldScene } from "../game/world-scene";
 import { PenBar } from "./pen-bar";
+import { PenRail, type PenTool } from "./pen-rail";
+
+/**
+ * How long the pen has to be held still inside a stroke before the rest of it
+ * is drawn straight.
+ *
+ * Longer than the editor's other hold — `HOLD_MS` in extrude mode is 320ms,
+ * because a hold *instead of* a drag has to be decided before the drag gets
+ * going. This one interrupts something already happening, so it has to be
+ * long enough that a pause for thought in the middle of a line is not read as
+ * a request to straighten it.
+ */
+const STRAIGHTEN_HOLD_MS = 1000;
 
 export interface PenUiOptions {
   projectId: string;
@@ -54,6 +67,14 @@ export interface PenUiOptions {
   drawing: () => DrawingLayer | null;
   /** Entering hands the pointer to the pencil, which is what draws here. */
   usePencil: () => void;
+  /**
+   * One of the pen rail's three has been picked, or put back.
+   *
+   * The shell owns the drawing layer's style, so what this reports is the
+   * choice; what it *means* — a brush, a stroke mode, a different gesture —
+   * is applied there. See `applyPenTool` in editor.ts.
+   */
+  onPenTool: (tool: PenTool) => void;
   /** The document layer new ink lands on, which is where a session's is. */
   inkLayerId: () => string;
   /** The file was rewritten and re-parsed; take the result back. */
@@ -93,7 +114,10 @@ export function createPenUi(options: PenUiOptions): PenUi {
     onApply: () => void apply(),
     onCancel: () => cancel(),
   });
-  options.host.appendChild(bar.root);
+  // The three tools that only exist in this mode, in a column under the
+  // editor's own rail — see pen-rail.ts.
+  const rail = new PenRail((tool) => options.onPenTool(tool));
+  options.host.append(bar.root, rail.root);
 
   // The bar counts strokes, so it has to follow the document rather than
   // only the mode: every stroke drawn is a change here and nothing else
@@ -124,6 +148,16 @@ export function createPenUi(options: PenUiOptions): PenUi {
     const mode = options.scene()?.modes.pen;
     const active = mode?.active ?? false;
     options.host.classList.toggle("penning", active);
+    // Press and wait, and the rest of the stroke comes out straight. Set from
+    // here rather than at the two ends of a session so it follows the mode
+    // however it was left — including being stopped from outside, which play
+    // mode and the other two canvas modes both do.
+    const drawing = options.drawing();
+    if (drawing) drawing.straightenHoldMs = active ? STRAIGHTEN_HOLD_MS : 0;
+    // Hiding the rail puts the pencil back, which is why the shell is told
+    // rather than left to notice: the mode ending is the tool ending.
+    if (rail.tool !== null && !active) options.onPenTool(null);
+    rail.setShown(active);
     if (!active) {
       // The mode can be taken away rather than left: play mode stops all
       // three, and entering extrude or collider stops the other two. The ink
@@ -351,6 +385,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
       session = null;
       options.scene()?.modes.pen.stop();
       options.host.classList.remove("penning");
+      rail.root.remove();
       bar.destroy();
     },
   };

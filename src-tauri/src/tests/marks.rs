@@ -51,6 +51,7 @@ fn a_pasted_image_carries_its_anchor_and_footprint() {
             margin: None,
             cols: 2,
             rows: 2,
+            art_on_top: false,
         };
 
         let bytes = psd_write::psd_from_rgba_marked(
@@ -147,6 +148,7 @@ fn an_import_marks_its_anchor_and_grid_footprint() {
             margin: None,
             cols: 1,
             rows: 1,
+            art_on_top: false,
         };
 
         let bytes = psd_write::psd_from_rgba_marked(
@@ -244,6 +246,7 @@ fn a_multi_space_footprint_draws_its_divisions() {
         margin: None,
         cols: 2,
         rows: 1,
+        art_on_top: false,
     };
 
     let bytes = psd_write::psd_from_rgba_marked(
@@ -314,6 +317,7 @@ fn a_margin_grows_the_canvas_without_moving_the_artwork() {
         margin: None,
         cols: 1,
         rows: 1,
+        art_on_top: false,
     };
     let roomy = AnchorMarks {
         margin: Some(at(32.0, 16.0)),
@@ -324,6 +328,7 @@ fn a_margin_grows_the_canvas_without_moving_the_artwork() {
             margin: None,
             cols: 1,
             rows: 1,
+            art_on_top: false,
         }
     };
 

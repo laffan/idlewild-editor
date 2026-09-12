@@ -11,7 +11,7 @@ import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
 import { snapshotPng } from "../game/snapshot";
-import { DrawingLayer } from "../drawing";
+import { DEFAULT_STYLE, DrawingLayer, PIXEL_BRUSH } from "../drawing";
 import { CodePanel } from "./code-panel";
 import { Inspector } from "./inspector";
 import { EditorHeader } from "./header";
@@ -29,6 +29,7 @@ import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
+import { penToolEffect, type PenTool } from "./pen-rail";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { confirmDeleteLayer } from "./layer-actions";
 import { openAddImage, openExportSelection, openPublish } from "./sheets";
@@ -51,6 +52,8 @@ export async function mountEditor(
   const os = await platform();
 
   let activeLayerId = store.layers[0]?.id ?? "";
+  /** The brush the pencil had before the pen rail's Pixels borrowed it. */
+  let remembered = DEFAULT_STYLE.brushId;
   let mode: EditorMode = "draw";
   let handle: GameHandle | null = null;
   let drawing: DrawingLayer | null = null;
@@ -225,6 +228,7 @@ export async function mountEditor(
     usePencil: () => applyTool("pencil", false),
     inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
+    onPenTool: (tool) => applyPenTool(tool),
     onPsdWritten: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
@@ -235,6 +239,18 @@ export async function mountEditor(
   // Pencil, eraser and lasso hand the pointer to the drawing layer; select
   // and pan leave it with the game canvas and its gesture arbiter.
   const rail = new ToolRail((tool: ToolId) => applyTool(tool));
+
+  /** Put one of pen mode's own three in the pointer's hands, or take it back. */
+  function applyPenTool(tool: PenTool): void {
+    if (!drawing) return;
+    if (tool === "pixels" && drawing.style.brushId !== PIXEL_BRUSH) {
+      remembered = drawing.style.brushId;
+    }
+    const effect = penToolEffect(tool, remembered);
+    drawing.style = { ...drawing.style, ...effect.style };
+    applyTool(effect.tool, false);
+    inspector.updateStrokeStyle(drawing.style);
+  }
 
   /**
    * Put a tool in the pointer's hands.
@@ -247,7 +263,9 @@ export async function mountEditor(
   function applyTool(tool: ToolId, announce = true): void {
     rail.setTool(tool);
     const drawingTool =
-      tool === "pencil" || tool === "eraser" || tool === "lasso" ? tool : null;
+      tool === "pencil" || tool === "eraser" || tool === "lasso" || tool === "fill"
+        ? tool
+        : null;
     handle?.scene.suspendGestures(drawingTool !== null);
     handle?.scene.setGestureMode(
       tool === "pan" ? "pan" : tool === "point" ? "point" : "select",
@@ -265,6 +283,7 @@ export async function mountEditor(
     if (tool === "point") log.info("Point — tap to put one down; drag still pans");
     if (tool === "pencil") log.info("Pencil — draw with a pencil or a mouse; fingers pan");
     if (tool === "lasso") log.info("Lasso — sweep around strokes to select them");
+    if (tool === "fill") log.info("Fill — sweep a closed shape and it fills");
   }
 
   const header = new EditorHeader(

@@ -8,7 +8,7 @@ import type { Stroke } from "../lib/types";
  * turned into a boundary" — so it is an action on a lasso selection, not a
  * mode you draw in.
  */
-export type DrawingTool = "pencil" | "eraser" | "lasso";
+export type DrawingTool = "pencil" | "eraser" | "lasso" | "fill";
 
 export interface StrokeStyle {
   brushId: number;

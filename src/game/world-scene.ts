@@ -622,13 +622,9 @@ export class WorldScene extends Phaser.Scene {
    * it, because a PSD is placed from the editor shell and from both of the
    * drawing layer's conversions.
    */
-  placePsd(
-    key: string,
-    manifestJson: string,
-    at: Cell,
-    scale = 1,
-  ): Promise<void> {
-    return this.psds.place(key, manifestJson, at, scale);
+  /** Place a processed PSD, and say whether anything landed. */
+  placePsd(key: string, json: string, at: Cell, scale = 1): Promise<boolean> {
+    return this.psds.place(key, json, at, scale);
   }
 
   /** Swap in a re-imported PSD under the key it already had. */

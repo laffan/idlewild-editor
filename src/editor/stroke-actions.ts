@@ -59,21 +59,45 @@ export async function convertStrokesToPsd(
     const result = await strokesToPsd(projectId, name, strokes, {
       atlas: drawing.atlas,
       scale: EXPORT_SCALE,
-      marks: (raster) =>
-        scaleMarks(
+      marks: (raster) => ({
+        ...scaleMarks(
           marksForCells(grid, cells, anchor, {
             x: raster.bounds.x - anchorWorld.x,
             y: raster.bounds.y - anchorWorld.y,
           }),
           EXPORT_SCALE,
         ),
+        // The ink on top of the marks rather than under them. It is the one
+        // row in this file anybody would rename — the other two are the
+        // editor's and read-only in the inspector's list — so burying it
+        // under both read backwards. Nothing is hidden by the swap: a sketch
+        // is a few percent ink on a clear ground.
+        artOnTop: true,
+      }),
     });
     if (!result) return;
 
-    // The ink going and the artwork arriving are one thing.
+    // The ink going and the artwork arriving are one thing — and only one
+    // thing. Placing can refuse: a locked layer, a file the pipeline found
+    // nothing placeable in. Taking the strokes away anyway is how a sketch
+    // becomes nothing at all, which is the worst outcome available here and
+    // silent besides, so the ink stays until there is artwork standing in
+    // its place.
     store.history.begin();
     try {
-      await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+      const placed = await scene.placePsd(
+        result.key,
+        result.manifest,
+        anchor,
+        IMPORT_SCALE,
+      );
+      if (!placed) {
+        log.warn(
+          `${result.key}.psd was written but nothing was placed — ` +
+            "keeping the strokes",
+        );
+        return;
+      }
       drawing.removeStrokes(selection.ids);
     } finally {
       store.history.end();

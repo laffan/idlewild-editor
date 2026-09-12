@@ -37,6 +37,15 @@ export const TOOLS: ToolSpec[] = [
   { id: "lasso", name: "Lasso", path: ICONS.lasso },
 ];
 
+/**
+ * What the label under the rail says, for tools with no button on it.
+ *
+ * Pen mode's Fill takes the pointer the way the rail's own tools do, so the
+ * name beside the canvas has to follow it — but its button is in the other
+ * column, and nothing here is pressed while it is up.
+ */
+const OFF_RAIL: Partial<Record<ToolId, string>> = { fill: "Fill" };
+
 export class ToolRail {
   readonly root: HTMLElement;
   readonly label: HTMLElement;
@@ -71,7 +80,8 @@ export class ToolRail {
     for (const [id, button] of this.buttons) {
       button.setAttribute("aria-pressed", String(id === tool));
     }
-    this.label.textContent = TOOLS.find((t) => t.id === tool)?.name ?? "";
+    this.label.textContent =
+      TOOLS.find((t) => t.id === tool)?.name ?? OFF_RAIL[tool] ?? "";
   }
 
   get tool(): ToolId {

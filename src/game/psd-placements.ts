@@ -73,24 +73,30 @@ export class PsdPlacements {
    *
    * `scale` is how big the artwork is displayed against its own pixels —
    * see `editor/import-anchor.ts` for why an import arrives at a half of it.
+   *
+   * Answers whether anything landed. A locked layer and a file with no
+   * placeable layers are both refusals with nothing on the canvas to show for
+   * them, and a caller that *consumes* something to make this call — a sketch
+   * conversion, which takes the ink away — needs to know the difference
+   * between that and a placement it can now see.
    */
   async place(
     key: string,
     manifestJson: string,
     at: Cell,
     scale = 1,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const layer = this.host.store.layer(this.host.activeLayerId);
     if (!layer || layer.locked) {
       log.warn("The active layer is locked");
-      return;
+      return false;
     }
 
     const manifest = parseManifest(manifestJson);
     const layers = placeableLayers(manifest);
     if (layers.length === 0) {
       log.warn(`${key}.psd has no placeable layers — check the naming convention`);
-      return;
+      return false;
     }
 
     const world = this.host.grid.cellToWorld(at);
@@ -149,6 +155,7 @@ export class PsdPlacements {
           placementId: last.id,
         });
       }
+      return last !== null;
     } finally {
       this.host.store.history.end();
     }

@@ -139,6 +139,17 @@ function categoryOf(name: string): string {
   return CATEGORIES[parts[0].toUpperCase()] ?? "ignored";
 }
 
+/** How many pixels of a base64 RGBA buffer are not fully transparent. */
+function countOpaque(base64: string): number {
+  if (!base64) return 0;
+  const binary = atob(base64);
+  let n = 0;
+  for (let i = 3; i < binary.length; i += 4) {
+    if (binary.charCodeAt(i) !== 0) n++;
+  }
+  return n;
+}
+
 function psdManifest(key = "tower", stack = PSD_LAYERS): string {
   return JSON.stringify({
     name: key, width: 128, height: 192,
@@ -394,6 +405,9 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       const a = args as any;
       (window as any).__lastRgba = {
         width: a.width, height: a.height, name: a.name, marks: a.marks ?? null,
+        // How much of the buffer carries ink, so a script can tell an empty
+        // conversion from one the pipeline lost afterwards.
+        opaque: countOpaque(String(a.rgbaBase64 ?? "")),
       };
       return {
         key: String(a.name),

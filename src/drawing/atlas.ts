@@ -50,6 +50,45 @@ export const BRUSHES: readonly BrushDef[] = [
   { id: 5, name: "Marker", url: brush5 },
 ];
 
+/**
+ * The pixel brush, which has no PNG behind it.
+ *
+ * Every other tip is a photograph of a real one, softened at the edges and
+ * sampled at whatever size the stroke asks for. This one is the opposite
+ * thing: a hard checker, so what it leaves is a dither rather than a smudge.
+ * Generated rather than drawn because the whole of it is a rule, and a
+ * 128×128 PNG of a checkerboard is a file to keep in step with the rule.
+ *
+ * It is out of the numbered set on purpose. The five are the pencil's
+ * brushes, chosen from the rail's own panel; this is a *tool* in pen mode,
+ * and giving it a sixth button beside them would put it in two places.
+ */
+export const PIXEL_BRUSH = 90;
+
+/** How many cells across the tip the checker runs. */
+const CHECKER = 8;
+
+/** A hard checkerboard, the same in all four variant slots. */
+function pixelMask(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = ATLAS_WIDTH;
+  canvas.height = ATLAS_CELL;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+
+  const step = ATLAS_CELL / CHECKER;
+  ctx.fillStyle = "#000";
+  for (let i = 0; i < ATLAS_VARIANTS; i++) {
+    for (let y = 0; y < CHECKER; y++) {
+      for (let x = 0; x < CHECKER; x++) {
+        if ((x + y) % 2) continue;
+        ctx.fillRect(i * ATLAS_CELL + x * step, y * step, step, step);
+      }
+    }
+  }
+  return canvas;
+}
+
 export interface TintedAtlas {
   atlas: CanvasImageSource;
   cell: number;
@@ -95,9 +134,16 @@ export function createAtlasCache(): AtlasCache {
   const tinted = new Map<string, TintedAtlas>();
   const listeners = new Set<() => void>();
   let fallback: HTMLCanvasElement | null = null;
+  let pixels: HTMLCanvasElement | null = null;
   let destroyed = false;
 
   const maskFor = (brushId: number): CanvasImageSource => {
+    // Built on first ask and kept, like the fallback — and unlike the five,
+    // it is never replaced by a file, so anything tinted from it stays good.
+    if (brushId === PIXEL_BRUSH) {
+      if (!pixels) pixels = pixelMask();
+      return pixels;
+    }
     const loaded = masks.get(brushId);
     if (loaded) return loaded;
     if (!fallback) fallback = fallbackMask();

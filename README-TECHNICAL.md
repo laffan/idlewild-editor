@@ -1521,6 +1521,20 @@ preview *is* the result: at 100 the line under the pointer is already the
 straight one it will become, which is the only way a setting like this can be
 aimed.
 
+### Four things a stroke can be
+
+`Stroke.mode` was Hush's two — "ink" paints and "highlight" multiplies — and
+pen mode's rail added two more, each of which *is* a tool rather than a
+variation on one. "erase" stamps the same brush with `destination-out`, so
+the tip's softness and the pressure taper are the eraser's too. "fill" is not
+stamped at all: its points are a closed outline and what is drawn is the
+inside of it.
+
+Putting both in the stroke model rather than beside it is what keeps them
+small. A fill previews, undoes, slices, exports and applies through the code
+that was already there for a pencil line; a fill that was a new kind of object
+in the document would have needed all five written again.
+
 ### Two brushes were wearing each other's names
 
 Brush 2 is the grainy tip and brush 5 the wet, even-edged one — Charcoal and
@@ -2393,6 +2407,45 @@ every voxel rather than from the visible faces, because the underside of the
 lowest layer is never drawn and a box that stopped at what is drawn would clip
 it off the bottom of the file.
 
+### Which way up a conversion's stack goes
+
+`AnchorMarks.art_on_top` decides whether the artwork sits above the two marks
+or below them, and the two answers are both right for their own case.
+
+An import or a converted fill puts the marks **over** the artwork, where they
+stay visible while somebody paints underneath them — that is what they are
+for. A sketch puts the artwork over the marks, because its artwork is the one
+row in the file anybody would ever rename and the marks are read-only rows the
+editor owns: a layer list that buried the author's layer under both of them
+read backwards. Nothing is hidden by the swap, because a sketch is a few
+percent ink on a clear ground.
+
+It travels on `AnchorMarks`, which is not quite what that struct is named for.
+It rides there because it is the same kind of fact from the same builders —
+something the editor knows about this conversion that Rust cannot work out for
+itself — and a second parameter on a command that already takes six would be
+worse.
+
+### A conversion keeps its ink until the artwork is standing
+
+`PsdPlacements.place` answers whether anything landed. Two of its paths are
+refusals with nothing on the canvas to show for them — a locked layer, a file
+the pipeline found nothing placeable in — and `convertStrokesToPsd` *consumes*
+what it converts. Taking the strokes away after a refusal is how a sketch
+becomes nothing at all: no ink, no artwork, and no error anybody would connect
+to either. So the ink now goes only once there is something standing where it
+was.
+
+`tests/sketching.rs` pins the other half, which is the half that is invisible
+from inside the editor: a sketch that writes correctly and *exports* blank
+looks exactly like a sketch that vanished, because the PSD opens perfectly in
+Photoshop and the canvas shows nothing. Every other conversion sends a
+rectangle of artwork filling most of its canvas; a sketch sends a few percent
+of one, and its footprint is measured from the anchor *down* — so the anchor
+lands on the top edge of the canvas and the dot drawn around it hangs six
+pixels above it. Both cases go through the real pipeline and come back with
+their ink counted.
+
 ### Room around what a conversion writes
 
 A canvas cropped exactly to a block-out is a file with nowhere to draw the
@@ -2909,6 +2962,75 @@ file and re-run the whole pipeline to change nothing.
 checks both. The two are only in step for as long as nobody else has rewritten
 the file, and a paint against a stale index would put somebody's drawing into
 the wrong layer — the one failure here that would be completely silent.
+
+### Hold still, and the rest of the stroke is ruled
+
+A second inside a stroke with the pen not moving and `beginDraw` latches its
+smoothing to 100 for the remainder of it; the next stroke starts again at
+whatever the slider says. Pause at the end of a wobbly line and it snaps
+straight; pause before drawing and everything after is a ruled line. Those are
+the same rule read from either end, which is why it is one rule.
+
+**Still, not merely down.** A stroke that took longer than a second to draw is
+an ordinary stroke, and straightening it would be the editor overruling the
+hand — so the timer is re-armed whenever the pen strays more than a few screen
+pixels from where the hold began. And the fire has to repaint by itself:
+nothing is moving, so nothing else would.
+
+A second rather than extrude mode's 320ms, and for a reason worth naming. A
+hold *instead of* a drag has to be decided before the drag gets going. This
+one interrupts something already happening, so it has to be longer than a
+pause for thought.
+
+Pen mode's, not the pencil's everywhere: `DrawingLayer.straightenHoldMs` is
+zero unless `editor/pen.ts` sets it, and it is set from `sync` rather than at
+the two ends of a session so it follows the mode however it was left —
+including being stopped from outside, which play mode and the other two canvas
+modes all do.
+
+### The second rail
+
+Three tools that only mean something inside the mode, in their own column
+under the editor's rail (`editor/pen-rail.ts`). Their own column rather than
+three more slots on that one, because a rail that grew and shrank with the
+mode would be a rail whose buttons moved under your hand.
+
+All three are the pencil with something changed about it, and only one of them
+needed the engine to learn anything:
+
+| Tool | What it is | What it cost |
+|---|---|---|
+| **Rub** | the same brush stamping `destination-out` | a `mode` on `Stroke` |
+| **Pixels** | the same brush with a hard checker for a tip | a mask with no PNG behind it |
+| **Fill** | the lasso's gesture ending in a shape instead of a selection | a `mode`, and `beginFill` |
+
+`penToolEffect` says what picking one changes — a stroke mode, a brush, and
+which of the editor's tools takes the pointer — and the shell applies it,
+because the shell is what owns the drawing layer's style. Pressing the tool
+that is down puts the plain pencil back, which is what saves a fourth button
+saying "the pencil again".
+
+**A fill is a stroke.** `mode: "fill"` means the points are a closed outline
+and what is drawn is the inside of it, filled `nonzero` so a loop that crosses
+itself comes out solid rather than holed. Making it a stroke rather than a new
+kind of object is the whole reason it is small: it previews, undoes, erases,
+exports and applies without a line of new plumbing anywhere. A bucket that
+floods the area under a tap is the version after this one, and it needs a
+raster of the session to flood — which is the thing this deliberately does not
+build yet.
+
+**The eraser reaches this session's ink and no further.** `destination-out`
+clears what is on the layer being drawn on, and the raster Apply sends is
+composited *over* the PSD layer — so a rub takes out ink drawn here and leaves
+the artwork already in the file alone. An eraser that reached that has to work
+on the file's own pixels, which is `psd_paint`'s side of the fence and later
+work.
+
+**The pixel brush is out of the numbered set** (`PIXEL_BRUSH = 90`). The five
+are the pencil's, chosen from the inspector's own panel; this is a tool, and
+giving it a sixth button beside them would put it in two places. Its mask is
+generated rather than drawn, because the whole of it is a rule and a PNG of a
+checkerboard is a file to keep in step with the rule.
 
 ### The dim follows the camera
 

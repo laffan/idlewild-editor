@@ -37,5 +37,5 @@ export { rasteriseStrokes, strokesToPsd } from "./rasterise";
 export { strokesToZonePoints } from "./to-zone";
 export { strokesBox } from "./geometry";
 export type { Viewport } from "./surface";
-export { BRUSHES } from "./atlas";
+export { BRUSHES, PIXEL_BRUSH } from "./atlas";
 export { DEFAULT_STYLE, type DrawingTool, type StrokeStyle } from "./types";

@@ -41,6 +41,15 @@ export function brushPanel(
     );
   }
 
+  if (tool === "fill") {
+    return note(
+      "Fill",
+      "Sweep a shape",
+      "Sweep a closed outline and the inside of it fills with the drawing " +
+        "colour. It lands as one thing you can erase or undo, like a stroke.",
+    );
+  }
+
   const name = h("div", {
     class: "inspect-title",
     text: BRUSHES.find((b) => b.id === style.brushId)?.name ?? "Ink",

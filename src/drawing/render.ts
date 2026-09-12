@@ -114,6 +114,13 @@ function paint(
 ): void {
   if (stream.length === 0) return;
   ctx.save();
+  // A fill is a closed outline rather than a path to stamp along, so it
+  // leaves the loop below entirely.
+  if (mode === "fill") {
+    fillRegion(ctx, stream, color);
+    ctx.restore();
+    return;
+  }
   // A highlight multiplies so it tints what is under it rather than covering
   // it; ink paints over. Alpha is per stroke, not per stamp, or the overlaps
   // inside one stroke would accumulate into a dark spine.
@@ -121,6 +128,36 @@ function paint(
     ctx.globalCompositeOperation = "multiply";
     ctx.globalAlpha = 0.5;
   }
+  // An eraser is the same brush with the paint taken out of it: every stamp
+  // clears what it lands on instead of covering it, so the tip's softness and
+  // the pressure taper are the eraser's too. What it reaches is the ink on
+  // this layer — an eraser that rubbed the artwork already inside the PSD
+  // would have to work on that file's pixels, which is later work.
+  if (mode === "erase") ctx.globalCompositeOperation = "destination-out";
   stampStream(ctx, stream, size, atlas.get(brushId, color));
   ctx.restore();
+}
+
+/**
+ * The inside of a closed outline, in flat colour.
+ *
+ * No brush and no stamping: a fill is one shape, and stamping its boundary
+ * would leave a soft edge around a hard area. `nonzero` rather than
+ * `evenodd`, so a loop that crosses itself — which a swept outline does all
+ * the time — comes out filled rather than holed.
+ */
+function fillRegion(
+  ctx: CanvasRenderingContext2D,
+  stream: readonly StreamPoint[],
+  color: string,
+): void {
+  if (stream.length < 3) return;
+  ctx.beginPath();
+  ctx.moveTo(stream[0].point[0], stream[0].point[1]);
+  for (let i = 1; i < stream.length; i++) {
+    ctx.lineTo(stream[i].point[0], stream[i].point[1]);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill("nonzero");
 }

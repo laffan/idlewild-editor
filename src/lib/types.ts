@@ -234,8 +234,17 @@ export interface Stroke {
   brushId: number;
   size: number;
   color: string;
-  /** "ink" paints, "highlight" multiplies. */
-  mode: "ink" | "highlight";
+  /**
+   * What the stroke does to what is under it.
+   *
+   * "ink" paints and "highlight" multiplies, as Hush has always had them.
+   * The other two are pen mode's, and both are the whole implementation of a
+   * tool rather than a variation on the pencil: "erase" stamps the same brush
+   * with `destination-out`, so it rubs ink out instead of laying it down, and
+   * "fill" is not stamped at all — its points are a closed outline and what
+   * is drawn is the inside of it.
+   */
+  mode: "ink" | "highlight" | "erase" | "fill";
   createdAt: number;
 }
 
@@ -460,7 +469,22 @@ export type EditorMode = "draw" | "code" | "play";
  * on the canvas to promote into one, so putting a point down has to be
  * something you do to empty space.
  */
-export type ToolId = "select" | "pan" | "point" | "pencil" | "eraser" | "lasso";
+/**
+ * What the pointer is doing.
+ *
+ * "fill" has no button on the rail — it is pen mode's, from the second column
+ * that only exists while that mode is up — but it is a tool the same way the
+ * others are: the drawing layer holds the pointer and the gesture means
+ * something of its own. See `editor/pen-rail.ts`.
+ */
+export type ToolId =
+  | "select"
+  | "pan"
+  | "point"
+  | "pencil"
+  | "eraser"
+  | "lasso"
+  | "fill";
 
 export interface PsdManifestEntry {
   key: string;

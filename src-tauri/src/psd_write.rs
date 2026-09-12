@@ -53,6 +53,21 @@ pub struct AnchorMarks {
     /// buys is somewhere to paint past the edge of what is already there.
     #[serde(default)]
     pub margin: Option<MarkPoint>,
+    /// Whether the artwork goes *above* the two marks in the stack.
+    ///
+    /// Not a mark, and here anyway: it rides the same struct from the same
+    /// builders, and it is the same kind of fact — something the editor knows
+    /// about this conversion that Rust cannot work out for itself.
+    ///
+    /// The default is false, which is marks over artwork: they stay visible
+    /// while somebody paints underneath them, which is what an import or a
+    /// converted fill wants. A sketch asks for the other way round, because
+    /// its artwork is the one row in the file anybody would rename and the
+    /// marks are read-only rows the editor owns — a list that buried it under
+    /// both of them read backwards. Nothing is hidden by the swap: a sketch is
+    /// a few percent ink on a clear ground.
+    #[serde(default)]
+    pub art_on_top: bool,
     /// How many grid spaces it covers, which names the zone layer.
     #[serde(default)]
     pub cols: u32,
@@ -88,14 +103,24 @@ pub fn psd_from_rgba_marked(
 
     let layout = psd_marks::layout(width, height, marks);
     let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
-    // Artwork first so the marks sit above it and stay visible while editing.
-    builder.add_layer(
+    let mut art = Some(
         LayerBuilder::new(format!("S | {name}"))
             .rgba(width, height, rgba)
             .at(layout.art_left, layout.art_top),
     );
+
+    // `add_layer` stacks bottom-up, so what goes in first is underneath.
+    // Artwork first — marks over it, staying visible while somebody paints
+    // underneath — unless the conversion asked for the other way round; see
+    // `art_on_top`.
+    if !marks.art_on_top {
+        builder.add_layer(art.take().expect("the artwork is put in once"));
+    }
     for layer in psd_marks::layers(&layout, marks) {
         builder.add_layer(layer);
+    }
+    if let Some(on_top) = art.take() {
+        builder.add_layer(on_top);
     }
     builder
         .to_bytes()

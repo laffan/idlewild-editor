@@ -21,6 +21,7 @@ import type { WorldScene } from "../game/world-scene";
 import { createColliderUi, type ColliderUi } from "./collider";
 import { createExtrudeUi, type ExtrudeUi } from "./extrude";
 import { createPenUi, type PenUi } from "./pen";
+import type { PenTool } from "./pen-rail";
 
 export interface CanvasModeUiOptions {
   projectId: string;
@@ -45,6 +46,8 @@ export interface CanvasModeUiOptions {
    * next.
    */
   defaultZoom: () => number;
+  /** One of pen mode's own three tools has been picked, or put back. */
+  onPenTool: (tool: PenTool) => void;
   /** A PSD was rewritten and re-parsed; take the result back. */
   onPsdWritten: (key: string, manifest: string) => Promise<void> | void;
 }
@@ -91,6 +94,7 @@ export function createCanvasModeUis(
     drawing: options.drawing,
     usePencil: options.usePencil,
     inkLayerId: options.inkLayerId,
+    onPenTool: options.onPenTool,
     onWritten: options.onPsdWritten,
   });
 

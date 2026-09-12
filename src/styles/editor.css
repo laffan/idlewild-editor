@@ -230,6 +230,24 @@
 .tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
 .tool-btn[disabled] { opacity: 0.45; }
 
+/* The second column, under the first, up only while pen mode is. Its own
+   block rather than more slots on the rail above, because these three mean
+   nothing outside the mode — and a rail that grew and shrank would be a rail
+   whose buttons moved under your hand. The gap is what says they are two
+   things; see editor/pen-rail.ts. */
+.pen-rail {
+  position: absolute;
+  left: 16px;
+  top: 372px;
+  border: 0;
+  background: var(--chrome-bg);
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+.pen-rail.hidden { display: none; }
+.pen-rail .tool-btn:first-child { border-top: 0; }
+
 .tool-name {
   position: absolute;
   left: 84px;
@@ -558,6 +576,8 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
    act on in either. What Code keeps is the editor *around* the canvas: both
    sidebars, so the scene can be switched and the document adjusted while the
    game runs, and the panel the code is in. */
+.editor.play-mode .pen-rail,
+.editor.code-mode .pen-rail,
 .editor.play-mode .tool-rail,
 .editor.play-mode .tool-name,
 .editor.play-mode .selection-actions,
