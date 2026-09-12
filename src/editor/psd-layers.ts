@@ -33,32 +33,22 @@
  * extrude mode.
  */
 
-import { clear, h, ICONS, icon } from "../lib/dom";
+import { clear, h } from "../lib/dom";
 import {
   blockLength,
   dropSlots,
   hiddenBy,
   moveBlock,
 } from "./psd-layer-tree";
-import { isExtrusionPart, isMarkLayer } from "../lib/manifest";
+import {
+  newLayerButton,
+  psdHeadRow,
+  type PsdHeadState,
+} from "./psd-layer-actions";
+import { manifestName, type OwnedLayer } from "./psd-layer-owner";
+import { asRow, psdLayerRow, type Row } from "./psd-layer-row";
 import { psd, type PsdLayerInfo, type PsdLayerList } from "../lib/ipc";
 import * as log from "../lib/log";
-
-/**
- * A layer this editor owns the name of, and what it offers in its place.
- *
- * `reason` is what the field says when it will not be typed in. `action` is
- * the button on the right of the row — the one thing an owned layer can do
- * that an ordinary one cannot.
- */
-export interface OwnedLayer {
-  reason: string;
-  action?: {
-    icon: string | readonly string[];
-    label: string;
-    run: () => void;
-  };
-}
 
 export interface PsdLayerEditorCallbacks {
   /**
@@ -75,68 +65,17 @@ export interface PsdLayerEditorCallbacks {
    * be renamed.
    */
   ownerOf?: (layer: PsdLayerInfo) => OwnedLayer | null;
-}
-
-/**
- * Which of a PSD's layers this editor owns the name of.
- *
- * The two orienting marks on any file it wrote — `P | anchor` is looked up by
- * name on every parse, and renaming it silently costs the artwork its
- * alignment on the next re-import — and, on an extrusion, the group holding
- * its artwork and every part inside it. Apply regenerates all four under the
- * file's own key, so a new name would survive exactly one Apply.
- *
- * The group is also the way back in: its row carries the button that reopens
- * the solid. On the group rather than on a part because the group is the
- * thing the parts add up to, and it is the row a placement points at.
- */
-export function psdLayerOwner(
-  layer: PsdLayerInfo,
-  key: string,
-  isExtrusion: boolean,
-  onExtrude: () => void,
-): OwnedLayer | null {
-  // The exported name, not the whole label: `manifestName` is what a
-  // placement's path is made of, and it is what psd-to-json reads too.
-  const named = manifestName(layer.name)?.toLowerCase() ?? "";
-  if (isMarkLayer(named)) {
-    return {
-      reason:
-        layer.category === "point"
-          ? "The editor finds this mark by name — it cannot be renamed"
-          : "The editor writes this mark — it cannot be renamed",
-    };
-  }
-  if (!isExtrusion) return null;
-
-  // The group the parts live in, which is what a placement points at.
-  if (named === key.toLowerCase()) {
-    return {
-      reason: "Extrude mode writes this group — it cannot be renamed",
-      action: {
-        icon: ICONS.box,
-        label: "Continue extruding this shape",
-        run: onExtrude,
-      },
-    };
-  }
-  if (isExtrusionPart(key, named)) {
-    return { reason: "Extrude mode writes this layer — it cannot be renamed" };
-  }
-  return null;
-}
-
-/**
- * A layer as it is in the file, beside the name it is being given.
- *
- * `depth` is the row's own, carried here rather than read off `source` every
- * time because it is what the tree arithmetic works on — and because a move
- * is free to change it the day the inspector offers a way to re-parent.
- */
-interface Row {
-  source: PsdLayerInfo;
-  name: string;
-  depth: number;
+  /** Hand the file to the OS: a desktop editor, or an iPadOS share sheet. */
+  onOpen: () => void;
+  /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
+  onRefresh: () => void;
+  /** Open the placed PSD up into its layers on the canvas, or close it. */
+  onToggleAdjust: () => void;
+  /** Draw into one sprite layer of this file — see `penable`. */
+  onPen: (layer: PsdLayerInfo) => void;
+  /** What the two round-trip buttons are called on this platform. */
+  openLabel: string;
+  refreshLabel: string;
 }
 
 /**
@@ -163,12 +102,23 @@ export class PsdLayerEditor {
   private readonly callbacks: PsdLayerEditorCallbacks;
   private readonly status: HTMLElement;
   private readonly canvas: HTMLElement;
+  private readonly head: HTMLElement;
   private readonly list: HTMLElement;
+  private readonly newRow: HTMLElement;
   private readonly foot: HTMLElement;
   private stack: PsdLayerList | null = null;
   private rows: Row[] = [];
   private drag: DragState | null = null;
   private busy = false;
+  /**
+   * What the canvas is doing with this PSD, as the inspector last said.
+   *
+   * Pushed in rather than read out: this list knows about a *file*, and
+   * whether the placement of it is open for layer-by-layer moves is a fact
+   * about the canvas. Null while nothing has said — a file with one layer,
+   * or one nothing has placed.
+   */
+  private adjust: { members: number; adjusting: boolean } | null = null;
   /**
    * The groups that are folded shut, by the name the file holds them under.
    *
@@ -191,7 +141,11 @@ export class PsdLayerEditor {
     this.callbacks = callbacks;
 
     this.status = h("div", { class: "psd-layers-status m" });
+    // Three slots the panel refills rather than three panels: the row above
+    // the list changes with the canvas, and the one below it with the file.
+    this.head = h("div", { class: "psd-layers-head-slot" });
     this.list = h("div", { class: "psd-layer-list" });
+    this.newRow = h("div", { class: "psd-layers-new-slot" });
     this.foot = h("div", { class: "psd-layers-foot" });
     // The file's own size, which is not the placement's: a converted sketch
     // carries the grid it was drawn over beside the artwork, so the canvas
@@ -203,10 +157,15 @@ export class PsdLayerEditor {
       { class: "inspect-section psd-layers" },
       h("div", { class: "inspect-section-title m", text: "PSD" }),
       this.canvas,
+      this.head,
       this.status,
       this.list,
+      this.newRow,
       this.foot,
     );
+    // Before the file has been read, so the buttons that are about the file
+    // rather than about its stack are there from the first frame.
+    this.renderHead();
 
     void this.load();
   }
@@ -232,6 +191,23 @@ export class PsdLayerEditor {
     void this.load();
   }
 
+  /**
+   * Say what the canvas is doing with the placement this list belongs to, so
+   * the head can offer the switch between the two.
+   *
+   * Told on every inspector render rather than once, because the answer
+   * changes without the file changing: a double-tap on the canvas opens a PSD
+   * up, and this list is built once and kept until the selection moves to a
+   * different file.
+   */
+  setAdjust(state: { members: number; adjusting: boolean } | null): void {
+    const same =
+      this.adjust?.members === state?.members &&
+      this.adjust?.adjusting === state?.adjusting;
+    this.adjust = state;
+    if (!same) this.renderHead();
+  }
+
   // ── loading ───────────────────────────────────────────────────────────────
 
   private async load(): Promise<void> {
@@ -243,6 +219,7 @@ export class PsdLayerEditor {
       this.stack = null;
       this.rows = [];
       clear(this.list);
+      clear(this.newRow);
       clear(this.foot);
       log.error(`Could not read the layers of ${this.key}.psd:`, err);
       this.setStatus("This PSD's layers could not be read.");
@@ -279,7 +256,20 @@ export class PsdLayerEditor {
     // folded group would otherwise shift everything under it out of step.
     const hidden = hiddenBy(this.rows, (row) => this.isFolded(row));
     this.rows.forEach((row, at) => {
-      const el = this.rowEl(row, stack);
+      const el = psdLayerRow(row, {
+        stack,
+        rows: this.rows,
+        owner: (layer) => this.callbacks.ownerOf?.(layer) ?? null,
+        folded: (held) => this.isFolded(held),
+        onFold: (held) => this.fold(held),
+        onRename: (held, name) => {
+          held.name = name;
+          this.updateFoot();
+        },
+        onGripDown: (event) => this.beginDrag(event),
+        onGripKey: (event, held) => this.onGripKey(event, held),
+        onPen: (layer) => this.callbacks.onPen(layer),
+      });
       el.hidden = hidden[at];
       this.list.appendChild(el);
     });
@@ -288,75 +278,42 @@ export class PsdLayerEditor {
         h("div", { class: "psd-layers-status m", text: "No layers." }),
       );
     }
+    this.renderHead();
+    this.renderNew();
     this.updateFoot();
   }
 
-  private rowEl(row: Row, stack: PsdLayerList): HTMLElement {
-    const owner = this.callbacks.ownerOf?.(row.source) ?? null;
-    const group = row.source.isGroup;
-    const el = h(
-      "div",
-      {
-        class:
-          `psd-layer-row ${row.source.category}` +
-          `${owner ? " owned" : ""}${group ? " group" : ""}`,
-        dataset: { index: String(row.source.index) },
-        // The indent is the only thing saying what is inside what, so it is
-        // set here from the depth rather than in a rule per level.
-        style: { paddingLeft: `${row.depth * INDENT}px` },
-      },
-      stack.writable
-        ? h(
-            "button",
-            {
-              class: "psd-layer-grip",
-              title: "Drag to reorder",
-              "aria-label": `Reorder ${row.source.name}`,
-              onPointerDown: (event: PointerEvent) => this.beginDrag(event),
-              onKeyDown: (event: KeyboardEvent) => this.onGripKey(event, row),
-            },
-            icon(ICONS.grip, 14),
-          )
-        : h("div", { class: "psd-layer-grip" }),
-      h(
-        "div",
-        { class: "psd-layer-main" },
-        h("input", {
-          class: "psd-layer-name",
-          value: row.name,
-          readonly: stack.writable && !owner ? null : "true",
-          title: owner?.reason ?? null,
-          onInput: (event: Event) => {
-            row.name = (event.target as HTMLInputElement).value;
-            this.updateFoot();
-          },
-          onKeyDown: (event: KeyboardEvent) => {
-            if (event.key === "Enter") (event.target as HTMLInputElement).blur();
-          },
-        }),
-        group
-          ? this.foldEl(row)
-          : h("div", {
-              class: "psd-layer-meta m",
-              text:
-                `${row.source.category} · ` +
-                `${row.source.width} × ${row.source.height}`,
-            }),
-      ),
-      owner?.action
-        ? h(
-            "button",
-            {
-              class: "psd-layer-action",
-              title: owner.action.label,
-              "aria-label": owner.action.label,
-              onClick: owner.action.run,
-            },
-            icon(owner.action.icon, 14),
-          )
-        : null,
+  /** The row of buttons above the list — see psd-layer-actions.ts. */
+  private renderHead(): void {
+    clear(this.head);
+    const state: PsdHeadState = {
+      members: this.adjust?.members ?? 0,
+      adjusting: this.adjust?.adjusting ?? false,
+      openLabel: this.callbacks.openLabel,
+      refreshLabel: this.callbacks.refreshLabel,
+    };
+    this.head.appendChild(
+      psdHeadRow(state, {
+        onToggleAdjust: () => this.callbacks.onToggleAdjust(),
+        onOpen: () => this.callbacks.onOpen(),
+        onRefresh: () => this.callbacks.onRefresh(),
+      }),
     );
-    return el;
+  }
+
+  /**
+   * New layer, under the list.
+   *
+   * Left off a file this editor cannot rewrite at all: adding a layer to one
+   * carrying masks or clipping is the same rebuild a rename is, and the same
+   * work lost.
+   */
+  private renderNew(): void {
+    clear(this.newRow);
+    if (!this.stack?.writable) return;
+    this.newRow.appendChild(
+      newLayerButton(this.busy, () => void this.addLayer()),
+    );
   }
 
   private updateFoot(): void {
@@ -416,6 +373,7 @@ export class PsdLayerEditor {
     }
 
     this.busy = true;
+    this.renderNew();
     this.updateFoot();
     try {
       const manifest = await psd.writeLayers(this.projectId, this.key, edits);
@@ -440,6 +398,35 @@ export class PsdLayerEditor {
     }
   }
 
+  /**
+   * Put an empty sprite layer on the top of the file.
+   *
+   * Written straight away rather than held with the pending edits above it,
+   * because what the row is *for* is somewhere to draw and pen mode can only
+   * put ink in a layer the file really has. The file is read again after, so
+   * a half-typed rename waiting for Apply is lost — which is why the button
+   * goes quiet while the write is in flight rather than trying to be clever
+   * about merging the two.
+   */
+  private async addLayer(): Promise<void> {
+    if (this.busy || !this.stack?.writable) return;
+    this.busy = true;
+    this.renderNew();
+    this.updateFoot();
+    try {
+      const manifest = await psd.addLayer(this.projectId, this.key);
+      log.info(`Added a layer to ${this.key}.psd`);
+      // Nothing was renamed, so no placement is pointing anywhere new.
+      this.callbacks.onWritten(manifest, new Map());
+      this.busy = false;
+      await this.load();
+    } catch (err) {
+      log.error(`Could not add a layer to ${this.key}.psd:`, err);
+      this.busy = false;
+      this.render();
+    }
+  }
+
   /** The manifest paths this write moves, old name to new. */
   private renames(): Map<string, string> {
     const out = new Map<string, string>();
@@ -452,40 +439,6 @@ export class PsdLayerEditor {
   }
 
   // ── reordering ────────────────────────────────────────────────────────────
-
-  /**
-   * A group's second line, which is also the handle that folds it away.
-   *
-   * On the meta line rather than beside the grip, where it would push the
-   * name over too — and a name sitting further right than every other name
-   * reads as the group itself being inside something.
-   *
-   * The count is of layers, so a group holding a group counts what is in
-   * neither of them; the fold takes the whole block regardless, which is
-   * what the indent under it already shows.
-   */
-  private foldEl(row: Row): HTMLElement {
-    const at = this.rows.indexOf(row);
-    const block = at < 0 ? 1 : blockLength(this.rows, at);
-    const layers = this.rows
-      .slice(at + 1, at + block)
-      .filter((held) => !held.source.isGroup).length;
-    const label = `group · ${layers} ${layers === 1 ? "layer" : "layers"}`;
-    if (block < 2) return h("div", { class: "psd-layer-meta m", text: label });
-
-    const shut = this.isFolded(row);
-    return h(
-      "button",
-      {
-        class: "psd-layer-meta m psd-layer-fold",
-        "aria-expanded": shut ? "false" : "true",
-        title: shut ? "Show what is inside" : "Hide what is inside",
-        onClick: () => this.fold(row),
-      },
-      icon(shut ? ICONS.chevronRight : ICONS.chevronDown, 12),
-      h("span", { text: label }),
-    );
-  }
 
   private isFolded(row: Row): boolean {
     return row.source.isGroup && this.collapsed.has(row.source.name);
@@ -660,23 +613,4 @@ export class PsdLayerEditor {
     if (!commit) this.rows = before;
     this.render();
   }
-}
-
-/** How far one level of nesting indents a row, in pixels. */
-const INDENT = 14;
-
-/** A row as it comes off a read: where it is, at the depth the file has it. */
-function asRow(source: PsdLayerInfo): Row {
-  return { source, name: source.name, depth: source.depth };
-}
-
-/**
- * The name psd-to-json will export a layer under — the second pipe segment,
- * which is what a placement's `layerPath` is made of. Null for a name the
- * parser ignores altogether.
- */
-export function manifestName(layerName: string): string | null {
-  const parts = layerName.split("|").map((part) => part.trim());
-  if (parts.length < 2 || parts.length > 4) return null;
-  return parts[1] || null;
 }

@@ -119,6 +119,14 @@ export const ICONS = {
   select: "M4 4l7 16 2.2-6.4L20 11.6 4 4Z",
   pencil: "M4 20l4-1 10-10-3-3L5 16l-1 4Z",
   eraser: "M8 20h11M6 16l7-7 5 5-4 4H8l-2-2Z",
+  /* A nib: the barrel, the slit down the middle, and the point it writes
+     from. Its own glyph rather than the rail's pencil, because the two mean
+     different things — that one picks up a tool, this one opens a mode. */
+  pen: [
+    "M14 3.5 20.5 10 10 20.5l-6.5.5.5-6.5L14 3.5Z",
+    "M12.5 5 19 11.5",
+    "m4 20 4.2-4.2",
+  ],
   fill: "M6 12 12 6l6 6-6 6-6-6Zm13 4c0 1.7 1 2.6 2 2.6",
   boundary: "M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4",
   /* A freehand loop closing on itself — the lasso's own gesture. */

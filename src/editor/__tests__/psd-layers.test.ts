@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { manifestName, psdLayerOwner } from "../psd-layers";
+import { manifestName, psdLayerOwner } from "../psd-layer-owner";
+import { penable } from "../psd-layer-row";
 import type { PsdLayerInfo } from "../../lib/ipc";
 
 /**
@@ -87,5 +88,72 @@ describe("psdLayerOwner", () => {
 
   it("reads the exported name rather than the whole label", () => {
     expect(owner(layer("P | anchor | note", "point"))?.reason).toBeTruthy();
+  });
+});
+
+/**
+ * Which rows offer the pen.
+ *
+ * The case worth being firm about is an extrusion's own layers: they are
+ * sprites, and Apply regenerates every one of them under the file's key — so
+ * a drawing painted into one would look like it had worked right up until the
+ * next time the solid behind it was pulled, and then be gone.
+ */
+describe("which rows pen mode can draw into", () => {
+  function layer(
+    name: string,
+    category: PsdLayerInfo["category"],
+  ): PsdLayerInfo {
+    return {
+      index: 0, name, category,
+      visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
+      isGroup: category === "group", depth: 0,
+    };
+  }
+  const owner = (l: PsdLayerInfo, isExtrusion = true) =>
+    psdLayerOwner(l, "extrude-abc", isExtrusion, () => {});
+
+  it("offers it on an ordinary sprite", () => {
+    const sprite = layer("S | tower", "sprite");
+    expect(penable(sprite, owner(sprite, false))).toBe(true);
+  });
+
+  it("keeps it off a tileset, a point and a zone", () => {
+    for (const [name, category] of [
+      ["T | ground", "tileset"],
+      ["P | spawn", "point"],
+      ["Z | water", "zone"],
+      ["just a layer", "ignored"],
+    ] as const) {
+      const held = layer(name, category);
+      expect(penable(held, owner(held, false))).toBe(false);
+    }
+  });
+
+  it("keeps it off a group, which is a folder rather than pixels", () => {
+    const group = layer("G | enemies", "group");
+    expect(penable(group, owner(group, false))).toBe(false);
+  });
+
+  it("keeps it off the two marks and off an extrusion's own layers", () => {
+    for (const name of [
+      "P | anchor",
+      "Z | grid",
+      "G | extrude-abc",
+      "S | shape-abc",
+      "S | lines-abc",
+      "S | shading-abc",
+    ]) {
+      const held = layer(name, name.startsWith("S") ? "sprite" : "group");
+      expect(penable(held, owner(held))).toBe(false);
+    }
+  });
+
+  it("still offers it on a layer somebody added to an extruded file", () => {
+    // The point of the rule being about ownership rather than about the file:
+    // a layer painted over a greybox survives every Apply, so it is a layer
+    // worth drawing in.
+    const mine = layer("S | brickwork", "sprite");
+    expect(penable(mine, owner(mine))).toBe(true);
   });
 });

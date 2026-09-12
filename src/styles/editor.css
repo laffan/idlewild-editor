@@ -351,11 +351,14 @@
 /* While a canvas mode is up, the selection that started it is gone and its
    action bar with it. The rail stays: the camera has to stay reachable,
    because a solid is built from more than one angle and a collider is drawn
-   by looking at the artwork it belongs to. */
+   by looking at the artwork it belongs to — and pen mode needs the rail most
+   of all, since the thing it is a mode *for* is a tool on it. */
 .editor-canvas-wrap.extruding .selection-actions,
 .editor-canvas-wrap.extruding .edge-toggle,
 .editor-canvas-wrap.colliding .selection-actions,
-.editor-canvas-wrap.colliding .edge-toggle { display: none; }
+.editor-canvas-wrap.colliding .edge-toggle,
+.editor-canvas-wrap.penning .selection-actions,
+.editor-canvas-wrap.penning .edge-toggle { display: none; }
 
 /* Edge toggles.
    Anchored below the tool rail rather than at dead centre: the rail is five

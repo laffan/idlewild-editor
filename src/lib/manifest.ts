@@ -239,6 +239,34 @@ function walk(
  * sits relative to that mark inside the canvas — scaled, because the
  * displayed size is measured against the size the manifest exported.
  */
+/**
+ * Where the PSD's whole canvas sits in the world, given one placement of it.
+ *
+ * The frame pen mode draws, and the thing a placement's own outline is *not*:
+ * that box is one layer's artwork, cropped to its pixels, which on a file
+ * with a margin or several layers is a good deal smaller than the document
+ * somebody opens in Photoshop. Drawing inside the artwork's box and calling
+ * it "inside the PSD" is the mismatch this exists to close.
+ *
+ * The arithmetic is `placedPosition` run over the canvas corner: the anchor
+ * mark lands on the placement's grid space, and the top-left of the canvas is
+ * however far the mark sits from it, scaled by how big the artwork is being
+ * shown against its own pixels.
+ */
+export function canvasBox(
+  anchorWorld: Point,
+  manifest: Manifest,
+  scale: number,
+): { x: number; y: number; width: number; height: number } {
+  const anchor = anchorOffset(manifest);
+  return {
+    x: anchorWorld.x - anchor.x * scale,
+    y: anchorWorld.y - anchor.y * scale,
+    width: manifest.width * scale,
+    height: manifest.height * scale,
+  };
+}
+
 export function placedPosition(
   world: Point,
   manifest: Manifest,

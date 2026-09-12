@@ -224,6 +224,12 @@ function adoptNewLayers(
     // not a layer that has appeared since the last parse, and adopting it
     // would put a second placement over the one already there.
     if (standsFor(taken, entry.path)) continue;
+    // The placeholder an empty layer is written as. The inspector's New layer
+    // button puts a real row in the file with one transparent pixel in it —
+    // see `psd_layers::add` — and that is a layer to draw into rather than
+    // something to stand on the grid. It becomes a placement the moment there
+    // is something in it, because painting gives it the ink's own bounds.
+    if (entry.width * entry.height <= 1) continue;
     const width = entry.width || manifest.width;
     const height = entry.height || manifest.height;
     const at = positionFrom(world, anchor, entry, scale, scale);

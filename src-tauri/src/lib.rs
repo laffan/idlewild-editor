@@ -9,7 +9,9 @@ mod game_files;
 mod project;
 mod psd_layers;
 mod psd_marks;
+mod psd_paint;
 mod psd_pipeline;
+mod psd_rebuild;
 mod psd_write;
 mod publish;
 mod store;
@@ -501,6 +503,33 @@ fn write_psd_layers(
     psd_layers::write(&id, &key, &layers, logger(&app))
 }
 
+/// Put an empty sprite layer on the top of a PSD's stack.
+///
+/// Returns the fresh manifest, as every write that touches the file does:
+/// the layer arrives with a single transparent pixel in it, which is nothing
+/// to draw but is a real row to rename, reorder or draw into.
+#[tauri::command]
+fn add_psd_layer(app: tauri::AppHandle, id: String, key: String) -> Result<String, String> {
+    psd_layers::add(&id, &key, logger(&app))
+}
+
+/// Lay ink into one layer of a PSD — what pen mode applies.
+///
+/// `index` and `name` together name the row, and both are checked: a paint
+/// against an index the file has since renumbered would put a drawing in the
+/// wrong layer, and nothing about the result would say so.
+#[tauri::command]
+fn paint_psd_layer(
+    app: tauri::AppHandle,
+    id: String,
+    key: String,
+    index: usize,
+    name: String,
+    paint: psd_paint::Paint,
+) -> Result<String, String> {
+    psd_layers::paint(&id, &key, index, &name, paint, logger(&app))
+}
+
 #[tauri::command]
 fn read_psd_manifest(id: String, key: String) -> Result<String, String> {
     psd_pipeline::read_manifest(&id, &key)
@@ -652,6 +681,8 @@ pub fn run() {
             read_psd_bytes,
             read_psd_layers,
             write_psd_layers,
+            add_psd_layer,
+            paint_psd_layer,
             read_psd_manifest,
             is_psd_processed,
             list_psd_outputs,

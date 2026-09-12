@@ -22,6 +22,9 @@ import * as log from "../lib/log";
 import { isMobile } from "../lib/platform";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
+import { psdLayerOwner } from "./psd-layer-owner";
+import { PsdLayerEditor } from "./psd-layers";
+import type { PsdLayerInfo } from "../lib/ipc";
 import { openReplacePsd } from "./sheets";
 
 /**
@@ -278,4 +281,52 @@ export function createPsdFileActions(
   }
 
   return { open, refresh, applyLayers, rename, detach };
+}
+
+/**
+ * What the inspector's PSD section needs to be wired to.
+ *
+ * The list of a file's layers now carries every button that is about the
+ * *file* — open it up on the canvas, send it out, bring it back, add a layer,
+ * draw in one — so building one takes the round trip above, the scene, and
+ * the two canvas modes it can lead into. That is a paragraph of wiring per
+ * key, which is why it is a factory here rather than a closure in the shell.
+ */
+export interface PsdLayersOptions {
+  projectId: string;
+  os: string;
+  store: DocStore;
+  /** The round trip out to Photoshop and back — the actions above. */
+  file: PsdFileActions;
+  scene: () => WorldScene | null;
+  /** Re-open the solid behind an extruded PSD. */
+  onExtrude: () => void;
+  /** Draw into one sprite layer of a file. */
+  onPen: (key: string, layer: PsdLayerInfo) => void;
+}
+
+export function createPsdLayersFactory(
+  options: PsdLayersOptions,
+): (key: string) => PsdLayerEditor {
+  const { projectId, os, store, file, scene } = options;
+  return (key: string) =>
+    new PsdLayerEditor(projectId, key, {
+      onWritten: (manifest, renames) =>
+        void file.applyLayers(key, manifest, renames),
+      // The marks and an extrusion's artwork are the app's to name, and the
+      // extrusion's row is the way back into the mode that built it.
+      ownerOf: (layer) =>
+        psdLayerOwner(layer, key, !!store.extrusion(key), options.onExtrude),
+      onOpen: () => void file.open(key),
+      onRefresh: () => void file.refresh(key),
+      onToggleAdjust: () => {
+        const open = scene();
+        if (!open) return;
+        if (open.adjustingInstance) open.stopAdjusting();
+        else open.startAdjusting();
+      },
+      onPen: (layer) => options.onPen(key, layer),
+      openLabel: openPsdLabel(os),
+      refreshLabel: refreshPsdLabel(os),
+    });
 }

@@ -175,6 +175,13 @@ remaining pieces are wired to real slots rather than mocked.
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass
+- **Smoothing**, beside Size: how much of the hand's wobble comes out of a
+  line as it is drawn. At 0 the ink follows every tremor; turned up it takes
+  the shake out without moving where the line goes; at 100 it draws nothing
+  but perfectly straight lines, from where the pen went down to where it came
+  up. It is a property of the pen rather than of the stroke — what the
+  document stores is the line that was on the screen, the way a ruler leaves
+  a straight line behind rather than a note saying one was used
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
   a blocking boundary play mode walks around. The PSD carries the same
   orienting marks an import does — the anchor dot and the grid the sketch was
@@ -197,6 +204,28 @@ remaining pieces are wired to real slots rather than mocked.
   group's own second line — and a drag takes a group's contents with it,
   landing only among the things it already sits beside. A PSD with masks or
   clipping is listed read-only, because a rewrite would flatten them
+- Everything that is about the *file* rather than about this placement of it
+  is **one row directly over that list**: Adjust layers, which opens the PSD
+  up on the canvas so a single layer can be moved, and the two halves of the
+  round trip out to Photoshop and back. They used to be three buttons in
+  three different parts of the panel with the list they are all about in
+  between
+- **New layer**, under the list, puts an empty sprite layer on top of the
+  stack — somewhere to draw, without a trip to Photoshop to make it. It is
+  written into the file straight away and holds nothing but a single clear
+  pixel, so it is a row to rename, reorder or draw into and nothing the game
+  can see yet
+- **Pen mode**, from the pen on any sprite row of that list, the way the cube
+  on an extrusion's row reopens the solid. The rest of the canvas dims, the
+  PSD's own canvas is framed where the file stands on the grid, and the
+  pencil draws inside it — the same brushes, the same pressure, the same
+  smoothing as anywhere else. Apply lays the ink into that layer at the
+  file's own resolution and re-parses, so it arrives as artwork rather than
+  as strokes over the top of it; Cancel throws the drawing away, and ⌘Z
+  brings it back if that was the wrong button. The frame is the **document**,
+  not the artwork: everything this editor writes has a grid space of clear
+  canvas around it, and the boundary somebody draws up against had better be
+  the one Photoshop would show them
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail

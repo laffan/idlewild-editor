@@ -37,7 +37,7 @@ import { FileTree } from "./file-tree";
 import { DocsPanel } from "./docs/panel";
 import { fileState } from "./editor-state";
 import { addMissingBlocks, isGenerated, resetBlock } from "./managed-blocks";
-import { managedEdit } from "./managed-view";
+import { managedEdit, missingBlocksRow } from "./managed-view";
 import { createResizer, type Resizer } from "../editor/resizer";
 
 /**
@@ -608,22 +608,7 @@ export class CodeModal {
     if (this.openPath !== path) return;
     clear(this.repair);
     this.repair.classList.toggle("hidden", ids.length === 0);
-    if (ids.length === 0) return;
-
-    this.repair.append(
-      h("span", {
-        text:
-          `This file is missing ${ids.length} ` +
-          `${ids.length === 1 ? "block" : "blocks"} the editor maintains: ` +
-          `${ids.join(", ")}.`,
-      }),
-      h("button", {
-        class: "code-repair-btn",
-        type: "button",
-        text: "Add them",
-        onClick: () => void this.addMissing(),
-      }),
-    );
+    this.repair.append(...missingBlocksRow(ids, () => void this.addMissing()));
   }
 
   /** Put the missing blocks in, and save. */

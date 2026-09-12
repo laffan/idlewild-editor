@@ -27,8 +27,10 @@
 //! come back having quietly lost work someone did in Photoshop, so `read`
 //! reports it unwritable and the inspector shows the list read-only.
 
+use crate::psd_paint::Paint;
+use crate::psd_rebuild::rebuild;
 use crate::psd_pipeline;
-use psd::{GroupBuilder, LayerBuilder, Psd, PsdBuilder};
+use psd::Psd;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
@@ -124,11 +126,32 @@ pub struct PsdLayerList {
 #[serde(rename_all = "camelCase")]
 pub struct LayerEdit {
     /// Which row of the list `read` returned this is.
-    pub index: usize,
+    ///
+    /// None for a row that is not in the file yet — the empty layer the
+    /// inspector's New layer button asks for, which is written as a single
+    /// transparent pixel because a layer of no pixels is not a layer the
+    /// fork will write. See `add`.
+    #[serde(default)]
+    pub index: Option<usize>,
     pub name: String,
     /// Where it sits in the rebuilt tree. Zero is the top level.
     #[serde(default)]
     pub depth: usize,
+    /// Ink to lay over whatever this row already holds. See `psd_paint`.
+    #[serde(default)]
+    pub paint: Option<Paint>,
+}
+
+impl LayerEdit {
+    /// A row carried across unchanged, named by where it is now.
+    pub(crate) fn keep(index: usize, name: String, depth: usize) -> Self {
+        LayerEdit {
+            index: Some(index),
+            name,
+            depth,
+            paint: None,
+        }
+    }
 }
 
 pub fn read(project_id: &str, key: &str) -> Result<PsdLayerList, String> {
@@ -221,18 +244,8 @@ pub fn write(
         }
     }
 
-    let source = rows(&doc);
-    let tree = nest(edits, 0, &mut 0);
-    let mut builder = PsdBuilder::new(doc.width(), doc.height());
-    // The tree reads top-first and `add_*` stacks bottom-up.
-    for node in tree.iter().rev() {
-        emit(&doc, &source, node, &mut builder)?;
-    }
-
-    let rebuilt = builder
-        .to_bytes()
-        .map_err(|e| format!("Failed to write {key}.psd: {e:?}"))?;
-    std::fs::write(&path, rebuilt).map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
+    std::fs::write(&path, rebuild(&doc, edits)?)
+        .map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
 
     emit_log(&format!("Rewrote psd/{key}.psd with {} rows", edits.len()));
     psd_pipeline::process(
@@ -243,95 +256,130 @@ pub fn write(
     )
 }
 
-/// One edited row and whatever the rows after it put inside it.
-struct Node<'a> {
-    edit: &'a LayerEdit,
-    children: Vec<Node<'a>>,
-}
-
-/// Read a flat run of rows back into the tree its depths describe.
+/// The file's own stack, as an edit list that changes nothing.
 ///
-/// A row belongs to the last row shallower than it, which is what the indent
-/// in the list is saying. Anything deeper than one step past its predecessor
-/// is taken as one step: the list cannot show a gap, so there is no gap to
-/// honour.
-fn nest<'a>(edits: &'a [LayerEdit], depth: usize, at: &mut usize) -> Vec<Node<'a>> {
-    let mut out = Vec::new();
-    while *at < edits.len() {
-        let edit = &edits[*at];
-        if edit.depth < depth {
-            break;
-        }
-        *at += 1;
-        let children = nest(edits, depth + 1, at);
-        out.push(Node { edit, children });
-    }
-    out
+/// What `add` and `paint` start from: both are one change against a file
+/// nobody has retyped, and expressing them as edits means they go through the
+/// same rebuild a rewrite does rather than through a second one.
+fn identity_edits(doc: &Psd) -> Vec<LayerEdit> {
+    rows(doc)
+        .iter()
+        .enumerate()
+        .map(|(index, row)| LayerEdit::keep(index, name_of(doc, row), row.depth))
+        .collect()
 }
 
-/// Put one node of the edited tree into the file being built.
-fn emit(
-    doc: &Psd,
-    source: &[Row],
-    node: &Node<'_>,
-    into: &mut PsdBuilder,
-) -> Result<(), String> {
-    match built(doc, source, node)? {
-        Some(Built::Layer(layer)) => {
-            into.add_layer(layer);
-        }
-        Some(Built::Group(group)) => {
-            into.add_group(group);
-        }
-        None => {}
-    }
-    Ok(())
-}
-
-enum Built {
-    Layer(LayerBuilder),
-    Group(GroupBuilder),
-}
-
-fn built(doc: &Psd, source: &[Row], node: &Node<'_>) -> Result<Option<Built>, String> {
-    let row = source
-        .get(node.edit.index)
-        .ok_or_else(|| format!("No layer {} in this PSD", node.edit.index))?;
-    let name = node.edit.name.trim();
-
+fn name_of(doc: &Psd, row: &Row) -> String {
     match row.item {
-        Item::Group(id) => {
-            let group = &doc.groups()[&id];
-            let mut out = GroupBuilder::new(name)
-                .opacity(group.opacity())
-                .visible(group.visible())
-                .blend_mode(group.blend_mode());
-            for child in node.children.iter().rev() {
-                match built(doc, source, child)? {
-                    Some(Built::Layer(layer)) => out = out.add_layer(layer),
-                    Some(Built::Group(inner)) => out = out.add_group(inner),
-                    None => {}
-                }
-            }
-            Ok(Some(Built::Group(out)))
-        }
-        Item::Layer(at) => {
-            let layer = doc.layer_by_idx(at);
-            let (left, top, width, height, pixels) = crop(layer, doc.width(), doc.height());
-            if width == 0 || height == 0 {
-                // Nothing of it is on the canvas, so there is nothing to write.
-                return Ok(None);
-            }
-            Ok(Some(Built::Layer(
-                LayerBuilder::new(name)
-                    .rgba(width, height, pixels)
-                    .at(left, top)
-                    .opacity(layer.opacity())
-                    .visible(layer.visible())
-                    .blend_mode(layer.blend_mode()),
-            )))
+        Item::Layer(at) => doc.layer_by_idx(at).name().to_string(),
+        Item::Group(id) => doc.groups()[&id].name().to_string(),
+    }
+}
+
+/// Put an empty sprite layer on the top of the stack, and say what is there
+/// now.
+///
+/// The layer is a single transparent pixel. A layer of *no* pixels is not
+/// something the fork will write, and a layer the size of the canvas would
+/// arrive on the grid as a placement covering the whole file — invisible, and
+/// swallowing every click over the artwork under it. One pixel is the
+/// smallest honest placeholder, and the editor does not place a layer that
+/// small (see `adoptNewLayers` in `game/reconcile.ts`); the first thing
+/// painted into it replaces the rectangle outright, because a blank patch has
+/// no bounds worth keeping — see `psd_paint`.
+///
+/// Sprite because that is what almost every layer in a game document is, and
+/// because the prefix is one character to retype in the row that has just
+/// appeared. The name is the first `layer-N` the file is not already using,
+/// so a second press does not collide with the first.
+pub fn add(project_id: &str, key: &str, emit_log: impl Fn(&str)) -> Result<String, String> {
+    let path = psd_pipeline::psd_path(project_id, key)?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse {key}.psd: {e}"))?;
+    if let Some(reason) = unwritable_because(&doc) {
+        return Err(reason);
+    }
+
+    let mut edits = vec![LayerEdit {
+        index: None,
+        name: format!("S | {}", spare_name(&doc)),
+        depth: 0,
+        paint: None,
+    }];
+    edits.extend(identity_edits(&doc));
+
+    std::fs::write(&path, rebuild(&doc, &edits)?)
+        .map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
+    emit_log(&format!("Added a layer to psd/{key}.psd"));
+    psd_pipeline::process(
+        project_id,
+        key,
+        &psd_pipeline::ProcessOptions::default(),
+        emit_log,
+    )
+}
+
+/// The first `layer-N` this file does not already export something under.
+fn spare_name(doc: &Psd) -> String {
+    let taken: Vec<String> = rows(doc)
+        .iter()
+        .filter_map(|row| exported_name(&name_of(doc, row)).map(str::to_lowercase))
+        .collect();
+    for n in 1.. {
+        let candidate = format!("layer-{n}");
+        if !taken.contains(&candidate) {
+            return candidate;
         }
     }
+    unreachable!("the search above only ends by returning")
+}
+
+/// Lay ink into one layer of the file, and run the pipeline over the result.
+///
+/// `index` is a row of the list `read` returned and `name` is what that row
+/// was called when the editor read it. Both are checked, because the two are
+/// only in step for as long as nobody else has rewritten the file: a paint
+/// against a stale index would put somebody's drawing into the wrong layer,
+/// which is the one failure here that would be silent.
+pub fn paint(
+    project_id: &str,
+    key: &str,
+    index: usize,
+    name: &str,
+    ink: Paint,
+    emit_log: impl Fn(&str),
+) -> Result<String, String> {
+    let path = psd_pipeline::psd_path(project_id, key)?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse {key}.psd: {e}"))?;
+    if let Some(reason) = unwritable_because(&doc) {
+        return Err(reason);
+    }
+
+    let mut edits = identity_edits(&doc);
+    let edit = edits
+        .get_mut(index)
+        .ok_or_else(|| format!("No layer {index} in {key}.psd"))?;
+    if edit.name != name {
+        return Err(format!(
+            "{key}.psd has changed under this drawing — \"{name}\" is now \"{}\"",
+            edit.name
+        ));
+    }
+    if matches!(rows(&doc)[index].item, Item::Group(_)) {
+        return Err(format!("\"{name}\" is a group, not a layer to draw in"));
+    }
+    edit.paint = Some(ink);
+
+    std::fs::write(&path, rebuild(&doc, &edits)?)
+        .map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
+    emit_log(&format!("Painted \"{name}\" in psd/{key}.psd"));
+    psd_pipeline::process(
+        project_id,
+        key,
+        &psd_pipeline::ProcessOptions::default(),
+        emit_log,
+    )
 }
 
 /// Take a layer's own rectangle out of the canvas-sized buffer `rgba()`
@@ -443,11 +491,7 @@ pub fn rename_layers_named_after(
     for layer in &list.layers {
         let renamed = rename_segment(&layer.name, from, to);
         changed |= renamed != layer.name;
-        edits.push(LayerEdit {
-            index: layer.index,
-            name: renamed,
-            depth: layer.depth,
-        });
+        edits.push(LayerEdit::keep(layer.index, renamed, layer.depth));
     }
     if !changed {
         return Ok(false);

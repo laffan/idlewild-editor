@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   anchorOffset,
+  canvasBox,
   parseManifest,
   placeableLayers,
   placedPosition,
@@ -181,6 +182,71 @@ describe("the anchor mark", () => {
  * on the grid space at world (0, 0) and displayed at half size — so it lands
  * spanning (−50, −40) to (50, 40).
  */
+/**
+ * The frame pen mode draws, which is the *document* rather than the artwork.
+ *
+ * The distinction is the whole reason this exists: a placement's own box is
+ * one layer's pixels, and everything this editor writes has a grid space of
+ * clear canvas around them, so the two differ by most of a space.
+ */
+describe("the PSD's canvas in the world", () => {
+  // A 64×64 file whose anchor mark is dead centre, with the artwork filling
+  // the middle 32×32 — a converted fill, with its margin around it.
+  const withMargin = parseManifest(
+    JSON.stringify({
+      name: "hut",
+      width: 64,
+      height: 64,
+      layers: [
+        { name: "hut", category: "sprite", x: 16, y: 16, width: 32, height: 32 },
+        { name: "anchor", category: "point", x: 32, y: 32, width: 12, height: 12 },
+      ],
+    }),
+  );
+
+  it("puts the anchor mark on the grid space, and the canvas around it", () => {
+    const box = canvasBox({ x: 0, y: 0 }, withMargin, 1);
+    expect(box).toEqual({ x: -32, y: -32, width: 64, height: 64 });
+  });
+
+  it("is bigger than the artwork inside it, which is the point", () => {
+    const box = canvasBox({ x: 0, y: 0 }, withMargin, 1);
+    const art = withMargin.top.find((l) => l.name === "hut");
+    const at = placedPosition({ x: 0, y: 0 }, withMargin, art!, 1, 1);
+    expect(at.x).toBeGreaterThan(box.x);
+    expect(at.x + art!.width).toBeLessThan(box.x + box.width);
+  });
+
+  it("scales with the placement, because the artwork does", () => {
+    // Every import lands at half size, and the frame has to land with it.
+    expect(canvasBox({ x: 0, y: 0 }, withMargin, 0.5)).toEqual({
+      x: -16,
+      y: -16,
+      width: 32,
+      height: 32,
+    });
+  });
+
+  it("falls back to the canvas centre for a file with no mark", () => {
+    const plain = parseManifest(
+      JSON.stringify({
+        name: "other",
+        width: 100,
+        height: 40,
+        layers: [
+          { name: "other", category: "sprite", x: 0, y: 0, width: 100, height: 40 },
+        ],
+      }),
+    );
+    expect(canvasBox({ x: 0, y: 0 }, plain, 1)).toEqual({
+      x: -50,
+      y: -20,
+      width: 100,
+      height: 40,
+    });
+  });
+});
+
 describe("re-anchoring after an edit", () => {
   const WORLD = { x: 0, y: 0 };
   const HALF = 0.5;

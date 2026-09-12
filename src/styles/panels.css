@@ -395,6 +395,15 @@
   color: #fff;
 }
 .panel-btn.primary:hover { background: var(--color-accent-600); }
+/* A panel button that is a switch rather than an action — Adjust layers,
+   which is on while the canvas has the PSD open. The rail's tools and the
+   mode bars' toggles read the same way, so this is the third of a set. */
+.panel-btn.pressed {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.panel-btn.pressed:hover { background: var(--color-accent-600); }
 
 .inspect-empty {
   padding: 18px 16px;
@@ -607,3 +616,13 @@
   box-shadow: var(--shadow-md);
 }
 .psd-layers-foot:not(:empty) { margin-top: 4px; }
+
+/* The buttons around the list. Everything about the *file* is one row over
+   the stack it is about — it used to be three buttons in three places with
+   the list in between — and New layer is under it, where the row it makes
+   will appear. See editor/psd-layer-actions.ts. */
+.psd-layers-head { margin-bottom: 8px; }
+/* The row's buttons carry their own top margin from `.panel-btn`, which is
+   right under a paragraph and wrong directly under a heading. */
+.psd-layers-head .panel-btn { margin-top: 0; }
+.psd-layers-new .panel-btn { margin-top: 6px; }

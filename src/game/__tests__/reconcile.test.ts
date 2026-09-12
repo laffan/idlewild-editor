@@ -141,6 +141,45 @@ describe("re-parsing a PSD", () => {
     expect(paths(s).sort()).toEqual(["building", "roof"]);
   });
 
+  /**
+   * The empty layer the inspector's New layer button writes.
+   *
+   * It is real, and it is a single transparent pixel — see `psd_layers::add`.
+   * Adopting one would put an invisible placement on the grid before there
+   * was anything in it to see, and a row in the layer list for a layer with
+   * no artwork. It becomes a placement the moment somebody draws in it,
+   * because painting gives the layer the ink's own bounds.
+   */
+  it("does not adopt the placeholder an empty layer is written as", () => {
+    const s = store(placement("hut", "building"));
+    const withEmpty = JSON.stringify({
+      name: "hut",
+      width: 128,
+      height: 160,
+      layers: [
+        { name: "layer-1", category: "sprite", x: 0, y: 0, width: 1, height: 1 },
+        { name: "building", category: "sprite", x: 0, y: 0, width: 128, height: 160 },
+      ],
+    });
+    reconcilePlacements(s, grid, "hut", parseManifest(withEmpty));
+    expect(paths(s)).toEqual(["building"]);
+  });
+
+  it("adopts it once it has been drawn in", () => {
+    const s = store(placement("hut", "building"));
+    const painted = JSON.stringify({
+      name: "hut",
+      width: 128,
+      height: 160,
+      layers: [
+        { name: "layer-1", category: "sprite", x: 20, y: 20, width: 40, height: 30 },
+        { name: "building", category: "sprite", x: 0, y: 0, width: 128, height: 160 },
+      ],
+    });
+    reconcilePlacements(s, grid, "hut", parseManifest(painted));
+    expect(paths(s).sort()).toEqual(["building", "layer-1"]);
+  });
+
   it("still removes a placement whose layer has gone", () => {
     const s = store(placement("hut", "chimney"));
     reconcilePlacements(s, grid, "hut", parseManifest(GROUPED));

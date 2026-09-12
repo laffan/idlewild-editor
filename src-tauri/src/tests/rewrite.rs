@@ -398,14 +398,13 @@ fn a_grouped_file_round_trips_through_the_layer_list() {
         // tree's shape alone.
         let edits: Vec<LayerEdit> = [0usize, 1, 2, 4, 3, 5]
             .iter()
-            .map(|&at| LayerEdit {
-                index: at,
-                name: if at == 5 {
+            .map(|&at| {
+                let name = if at == 5 {
                     "S | base-abc".to_string()
                 } else {
                     list.layers[at].name.clone()
-                },
-                depth: list.layers[at].depth,
+                };
+                LayerEdit::keep(at, name, list.layers[at].depth)
             })
             .collect();
         psd_layers::write(id, "extrude-abc", &edits, |_| {}).expect("the rewrite should land");

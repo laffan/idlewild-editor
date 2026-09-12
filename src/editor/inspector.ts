@@ -25,7 +25,6 @@ import {
   fillColliderSection,
 } from "./inspect-collider";
 import { scaleOf, sizeControls } from "./inspect-transform";
-import { openPsdLabel, refreshPsdLabel } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
 import { instanceMembers, instanceOf } from "../game/instance";
@@ -40,19 +39,8 @@ export interface InspectorCallbacks {
   onToggleCollider: (key: string, blocking: boolean) => void;
   /** Open the selected PSD's collider up to be drawn on the grid. */
   onEditCollider: () => void;
-  /** Hand the PSD to the OS: a desktop editor, or an iPadOS share sheet. */
-  onOpenPsd: (key: string) => void;
-  /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
-  onRefreshPsd: (key: string) => void;
   /** Rename the file behind a placement. `name` is the stem, without ".psd". */
   onRenamePsd: (key: string, name: string) => void;
-  /**
-   * Open the selected PSD up into its own layers, or close it again.
-   *
-   * The canvas gesture is a double-tap, which nothing on screen says; this is
-   * the same switch where someone would look for it.
-   */
-  onToggleLayerAdjust: () => void;
   onDeleteSelection: () => void;
   /**
    * Get rid of a whole document layer, and everything drawn on it.
@@ -96,8 +84,6 @@ export class Inspector {
   private readonly store: DocStore;
   private readonly grid: Grid;
   private readonly callbacks: InspectorCallbacks;
-  /** `std::env::consts::OS`; only the PSD buttons read it. */
-  private readonly platform: string;
   private selection: Selection = { kind: "none" };
   /** Set while a drawing tool holds the pointer, so the panel can offer the
    *  brush instead of an empty state nobody can act on. */
@@ -116,15 +102,9 @@ export class Inspector {
   /** The placed PSD opened up into its layers, if any — see `game/instance.ts`. */
   private adjusting: string | null = null;
 
-  constructor(
-    store: DocStore,
-    grid: Grid,
-    platform: string,
-    callbacks: InspectorCallbacks,
-  ) {
+  constructor(store: DocStore, grid: Grid, callbacks: InspectorCallbacks) {
     this.store = store;
     this.grid = grid;
-    this.platform = platform;
     this.callbacks = callbacks;
 
     this.body = h("div", { class: "panel-body scroll" });
@@ -530,9 +510,12 @@ export class Inspector {
       );
     }
 
-    // Whether the canvas is treating this as one thing or as its layers, and
-    // the switch between them. Only worth saying for a PSD that has more than
-    // one placed layer; a single-layer file is a unit of one either way.
+    // Whether the canvas is treating this as one thing or as its layers. The
+    // switch between them used to be a note of its own up here, a long way
+    // from the list of layers it is about; it is a button over that list now,
+    // and what is left here is the sentence saying which state the canvas is
+    // in. Only worth saying for a PSD with more than one placed layer — a
+    // single-layer file is a unit of one either way.
     const members = instanceMembers(
       this.store.layers,
       layerId,
@@ -548,11 +531,6 @@ export class Inspector {
             text: open
               ? `Adjusting layers · ${members.length} in this PSD`
               : `${members.length} layers · moves as one`,
-          }),
-          h("button", {
-            class: "panel-btn",
-            text: open ? "Done adjusting" : "Adjust layers",
-            onClick: () => this.callbacks.onToggleLayerAdjust(),
           }),
         ),
       );
@@ -600,30 +578,18 @@ export class Inspector {
     this.row("Source", `${Math.round(source.w)} × ${Math.round(source.h)} px`);
     this.row("Scale", `${Math.round(scaleOf(placement) * 100)}%`);
 
-    // The stack inside the file. It sits above the buttons that send the file
-    // out, because most of what anyone opened Photoshop for — reordering,
-    // renaming, changing a sprite to a tileset — can be done here instead.
+    // The stack inside the file, and — over it — every button that is about
+    // the file rather than about this placement of it: open it up on the
+    // canvas, send it out to Photoshop, bring the edits back. They were in
+    // three different places in this panel, with the list they are all about
+    // in between; they are one row directly above it now. See
+    // psd-layer-actions.ts.
     this.body.appendChild(this.psdLayerSection(placement.psdKey));
+    this.psdLayers?.setAdjust({ members: members.length, adjusting: open });
 
-    // Editing a PSD elsewhere is a round trip out of the app and back, so the
-    // two halves sit together on one row: send it out, then bring the edits
-    // in. What each one does depends on the platform — see psd-actions.
+    // What is left down here is about the placement rather than the file.
     this.section();
     this.current.append(
-      h(
-        "div",
-        { class: "panel-btn-row" },
-        h("button", {
-          class: "panel-btn",
-          text: openPsdLabel(this.platform),
-          onClick: () => this.callbacks.onOpenPsd(placement.psdKey),
-        }),
-        h("button", {
-          class: "panel-btn",
-          text: refreshPsdLabel(this.platform),
-          onClick: () => this.callbacks.onRefreshPsd(placement.psdKey),
-        }),
-      ),
       h("button", {
         class: "panel-btn",
         text:

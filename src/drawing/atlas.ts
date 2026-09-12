@@ -32,13 +32,22 @@ export interface BrushDef {
   url: string;
 }
 
-/** Hush ships five; the id is what a stroke stores. */
+/**
+ * Hush ships five; the id is what a stroke stores.
+ *
+ * Two of the names were on the wrong tips: brush 2 is the grainy one and
+ * brush 5 the wet, even-edged one, which is Charcoal and Marker the other way
+ * round. Only the *names* are swapped here. Swapping the masks instead would
+ * repaint every stroke already drawn — a stroke records `brushId` and nothing
+ * else about its tip — so the numbers on the buttons stay where they are and
+ * the labels move.
+ */
 export const BRUSHES: readonly BrushDef[] = [
   { id: 1, name: "Ink", url: brush1 },
-  { id: 2, name: "Marker", url: brush2 },
+  { id: 2, name: "Charcoal", url: brush2 },
   { id: 3, name: "Pencil", url: brush3 },
   { id: 4, name: "Dry brush", url: brush4 },
-  { id: 5, name: "Charcoal", url: brush5 },
+  { id: 5, name: "Marker", url: brush5 },
 ];
 
 export interface TintedAtlas {

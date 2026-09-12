@@ -25,12 +25,10 @@ import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
 import { createShell } from "./shell";
-import { createPsdFileActions } from "./psd-actions";
-import { PsdLayerEditor, psdLayerOwner } from "./psd-layers";
+import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
-import { createExtrudeUi } from "./extrude";
-import { createColliderUi } from "./collider";
+import { createCanvasModeUis } from "./canvas-mode-ui";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { confirmDeleteLayer } from "./layer-actions";
 import { openAddImage, openExportSelection, openPublish } from "./sheets";
@@ -100,21 +98,14 @@ export async function mountEditor(
     },
   });
 
-  const inspector = new Inspector(store, grid, os, {
+  const inspector = new Inspector(store, grid, {
     onFillColor: (color) => applyFillColour(color),
     onToggleWalkable: (walkable) => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "fill") return;
       store.updateFill(selection.layerId, selection.fillId, { walkable });
     },
-    onOpenPsd: (key) => void psdFile.open(key),
-    onRefreshPsd: (key) => void psdFile.refresh(key),
     onRenamePsd: (key, name) => void psdFile.rename(key, name),
-    onToggleLayerAdjust: () => {
-      if (!handle) return;
-      if (handle.scene.adjustingInstance) handle.scene.stopAdjusting();
-      else handle.scene.startAdjusting();
-    },
     onToggleCollider: (key, blocking) => collider.setBlocking(key, blocking),
     onEditCollider: () => collider.open(),
     onStrokesToPsd: () => void strokesToPsd(),
@@ -123,15 +114,9 @@ export async function mountEditor(
     onRemoveReference: (key) => void removeReference(key),
     // Renaming a layer changes the path a placement reads, so the rename map
     // travels with the manifest — see reconcilePlacements.
-    createPsdLayers: (key) =>
-      new PsdLayerEditor(meta.id, key, {
-        onWritten: (manifest, renames) =>
-          void psdFile.applyLayers(key, manifest, renames),
-        // The marks and an extrusion's artwork are the app's to name, and the
-        // extrusion's row is the way back into the mode that built it.
-        ownerOf: (layer) =>
-          psdLayerOwner(layer, key, !!store.extrusion(key), () => extrude.resume()),
-      }),
+    // Every button in the PSD section, wired in psd-actions.ts beside the
+    // rest of what happens to the file behind a placement.
+    createPsdLayers: (key) => psdLayers(key),
     onStrokeStyle: (patch) => {
       if (!drawing) return;
       drawing.style = { ...drawing.style, ...patch };
@@ -181,6 +166,19 @@ export async function mountEditor(
     inspector,
   });
 
+  // And the list of the file's layers, which is where all of those buttons
+  // now are. Built through a factory rather than inline because the inspector
+  // asks for one per key, and it needs half the shell to answer.
+  const psdLayers = createPsdLayersFactory({
+    projectId: meta.id,
+    os,
+    store,
+    file: psdFile,
+    scene: () => handle?.scene ?? null,
+    onExtrude: () => extrude.resume(),
+    onPen: (key, layer) => pen.open(key, layer),
+  });
+
   const actions = new SelectionActions(grid, {
     onFill: () => handle?.scene.fillSelection(inspector.fillColor, false),
     onAddImage: () => {
@@ -212,28 +210,27 @@ export async function mountEditor(
     onExtrude: () => extrude.open(),
   });
 
-  // Extrude mode: the bar along the bottom of the canvas, and the two ways
-  // out of it. The mode itself is the scene's — see game/extrude-mode.ts.
-  const extrude = createExtrudeUi({
+  // The three bars along the bottom of the canvas — a solid being pulled out
+  // of the grid, a collider painted on it, a PSD layer drawn into. The modes
+  // themselves are the scene's; see editor/canvas-mode-ui.ts for what the
+  // shell owes them.
+  const modes = createCanvasModeUis({
     projectId: meta.id,
     store,
     grid,
     host: canvasWrap,
     scene: () => handle?.scene ?? null,
+    drawing: () => drawing,
     useSelectTool: () => applyTool("select", false),
+    usePencil: () => applyTool("pencil", false),
+    inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
+    onPsdWritten: async (key, manifest) => {
+      await handle?.scene.reloadPsd(key, manifest);
+      inspector.reloadPsdLayers(key);
+    },
   });
-
-  // Collider mode: the other bar along the bottom, entered from the
-  // inspector's Collider section rather than from a selection, because a
-  // collider is about a file that is already on the grid.
-  const collider = createColliderUi({
-    store,
-    grid,
-    host: canvasWrap,
-    scene: () => handle?.scene ?? null,
-    useSelectTool: () => applyTool("select", false),
-  });
+  const { extrude, collider, pen } = modes;
 
   // Pencil, eraser and lasso hand the pointer to the drawing layer; select
   // and pan leave it with the game canvas and its gesture arbiter.
@@ -398,6 +395,7 @@ export async function mountEditor(
         void psdFile.detach(layerId, placementId, key),
       onExtrudeChange: () => extrude.sync(),
       onColliderChange: () => collider.sync(),
+      onPenChange: () => pen.sync(),
     },
     render.options,
   );
@@ -662,8 +660,7 @@ export async function mountEditor(
     layers.destroy();
     inspector.destroy();
     gameFrame.destroy();
-    extrude.destroy();
-    collider.destroy();
+    modes.destroy();
     drawing?.destroy();
     drawing = null;
     code.destroy();

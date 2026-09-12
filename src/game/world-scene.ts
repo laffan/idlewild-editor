@@ -59,6 +59,8 @@ export interface WorldSceneConfig {
   onExtrudeChange?: () => void;
   /** Collider mode has started, finished, or changed the spaces it holds. */
   onColliderChange?: () => void;
+  /** Pen mode has started or finished. */
+  onPenChange?: () => void;
 }
 
 const MIN_ZOOM = 0.1;
@@ -143,6 +145,7 @@ export class WorldScene extends Phaser.Scene {
       scene: this,
       grid: this.grid,
       zoom: () => this.cameras.main.zoom,
+      camera: () => this.cameras.main,
       worldAt: (x, y) => this.worldAt(x, y),
       clearSelection: () => {
         this.marquee.cancel();
@@ -150,6 +153,7 @@ export class WorldScene extends Phaser.Scene {
       },
       onExtrudeChange: () => this.config.onExtrudeChange?.(),
       onColliderChange: () => this.config.onColliderChange?.(),
+      onPenChange: () => this.config.onPenChange?.(),
     });
 
     const saved = this.store.activeScene.camera;
@@ -248,6 +252,10 @@ export class WorldScene extends Phaser.Scene {
 
   override update(_time: number, _delta: number): void {
     this.gridRenderer.update(this.cameras.main);
+    // Pen mode's dim is cut out of what the camera can see, so it follows the
+    // camera the way the lattice does — a pan moves it as surely as a zoom.
+    // A no-op while the mode is down.
+    this.modes.pen.refresh();
     this.publishViewport();
   }
 

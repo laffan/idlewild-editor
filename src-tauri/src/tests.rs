@@ -8,7 +8,8 @@
 //! Neighbours split off for the 700-line rule, sharing only the store they
 //! create projects in and `swatch`. `marks` is the orienting marks an import
 //! writes and psd-to-json reports back. `rewrite` is what a *second* write to
-//! the same file has to keep. `scaffolds` is what a *project* is made of —
+//! the same file has to keep. `painting` is the two writes pen mode makes —
+//! a layer added to a file, and ink laid into one. `scaffolds` is what a *project* is made of —
 //! the starter document, the runnable game each template selection writes,
 //! what an export carries, and the tree the code modal edits. `options` is the
 //! per-project settings — pixel-perfect rendering, the default zoom, and the
@@ -18,6 +19,7 @@ mod archive;
 mod config;
 mod marks;
 mod options;
+mod painting;
 mod rewrite;
 mod scaffolds;
 mod server;
@@ -560,9 +562,9 @@ fn psd_layers_can_be_reordered_and_renamed() {
 
         // Write: put the sprite on top and rename it, leaving the rest alone.
         let edits = vec![
-            LayerEdit { index: 2, name: "T | hut".into(), depth: 0 },
-            LayerEdit { index: 0, name: "P | anchor".into(), depth: 0 },
-            LayerEdit { index: 1, name: "Z | grid".into(), depth: 0 },
+            LayerEdit::keep(2, "T | hut".into(), 0),
+            LayerEdit::keep(0, "P | anchor".into(), 0),
+            LayerEdit::keep(1, "Z | grid".into(), 0),
         ];
         let manifest = psd_layers::write(id, "hut", &edits, |_| {})
             .expect("rewrite should succeed");
@@ -598,7 +600,7 @@ fn psd_layers_can_be_reordered_and_renamed() {
         assert!(psd_layers::write(
             id,
             "hut",
-            &[LayerEdit { index: 99, name: "S | x".into(), depth: 0 }],
+            &[LayerEdit::keep(99, "S | x".into(), 0)],
             |_| {},
         )
         .is_err());

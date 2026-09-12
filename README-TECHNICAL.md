@@ -39,6 +39,7 @@ Extension of [README.md](README.md).
 │                        Rust backend                            │
 │  store.rs        per-project directories on disk               │
 │  psd_write.rs    image / RGBA → PSD  (psd fork, write half)    │
+│  psd_paint.rs    ink → a layer already in a PSD                │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
 │  templates.rs    per-genre scaffolds, per-projection grid      │
@@ -383,7 +384,7 @@ So a caller can say three things about a write:
 | | What it means | Where |
 |---|---|---|
 | *(nothing)* | one step | every ordinary mutation |
-| `history.begin()` / `end()` | the writes between them are one step | `game/drag.ts`, and either end of a gesture in both canvas modes |
+| `history.begin()` / `end()` | the writes between them are one step | `game/drag.ts`, either end of a gesture in extrude and collider mode, and pen mode's Apply |
 | `history.group(fn)` | the same, when the writes are in one place | placing a PSD, Apply, the two conversions |
 | `history.silence(fn)` | not the user's edit; leave no step | the migrations that run on open |
 
@@ -462,6 +463,13 @@ So each mode holds an `UndoHistory` of its own, over the value it is editing —
 `ExtrudeState` for one, the collider's set of grid spaces for the other. The
 same snapshot argument applies for the same reason, and collider mode's spaces
 were made replace-rather-than-mutate to earn it.
+
+**Pen mode is the exception, and for the same reason read the other way.** Its
+work is ordinary strokes on an ordinary document layer, so the document's
+history has everything to take back and ⌘Z inside the mode undoes a stroke at
+a time, which is exactly what it should do. That is also what makes its Cancel
+safe: throwing the session's ink away is a document edit, so it is one press
+of undo from coming back.
 
 **A step is a pull or a rub, not a frame of one and not taking hold of a
 face.** A sweep rebuilds the shape from its base on every pointer move, so the
@@ -797,7 +805,7 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 | Projects | `list_projects`, `create_project`, `rename_project`, `delete_project`, `duplicate_project`, `read_project_meta` |
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
 | Game tree | `list_game_files`, `read_game_file`, `write_game_file`, `create_game_file`, `create_game_dir`, `move_game_path`, `copy_game_path`, `delete_game_path` |
-| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `rename_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `rename_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `add_psd_layer`, `paint_psd_layer`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
 | Publish | `publish_zip`, `save_bytes` |
 | Server | `get_server_port`, `platform` |
 
@@ -1000,8 +1008,22 @@ order is draw order, and the name carries the pipe convention, so renaming
 `S | tower` to `T | tower` is what turns a sprite into a tileset. Neither is
 worth a round trip out to Photoshop and back.
 
-`src-tauri/src/psd_layers.rs` reads the stack and rewrites it;
-`src/editor/psd-layers.ts` is the list.
+`src-tauri/src/psd_layers.rs` reads the stack and rewrites it,
+`src-tauri/src/psd_rebuild.rs` turns an edit list back into a file, and
+`src/editor/psd-layers.ts` is the list — with `psd-layer-row.ts` for a row,
+`psd-layer-owner.ts` for whose names the app owns, and
+`psd-layer-actions.ts` for the buttons around it.
+
+**Every button about the file is one row over the list.** Adjust layers used
+to be a note near the top of the inspector, beside the filename; Open PSD and
+Re-parse were at the very bottom, under the stack. Three buttons about the
+same file, in three places, with the list they are all about in between. They
+are one row directly above it now, and what is left where Adjust layers was is
+the sentence saying which state the canvas is in — a fact rather than a
+control. The list is built once per key and kept across the inspector's
+re-renders, so whether the canvas has the PSD open is *pushed in*
+(`setAdjust`) rather than read: it changes without the file changing, because
+a double-tap on the canvas opens one up.
 
 **A rename is a full rebuild.** The `psd` fork has no way to edit a layer
 record in place — it writes a file by rebuilding it from RGBA — so a rewrite
@@ -1470,6 +1492,43 @@ is replaced by `StrokeStore`, which keeps only what the engine needs and
 writes through to the game document, so strokes persist with the project and
 appear in the layer panel's counts. Hush's load-bearing invariant comes with
 it: strokes are immutable once stored.
+
+### Smoothing, which is not the streamline
+
+Two different things, and conflating them is why the slider needed a second
+stage. The **streamline** is a fixed part of how the ink feels — `render.ts`
+lags the pointer a little so a stamp chain reads as a stroke — and turning it
+up does not produce a straight line, it produces a line that trails further
+behind the hand. What the slider asks for is something the hand cannot do: at
+100, only straight lines.
+
+So `smoothPoints` is two stages. `relax` is Laplacian passes with the ends
+pinned, more of them the higher the setting, which takes a tremor out without
+moving where the line goes. `straighten` then pulls every point towards where
+it would sit on the chord between the two ends — spaced by distance *along*
+the stroke rather than by index, so the stamps stay evenly spread as the curve
+flattens — and at weight 1 every point lands exactly on that line. The weight
+is the square of the setting, so the first half of the slider is nearly all
+tremor-removal and the pull towards the line comes in over the second. The
+endpoints never move under either stage: a line that started somewhere other
+than where the pen went down is a line that ignored you.
+
+It is applied **as the samples are recorded**, in `beginDraw`, not at render
+time — so `StrokeStyle` carries it and `Stroke` does not. What the document
+stores is the line that was on the screen, the way a ruler leaves a straight
+line behind rather than a note saying one was used. It also means the live
+preview *is* the result: at 100 the line under the pointer is already the
+straight one it will become, which is the only way a setting like this can be
+aimed.
+
+### Two brushes were wearing each other's names
+
+Brush 2 is the grainy tip and brush 5 the wet, even-edged one — Charcoal and
+Marker the other way round from how `atlas.ts` had them labelled. Only the
+*names* were swapped. A stroke records `brushId` and nothing else about its
+tip, so swapping the masks instead would have repainted every drawing already
+in every project; the numbers on the buttons stay where they are and the
+labels move.
 
 ### Why the ink is baked, not repainted
 
@@ -2757,6 +2816,140 @@ PSD can stand in more than one scene and blocks the same spaces in each. So
 the export hands every scene the same map, and the backfill on open covers
 every scene's keys rather than the open scene's — a file standing somewhere
 nobody has looked at this session is still in the published game.
+
+## Pen mode
+
+Drawing straight into one layer of a PSD, from the canvas, without a trip out
+to Photoshop. Entered from the pen on a sprite row of the inspector's layer
+list — the same place, and the same idea, as the cube on an extrusion's row.
+
+`game/pen-mode.ts` is the state, `game/pen-render.ts` the frame and the dim,
+`editor/pen.ts` the session, `editor/pen-bar.ts` the bar, and
+`src-tauri/src/psd_paint.rs` the pixels.
+
+### The frame is the document, not the artwork
+
+A placement's outline is **one layer's pixels cropped to what is in them**,
+and that is not where the PSD ends. Everything this editor writes gets a grid
+space of clear canvas around it — see *Room around what a conversion writes* —
+and a multi-layer file's canvas is bigger than any one of its layers by
+construction. So a frame drawn from the placement would sit inside the
+document by most of a grid space, and it is a boundary somebody is going to
+draw right up against.
+
+`canvasBox` in `lib/manifest.ts` is `placedPosition` run over the canvas
+corner instead of a layer: put the file's anchor mark on the placement's grid
+space, step back by where that mark sits inside the canvas, and take the
+canvas's own size — all scaled by how big the artwork is being shown against
+its own pixels. It needs the manifest, which is read from disk on the way in,
+because a placement knows how big its own layer is and nothing at all about
+the document around it.
+
+### It owns no pointer
+
+This is where it parts company with the other two canvas modes. Extrude and
+collider are made of gestures; pen mode is made of a rectangle. What draws in
+it is the drawing layer — a stack of 2D canvases over Phaser's, with a pencil,
+five brushes, an eraser and pressure already on it — so entering picks the
+Pencil and the ink goes where ink always goes.
+
+It still claims every gesture in `canvas-modes.ts`, and returns true without
+doing anything with them. That is not an oversight: the rail stays reachable
+while the mode is up, and a drag made with Select under the dim would move the
+very artwork being drawn on, sliding the file out from under a frame that was
+worked out when the mode opened.
+
+### Which strokes are the session's
+
+The ink that was not there when the mode opened. `editor/pen.ts` remembers the
+stroke ids on the document layer at the start and takes everything else on it
+at the end. One honest edge: erase a stroke that was already there and its
+surviving halves are new strokes, so they count as the session's. Both
+readings are defensible and this one is at least simple to say out loud.
+
+Both ways out consume it. Apply rasterises and writes; Cancel discards. Neither
+leaves ink lying over the artwork, which is what a mode that framed a file and
+then left a copy of the drawing on top of it would do — and Cancel is an
+ordinary document edit, so ⌘Z brings the strokes back.
+
+### The ink goes in at the file's resolution
+
+`rasteriseStrokes` is asked for `1 / scale` pixels per world unit, where
+`scale` is the placement's. Every import lands at half size, so a stroke drawn
+on the glass is stamped into the document at twice the size it was drawn —
+the same bargain `EXPORT_SCALE` makes in `import-anchor.ts`, arrived at from
+the other direction. Rasterising at screen resolution and letting the file
+scale it up would put half the detail in the PSD.
+
+### Compositing happens in Rust
+
+The editor could composite against the sprite psd-to-json exported, but that
+PNG is quantised on the way out (`png_quality_range`), so a round trip through
+it would degrade the artwork a little every time anybody drew on the layer.
+The layer's real pixels are only in the PSD, so `psd_paint::over` does a plain
+Porter-Duff `over` on straight alpha — which is what `LayerBuilder` takes and
+what `PsdLayer::rgba` hands back — on the rectangle covering both, and the
+layer grows to hold what it had and what was added.
+
+Two rules are decisions rather than mechanics. **Ink is laid over, not
+instead of**: a layer painted into keeps what was in it. And **a blank layer
+has no rectangle worth keeping**: an empty layer is a single transparent pixel
+at the origin, and treating that pixel as part of the artwork would leave
+every layer drawn into from scratch carrying a transparent margin back to the
+corner of the canvas.
+
+Ink that falls outside the canvas is trimmed rather than refused — the frame
+is a boundary to work inside, not a wall — and Apply is disabled until some of
+it is inside, because a write that trimmed everything away would rebuild the
+file and re-run the whole pipeline to change nothing.
+
+### Naming the row, twice
+
+`paint_psd_layer` takes the row's `index` **and** the name it was showing, and
+checks both. The two are only in step for as long as nobody else has rewritten
+the file, and a paint against a stale index would put somebody's drawing into
+the wrong layer — the one failure here that would be completely silent.
+
+### The dim follows the camera
+
+`extrude-render.ts` pins its scrim to the screen with `setScrollFactor(0)` and
+makes it big enough for any viewport. Pen mode's cannot: it has a hole in it,
+the hole is in world space, and Phaser's Graphics has no even-odd fill — so
+the dim is four rectangles around the gap, in world units.
+
+Sizing those from a constant large enough for the widest possible view (the
+camera zooms out to 0.1, so a viewport is thousands of world units across)
+puts tens of thousands of units of geometry through the batch and comes back
+with holes in it. So the rectangles are cut from `camera.worldView` instead,
+grown by an overdraw, and redrawn every frame from the scene's `update` — four
+`fillRect`s, which is cheaper than working out when a pan or a zoom needed
+them.
+
+## Adding a layer, and the empty one
+
+`New layer` under the stack writes an empty sprite layer onto the top of the
+file and re-parses, through `psd_layers::add`.
+
+It is written **straight away** rather than held with the pending renames and
+reorders above it, because the point of the row is to have somewhere to draw
+and pen mode can only put ink in a layer the file really has. The file is read
+again afterwards, so a half-typed rename waiting for Apply is lost — which is
+why the button goes quiet while the write is in flight rather than trying to
+merge the two.
+
+The layer holds **one transparent pixel**. A layer of no pixels is not
+something the fork will write, and a layer the size of the canvas would arrive
+on the grid as a placement covering the whole file: invisible, and swallowing
+every click over the artwork under it. One pixel is the smallest honest
+placeholder, and `adoptNewLayers` skips a manifest layer of one pixel or less
+for exactly that reason — it becomes a placement the moment somebody draws in
+it, because painting replaces the blank rectangle with the ink's own.
+
+`add` and `paint` are both expressed as **edit lists against the file's own
+order** and go through the same rebuild a rewrite does — `psd_rebuild.rs`,
+split out of `psd_layers.rs` once three operations ended there. `LayerEdit`
+grew two optional fields for it: an absent `index` is a row the file does not
+have yet, and `paint` is ink to lay over whatever the row already holds.
 
 ## The iPad's safe area
 

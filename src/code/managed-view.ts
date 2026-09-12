@@ -198,6 +198,32 @@ function harms(
   return false;
 }
 
+/**
+ * The banner offering to put in blocks a file has never had.
+ *
+ * Beside `ResetWidget` because they are the two halves of the same idea: one
+ * puts a marked run back the way the editor wrote it, and this one offers a
+ * run that was never there to put back. Empty markup for an empty list, so
+ * the caller has one thing to do with the answer either way.
+ */
+export function missingBlocksRow(
+  ids: readonly string[],
+  onAdd: () => void,
+): Node[] {
+  if (ids.length === 0) return [];
+  const said = document.createElement("span");
+  said.textContent =
+    `This file is missing ${ids.length} ` +
+    `${ids.length === 1 ? "block" : "blocks"} the editor maintains: ` +
+    `${ids.join(", ")}.`;
+  const button = document.createElement("button");
+  button.className = "code-repair-btn";
+  button.type = "button";
+  button.textContent = "Add them";
+  button.addEventListener("click", () => onAdd());
+  return [said, button];
+}
+
 /** The Reset beside a block's opening marker. */
 class ResetWidget extends WidgetType {
   private readonly blockId: string;

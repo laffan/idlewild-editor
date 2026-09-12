@@ -14,6 +14,7 @@ import type { StrokeStore } from "./stroke-store";
 import type { Surface } from "./surface";
 import {
   sliceStroke,
+  smoothPoints,
   strokeBox,
   strokeInPolygon,
   streamlinePoints,
@@ -46,9 +47,16 @@ export function beginDraw(
 ): ToolSession {
   const points: InkPoint[] = [{ x, y, pressure }];
 
+  // The samples as the stroke will be *kept*, which is also what is drawn
+  // while it is in flight. Smoothing is applied here rather than at render
+  // time so the ink under the pointer is the ink that lands in the document —
+  // at 100 the preview is already the straight line it will become, which is
+  // the only way a setting like this can be aimed.
+  const shaped = () => smoothPoints(points, style.smoothing);
+
   const paint = () => {
     const ctx = surface.beginLive();
-    renderLive(ctx, streamlinePoints(points, STREAMLINE), style, atlas);
+    renderLive(ctx, streamlinePoints(shaped(), STREAMLINE), style, atlas);
     surface.endLive();
   };
   paint();
@@ -68,7 +76,7 @@ export function beginDraw(
         // needs before it draws anything but a single stamp.
         points.push({ x: points[0].x + 0.01, y: points[0].y, pressure });
       }
-      store.add(toFlat(points), style);
+      store.add(toFlat(shaped()), style);
     },
   };
 }

@@ -132,6 +132,19 @@ export interface PsdLayerEdit {
   depth: number;
 }
 
+/**
+ * A rectangle of ink to lay into one layer of a PSD, in the file's own
+ * pixels — what pen mode applies. See src-tauri/src/psd_paint.rs.
+ */
+export interface PsdPaint {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** RGBA8, `width * height * 4` bytes. */
+  rgbaBase64: string;
+}
+
 /** One raster layer of a generated group. The name is the exported one. */
 export interface PsdPart {
   name: string;
@@ -395,6 +408,28 @@ export const psd = {
    */
   writeLayers: (id: string, key: string, layers: PsdLayerEdit[]) =>
     invoke<string>("write_psd_layers", { id, key, layers }),
+  /**
+   * Put an empty sprite layer on the top of the stack, and re-parse.
+   *
+   * It arrives holding a single transparent pixel — a real row to rename,
+   * reorder or draw into, and nothing for the game to draw yet.
+   */
+  addLayer: (id: string, key: string) =>
+    invoke<string>("add_psd_layer", { id, key }),
+  /**
+   * Lay ink into one layer of the file, over whatever it already holds.
+   *
+   * `index` is a row of the list `readLayers` returned and `name` is what it
+   * was called then; Rust checks both, because a paint against a stale index
+   * would silently draw into the wrong layer.
+   */
+  paintLayer: (
+    id: string,
+    key: string,
+    index: number,
+    name: string,
+    paint: PsdPaint,
+  ) => invoke<string>("paint_psd_layer", { id, key, index, name, paint }),
   reprocess: (id: string, key: string, options?: Record<string, unknown>) =>
     invoke<string>("reprocess_psd", { id, key, options }),
   /** Overwrite `<key>.psd` with another file and run the pipeline again. */

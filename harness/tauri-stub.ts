@@ -451,6 +451,56 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       stack.splice(0, stack.length, ...next);
       return psdManifest(key, stack);
     }
+    // What pen mode reads to work out where the file's canvas falls on the
+    // grid — the document's own size and its anchor mark, which is a
+    // different question from where any one layer's artwork is.
+    case "read_psd_manifest": {
+      const key = String((args as any).key);
+      return psdManifest(key, key === "tower" ? PSD_LAYERS : generatedStack(key));
+    }
+    // The two writes pen mode is built on. Both edit the stack this stub
+    // keeps for the key, so a script can add a layer, draw into it, and read
+    // the file's shape back the way the reorder paths already can.
+    case "add_psd_layer": {
+      const key = String((args as any).key);
+      const stack = key === "tower" ? PSD_LAYERS : generatedStack(key);
+      // One transparent pixel at the origin, as `psd_layers::add` writes it.
+      const taken = new Set(
+        stack.map((l) => l.name.split("|")[1]?.trim().toLowerCase()),
+      );
+      let n = 1;
+      while (taken.has(`layer-${n}`)) n++;
+      stack.unshift({ name: `S | layer-${n}`, x: 0, y: 0, width: 1, height: 1 });
+      return psdManifest(key, stack);
+    }
+    case "paint_psd_layer": {
+      const a = args as any;
+      const key = String(a.key);
+      const stack = key === "tower" ? PSD_LAYERS : generatedStack(key);
+      const row = stack[Number(a.index)];
+      if (!row || row.name !== a.name) {
+        throw new Error(`No layer ${a.index} named ${a.name} in ${key}.psd`);
+      }
+      (window as any).__lastPaint = {
+        key, index: Number(a.index), name: String(a.name),
+        x: a.paint.x, y: a.paint.y,
+        width: a.paint.width, height: a.paint.height,
+      };
+      // A blank layer has no rectangle worth keeping, so the first stroke
+      // replaces it outright — see src-tauri/src/psd_paint.rs.
+      const blank = row.width <= 1 && row.height <= 1;
+      const left = blank ? a.paint.x : Math.min(row.x, a.paint.x);
+      const top = blank ? a.paint.y : Math.min(row.y, a.paint.y);
+      row.width = blank
+        ? a.paint.width
+        : Math.max(row.x + row.width, a.paint.x + a.paint.width) - left;
+      row.height = blank
+        ? a.paint.height
+        : Math.max(row.y + row.height, a.paint.y + a.paint.height) - top;
+      row.x = left;
+      row.y = top;
+      return psdManifest(key, stack);
+    }
     case "reprocess_psd":
       // A layer the artist added in Photoshop before saving. Pushed onto the
       // real stack, because the point of a re-parse is that the file on disk

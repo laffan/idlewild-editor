@@ -81,6 +81,98 @@ export function streamlinePoints(
   return out;
 }
 
+// ── smoothing ────────────────────────────────────────────────
+
+/**
+ * How many relaxation passes the slider asks for at 100.
+ *
+ * Each pass pulls every interior point a quarter of the way towards the mean
+ * of its neighbours, which is the cheapest thing that reliably takes a tremor
+ * out without moving where the line goes.
+ */
+const SMOOTH_PASSES = 14;
+
+/**
+ * Take the shake out of a drawn line, and at the top of the range straighten
+ * it outright.
+ *
+ * This is the *smoothing* slider, which is a different thing from the
+ * streamline the renderer already applies. The streamline is a fixed part of
+ * how the ink feels — it lags the pointer a little so a stamp chain reads as
+ * a stroke — and turning it up does not produce a straight line, it produces
+ * a line that trails further behind the hand. What the slider asks for is
+ * something the hand cannot do: at 100, only straight lines.
+ *
+ * So it is two stages, and the second is what makes the promise exact.
+ * `relax` smooths, taking more passes the higher the setting. `straighten`
+ * then pulls every point towards where it would sit on the straight line
+ * between the two ends, spaced by how far along the stroke it is — at weight
+ * 1 every point lands *on* that line, so a stroke drawn at 100 is a straight
+ * segment from where the pen went down to where it came up, whatever the hand
+ * did in between. The weight is the square of the setting, so the first half
+ * of the slider is nearly all tremor-removal and the pull towards the line
+ * comes in over the second.
+ *
+ * The endpoints never move under either stage: a line that started somewhere
+ * other than where the pen went down is a line that ignored you.
+ */
+export function smoothPoints(
+  raw: readonly InkPoint[],
+  smoothing: number,
+): InkPoint[] {
+  const amount = Math.min(1, Math.max(0, smoothing / 100));
+  // Two points are already a straight line, and one is a dot.
+  if (amount <= 0 || raw.length < 3) return raw.map((p) => ({ ...p }));
+  return straighten(relax(raw, Math.round(amount * SMOOTH_PASSES)), amount ** 2);
+}
+
+/** Laplacian passes with the ends pinned. Pressure is left alone. */
+function relax(points: readonly InkPoint[], passes: number): InkPoint[] {
+  let out = points.map((p) => ({ ...p }));
+  for (let pass = 0; pass < passes; pass++) {
+    const next = out.map((p) => ({ ...p }));
+    for (let i = 1; i < out.length - 1; i++) {
+      next[i].x = (out[i - 1].x + 2 * out[i].x + out[i + 1].x) / 4;
+      next[i].y = (out[i - 1].y + 2 * out[i].y + out[i + 1].y) / 4;
+    }
+    out = next;
+  }
+  return out;
+}
+
+/**
+ * Pull every point `t` of the way towards the chord between the two ends.
+ *
+ * Where a point belongs on that chord is its distance *along the stroke*
+ * rather than its index, so the stamps stay evenly spread as the curve
+ * flattens instead of bunching wherever the hand happened to slow down.
+ */
+function straighten(points: InkPoint[], t: number): InkPoint[] {
+  if (t <= 0 || points.length < 3) return points;
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  const along: number[] = [0];
+  for (let i = 1; i < points.length; i++) {
+    along.push(
+      along[i - 1] +
+        Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y),
+    );
+  }
+  const total = along[along.length - 1];
+  // Every sample in the same place: there is no chord to pull towards.
+  if (total === 0) return points;
+
+  return points.map((point, i) => {
+    const u = along[i] / total;
+    return {
+      x: lerp(point.x, first.x + (last.x - first.x) * u, t),
+      y: lerp(point.y, first.y + (last.y - first.y) * u, t),
+      pressure: point.pressure,
+    };
+  });
+}
+
 /**
  * A stable pseudo-random angle for stamp `i`, in [0, 2π).
  *

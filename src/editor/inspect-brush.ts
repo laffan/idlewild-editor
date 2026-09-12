@@ -64,22 +64,19 @@ export function brushPanel(
     brushes.appendChild(button);
   }
 
-  const readout = h("div", { class: "inspect-value", text: `${style.size} px` });
-  const size = h("input", {
-    class: "brush-size",
-    type: "range",
-    min: "1",
-    max: "48",
-    step: "1",
-    value: String(style.size),
-    // `input` rather than `change`: the ink should follow the slider.
-    onInput: (event: Event) => {
-      const next = Number((event.target as HTMLInputElement).value);
-      if (!Number.isFinite(next)) return;
-      readout.textContent = `${next} px`;
-      onStyle({ size: next });
-    },
-  });
+  const size = slider("Size", style.size, 1, 48, (next) => `${next} px`, (next) =>
+    onStyle({ size: next }),
+  );
+  // Straightening, not thickness: the two sliders are the same control and
+  // sit together, because between them they are the whole shape of a line.
+  const smoothing = slider(
+    "Smoothing",
+    style.smoothing,
+    0,
+    100,
+    (next) => (next === 100 ? "straight" : String(next)),
+    (next) => onStyle({ smoothing: next }),
+  );
 
   const picker = createColorPicker({
     value: style.color,
@@ -99,13 +96,8 @@ export function brushPanel(
       { class: "inspect-section" },
       h("div", { class: "inspect-section-title m", text: "Brush" }),
       brushes,
-      h(
-        "div",
-        { class: "inspect-row brush-row-size" },
-        h("div", { class: "inspect-key m", text: "Size" }),
-        size,
-        readout,
-      ),
+      size,
+      smoothing,
     ),
     h(
       "div",
@@ -114,6 +106,48 @@ export function brushPanel(
       picker.root,
     ),
   ];
+}
+
+/**
+ * One labelled range with its own readout, as both of the brush's numbers
+ * want to be.
+ *
+ * `format` is what the readout says, which is not always the number: the top
+ * of the smoothing range is a promise rather than a quantity, so it says
+ * *straight* there instead of 100.
+ */
+function slider(
+  label: string,
+  value: number,
+  min: number,
+  max: number,
+  format: (value: number) => string,
+  onChange: (value: number) => void,
+): HTMLElement {
+  const readout = h("div", { class: "inspect-value", text: format(value) });
+  const input = h("input", {
+    class: "brush-size",
+    type: "range",
+    min: String(min),
+    max: String(max),
+    step: "1",
+    value: String(value),
+    "aria-label": label,
+    // `input` rather than `change`: the ink should follow the slider.
+    onInput: (event: Event) => {
+      const next = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(next)) return;
+      readout.textContent = format(next);
+      onChange(next);
+    },
+  });
+  return h(
+    "div",
+    { class: "inspect-row brush-row-size" },
+    h("div", { class: "inspect-key m", text: label }),
+    input,
+    readout,
+  );
 }
 
 /** A tool with nothing to set: a heading and a sentence saying what it does. */

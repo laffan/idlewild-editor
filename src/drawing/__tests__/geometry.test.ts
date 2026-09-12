@@ -13,6 +13,7 @@ import {
   pointInPolygon,
   simplify,
   sliceStroke,
+  smoothPoints,
   strokeBox,
   strokeInPolygon,
   streamlinePoints,
@@ -83,6 +84,82 @@ describe("streamline", () => {
 
   it("holds its ground on an empty trail", () => {
     expect(streamlinePoints([], 0.5)).toEqual([]);
+  });
+});
+
+describe("smoothing", () => {
+  /** How far a point sits off the straight line between the two ends. */
+  function offChord(points: readonly InkPoint[]): number {
+    const a = points[0];
+    const b = points[points.length - 1];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    let worst = 0;
+    for (const p of points) {
+      const cross =
+        (b.x - a.x) * (a.y - p.y) - (a.x - p.x) * (b.y - a.y);
+      worst = Math.max(worst, Math.abs(cross) / length);
+    }
+    return worst;
+  }
+
+  /** A shaky run along x: every other sample a pixel off the line. */
+  function shaky(): InkPoint[] {
+    const out: InkPoint[] = [];
+    for (let x = 0; x <= 20; x++) {
+      out.push({ x, y: x % 2 === 0 ? 1 : -1, pressure: 0.5 });
+    }
+    return out;
+  }
+
+  it("changes nothing at zero", () => {
+    const raw = shaky();
+    expect(smoothPoints(raw, 0)).toEqual(raw);
+  });
+
+  it("draws a perfectly straight line at 100", () => {
+    // The promise the top of the slider makes, and the reason the second
+    // stage exists at all: relaxation alone only ever approaches this.
+    const out = smoothPoints(shaky(), 100);
+    expect(offChord(out)).toBeCloseTo(0, 9);
+  });
+
+  it("takes the wobble out in between without going straight", () => {
+    const raw = shaky();
+    const half = smoothPoints(raw, 50);
+    expect(offChord(half)).toBeLessThan(offChord(raw));
+    expect(offChord(half)).toBeGreaterThan(0);
+  });
+
+  it("never moves the two ends", () => {
+    const raw = shaky();
+    for (const amount of [25, 50, 75, 100]) {
+      const out = smoothPoints(raw, amount);
+      expect(out[0]).toEqual(raw[0]);
+      expect(out[out.length - 1]).toEqual(raw[raw.length - 1]);
+    }
+  });
+
+  it("keeps the pressure that was recorded", () => {
+    const raw = shaky().map((p, i) => ({ ...p, pressure: i / 20 }));
+    const out = smoothPoints(raw, 80);
+    expect(out.map((p) => p.pressure)).toEqual(raw.map((p) => p.pressure));
+  });
+
+  it("leaves a stroke too short to have a middle alone", () => {
+    const two: InkPoint[] = [
+      { x: 0, y: 0, pressure: 0.5 },
+      { x: 5, y: 5, pressure: 0.5 },
+    ];
+    expect(smoothPoints(two, 100)).toEqual(two);
+  });
+
+  it("survives a stroke that never left the spot it started on", () => {
+    const still: InkPoint[] = [
+      { x: 3, y: 3, pressure: 0.5 },
+      { x: 3, y: 3, pressure: 0.5 },
+      { x: 3, y: 3, pressure: 0.5 },
+    ];
+    expect(smoothPoints(still, 100)).toEqual(still);
   });
 });
 
