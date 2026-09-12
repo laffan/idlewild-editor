@@ -2168,6 +2168,53 @@ A blank project's cell is one pixel, so there the margin is the nominal grid
 size the New Game sheet set — the same fallback `size` serves everywhere else
 nothing rounds to it.
 
+The size the command **reports** is the file's, not the buffer's. The three
+commands that write a PSD from raw pixels used to echo back the raster they
+were handed, which stopped describing the file the day marks existed — the
+canvas already grew to hold the footprint beside the artwork — and the margin
+made it wrong every time. `extrude-mtx2vyzs.psd (256×320)` in the console for
+a file that is 512 × 448 is the one place the editor says how big a generated
+PSD is, so all three now measure the file the way every import path already
+did.
+
+### A placed group keeps its parts where they were
+
+`P2P.place()` hands back a Phaser **Group**, and a Group is not a container:
+its children live on the scene's own display list at their own coordinates,
+and the `setPosition` the plugin grafts on forwards one pair of numbers to
+every one of them. So a placed group put every layer inside it on the
+placement's corner. This is the same graft that flattened `setDepth` and threw
+away an extrusion's stacking; the depth half was fixed and the position half
+was not, because nothing showed it.
+
+The margin is what showed it. A raster layer's bounds in Photoshop are the box
+around its ink, so a file saved from there comes back with each part cropped
+to what it actually draws — and an extrusion's three parts are *not* the same
+picture. The shading paints the walls only, so its ink starts half a tile
+below the silhouette's: on a 2 × 2 plate pulled up three, `shapeBounds` is
+160 world pixels tall and the shading's ink is 128 of them, starting 32 down.
+The parts go into the file at one rect on purpose, and Photoshop hands them
+back at three. Painting into the clear canvas the margin leaves does the same
+thing from the other end — new ink past the artwork moves the group's own
+corner, which is the corner `placedPosition` measures the placement from. So
+the next Re-parse drew the parts stacked on one corner instead of over each
+other, and what that looks like is the whole thing jumping.
+
+`game/placed-parts.ts` reads each piece's offset off the objects the plugin
+has just made, while they still stand where the manifest put them, and every
+move afterwards is made against those offsets rather than through the group.
+The corner they are measured from is the pieces' own bounding corner, which is
+exactly the box psd-to-json gives a group — the union of the layers in it — so
+offset zero is the placement's own x and y and a single-sprite placement comes
+out where it always did.
+
+The offsets are in the PSD's own pixels, so they scale with the placement.
+That is the other half of the same bug, and it was in Known gaps: a resized
+group used to leave its parts the distance apart they were at 100%, because
+`setScale` is forwarded to each child and a child scales about its own origin.
+Positioning the parts from scaled offsets is what a Container would have done,
+without needing one.
+
 Generate PSD and the sketch conversion do not ask for one. The first is
 defined as the size and shape of the selection, and the second as the ink plus
 the spaces the ink covers; both would be saying something less true about
@@ -2885,10 +2932,11 @@ frame is the point of the JS half.
   one of them now leaves the shared texture alone rather than blanking the
   other, so the collision shows as the wrong artwork rather than none — but it
   is still a collision.
-- Resizing a placement that holds a *group* of sprites scales each child
-  about its own origin, so their relative offsets do not grow with it.
-  Scaling a composition as a unit needs a Container, and `place()` returns a
-  Group. Single-sprite placements — every converted image — are exact.
+- A placed group is still a Phaser Group rather than a Container. Its parts
+  are positioned and scaled one at a time, from the offsets they were made
+  at, which is what makes a composition move and resize as one — but there is
+  no single object underneath it, so there is nothing to rotate, clip or mask
+  as a whole.
 - Strokes are listed under a layer as one row rather than individually, and
   are the one thing that cannot be carried to another layer from the panel. A
   sketch is a few hundred strokes and each is a stroke of a pen, not an

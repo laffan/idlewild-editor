@@ -12,6 +12,7 @@ import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { convexOverlapsRect, Grid, fillShape } from "../lib/grid";
 import { instanceOf } from "./instance";
+import { applyTransform, partsOf, type PlacedPart } from "./placed-parts";
 import type {
   Cell,
   FillPatch,
@@ -107,6 +108,12 @@ export interface PlacementView {
   placement: Placement;
   layerId: string;
   object: PlacedObject;
+  /**
+   * The pieces inside it, and where each one sits. Read once, when the
+   * plugin has just made them and they still stand where the manifest put
+   * them — see `placed-parts.ts`.
+   */
+  parts: PlacedPart[];
 }
 
 export class DocRenderer {
@@ -267,8 +274,10 @@ export class DocRenderer {
         // A placement can be carried to another layer from the layer panel,
         // and the view is what any later lookup by id reads.
         view.layerId = layer.id;
-        view.object.setPosition(placement.x, placement.y);
-        applyScale(view.object, placement);
+        // Every piece at its own offset, scaled — not all of them on the
+        // placement's corner, which is what the plugin's own `setPosition`
+        // does to a group. See `placed-parts.ts`.
+        applyTransform(view.object, view.parts, placement);
         applyDepth(view.object, base + step);
         view.object.setVisible(
           layer.visible && instanceOf(placement) !== this.hidden,
@@ -293,7 +302,12 @@ export class DocRenderer {
       log.warn(`psd-to-phaser returned nothing placeable for ${placement.psdKey}`);
       return;
     }
-    this.placements.set(placement.id, { placement, layerId, object: candidate });
+    this.placements.set(placement.id, {
+      placement,
+      layerId,
+      object: candidate,
+      parts: partsOf(candidate),
+    });
     this.syncPlacements();
   }
 
@@ -444,27 +458,6 @@ export function destroyPlaced(object: PlacedObject): void {
     return;
   }
   object.destroy();
-}
-
-/**
- * Scale a placed object to its displayed size.
- *
- * `setScale` is forwarded by the plugin to the group's children, and a sprite
- * placed with `setOrigin(0, 0)` scales away from its top-left — which is the
- * corner the placement's x/y describes, so the box and the image agree.
- *
- * A group holding several sprites scales each one about its own origin, so
- * their relative offsets do not grow with it. Scaling a multi-layer
- * composition as a unit needs a Container, and `place()` returns a Group.
- */
-function applyScale(object: PlacedObject, placement: Placement): void {
-  const naturalWidth = placement.naturalWidth ?? placement.width;
-  const naturalHeight = placement.naturalHeight ?? placement.height;
-  if (!naturalWidth || !naturalHeight) return;
-  object.setScale(
-    placement.width / naturalWidth,
-    placement.height / naturalHeight,
-  );
 }
 
 export function hexToNumber(hex: string): number {

@@ -319,6 +319,12 @@ fn create_psd_from_rgba(
     let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
     std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
 
+    // The file's own size rather than the buffer's, as every import path
+    // already reports: `psd_marks::layout` grows the canvas to hold the grid
+    // footprint beside the artwork, and a conversion's margin again around
+    // both, so the raster handed in stopped describing the file the moment
+    // marks existed.
+    let (width, height) = psd_pipeline::psd_dimensions(&dest)?;
     let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
     Ok(ImportResult {
         key,
@@ -373,6 +379,9 @@ fn create_psd_group_from_rgba(
     let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
     std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
 
+    // The canvas, not the parts: an extrusion asks for a grid space of clear
+    // room around what it draws, so the file is a margin bigger on every side.
+    let (width, height) = psd_pipeline::psd_dimensions(&dest)?;
     let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
     Ok(ImportResult {
         key,
@@ -407,6 +416,8 @@ fn rewrite_psd_group_from_rgba(
         psd_write::rewrite_parts_marked(&existing, &key, width, height, &parts, &marks)?;
     std::fs::write(&path, rebuilt).map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
 
+    // And here too: carrying a shape further out grows the canvas again.
+    let (width, height) = psd_pipeline::psd_dimensions(&path)?;
     let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
     Ok(ImportResult {
         key,

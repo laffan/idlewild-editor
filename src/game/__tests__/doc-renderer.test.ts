@@ -207,3 +207,97 @@ describe("depth on a placed group", () => {
     expect(group.flattened).not.toBeNull();
   });
 });
+
+/**
+ * And the same bug in the other grafted method.
+ *
+ * `setPosition` recurses too, so a placed group put every part on the
+ * placement's own corner. That was invisible while the only groups the editor
+ * wrote were extrusions — whose three parts go into the file at one size and
+ * one offset — and stopped being invisible the day those files gained a
+ * margin to paint in: Photoshop crops a layer to its ink, so a saved
+ * extrusion comes back with its shading half a tile below its silhouette, and
+ * anything painted past the artwork moves the group's corner.
+ */
+describe("position on a placed group", () => {
+  /** A sprite the plugin has placed: at its layer's spot in the canvas. */
+  function part(x: number, y: number) {
+    return {
+      x,
+      y,
+      setPosition(nx: number, ny: number) {
+        this.x = nx;
+        this.y = ny;
+        return this;
+      },
+      setScale: () => undefined,
+      setDepth: () => undefined,
+    };
+  }
+
+  function partGroup(...children: ReturnType<typeof part>[]) {
+    return {
+      children,
+      setPosition(x: number, y: number) {
+        for (const c of this.children) c.setPosition(x, y);
+        return this;
+      },
+      setScale: () => undefined,
+      setDepth: () => undefined,
+      setVisible: () => undefined,
+      destroy: () => undefined,
+      getChildren() {
+        return this.children;
+      },
+    };
+  }
+
+  function setUp(group: ReturnType<typeof partGroup>, over: Partial<Placement> = {}) {
+    const one = { ...placement("a", "unit-1"), ...over };
+    const store = new DocStore("p", doc(one));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    renderer.attach("l1", one, group);
+    return renderer;
+  }
+
+  it("keeps each part's offset inside the placement", () => {
+    // A file back from Photoshop: shape and lines on the artwork's corner,
+    // shading cropped to its own ink half a tile down.
+    const shape = part(128, 64);
+    const shading = part(128, 128);
+    setUp(partGroup(shape, shading), {
+      x: -64,
+      y: -96,
+      width: 128,
+      height: 160,
+      naturalWidth: 256,
+      naturalHeight: 320,
+    });
+
+    expect([shape.x, shape.y]).toEqual([-64, -96]);
+    // Placed at half size, so the 64 px it hangs down in the file is 32 here.
+    expect([shading.x, shading.y]).toEqual([-64, -64]);
+  });
+
+  it("still stacks the parts when the file puts them all on one corner", () => {
+    const a = part(40, 40);
+    const b = part(40, 40);
+    setUp(partGroup(a, b), { x: 7, y: 9, naturalWidth: 32, naturalHeight: 32 });
+    expect([a.x, a.y]).toEqual([7, 9]);
+    expect([b.x, b.y]).toEqual([7, 9]);
+  });
+
+  it("moves them further apart as the placement grows", () => {
+    const shape = part(0, 0);
+    const shading = part(0, 100);
+    setUp(partGroup(shape, shading), {
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 400,
+      naturalWidth: 100,
+      naturalHeight: 200,
+    });
+    expect(shading.y).toBe(200);
+  });
+});

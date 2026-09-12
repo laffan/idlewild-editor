@@ -181,7 +181,10 @@ remaining pieces are wired to real slots rather than mocked.
 - A fill or an extrusion written out as a PSD gets a **grid space of clear
   canvas** around it, so there is somewhere to paint the eaves that hang past
   the wall. It is the canvas that grows and nothing else: the artwork keeps
-  its size and its place on the grid, and blocks exactly what it did
+  its size and its place on the grid, and blocks exactly what it did. Paint
+  into that room and Re-parse, and it comes back where you painted it: the
+  layers inside a file keep the arrangement the file gives them, however
+  Photoshop has cropped them on the way back
 - Delete removes whatever is selected
 - **Undo and redo**, from the two buttons beside Edit or from ⌘Z and ⇧⌘Z —
   the same keys on a Mac and on an iPad with a keyboard attached, and the
