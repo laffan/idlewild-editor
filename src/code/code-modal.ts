@@ -233,12 +233,14 @@ export class CodeModal {
         { class: "code-head" },
         // Where the word "Code" and the project name used to sit, and then New
         // File and New Folder: those belong over the column they create into,
-        // so they have gone there and the reference takes the left of the head.
-        this.docsButton,
+        // so they have gone there. What takes the left is where the panel goes
+        // — the one control that is about this row rather than about what is
+        // under it — and the reference sits with Close at the other end.
+        dockGroup,
         h(
           "div",
           { class: "code-head-right" },
-          dockGroup,
+          this.docsButton,
           h(
             "button",
             { class: "icon-btn", title: "Close", onClick: onClose },

@@ -3113,10 +3113,11 @@ of the screen, which is exactly what it did.
 
 ### What is in the panel's own chrome
 
-The head carries **Docs** on the left, the three placement buttons and Close on
-the right. The word "Code" and the project name were there once and said nothing
-the user did not already know a moment after opening the modal from that
-project.
+The head carries the three **placement** buttons on the left — the one control
+in here that is about this row rather than about what is inside it — and
+**Docs** with Close at the other end. The word "Code" and the project name were
+there once and said nothing the user did not already know a moment after opening
+the modal from that project.
 
 **New File and New Folder are over the column they create into**, which is where
 they belong: they read which file is open to decide where a new one goes, and
