@@ -1,18 +1,27 @@
 /**
  * Undo and redo, as the shell presents them: two buttons in the header, two
- * keystrokes, and the question of which of two histories a press means.
+ * keystrokes, and the question of which history a press means.
  *
- * There are two, and they are genuinely separate. The document's is a stack
- * of `GameDoc` snapshots (`lib/doc-history.ts`); the code editor's is
- * CodeMirror's own, per open file, and it has always been there over ⌘Z. What
- * did not exist is a rule for which one a press reaches — and with the code
- * panel pinned, both are on screen at once.
+ * There are several, and they are genuinely separate:
  *
- * **The rule is where you last worked.** Type in the editor and ⌘Z is the
- * editor's; touch the canvas, a panel or a sheet and it is the document's.
- * That is what a person means by it: undo acts on the thing you are working
- * in. The header itself is excluded from the reckoning, or pressing the
- * button would count as working in the header and make the *next* press mean
+ * - **the document's** — a stack of `GameDoc` snapshots on `DocStore`.
+ * - **the code editor's** — CodeMirror's own, per open file. It has always
+ *   been there over ⌘Z; what did not exist is a rule for when a press means
+ *   it, and with the code panel pinned both surfaces are on screen at once.
+ * - **the canvas mode's**, while one is up. Extrude and collider mode hold
+ *   their work in their own objects until Apply, so the document's history
+ *   has nothing to take back between one pull and the next: a stack that
+ *   skipped over them would be a stack with a hole in it exactly where the
+ *   work is.
+ *
+ * **The rule is where you last worked, and then what owns the canvas.** Type
+ * in the editor and ⌘Z is the editor's. Otherwise it is the canvas's — and if
+ * a mode owns the canvas it is that mode's, because while one is up there is
+ * nothing else on the canvas to edit. Leaving the mode hands it back, with
+ * the document's history exactly as the session left it.
+ *
+ * The header itself is excluded from the reckoning, or pressing the button
+ * would count as working in the header and make the *next* press mean
  * something else — and the buttons swallow their own `mousedown` so a press
  * does not take the caret out of the editor either. Closing the code panel
  * hands it back to the document.
@@ -43,8 +52,8 @@ export interface HistoryUiOptions {
   store: DocStore;
   code: CodePanel;
   header: EditorHeader;
-  /** Null until the game has booted, which is after this is built. */
-  scene: () => WorldScene | null;
+  /** The scene, which is up by the time this is built. */
+  scene: WorldScene;
 }
 
 export interface HistoryUi {
@@ -53,28 +62,70 @@ export interface HistoryUi {
   destroy: () => void;
 }
 
+/**
+ * All this needs of a stack: whether it can move, and moving it.
+ *
+ * The three it routes between hold different things — a document, a solid, a
+ * set of grid spaces — and none of that reaches this far, so it asks for the
+ * four members it uses rather than for `UndoHistory<something>`.
+ */
+interface Steppable extends EventTarget {
+  readonly canUndo: boolean;
+  readonly canRedo: boolean;
+  undo(): boolean;
+  redo(): boolean;
+}
+
 /** What the button titles call each surface. */
 const CANVAS = "the canvas";
 const CODE = "the open file";
+const EXTRUDE = "the extrusion";
+const COLLIDER = "the collider";
 
 export function createHistoryUi(options: HistoryUiOptions): HistoryUi {
-  const { store, code, header } = options;
+  const { store, code, header, scene } = options;
+  const modes = scene.modes;
 
   /** Where a press goes. Set by where the work is, not by what is on screen. */
   let inCode = false;
 
-  const sync = (): void => {
-    // A panel that has gone takes the focus with it: the DOM the caret was in
-    // is not in the document any more, and nothing is going to say so.
+  /**
+   * The stack a press on the canvas side reaches, and what to call it.
+   *
+   * A mode wins over the document beneath it: while one is up there is
+   * nothing else on the canvas to edit, and the document has not moved since
+   * the session began. The code editor is not here because it is not one of
+   * these — it is CodeMirror's own history, reached through the panel.
+   */
+  function canvas(): { history: Steppable; what: string } {
+    const { extrude, collider } = modes;
+    if (extrude.active) return { history: extrude.history, what: EXTRUDE };
+    if (collider.active) return { history: collider.history, what: COLLIDER };
+    return { history: store.history, what: CANVAS };
+  }
+
+  /**
+   * Whether the caret is somewhere the code editor's history is the answer.
+   *
+   * `code.open` as well as `inCode`, because a panel that has gone takes the
+   * focus with it: the DOM the caret was in is not in the page any more, and
+   * nothing is going to say so.
+   */
+  function typing(): boolean {
     if (inCode && !code.open) inCode = false;
-    if (inCode) {
+    return inCode;
+  }
+
+  const sync = (): void => {
+    if (typing()) {
       header.setHistory(code.canUndo, code.canRedo, CODE);
       return;
     }
-    header.setHistory(store.history.canUndo, store.history.canRedo, CANVAS);
+    const { history, what } = canvas();
+    header.setHistory(history.canUndo, history.canRedo, what);
   };
 
-  /** Somebody worked on something. Which of the two was it? */
+  /** Somebody worked on something. Was it the code editor, or the canvas? */
   const worked = (target: EventTarget | null): void => {
     if (!(target instanceof Node)) return;
     // The two buttons are not a surface. Excluding the whole header also
@@ -90,29 +141,42 @@ export function createHistoryUi(options: HistoryUiOptions): HistoryUi {
   const onPointerDown = (event: PointerEvent): void => worked(event.target);
 
   function undo(): void {
-    if (inCode && code.open) {
+    if (typing()) {
       if (!code.undo()) log.warn("Nothing to undo in this file");
       sync();
       return;
     }
-    if (!store.history.undo()) {
-      log.warn("Nothing to undo");
-      return;
-    }
-    settle();
+    step("undo");
   }
 
   function redo(): void {
-    if (inCode && code.open) {
+    if (typing()) {
       if (!code.redo()) log.warn("Nothing to redo in this file");
       sync();
       return;
     }
-    if (!store.history.redo()) {
-      log.warn("Nothing to redo");
+    step("redo");
+  }
+
+  /**
+   * Move whichever canvas stack is in charge, and say so when it will not.
+   *
+   * A mode that has nothing left says so rather than falling through to the
+   * document: the work underneath is not what the press meant, and Cancel is
+   * how you go back past the start of a session.
+   */
+  function step(way: "undo" | "redo"): void {
+    const { history, what } = canvas();
+    if (history[way]()) {
+      settle();
       return;
     }
-    settle();
+    const inMode = what === EXTRUDE || what === COLLIDER;
+    log.warn(
+      inMode
+        ? `Nothing to ${way} in ${what} — Cancel leaves it`
+        : `Nothing to ${way}`,
+    );
   }
 
   /**
@@ -125,14 +189,19 @@ export function createHistoryUi(options: HistoryUiOptions): HistoryUi {
    * outline nothing, so it is dropped instead.
    */
   function settle(): void {
-    const scene = options.scene();
-    if (scene && !selectionAlive(store, scene.getSelection())) {
+    if (!selectionAlive(store, scene.getSelection())) {
       scene.setSelection({ kind: "none" });
     }
     sync();
   }
 
-  store.history.addEventListener("change", sync);
+  // Every stack this routes between, so the buttons follow whichever moved.
+  const stacks: Steppable[] = [
+    store.history,
+    modes.extrude.history,
+    modes.collider.history,
+  ];
+  for (const history of stacks) history.addEventListener("change", sync);
   code.onHistoryChange = sync;
   document.addEventListener("focusin", onFocusIn);
   // Captured, so a canvas or an overlay that stops the event on its way up
@@ -144,7 +213,7 @@ export function createHistoryUi(options: HistoryUiOptions): HistoryUi {
     undo,
     redo,
     destroy: () => {
-      store.history.removeEventListener("change", sync);
+      for (const history of stacks) history.removeEventListener("change", sync);
       code.onHistoryChange = () => {};
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("pointerdown", onPointerDown, true);

@@ -1,7 +1,7 @@
 /**
  * Undo, as the store actually drives it.
  *
- * Written against `DocStore` rather than against `DocHistory` alone, because
+ * Written against `DocStore` rather than against `UndoHistory` alone, because
  * the thing worth asserting is not that a stack pops — it is that the stack
  * and the store's immutability agree: a step is one commit, a group is one
  * step however many commits are inside it, and a document restored two edits
@@ -11,7 +11,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DocStore } from "../doc-store";
-import { DocHistory } from "../doc-history";
+import { UndoHistory } from "../history";
 import type { GameDoc, StoredDoc } from "../types";
 
 // The store writes through `ipc.doc.write`, which wants Tauri. Nothing here
@@ -120,7 +120,7 @@ describe("one edit, one step", () => {
     // Against the stack directly, with a limit small enough to reach: the
     // far end is the one nobody is about to press, so that is the one to go.
     let held = { at: 0 } as unknown as GameDoc;
-    const history = new DocHistory(
+    const history = new UndoHistory<GameDoc>(
       { current: () => held, restore: (doc) => (held = doc) },
       2,
     );

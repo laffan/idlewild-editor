@@ -180,3 +180,76 @@ describe("what Apply is told", () => {
     expect(mode.isDefault).toBe(true);
   });
 });
+
+describe("undo inside a session", () => {
+  it("has nothing to go back to before anything is painted", () => {
+    const { mode } = started();
+    expect(mode.history.canUndo).toBe(false);
+    expect(mode.history.undo()).toBe(false);
+  });
+
+  it("takes back a stroke whole, however many spaces it crossed", () => {
+    const { mode } = started();
+    mode.beginPaint(...at(1, 0));
+    mode.movePaint(...at(2, 0));
+    mode.movePaint(...at(3, 0));
+    mode.endPaint();
+    expect(keys(mode.shape)).toEqual(["0,0", "1,0", "2,0", "3,0"]);
+    expect(mode.history.depths).toEqual({ undo: 1, redo: 0 });
+
+    mode.history.undo();
+    expect(keys(mode.shape)).toEqual(["0,0"]);
+    mode.history.redo();
+    expect(keys(mode.shape)).toEqual(["0,0", "1,0", "2,0", "3,0"]);
+  });
+
+  it("counts Remove the same way, and Reset as a step of its own", () => {
+    const { mode } = started([{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }]);
+    mode.setTool("remove");
+    mode.beginPaint(...at(1, 0));
+    mode.endPaint();
+    expect(keys(mode.shape)).toEqual(["0,0"]);
+
+    mode.reset();
+    expect(keys(mode.shape)).toEqual(["0,0", "1,0"]);
+    expect(mode.history.depths.undo).toBe(2);
+
+    mode.history.undo();
+    expect(keys(mode.shape)).toEqual(["0,0"]);
+    mode.history.undo();
+    expect(keys(mode.shape)).toEqual(["0,0", "1,0"]);
+  });
+
+  it("leaves no step for a press on a space already painted", () => {
+    const { mode } = started();
+    mode.beginPaint(...at(0, 0));
+    mode.endPaint();
+    expect(mode.history.canUndo).toBe(false);
+  });
+
+  it("does not let the spaces it remembers be written through", () => {
+    const { mode } = started();
+    mode.beginPaint(...at(1, 0));
+    mode.endPaint();
+    mode.beginPaint(...at(2, 0));
+    mode.endPaint();
+
+    mode.history.undo();
+    // Two spaces, not three: the snapshot the second stroke took describes
+    // the spaces as they were rather than the set the first one is still on.
+    expect(keys(mode.shape)).toEqual(["0,0", "1,0"]);
+  });
+
+  it("forgets the lot on the way out, and on the way back in", () => {
+    const { mode } = started();
+    mode.beginPaint(...at(1, 0));
+    mode.endPaint();
+    expect(mode.history.canUndo).toBe(true);
+
+    mode.stop();
+    expect(mode.history.canUndo).toBe(false);
+
+    mode.start(target, [{ cx: 0, cy: 0 }], [{ cx: 0, cy: 0 }]);
+    expect(mode.history.canUndo).toBe(false);
+  });
+});

@@ -197,7 +197,7 @@ export class PsdPlacements {
     // Undo stops here. The file on disk is a different file now, so every
     // document state before this one names layers it may no longer have, and
     // a placement restored onto one can never render — see
-    // `DocHistory.clear`.
+    // `UndoHistory.clear`.
     this.host.store.history.clear();
     reconcilePlacements(
       this.host.store,

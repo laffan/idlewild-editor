@@ -19,7 +19,7 @@
  * Undo lives on `history`, and it works *because* of the immutability rule:
  * a commit already builds a document that shares everything it did not
  * touch, so remembering the one before it costs a pointer — see
- * `lib/doc-history.ts`.
+ * `lib/history.ts`.
  */
 
 import type {
@@ -40,7 +40,7 @@ import type {
 } from "./types";
 import { doc as docIpc } from "./ipc";
 import { emptyLayer, copyLayer, makeId, nextPointName, withScenes } from "./doc-shape";
-import { DocHistory } from "./doc-history";
+import { UndoHistory } from "./history";
 import * as log from "./log";
 
 // Re-exported because they were this module's before `doc-shape.ts` was split
@@ -55,11 +55,11 @@ export class DocStore extends EventTarget {
   readonly projectId: string;
 
   /**
-   * Undo and redo over this document — `lib/doc-history.ts` says what a step
-   * is. A field rather than methods here: the stack has a `change` event of
-   * its own, so the header's two buttons listen to the thing they are about.
+   * Undo and redo over this document — `lib/history.ts` says what a step is.
+   * A field rather than methods here: the stack has a `change` event of its
+   * own, so the header's two buttons listen to the thing they are about.
    */
-  readonly history: DocHistory = new DocHistory({
+  readonly history: UndoHistory<GameDoc> = new UndoHistory<GameDoc>({
     current: () => this.state,
     restore: (doc) => this.restore(doc),
   });

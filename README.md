@@ -190,8 +190,10 @@ remaining pieces are wired to real slots rather than mocked.
   so is a dropped PSD however many layers came in with it. The two buttons
   follow what you are working on — put the caret in the code editor and they
   undo there instead, in that file's own history, which is the same one ⌘Z has
-  always had in it. The code panel carries a pair of its own beside Save, for
-  when it is floating over the header. Undo does not reach across the things
+  always had in it, and while extrude or collider mode is up they undo *in
+  that*, a pull or a rub at a time, with the document's history waiting
+  untouched underneath. The code panel carries a pair of its own beside Save,
+  for when it is floating over the header. Undo does not reach across the things
   the editor cannot take back: renaming a PSD, or bringing an edited one home,
   moves a file on disk, and the history stops there rather than restoring a
   document that names a file which is no longer where it says

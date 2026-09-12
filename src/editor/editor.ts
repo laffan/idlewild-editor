@@ -17,7 +17,7 @@ import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
 import { bindShortcuts } from "./shortcuts";
-import { createHistoryUi } from "./history";
+import { createHistoryUi, type HistoryUi } from "./history";
 import { startIntake } from "./intake";
 import { GameFrame } from "./game-frame";
 import { Terminal } from "./terminal";
@@ -59,6 +59,9 @@ export async function mountEditor(
   let mode: EditorMode = "edit";
   let handle: GameHandle | null = null;
   let drawing: DrawingLayer | null = null;
+  // Built once the scene is up — see below. The header's two buttons and the
+  // keyboard both reach it through closures, which run long after.
+  let history: HistoryUi | null = null;
 
   const canvasWrap = h("div", { class: "editor-canvas-wrap" });
   // The console's level chip is a link when the line came from a file the
@@ -284,8 +287,8 @@ export async function mountEditor(
     `${meta.gridSize} px · ${meta.projection}`,
     {
       onBack: () => void leave(),
-      onUndo: () => history.undo(),
-      onRedo: () => history.redo(),
+      onUndo: () => history?.undo(),
+      onRedo: () => history?.redo(),
       onMode: (next) => setMode(next),
       onCode: () => code.toggle(),
       onPasteImage: () => intake.paste(),
@@ -400,15 +403,6 @@ export async function mountEditor(
 
   clear(container);
   container.appendChild(shell);
-  // Undo and redo: the two header buttons, and which of the document's
-  // history and the code editor's a press means — see editor/history.ts.
-  const history = createHistoryUi({
-    store,
-    code,
-    header,
-    scene: () => handle?.scene ?? null,
-  });
-
   const stopShortcuts = bindShortcuts({
     currentTool: () => rail.tool,
     applyTool: (tool) => applyTool(tool, false),
@@ -417,8 +411,8 @@ export async function mountEditor(
       return !!selection && selection.kind !== "none" && selection.kind !== "layer";
     },
     onDelete: () => deleteSelection(),
-    onUndo: () => history.undo(),
-    onRedo: () => history.redo(),
+    onUndo: () => history?.undo(),
+    onRedo: () => history?.redo(),
   });
   leftResizer.restore();
   rightResizer.restore();
@@ -444,6 +438,12 @@ export async function mountEditor(
     onColliderChange: () => collider.sync(),
   });
   handle.scene.activeLayerId = activeLayerId;
+
+  // Undo and redo: the two header buttons, and which history a press means —
+  // the document's, the code editor's, or whichever mode owns the canvas.
+  // Built after the scene because the modes' own stacks are on it, and the
+  // header and the keyboard reach it through closures rather than by order.
+  history = createHistoryUi({ store, code, header, scene: handle.scene });
 
   // The drawing layer is built after the scene because its two-finger
   // navigation drives that camera. It sits over the canvas, inert until one
@@ -663,7 +663,8 @@ export async function mountEditor(
 
   async function teardown(): Promise<void> {
     stopShortcuts();
-    history.destroy();
+    history?.destroy();
+    history = null;
     intake.stop();
     if (mode === "play") setMode("edit");
     await saveThumbnail();

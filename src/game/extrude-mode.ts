@@ -34,7 +34,21 @@
  * or drag, and whatever face is under it loses its space.
  *
  * Nothing here touches the document. The shape lives in this object until
- * Apply turns it into a PSD, and Cancel is simply dropping it.
+ * Apply turns it into a PSD, and Cancel is simply dropping it — which is also
+ * why the mode carries an undo stack of its own. A pull is not a document
+ * edit, so the document's history has nothing to take back; `history` here is
+ * the one ⌘Z reaches while the mode is up. It holds `ExtrudeState` snapshots
+ * and costs nothing to keep, because a pull already replaces that state
+ * rather than writing through it. See `lib/history.ts`.
+ *
+ * A **step is a pull or a rub**, not every frame of one and not taking hold
+ * of a face. The gesture opens a group at pointer-down and closes it at the
+ * release, so a face swept ten spaces out is one press of undo; a face pulled
+ * out and back to where it started is none, because the state it ends on is
+ * the object it began on. Taking hold of a different face records nothing at
+ * all — it is this mode's version of a selection, and undo is for what you
+ * built. What it does do is ride *inside* the snapshot, so an undo puts back
+ * the face the undone pull was made from.
  */
 
 import type Phaser from "phaser";
@@ -61,6 +75,7 @@ import {
   type Voxel,
   type VoxelSet,
 } from "../lib/extrude";
+import { UndoHistory } from "../lib/history";
 import { pointInPolygon } from "./doc-renderer";
 import { ExtrudeRender } from "./extrude-render";
 
@@ -145,6 +160,24 @@ export class ExtrudeMode {
   private peek = false;
   /** Set while carrying on with a PSD rather than building a new one. */
   private continuing: ExtrudeTarget | null = null;
+
+  /**
+   * Undo between pulls — this session's, and nothing else's. Emptied on the
+   * way in and on the way out, because the shape it remembers stops existing
+   * at both ends.
+   *
+   * `current` is never actually asked while the mode is down: the stack is
+   * empty then, so neither `undo` nor `end` reads it. It still has to answer
+   * something, and an empty solid is the honest answer to "no session".
+   */
+  readonly history = new UndoHistory<ExtrudeState>({
+    current: () => this.state ?? nothing(),
+    restore: (state) => {
+      this.state = state;
+      this.draw();
+      this.host.onChange();
+    },
+  });
 
   constructor(host: ExtrudeHost) {
     this.host = host;
@@ -241,6 +274,9 @@ export class ExtrudeMode {
   }
 
   private begin(state: ExtrudeState, target: ExtrudeTarget | null): void {
+    // A session starts with nothing behind it. The previous one's shape has
+    // been applied or dropped, and neither is somewhere to go back to.
+    this.history.clear();
     this.state = state;
     this.continuing = target;
     this.faces = [];
@@ -258,6 +294,8 @@ export class ExtrudeMode {
     this.continuing = null;
     this.faces = [];
     this.clearGesture();
+    // The shape is gone, so the way back to earlier versions of it is a lie.
+    this.history.clear();
     this.render.clear();
     this.host.onChange();
   }
@@ -302,6 +340,9 @@ export class ExtrudeMode {
     // wherever it is put rather than what happens to be held.
     if (this.erasing) {
       this.gesture = { kind: "erase" };
+      // A rub is one step however many spaces it takes, the way the drawing
+      // layer's slice eraser is one write however many strokes it cuts.
+      this.history.begin();
       this.eraseAt(screenX, screenY);
       return true;
     }
@@ -321,6 +362,10 @@ export class ExtrudeMode {
       base: this.state,
       hold: setTimeout(() => this.holdOnPatch(from), HOLD_MS),
     };
+    // Every frame of the sweep rebuilds the shape from `base`; the group is
+    // what makes the whole of it one press of undo. Closed in `clearGesture`,
+    // so it survives the gesture turning into a sweep or being abandoned.
+    this.history.begin();
     return true;
   }
 
@@ -350,6 +395,11 @@ export class ExtrudeMode {
     }
 
     const chosen = pickPull(this.host.grid, delta, this.host.zoom());
+    // What the sweep is being built from is what undo goes back to, and the
+    // group keeps only the first of these however many frames it takes. A
+    // sweep that comes back to `base` ends on the object it started from, and
+    // `UndoHistory.end` drops the step for that.
+    this.history.record(gesture.base);
     this.state = chosen
       ? extrude(gesture.base, chosen.axis, chosen.steps)
       : gesture.base;
@@ -367,7 +417,9 @@ export class ExtrudeMode {
   /** The finger stayed put: it was asking for a face, not pulling one. */
   private holdOnPatch(from: Point): void {
     if (this.gesture?.kind !== "pull") return;
-    this.gesture = null;
+    // Through `clearGesture`, so the step the pull opened is closed: taking
+    // hold of a face is not something to undo, and it wrote nothing anyway.
+    this.clearGesture();
     this.beginSelect(from.x, from.y);
   }
 
@@ -509,6 +561,7 @@ export class ExtrudeMode {
       if (!state.shape.has(key)) return;
       const shape = new Set(state.shape);
       shape.delete(key);
+      this.history.record(state);
       this.state = {
         shape,
         patch: {
@@ -526,15 +579,27 @@ export class ExtrudeMode {
       (v) => v.cx !== cell.cx || v.cy !== cell.cy,
     );
     if (kept.length === state.patch.voxels.length) return;
+    // Rubbing a space off the plate before anything is pulled from it is an
+    // edit like any other — the plate is the shape at that point.
+    this.history.record(state);
     this.state = { shape: state.shape, patch: { ...state.patch, voxels: kept } };
     this.paint();
   }
 
+  /**
+   * Drop the gesture in flight, and close the undo step it opened.
+   *
+   * Every way out of a gesture comes through here — the release, the hold
+   * that turns a pull into a sweep, leaving the mode — which is what
+   * guarantees no group is ever left open to swallow the next thing done.
+   * `end` on a sweep, which never opened one, is a no-op.
+   */
   private clearGesture(): void {
     if (this.gesture?.kind === "pull" && this.gesture.hold !== null) {
       clearTimeout(this.gesture.hold);
     }
     this.gesture = null;
+    this.history.end();
   }
 
   private onPatch(world: Point): boolean {
@@ -556,4 +621,9 @@ export class ExtrudeMode {
     if (!this.state) return;
     this.render.render(this.faces, this.state.patch, this.host.zoom(), this.xray);
   }
+}
+
+/** A session that is not up, for the one caller that must be answered. */
+function nothing(): ExtrudeState {
+  return { shape: new Set(), patch: { voxels: [], virtual: false, facing: "+z" } };
 }

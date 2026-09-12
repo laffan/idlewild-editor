@@ -296,7 +296,7 @@ export class DragController {
     if (!this.state) return;
     this.state = null;
     // Closes the step `begin` opened. A gesture that moved nothing leaves no
-    // step at all — see `DocHistory.end`.
+    // step at all — see `UndoHistory.end`.
     this.host.store.history.end();
     this.host.onDragStateChange(false);
   }

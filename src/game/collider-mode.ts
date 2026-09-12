@@ -19,6 +19,14 @@
  * edited, because that is what the pointer hands over. Apply is what turns
  * them back into offsets from the space the artwork hangs from — see
  * `lib/collider.ts` for why the document stores them that way.
+ *
+ * And they are **replaced rather than written through**, which is the rule
+ * the rest of this codebase already keeps: painting a space builds a new set.
+ * That is what lets the mode carry an undo stack of its own for the price of
+ * a pointer — nothing here reaches the document until Apply, so the
+ * document's history has nothing to take back and `history` is the one ⌘Z
+ * reaches while the mode is up. A step is a press or a drag, however many
+ * spaces it paints, and Reset is a step of its own.
  */
 
 import type Phaser from "phaser";
@@ -27,6 +35,7 @@ import { cellKey } from "../lib/grid";
 import { MAX_COLLIDER_CELLS } from "../lib/collider";
 import type { Cell, Point } from "../lib/types";
 import * as log from "../lib/log";
+import { UndoHistory } from "../lib/history";
 import { ColliderRender } from "./collider-render";
 
 /** What the pointer does inside the mode. */
@@ -60,12 +69,25 @@ export class ColliderMode {
   /** Null when the mode is not up. */
   private target: ColliderTarget | null = null;
   /** The spaces as they stand, in absolute grid coordinates. */
-  private cells = new Set<string>();
+  private cells: ReadonlySet<string> = new Set();
   /** What Reset goes back to: the default this file would get on import. */
   private defaults = new Set<string>();
   private tool: ColliderTool = "add";
   /** Set while a press or drag is painting. */
   private painting = false;
+
+  /**
+   * Undo between strokes — this session's, and emptied at both ends of it,
+   * because the spaces it remembers stop existing when the mode does.
+   */
+  readonly history = new UndoHistory<ReadonlySet<string>>({
+    current: () => this.cells,
+    restore: (cells) => {
+      this.cells = cells;
+      this.draw();
+      this.host.onChange();
+    },
+  });
 
   constructor(host: ColliderHost) {
     this.host = host;
@@ -121,6 +143,9 @@ export class ColliderMode {
       log.warn("A collider is drawn on grid spaces — this project has none");
       return false;
     }
+    // A session starts with nothing behind it: the last one's spaces were
+    // applied or dropped, and neither is somewhere to go back to.
+    this.history.clear();
     this.target = target;
     this.cells = new Set(cells.map(cellKey));
     this.defaults = new Set(defaults.map(cellKey));
@@ -138,9 +163,13 @@ export class ColliderMode {
   stop(): void {
     if (!this.target) return;
     this.target = null;
-    this.cells.clear();
+    this.cells = new Set();
     this.defaults.clear();
     this.painting = false;
+    // Closes a stroke abandoned mid-drag, then forgets the lot: the shape is
+    // gone, so the way back to earlier versions of it is a lie.
+    this.history.end();
+    this.history.clear();
     this.render.clear();
     this.host.onChange();
   }
@@ -159,6 +188,7 @@ export class ColliderMode {
   /** Back to the spaces this file would have been given on import. */
   reset(): void {
     if (!this.target) return;
+    this.history.record(this.cells);
     this.cells = new Set(this.defaults);
     this.draw();
     this.host.onChange();
@@ -176,6 +206,9 @@ export class ColliderMode {
   beginPaint(screenX: number, screenY: number): boolean {
     if (!this.target) return false;
     this.painting = true;
+    // A stroke is one step however many spaces it crosses. Closed in
+    // `endPaint`, and in `stop` for a drag that never got that far.
+    this.history.begin();
     this.paintAt(screenX, screenY);
     return true;
   }
@@ -189,6 +222,7 @@ export class ColliderMode {
   endPaint(): boolean {
     if (!this.painting) return false;
     this.painting = false;
+    this.history.end();
     this.host.onChange();
     return true;
   }
@@ -218,16 +252,22 @@ export class ColliderMode {
     if (!this.target) return;
     const cell = this.host.grid.worldToCell(this.host.worldAt(screenX, screenY));
     const key = cellKey(cell);
-    if (this.tool === "add") {
-      if (this.cells.has(key)) return;
-      if (this.cells.size >= MAX_COLLIDER_CELLS) {
-        log.warn(`A collider holds at most ${MAX_COLLIDER_CELLS} spaces`);
-        return;
-      }
-      this.cells.add(key);
-    } else if (!this.cells.delete(key)) {
+    const adding = this.tool === "add";
+    // Both tools are idempotent, which is what makes a drag that crosses the
+    // same space twice mean what it did the first time.
+    if (this.cells.has(key) === adding) return;
+    if (adding && this.cells.size >= MAX_COLLIDER_CELLS) {
+      log.warn(`A collider holds at most ${MAX_COLLIDER_CELLS} spaces`);
       return;
     }
+
+    // Replaced rather than written through, so the snapshot the stroke's
+    // first space took goes on describing the spaces as they were.
+    const next = new Set(this.cells);
+    if (adding) next.add(key);
+    else next.delete(key);
+    this.history.record(this.cells);
+    this.cells = next;
     this.draw();
   }
 

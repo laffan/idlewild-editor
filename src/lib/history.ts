@@ -1,60 +1,68 @@
 /**
- * Undo and redo, as snapshots of the whole document.
+ * Undo and redo, as a stack of snapshots of whatever is being edited.
  *
- * This is the cheap way round precisely because of the hard rule above it:
- * **document objects are immutable once stored**, so every commit already
- * builds a new `GameDoc` that shares every untouched subtree with the one
- * before it. Remembering the previous object is a pointer copy, not a clone,
- * and a hundred of them cost about what a hundred pointers cost. Hush stores
- * a stack of engine snapshots for the same reason; this is that idea against
- * a document rather than against a canvas.
+ * Three things hold one: the document (`DocStore`), and each of the two modes
+ * that take the canvas over — a solid being pulled out of the grid, and a
+ * collider being painted on one. They are separate stacks because they are
+ * separate pieces of work: nothing a mode does reaches the document until
+ * Apply, so a press of ⌘Z inside one has to mean *that*, and the document's
+ * own history has to still be there afterwards.
+ *
+ * Snapshots are the cheap way round precisely because of the hard rule at the
+ * top of README-TECHNICAL: **values are immutable once stored**, so every
+ * change already builds a new one that shares every untouched part with the
+ * one before it. Remembering the previous value is a pointer copy, not a
+ * clone, and a hundred of them cost about what a hundred pointers cost. That
+ * is the one thing this asks of a `T` — that a change replaces it rather than
+ * writing through it — and it is what the identity test in `end` reads.
  *
  * The alternative — an inverse operation per mutation — would need one for
  * each of the thirty-odd methods on `DocStore` and a fresh one for every
  * method added after, and it only pays for itself when a snapshot is
  * expensive. Here it is not.
  *
- * Three things a caller can say about a write:
+ * Three things a caller can say about a change:
  *
  * - **nothing** — it is one step, and one press of undo takes it back.
- * - **`group`** — the writes inside are one step. A drag writes on every
- *   pointer move and a dropped PSD writes once per layer inside it; without
- *   this, undo would walk back through a drag a pixel at a time.
+ * - **`group`** — the changes inside are one step. A drag writes on every
+ *   pointer move, a dropped PSD writes once per layer inside it, and a face
+ *   pulled out of a solid is rebuilt from its base on every frame of the
+ *   gesture; without this, undo would walk back through a drag a pixel at a
+ *   time.
  * - **`silence`** — it is not the user's edit at all. The migrations that run
  *   when a project opens are the case: an undo stack that begins with
  *   "un-repair the document you just opened" is worse than no undo.
  *
  * And one thing the *editor* can say: `clear()`, for when something has
- * happened that a document snapshot cannot describe. Renaming a PSD moves a
- * file on disk, so the document as it stood before the rename names a file
- * that is no longer there — going back to it would be corruption rather than
- * an undo. The history stops at those rather than lying about them.
+ * happened that a snapshot cannot describe. Renaming a PSD moves a file on
+ * disk, so the document as it stood before the rename names a file that is no
+ * longer there — going back to it would be corruption rather than an undo.
+ * Leaving a canvas mode is the same statement about a shape that no longer
+ * exists. The history stops at those rather than lying about them.
  */
-
-import type { GameDoc } from "./types";
 
 /** How many steps back the stack holds before it forgets the oldest. */
 const HISTORY_LIMIT = 100;
 
-export interface HistoryHost {
-  /** The document as it stands. */
-  current(): GameDoc;
+export interface HistoryHost<T> {
+  /** The value as it stands. */
+  current(): T;
   /**
-   * Put a remembered document back, firing whatever an edit fires — the
-   * panels and the canvas re-read on the same events either way.
+   * Put a remembered value back, doing whatever an edit does — the panels and
+   * the canvas re-read on the same events either way, and a mode redraws.
    */
-  restore(doc: GameDoc): void;
+  restore(value: T): void;
 }
 
 /**
  * The stack. Dispatches `change` whenever what undo and redo would do has
  * moved, which is what the header's two buttons listen to.
  */
-export class DocHistory extends EventTarget {
-  private readonly host: HistoryHost;
+export class UndoHistory<T> extends EventTarget {
+  private readonly host: HistoryHost<T>;
   private readonly limit: number;
-  private readonly past: GameDoc[] = [];
-  private readonly future: GameDoc[] = [];
+  private readonly past: T[] = [];
+  private readonly future: T[] = [];
 
   /** How many `group`s deep we are; only the outermost bounds a step. */
   private depth = 0;
@@ -65,7 +73,7 @@ export class DocHistory extends EventTarget {
   /** Set while a restore is in flight, so it cannot record itself. */
   private restoring = false;
 
-  constructor(host: HistoryHost, limit = HISTORY_LIMIT) {
+  constructor(host: HistoryHost<T>, limit = HISTORY_LIMIT) {
     super();
     this.host = host;
     this.limit = limit;
@@ -85,13 +93,13 @@ export class DocHistory extends EventTarget {
   }
 
   /**
-   * Remember where the document was, before a commit moves it.
+   * Remember where the value was, before a change moves it.
    *
-   * Called by `DocStore.commit` with the state that is about to be replaced,
-   * which is why the store hands it a value rather than this reading one: by
-   * the time anything else could ask, the new state is already in place.
+   * Handed the value that is about to be replaced rather than reading one,
+   * because by the time anything else could ask, the new one is already in
+   * place — `DocStore.commit` is the shape of every caller.
    */
-  record(before: GameDoc): void {
+  record(before: T): void {
     if (this.quiet > 0 || this.restoring) return;
     if (this.depth > 0) {
       if (this.pushed) return;
@@ -139,16 +147,25 @@ export class DocHistory extends EventTarget {
   /**
    * Close the innermost group; the outermost one ends the step.
    *
-   * A group that wrote nothing leaves no step behind, and that falls out
-   * rather than being checked for: the entry is pushed by the first write
-   * inside the group, so a drag that never left the space it started on
-   * pushes nothing at all. Safe to call when no group is open: a gesture can
-   * be both cancelled and ended, and only the first of the two closes it.
+   * A group that changed nothing leaves no step behind. Usually that falls
+   * out — the entry is pushed by the first change inside the group, so a
+   * gesture that never wrote pushes nothing at all — but a gesture can also
+   * come back to where it began, which is what a face pulled ten spaces out
+   * and ten back is. The test for that is identity, which is exactly what the
+   * immutability rule buys: an unchanged value is the *same object*.
+   *
+   * Safe to call when no group is open: a gesture can be both cancelled and
+   * ended, and only the first of the two closes it.
    */
   end(): void {
     if (this.depth === 0) return;
     this.depth -= 1;
-    if (this.depth === 0) this.pushed = false;
+    if (this.depth > 0) return;
+    if (this.pushed && this.past[this.past.length - 1] === this.host.current()) {
+      this.past.pop();
+      this.announce();
+    }
+    this.pushed = false;
   }
 
   /** `begin`/`end` around a call, including if it throws. */
@@ -182,10 +199,10 @@ export class DocHistory extends EventTarget {
     this.announce();
   }
 
-  private apply(doc: GameDoc): void {
+  private apply(value: T): void {
     this.restoring = true;
     try {
-      this.host.restore(doc);
+      this.host.restore(value);
     } finally {
       this.restoring = false;
     }

@@ -491,3 +491,120 @@ describe("carrying an applied solid on", () => {
     expect(mode.active).toBe(false);
   });
 });
+
+describe("undo inside a session", () => {
+  it("has nothing to go back to before anything is pulled", () => {
+    const { mode } = started();
+    expect(mode.history.canUndo).toBe(false);
+    expect(mode.history.undo()).toBe(false);
+  });
+
+  it("takes back a pull, whole, and puts it back again", () => {
+    const { mode } = started();
+    mode.beginPull(0, 0);
+    // Several frames of one sweep, which is one step and not four.
+    mode.movePull(0, -16);
+    mode.movePull(0, -32);
+    mode.movePull(0, -64);
+    mode.endPull();
+    expect(mode.shape?.size).toBe(8);
+    expect(mode.history.depths).toEqual({ undo: 1, redo: 0 });
+
+    expect(mode.history.undo()).toBe(true);
+    expect(mode.shape).toBeNull();
+    expect(mode.summary).toBe("nothing yet");
+
+    expect(mode.history.redo()).toBe(true);
+    expect(mode.shape?.size).toBe(8);
+  });
+
+  it("walks back through pulls one at a time", () => {
+    const { mode } = started();
+    mode.beginPull(0, 0);
+    mode.movePull(0, -64);
+    mode.endPull();
+    mode.tap(0, -64);
+    mode.beginPull(0, -64);
+    mode.movePull(0, -96);
+    mode.endPull();
+    expect(mode.shape?.size).toBe(9);
+
+    mode.history.undo();
+    expect(mode.shape?.size).toBe(8);
+    mode.history.undo();
+    expect(mode.shape).toBeNull();
+    expect(mode.history.canUndo).toBe(false);
+  });
+
+  it("leaves no step for a sweep that comes back to where it began", () => {
+    const { mode } = started();
+    mode.beginPull(0, 0);
+    mode.movePull(0, -64);
+    mode.movePull(0, 0);
+    mode.endPull();
+    expect(mode.shape).toBeNull();
+    expect(mode.history.canUndo).toBe(false);
+  });
+
+  it("does not count taking hold of another face", () => {
+    const { mode } = started();
+    mode.beginPull(0, 0);
+    mode.movePull(0, -64);
+    mode.endPull();
+
+    mode.tap(0, -64);
+    mode.beginSelect(0, -64);
+    mode.extendSelect(32, -48);
+    mode.endSelect();
+    expect(mode.history.depths.undo).toBe(1);
+  });
+
+  it("counts a rub as one step however many spaces it takes", () => {
+    const { mode } = started();
+    mode.beginPull(0, 0);
+    mode.movePull(0, -64);
+    mode.endPull();
+    const built = mode.shape?.size;
+
+    mode.setTool("erase");
+    mode.beginPull(0, -64);
+    mode.movePull(32, -48);
+    mode.endPull();
+    expect(mode.shape?.size).toBeLessThan(built ?? 0);
+    expect(mode.history.depths.undo).toBe(2);
+
+    mode.history.undo();
+    expect(mode.shape?.size).toBe(built);
+  });
+
+  it("forgets the lot on the way out, and on the way back in", () => {
+    const { mode } = started();
+    mode.beginPull(0, 0);
+    mode.movePull(0, -64);
+    mode.endPull();
+    expect(mode.history.canUndo).toBe(true);
+
+    mode.stop();
+    expect(mode.history.canUndo).toBe(false);
+
+    mode.start({ cx: 0, cy: 0 }, { cx: 1, cy: 1 });
+    expect(mode.history.canUndo).toBe(false);
+  });
+
+  it("closes the step when a pull turns into a hold", () => {
+    vi.useFakeTimers();
+    const { mode } = started();
+    mode.beginPull(0, 0);
+    vi.advanceTimersByTime(400);
+    mode.endSelect();
+    // Nothing was pulled, so nothing was recorded — and no step was left
+    // open to swallow the next thing done.
+    expect(mode.history.canUndo).toBe(false);
+
+    vi.useRealTimers();
+    mode.beginPull(0, 0);
+    mode.movePull(0, -64);
+    mode.endPull();
+    expect(mode.history.depths.undo).toBe(1);
+  });
+});

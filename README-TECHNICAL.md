@@ -315,8 +315,9 @@ cost, and a stroke-heavy layer is a hundred references to the *same* strokes.
 The alternative reading is an inverse operation per mutation, and it would
 need one for each of the thirty-odd methods on `DocStore` plus a fresh one for
 every method added after. That pays for itself when a snapshot is expensive.
-Here it is not. `lib/doc-history.ts` is the stack; `DocStore.commit` hands it
-the state it is about to replace, and `DocStore.restore` — deliberately not
+Here it is not. `lib/history.ts` is the stack — `UndoHistory<T>`, generic
+because three separate things hold one; `DocStore.commit` hands its own the
+state it is about to replace, and `DocStore.restore` — deliberately not
 `commit` — is how one comes back.
 
 ### A step is a thing you did, not a write the editor made
@@ -332,18 +333,22 @@ So a caller can say three things about a write:
 | | What it means | Where |
 |---|---|---|
 | *(nothing)* | one step | every ordinary mutation |
-| `history.begin()` / `end()` | the writes between them are one step | `game/drag.ts`, either end of a gesture |
+| `history.begin()` / `end()` | the writes between them are one step | `game/drag.ts`, and either end of a gesture in both canvas modes |
 | `history.group(fn)` | the same, when the writes are in one place | placing a PSD, Apply, the two conversions |
 | `history.silence(fn)` | not the user's edit; leave no step | the migrations that run on open |
 
 `begin`/`end` is a pair rather than only a callback because the two ends of a
 drag are two events — a pointer-down and a release — and there is no function
 that spans them. A group that wrote nothing leaves no step behind, and that
-falls out rather than being checked for: the entry is pushed by the *first*
-write inside the group, so a drag that never left the space it started on
-pushes nothing at all. `Drag.begin` therefore opens the group before asking
-whether the gesture grabbed anything, and closes it again when the answer is
-no — an open group nobody closed would swallow whatever the user did next.
+usually falls out rather than being checked for: the entry is pushed by the
+*first* write inside the group, so a drag that never left the space it started
+on pushes nothing at all. The exception is a gesture that comes *back* to
+where it began, which is what a face pulled ten spaces out and ten back is;
+`end` tests the group's entry against the current value by identity, which is
+what the immutability rule buys. `Drag.begin` therefore opens the group before
+asking whether the gesture grabbed anything, and closes it again when the
+answer is no — an open group nobody closed would swallow whatever the user did
+next.
 
 `silence` exists because `PsdPlacements.migrate` runs when a project opens: it
 backfills the unit and stack fields old documents lack, and writes a default
@@ -393,21 +398,61 @@ inspector would go on describing it and the overlay would outline nothing. So
 `editor/history.ts` drops it when it does not. Only there: everywhere else,
 the thing that removes an object clears the selection on its way out.
 
-### Two histories, and which one a press means
+### A canvas mode is a session of its own
+
+Extrude and collider mode hold their work in their own objects and touch the
+document only at Apply. That is the whole point of them — Cancel is dropping
+what is in the object — and it means the document's history has *nothing* to
+take back between one pull and the next. A stack that skipped over that would
+be a stack with a hole in it exactly where the work is: pull a wall up ten,
+pull an arm out of it, and ⌘Z would offer to undo whatever you did before you
+entered the mode.
+
+So each mode holds an `UndoHistory` of its own, over the value it is editing —
+`ExtrudeState` for one, the collider's set of grid spaces for the other. The
+same snapshot argument applies for the same reason, and collider mode's spaces
+were made replace-rather-than-mutate to earn it.
+
+**A step is a pull or a rub, not a frame of one and not taking hold of a
+face.** A sweep rebuilds the shape from its base on every pointer move, so the
+gesture opens a group at pointer-down and closes it at the release; a face
+pulled out and back to where it started leaves no step at all, which is the
+one place `UndoHistory.end`'s identity test actually fires. Every way out of a
+gesture goes through `ExtrudeMode.clearGesture` — the release, the hold that
+turns a pull into a sweep, leaving the mode — which is what guarantees no
+group is ever left open to swallow the next thing done.
+
+Taking hold of a different face records nothing: it is this mode's version of
+a selection. It does ride *inside* the snapshot, though, so undoing a pull
+puts back the face that pull was made from.
+
+Both stacks are cleared on the way into a session and on the way out of one.
+The shape a session remembers stops existing at both ends, and offering to go
+back to it would be the same lie a renamed PSD would be.
+
+### Three kinds of history, and which one a press means
 
 The code editor has had its own undo since it was ported — CodeMirror's
-`history()`, per open file, over ⌘Z. What did not exist is a rule for which of
-the two a press reaches, and with the code panel pinned both are on screen at
-once.
+`history()`, per open file, over ⌘Z. What did not exist is a rule for which
+history a press reaches, and with the code panel pinned two of them are on
+screen at once.
 
-**The rule is where you last worked**, read from `focusin` *and* a captured
-`pointerdown`. Two events rather than one because half this editor cannot take
-focus at all: the Phaser canvas and the drawing surface are not focusable, so
-putting a pencil on one fires no focus event of any kind and ⌘Z would go on
-meaning the file you were last typing in. The header is excluded from the
-reckoning, and its two buttons swallow their own `mousedown`, so pressing one
-neither reassigns the next press nor takes the caret out of the editor it is
-about.
+**The rule is where you last worked, and then what owns the canvas.** Where
+you last worked is read from `focusin` *and* a captured `pointerdown` — two
+events rather than one because half this editor cannot take focus at all: the
+Phaser canvas and the drawing surface are not focusable, so putting a pencil
+on one fires no focus event of any kind and ⌘Z would go on meaning the file
+you were last typing in. The header is excluded from the reckoning, and its
+two buttons swallow their own `mousedown`, so pressing one neither reassigns
+the next press nor takes the caret out of the editor it is about.
+
+Once the press is the canvas's, a mode wins over the document beneath it,
+because while one is up there is nothing else on the canvas to edit. A mode
+with nothing left says so rather than falling through — the work underneath is
+not what the press meant, and Cancel is how you go back past the start of a
+session. `editor/history.ts` is built after `bootGame` for this: the mode
+stacks live on the scene, and the header and the keyboard reach the controller
+through closures rather than by construction order.
 
 ⌘Z typed *inside* CodeMirror never reaches `editor/history.ts` at all:
 `isTyping` stands the global handler down for anything `contenteditable`, and
@@ -1580,7 +1625,8 @@ running it on a device.
 `vitest` covers the pure halves — the grid projection, fill geometry,
 picking (a point's and both marquees'), what is drawn over what, resize
 geometry, undo's three answers about a write and what a restored document is,
-whether a selection still names something, the unit arithmetic
+what each canvas mode counts as one step of its own, whether a selection still
+names something, the unit arithmetic
 behind a placed PSD, what the clipboard hands a paste and where that paste
 lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest
@@ -2866,6 +2912,11 @@ frame is the point of the JS half.
   per-key fence would give more cheaply.
 - An undo that lands in another scene switches to it, which is right, but it
   arrives with no notice — the canvas simply becomes somewhere else.
+- A canvas mode's history is the session's and dies with it, so Cancel is
+  still all-or-nothing: there is no undoing your way out of a mode, and no
+  redoing a shape you cancelled. Apply is the same door in the other
+  direction — the pulls that made a solid collapse into the one document step
+  that placed it.
 - Strokes do not reach a publish, and play mode is a publish now, so they do
   not reach play either. They are scaffolding for the PSDs and boundaries they
   become.
