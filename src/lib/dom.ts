@@ -153,6 +153,8 @@ export const ICONS = {
   /* An open book, for the reference along the bottom of the code modal. */
   book: ["M12 7v13", "M12 7C9.5 5 6.5 4.6 4 5v13c2.5-.4 5.5 0 8 2", "M12 7c2.5-2 5.5-2.4 8-2v13c-2.5-.4-5.5 0-8 2"],
   pin: ["M9 4h6", "M10 4v6l-3 4v2h10v-2l-3-4V4", "M12 16v5"],
+  /** A panel with a column down one side: the file browser's own toggle. */
+  sidebar: ["M4 5h16v14H4z", "M10 5v14"],
   /* Sliders — Project Options, which is settings rather than navigation. */
   sliders: ["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 5v4", "M9 15v4"],
   /* A drag handle. Round line caps turn each zero-length segment into a dot,

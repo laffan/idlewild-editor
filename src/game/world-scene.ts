@@ -76,7 +76,12 @@ export class WorldScene extends Phaser.Scene {
   private drops!: DropTargets;
   private marquee!: Marquee;
 
-  private mode: EditorMode = "draw";
+  /**
+   * Whether the canvas is the thing in front of the user: true in Draw, false
+   * in Code and Play, which both put the project's own game in a frame over
+   * it. Which mode it *is* stays the shell's business — see `setMode`.
+   */
+  private editing = true;
   private selection: Selection = { kind: "none" };
   private drag!: DragController;
   /** The modes that take the canvas over: extrude, and collider. */
@@ -168,7 +173,7 @@ export class WorldScene extends Phaser.Scene {
       // whichever is up owns the pointer, and what it does with a drag — paint
       // a space, pull the face it is already holding — is the mode itself.
       onDragStart: (x, y, modifiers) =>
-        this.mode !== "play" &&
+        this.editing &&
         (this.modes.beginDrag(x, y) || this.drag.begin(x, y, modifiers)),
       onDragMove: (x, y) => {
         if (!this.modes.moveDrag(x, y)) this.drag.move(x, y);
@@ -214,10 +219,10 @@ export class WorldScene extends Phaser.Scene {
    *
    * Nothing half-done survives the move — a drag, a marquee, a solid being
    * pulled or a collider being painted, and an opened-up PSD are all about
-   * objects that are on their way out. Then `render()` does the demolition for free: the renderer keys its
-   * placements by placement id and destroys every one it no longer finds in
-   * the document, which after a switch is all of them. `loadAll` puts the new
-   * scene's up, loading any PSD this session has not needed yet.
+   * objects on their way out. Then `render()` does the demolition for free:
+   * the renderer keys placements by id and destroys every one it no longer
+   * finds in the document, which after a switch is all of them. `loadAll` puts
+   * the new scene's up, loading any PSD this session has not needed yet.
    */
   reloadScene(): void {
     this.drag.cancel();
@@ -358,7 +363,7 @@ export class WorldScene extends Phaser.Scene {
   private handleTap(screenX: number, screenY: number): void {
     // The running game is a frame over this canvas and takes its own input;
     // nothing down here is meant for it.
-    if (this.mode === "play") return;
+    if (!this.editing) return;
     const world = this.worldAt(screenX, screenY);
 
     // While a collider is being drawn, a tap paints the space under the
@@ -398,7 +403,7 @@ export class WorldScene extends Phaser.Scene {
     screenY: number,
     fromHold: boolean,
   ): void {
-    if (this.mode === "play") return;
+    if (!this.editing) return;
     if (this.modes.beginSelect(screenX, screenY)) return;
     this.setSelection(this.marquee.begin(this.worldAt(screenX, screenY), fromHold));
   }
@@ -456,7 +461,7 @@ export class WorldScene extends Phaser.Scene {
    * has to decide what that selection means from here on.
    */
   private handleDoubleTap(screenX: number, screenY: number): void {
-    if (this.mode === "play") return;
+    if (!this.editing) return;
     // Two taps under the Point tool are two points, not a request to open
     // whatever the second one happened to land on.
     if (this.gestureMode === "point") return;
@@ -552,7 +557,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** The placed PSD under a point on the page — what a drop would replace. */
   placedAt(clientX: number, clientY: number): PlacedTarget | null {
-    if (this.mode === "play") return null;
+    if (!this.editing) return null;
     const world = this.worldAt(clientX, clientY);
     return this.drops.at(world.x, world.y);
   }
@@ -643,24 +648,24 @@ export class WorldScene extends Phaser.Scene {
 
   // ── modes ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Code and Play differ in what the shell keeps on screen, not in anything
+   * the scene does: both run the game in a frame over this canvas, so both
+   * mean the same thing here. Nothing half-built survives the trip — a drag,
+   * a marquee, a solid being pulled — and a drop highlight left behind would
+   * never be cleared, because nothing can be dropped on a running game.
+   */
   setMode(mode: EditorMode): void {
-    if (this.mode === mode) return;
-    const wasPlaying = this.mode === "play";
-    this.mode = mode;
-    // Draw and Code are both editing: the canvas is still there, still
-    // interactive, and a solid half pulled is not something a trip to the code
-    // panel should throw away. Only play mode stops the tools.
-    if (!wasPlaying && mode !== "play") return;
+    const editing = mode === "draw";
+    if (editing === this.editing) return;
+    this.editing = editing;
+    if (editing) return;
+
     this.drag.cancel();
-    // Nothing can be dropped on a running game, so a highlight left over
-    // from a drag that ended in Play would never be cleared.
     this.markDrop(null);
     this.marquee.cancel();
-    // Nothing half-built survives a trip through play mode.
     this.modes.stop();
-    // The running game is the editor shell's — a frame over this canvas, not
-    // an object in it. All the scene owes play mode is to stop editing.
-    if (mode === "play") this.setSelection({ kind: "none" });
+    this.setSelection({ kind: "none" });
   }
 
   /** Let a tool take raw pointer input — the drawing layer's entry point. */
@@ -674,17 +679,6 @@ export class WorldScene extends Phaser.Scene {
 
   suspendGestures(suspended: boolean): void {
     this.rig.setSuspended(suspended);
-  }
-
-  /** A PNG of the current view, for the home screen's thumbnail. */
-  snapshot(): Promise<string> {
-    return new Promise((resolve) => {
-      this.game.renderer.snapshot((image) => {
-        resolve(
-          image instanceof HTMLImageElement ? image.src : "",
-        );
-      });
-    });
   }
 
   shutdownScene(): void {

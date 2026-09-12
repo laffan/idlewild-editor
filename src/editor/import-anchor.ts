@@ -56,6 +56,29 @@ export const IMPORT_SCALE = 0.5;
 export const EXPORT_SCALE = 1 / IMPORT_SCALE;
 
 /**
+ * How wide a baked hairline is, in world pixels.
+ *
+ * The lattice the canvas draws is stroked at one *screen* pixel, whatever the
+ * camera is doing — `game/grid-renderer.ts` divides by the zoom, and every
+ * overlay on that canvas does the same. A line written into a PSD cannot: it
+ * is pixels by the time anyone looks at it, and it scales with everything
+ * else in the file.
+ *
+ * So it is baked at the weight the lattice has at the zoom this project is
+ * meant to be seen at — its `defaultZoom` — with a floor of **one pixel of
+ * the file itself**. The floor is what stops a pixel-art project's lines
+ * becoming half a pixel of antialiased grey: a smear rather than a line. At
+ * 1× this is exactly the one world pixel it has always been, so a project
+ * that never touched the zoom gets the lines it always got.
+ */
+export function hairline(zoom: number): number {
+  // A hand-edited zoom of zero, or a NaN, would otherwise reach a canvas as a
+  // line width of NaN — which draws nothing at all, silently.
+  const safe = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return Math.max(1 / EXPORT_SCALE, 1 / safe);
+}
+
+/**
  * Room to leave around a generated PSD's contents, in world pixels.
  *
  * One grid space, in the grid's own shape: a diamond template gets a tile's

@@ -31,6 +31,13 @@ export interface ExtrudeUiOptions {
    * holding the pointer would leave it unreachable. Entering picks Select.
    */
   useSelectTool: () => void;
+  /**
+   * The zoom this project opens at, read when Apply writes the file: the
+   * lines it bakes are as thin as the canvas's own lattice looks there. A
+   * function rather than a number, because Project Options can change it
+   * between one pull and the next.
+   */
+  defaultZoom: () => number;
 }
 
 export interface ExtrudeUi {
@@ -174,6 +181,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
       scene,
       shape,
       scene.modes.extrude.target,
+      options.defaultZoom(),
     );
     if (!written) return;
     scene.modes.extrude.stop();

@@ -97,11 +97,6 @@ export function createShell(parts: ShellParts): Shell {
     storageKey: "consoleHeight",
   });
   terminal.mountResizeHandle(consoleResizer.handle);
-  // Named so the stylesheet can take the inspector's divider away with the
-  // inspector in code mode. A divider is otherwise anonymous — every one of
-  // them is the same element with the same two classes.
-  leftResizer.handle.classList.add("divider-left");
-  rightResizer.handle.classList.add("divider-right");
 
   const main = h(
     "div",

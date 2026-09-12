@@ -7,17 +7,17 @@
  * autocomplete and its live preview reload are the next increment; the spec
  * asks only for a dockable modal for now.
  *
- * Where it sits is a choice of four — a row above the console, a column either
- * side of the canvas, or the whole shell — and the row of buttons in the header
- * is how it is made. Which of them is in force is the editor shell's business,
- * because it is a fact about the shell's layout, so a placement is reported
- * rather than acted on here. See `editor/code-panel.ts`.
+ * Where it sits is a choice of three — a row above the console, a column to
+ * the right of the canvas, or the whole shell — and the row of buttons in its
+ * head is how it is made. Which of them is in force is the editor shell's
+ * business, because it is a fact about the shell's layout, so a placement is
+ * reported rather than acted on here. See `editor/code-panel.ts`.
  *
- * Docs opens a fourth region along the bottom, on a divider of its own: the
- * Phaser reference, MDN's, and the two written guides, following the caret
- * where they can. It is ported from phaser-bench, where it sits under the
- * editor for the same reason — the question "what does this method take?"
- * arrives while you are typing the method. See `docs/panel.ts`.
+ * Docs opens a region of its own on a divider: the Phaser reference, MDN's,
+ * and the two written guides, following the caret where they can. It is
+ * ported from phaser-bench, where it sits under the editor — the question
+ * "what does this method take?" arrives while you are typing the method — and
+ * here it takes whichever side the panel has room for. See `placeDocs`.
  *
  * Some of these lines are the editor's. A scaffolded file marks the runs it
  * maintains, and `managed-blocks.ts` works out line by line which of them are
@@ -28,45 +28,30 @@
  * on screen is what the running game reads.
  */
 
-import { EditorState, Compartment } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  redo,
-  redoDepth,
-  undo,
-  undoDepth,
-} from "@codemirror/commands";
-import { javascript } from "@codemirror/lang-javascript";
-import { html as htmlLang } from "@codemirror/lang-html";
-import { css as cssLang } from "@codemirror/lang-css";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorView } from "@codemirror/view";
+import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { gameFiles } from "../lib/ipc";
 import * as log from "../lib/log";
 import { FileTree } from "./file-tree";
 import { DocsPanel } from "./docs/panel";
+import { fileState } from "./editor-state";
 import { addMissingBlocks, isGenerated, resetBlock } from "./managed-blocks";
-import { managedEdit, managedExtension } from "./managed-view";
+import { managedEdit } from "./managed-view";
 import { createResizer, type Resizer } from "../editor/resizer";
-
-const languageCompartment = new Compartment();
 
 /**
  * Where the panel sits in the shell.
  *
- * `bottom` is a row between the canvas and the console; `left` and `right` are
- * columns beside the canvas; `full` covers the shell, header included. Acted on
- * by `editor/code-panel.ts` — what it means here is which button is lit and
- * which class the panel carries.
+ * `bottom` is a row between the canvas and the console; `right` is a column
+ * beside it; `full` covers the shell, header included. Acted on by
+ * `editor/code-panel.ts` — what it means here is which button is lit, which
+ * class the panel carries, and which side the reference takes.
  */
-export type CodePlacement = "bottom" | "left" | "right" | "full";
+export type CodePlacement = "bottom" | "right" | "full";
 
-/** The four, in the order the header offers them — left to right, as they sit. */
+/** The three, in the order the head offers them. */
 const PLACEMENTS: Array<{ value: CodePlacement; label: string; title: string }> = [
-  { value: "left", label: "Left", title: "Dock to the left of the canvas" },
   { value: "bottom", label: "Bottom", title: "Dock above the console" },
   { value: "right", label: "Right", title: "Dock to the right of the canvas" },
   { value: "full", label: "Full", title: "Cover the editor" },
@@ -106,8 +91,16 @@ export class CodeModal {
   private noteTimer: number | null = null;
   private readonly filesResizer: Resizer;
   private readonly docs = new DocsPanel();
-  private readonly docsResizer: Resizer;
+  /** Rebuilt on every move: the axis differs between the two sides. */
+  private docsResizer: Resizer | null = null;
+  /** Which side the reference is on, or null before it has been placed. */
+  private docsSide: "right" | "bottom" | null = null;
   private docsOpen = false;
+  /** The panel and the row inside it: what a placement moves the docs between. */
+  private readonly panel: HTMLElement;
+  private readonly body: HTMLElement;
+  private readonly filesButton: HTMLButtonElement;
+  private filesShown = true;
 
   constructor(
     projectId: string,
@@ -143,17 +136,8 @@ export class CodeModal {
       storageKey: "codeFilesWidth",
     });
 
-    // The docs panel is a row of the modal like the console is a row of the
-    // shell, and takes its height the same way — on a divider, remembered.
-    this.docsResizer = createResizer({
-      target: this.docs.root,
-      axis: "height",
-      edge: "start",
-      min: 120,
-      max: 620,
-      storageKey: "codeDocsHeight",
-    });
-    this.docsResizer.handle.hidden = true;
+    // The reference is placed rather than nailed down — see `placeDocs`, which
+    // the first `setPlacement` calls. It starts closed either way.
     this.docs.root.hidden = true;
 
     this.filename = h("div", { class: "code-filename m", text: "No file open" });
@@ -174,8 +158,23 @@ export class CodeModal {
       h("span", { text: "Docs" }),
     ) as HTMLButtonElement;
 
-    // Four buttons rather than one toggle: there is no natural pair here, and
-    // a control that cycled through four places would be a guessing game.
+    // The file column's own switch, beside the path it is showing: on a column
+    // dock the tree and the editor are fighting over 420 px, and the tree is
+    // the half you only need between files.
+    this.filesButton = h(
+      "button",
+      {
+        class: "code-files-btn",
+        title: "Hide the file browser",
+        "aria-label": "Toggle the file browser",
+        "aria-pressed": "true",
+        onClick: () => this.setFilesShown(!this.filesShown),
+      },
+      icon(ICONS.sidebar, 15),
+    ) as HTMLButtonElement;
+
+    // Three buttons rather than one toggle: there is no natural pair here, and
+    // a control that cycled through three places would be a guessing game.
     const dockGroup = h("div", { class: "code-dock" }, icon(ICONS.pin, 15));
     for (const { value, label, title } of PLACEMENTS) {
       const button = h("button", {
@@ -232,16 +231,13 @@ export class CodeModal {
       h(
         "div",
         { class: "code-head" },
-        // Where the word "Code" and the project name used to sit. Neither
-        // said anything the user did not already know — they opened this
-        // modal from that project a moment ago — and the header is the one
-        // full-width row in here, so it goes to the two actions the file
-        // column needs and cannot fit above itself on an iPad.
-        this.tree.controls,
+        // Where the word "Code" and the project name used to sit, and then New
+        // File and New Folder: those belong over the column they create into,
+        // so they have gone there and the reference takes the left of the head.
+        this.docsButton,
         h(
           "div",
           { class: "code-head-right" },
-          this.docsButton,
           dockGroup,
           h(
             "button",
@@ -250,7 +246,7 @@ export class CodeModal {
           ),
         ),
       ),
-      h(
+      (this.body = h(
         "div",
         { class: "code-body" },
         this.tree.root,
@@ -261,6 +257,7 @@ export class CodeModal {
           h(
             "div",
             { class: "code-bar" },
+            this.filesButton,
             this.filename,
             this.dirtyFlag,
             this.note,
@@ -281,14 +278,12 @@ export class CodeModal {
             this.redoButton,
           ),
         ),
-      ),
-      this.docsResizer.handle,
-      this.docs.root,
+      )),
     );
+    this.panel = panel;
 
     this.root = h("div", { class: "code-backdrop" }, panel);
     this.filesResizer.restore();
-    this.docsResizer.restore();
     void this.reloadFiles();
   }
 
@@ -343,13 +338,70 @@ export class CodeModal {
     if (placement === this.placement) return;
     this.placement = placement;
     this.root.classList.toggle("docked", placement !== "full");
-    for (const side of ["left", "right", "bottom"] as const) {
+    for (const side of ["right", "bottom"] as const) {
       this.root.classList.toggle(`dock-${side}`, placement === side);
     }
     for (const [value, button] of this.placementButtons) {
       button.setAttribute("aria-pressed", String(value === placement));
     }
+    this.placeDocs();
     this.onPlacementChange(placement);
+  }
+
+  /**
+   * Which side the reference takes, which follows the panel's own shape.
+   *
+   * **Beside the editor** when the panel is wide — the bottom dock and the
+   * full-screen one — because a reference page is a column of prose and the
+   * bottom dock has no height to spare for one. **Under it** when the panel is
+   * itself a column beside the canvas: there is no width to give away there,
+   * and under the editor is where phaser-bench had it and where the question
+   * "what does this method take?" wants it.
+   *
+   * Each side is a divider on a different axis, so each remembers its own
+   * size and the inline size the other one wrote has to come off first.
+   */
+  private placeDocs(): void {
+    const side = this.placement === "right" ? "bottom" : "right";
+    if (side === this.docsSide) return;
+    this.docsSide = side;
+
+    this.docsResizer?.destroy();
+    this.docs.root.style.removeProperty("width");
+    this.docs.root.style.removeProperty("height");
+    this.docs.root.classList.toggle("docs-right", side === "right");
+
+    const right = side === "right";
+    this.docsResizer = createResizer({
+      target: this.docs.root,
+      axis: right ? "width" : "height",
+      edge: "start",
+      min: right ? 240 : 120,
+      max: right ? 900 : 620,
+      storageKey: right ? "codeDocsWidth" : "codeDocsHeight",
+    });
+    this.docsResizer.handle.hidden = !this.docsOpen;
+    // Appended: the row the reference goes beside — or under — is the last
+    // thing in either container already.
+    (right ? this.body : this.panel).append(
+      this.docsResizer.handle,
+      this.docs.root,
+    );
+    this.docsResizer.restore();
+  }
+
+  /**
+   * Show or hide the file column.
+   *
+   * The divider goes with it: a handle left behind is a three-pixel strip that
+   * resizes something nobody can see.
+   */
+  setFilesShown(shown: boolean): void {
+    this.filesShown = shown;
+    this.root.classList.toggle("files-hidden", !shown);
+    this.filesResizer.handle.hidden = !shown;
+    this.filesButton.setAttribute("aria-pressed", String(shown));
+    this.filesButton.title = shown ? "Hide the file browser" : "Show the file browser";
   }
 
   /**
@@ -379,7 +431,7 @@ export class CodeModal {
     if (open === this.docsOpen) return;
     this.docsOpen = open;
     this.docs.root.hidden = !open;
-    this.docsResizer.handle.hidden = !open;
+    if (this.docsResizer) this.docsResizer.handle.hidden = !open;
     this.docsButton.setAttribute("aria-pressed", String(open));
     // Opening it with the caret already somewhere should answer for where the
     // caret already is, rather than waiting for the next keystroke.
@@ -435,55 +487,20 @@ export class CodeModal {
     );
     this.tree.setOpen(path);
 
-    const state = EditorState.create({
-      doc: content,
-      extensions: [
-        lineNumbers(),
-        highlightActiveLine(),
-        history(),
-        keymap.of([
-          {
-            key: "Mod-s",
-            preventDefault: true,
-            run: () => {
-              void this.save();
-              return true;
-            },
-          },
-          ...defaultKeymap,
-          ...historyKeymap,
-        ]),
-        languageCompartment.of(languageFor(path)),
-        oneDark,
-        managedExtension({
-          path,
-          canonical,
-          onReset: (blockId) => void this.reset(blockId),
-          onRefused: () =>
-            this.setNote("These lines are the editor's — Reset puts them back."),
-          onMissing: (ids) => this.offerMissing(path, ids),
-        }),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            this.setDirty(true);
-            // Typing, undoing and redoing all move what the four history
-            // buttons would do, and `docChanged` covers all three: an undo is
-            // a transaction like any other.
-            this.historyMoved();
-          }
-          // Automatic mode is the docs panel following the caret, so it wants
-          // every move of it — and a typed character moves it too.
-          if (update.docChanged || update.selectionSet) this.reportCursor();
-        }),
-        EditorView.theme({
-          "&": { height: "100%" },
-          // The design system's code face, not CodeMirror's default stack.
-          ".cm-content, .cm-gutters": {
-            fontFamily: "var(--font-mono)",
-            fontSize: "13px",
-          },
-        }),
-      ],
+    const state = fileState({
+      path,
+      content,
+      canonical,
+      onSave: () => void this.save(),
+      onReset: (blockId) => void this.reset(blockId),
+      onRefused: () =>
+        this.setNote("These lines are the editor's — Reset puts them back."),
+      onMissing: (ids) => this.offerMissing(path, ids),
+      onEdit: () => {
+        this.setDirty(true);
+        this.historyMoved();
+      },
+      onCursor: () => this.reportCursor(),
     });
 
     if (this.view) {
@@ -674,16 +691,10 @@ export class CodeModal {
   destroy(): void {
     if (this.noteTimer !== null) window.clearTimeout(this.noteTimer);
     this.filesResizer.destroy();
-    this.docsResizer.destroy();
+    this.docsResizer?.destroy();
     this.docs.destroy();
     this.tree.destroy();
     this.view?.destroy();
     this.root.remove();
   }
-}
-
-function languageFor(path: string) {
-  if (path.endsWith(".html")) return htmlLang();
-  if (path.endsWith(".css")) return cssLang();
-  return javascript();
 }

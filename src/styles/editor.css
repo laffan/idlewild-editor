@@ -544,23 +544,23 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 .terminal-line { font-family: var(--font-mono); }
 .terminal-body { user-select: text; -webkit-user-select: text; }
 
-/* Code mode takes the inspector away, with its divider and its tab.
-
-   The inspector describes what is selected on the canvas, and nothing in the
-   code panel is on the canvas: in Code the width it was using is width the
-   editor can have instead. The layers panel stays — a file and a layer are
-   often the same question — and so does the canvas, which is the thing the
-   code is about. See editor/shell.ts for the divider's class. */
-.editor.code-mode .side-panel.right,
-.editor.code-mode .divider-right,
-.editor.code-mode .edge-toggle.right { display: none; }
-
 /* Play mode hides the chrome the spec says closes. */
 .editor.play-mode .side-panel,
+.editor.play-mode .edge-toggle { display: none; }
+
+/* The canvas tools, in both of the modes that run the game over the canvas.
+
+   Code shows what Play shows — the project's own game, in a frame over this
+   canvas — so the tools, the tool name and the selection bar have nothing to
+   act on in either. What Code keeps is the editor *around* the canvas: both
+   sidebars, so the scene can be switched and the document adjusted while the
+   game runs, and the panel the code is in. */
 .editor.play-mode .tool-rail,
 .editor.play-mode .tool-name,
-.editor.play-mode .edge-toggle,
-.editor.play-mode .selection-actions { display: none; }
+.editor.play-mode .selection-actions,
+.editor.code-mode .tool-rail,
+.editor.code-mode .tool-name,
+.editor.code-mode .selection-actions { display: none; }
 
 /* What Play runs: the project's own game, in a frame over the canvas.
 
@@ -587,7 +587,8 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 /* The editor's own canvas keeps its context while a game is up — the frame
    covers it — but nothing under there should react to a finger meant for the
    game. */
-.editor.play-mode .editor-canvas-wrap canvas { pointer-events: none; }
+.editor.play-mode .editor-canvas-wrap canvas,
+.editor.code-mode .editor-canvas-wrap canvas { pointer-events: none; }
 
 /* ── the drawing layer ─────────────────────────────────────────────────────────
    Hush's ink, superimposed over the game canvas. The stage is a
@@ -634,5 +635,8 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
   pointer-events: none;
 }
 
-/* Play mode hides the tools, so it hides their layer with them. */
-.editor.play-mode .draw-surface { display: none; }
+/* Both modes that run the game hide the tools, so they hide the ink's own
+   layer with them — it is a sheet over the canvas, and the canvas is behind a
+   game. */
+.editor.play-mode .draw-surface,
+.editor.code-mode .draw-surface { display: none; }

@@ -1,7 +1,7 @@
-/* The docs panel: a fourth region along the bottom of the code modal, on a
-   divider of its own. Ported from phaser-bench's docs.css and re-skinned to
-   this project's tokens — one accent, zero radius, the same rules as the rest
-   of the chrome. */
+/* The docs panel: a region of the code modal on a divider of its own, under
+   the editor or beside it. Ported from phaser-bench's docs.css and re-skinned
+   to this project's tokens — one accent, zero radius, the same rules as the
+   rest of the chrome. */
 
 .docs-panel {
   flex: none;
@@ -14,6 +14,30 @@
   background: var(--chrome-bg);
 }
 .docs-panel[hidden] { display: none; }
+
+/* Beside the editor, which is where it goes whenever the panel is wide — see
+   CodeModal.placeDocs. A reference page is a column of prose, and the bottom
+   dock has no height to spare for one; a code panel docked as a column beside
+   the canvas has no width to spare instead, and keeps it underneath.
+
+   The height is the row's, so the docked height has to come off; the nav and
+   the page stack rather than sitting side by side, because 300 px of column
+   cannot carry both. */
+.docs-panel.docs-right {
+  width: 340px;
+  min-width: 240px;
+  height: auto;
+  border-top: 0;
+  border-left: var(--rule-chrome);
+}
+.docs-panel.docs-right .docs-body { flex-direction: column; }
+.docs-panel.docs-right .docs-nav {
+  width: auto;
+  max-height: 40%;
+  border-right: 0;
+  border-bottom: var(--rule-chrome);
+}
+.docs-panel.docs-right .docs-head { padding: 6px 8px; gap: 8px; }
 
 /* ── The header: which reference, and how it is being read ───────────────── */
 

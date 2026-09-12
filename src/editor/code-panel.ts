@@ -2,25 +2,24 @@
  * Where the code panel sits in the shell, and what each placement means.
  *
  * The modal itself is `code/code-modal.ts` — the file tree, the editor and the
- * reference along the bottom. What it cannot decide for itself is where in the
+ * reference beside or under it. What it cannot decide for itself is where in the
  * page it sits, because that is a fact about the editor's layout rather than
  * about editing code. So the modal reports the placement and this acts on it.
  *
- * There are four, and they are four different jobs:
+ * There are three, and they are three different jobs:
  *
  * - **Bottom** — a row between the canvas and the console, the original dock.
  *   Code about the thing above it, with the console under both.
- * - **Left** and **right** — a column of the main row, beside the canvas. A
- *   wide screen has the room, and a file is taller than it is wide: the editor
- *   gets the height of the whole window rather than a strip of it.
+ * - **Right** — a column of the main row, beside the canvas. A wide screen has
+ *   the room, and a file is taller than it is wide: the editor gets the height
+ *   of the whole window rather than a strip of it.
  * - **Full** — over the shell, header included. A code editor wants the room,
  *   and the canvas underneath is not what you are looking at while you are
  *   reading a file end to end.
  *
  * Each is a divider on a different edge, so each remembers its own size: a
- * height for the bottom dock, a width for the two columns. The divider is
- * rebuilt on each move rather than kept, which is also what restores that
- * size.
+ * height for the bottom dock, a width for the column. The divider is rebuilt
+ * on each move rather than kept, which is also what restores that size.
  *
  * Code mode opens it — see `editor.ts`. Which placement it opens in is
  * remembered, and **bottom** is the answer for anyone who has not said: code
@@ -32,7 +31,7 @@ import { CodeModal, type CodePlacement } from "../code/code-modal";
 import { createResizer, type Resizer } from "./resizer";
 
 const PLACEMENT_KEY = "codePlacement";
-/** What the panel was before there were four answers rather than two. */
+/** What the panel was before a placement was more than pinned or not. */
 const LEGACY_PINNED_KEY = "codePinned";
 
 export interface CodePanelSlots {
@@ -43,7 +42,7 @@ export interface CodePanelSlots {
   beforeConsole: HTMLElement;
   /** The row holding the sidebars and the canvas: where a column dock goes. */
   main: HTMLElement;
-  /** The canvas wrapper, which a column dock sits to the left or right of. */
+  /** The canvas wrapper, which the column dock sits to the right of. */
   canvas: HTMLElement;
   /** A file in `game/` was written — the shell decides what that means. */
   onSaved?: (path: string) => void;
@@ -158,7 +157,7 @@ export class CodePanel {
   }
 
   /**
-   * Move the panel to one of its four places.
+   * Move the panel to one of its three places.
    *
    * Docked, the divider writes an inline `height` or `width` on the panel.
    * Over the shell, it is `position: absolute; inset: 0` — and an absolutely
@@ -197,28 +196,22 @@ export class CodePanel {
       return;
     }
 
-    // A column beside the canvas. The divider sits between the two, which is
-    // the panel's end edge on the left and its start edge on the right.
-    const left = placement === "left";
+    // A column to the right of the canvas, with the divider between the two —
+    // the panel's start edge.
     this.resizer = createResizer({
       target: modal.root,
       axis: "width",
-      edge: left ? "end" : "start",
+      edge: "start",
       min: 260,
       max: 900,
       storageKey: "codeWidth",
     });
-    if (left) {
-      this.slots.main.insertBefore(modal.root, this.slots.canvas);
-      this.slots.main.insertBefore(this.resizer.handle, this.slots.canvas);
-    } else {
-      // Whatever follows the canvas is the inspector's own divider, and the
-      // panel goes in front of it. `insertBefore(…, null)` appends, which is
-      // the right answer if nothing follows the canvas at all.
-      const after = this.slots.canvas.nextSibling;
-      this.slots.main.insertBefore(this.resizer.handle, after);
-      this.slots.main.insertBefore(modal.root, after);
-    }
+    // Whatever follows the canvas is the inspector's own divider, and the
+    // panel goes in front of it. `insertBefore(…, null)` appends, which is the
+    // right answer if nothing follows the canvas at all.
+    const after = this.slots.canvas.nextSibling;
+    this.slots.main.insertBefore(this.resizer.handle, after);
+    this.slots.main.insertBefore(modal.root, after);
     this.resizer.restore();
   }
 }
@@ -232,8 +225,14 @@ export class CodePanel {
 function readPlacement(): CodePlacement {
   try {
     const stored = window.localStorage.getItem(PLACEMENT_KEY);
-    if (stored === "bottom" || stored === "left" || stored === "right") return stored;
-    if (stored === "full") return "full";
+    if (stored === "bottom" || stored === "right" || stored === "full") {
+      return stored;
+    }
+    // There was a left dock for one build. It was the right one mirrored, and
+    // the canvas is what the code is about — so it is better looked at with
+    // the code beside it in reading order than behind it. Anyone who was in it
+    // gets the column they were in, on the other side.
+    if (stored === "left") return "right";
     return window.localStorage.getItem(LEGACY_PINNED_KEY) === "false"
       ? "full"
       : "bottom";

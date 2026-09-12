@@ -42,7 +42,11 @@ export class SelectionOverlay {
       case "region": {
         const points = this.grid.rangePolygon(selection.from, selection.to);
         g.fillStyle(ACCENT, 0.1);
-        g.lineStyle(2, ACCENT, 1);
+        // Two screen pixels, as everything else here is: an outline drawn on
+        // the grid thickens with the camera otherwise, and on a project
+        // opened at 4× that is eight pixels of chrome around a small
+        // selection.
+        g.lineStyle(2 / zoom, ACCENT, 1);
         polygon(g, points, true);
         break;
       }
@@ -53,7 +57,7 @@ export class SelectionOverlay {
         if (!fill) break;
         const shape = fillShape(this.grid, fill);
         if (!shape) break;
-        g.lineStyle(2, ACCENT, 1);
+        g.lineStyle(2 / zoom, ACCENT, 1);
         for (const points of shape.polygons) polygon(g, points, false);
         break;
       }

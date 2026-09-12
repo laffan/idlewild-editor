@@ -173,6 +173,13 @@ and it splits cleanly: none of it touches the store.
   fills, A*, export bounds — is written once against `Grid`.
 - **The grid is never stored.** It is recomputed from the camera over exactly
   the cells the viewport can see. There is no world bound to hit.
+- **Chrome is measured in screen pixels, not world ones.** Everything the
+  editor draws *about* the document — the lattice, a selection's outline, an
+  extrusion's hairlines — is stroked at a width divided by the camera's zoom,
+  so it reads the same at 1× and at 4×. Phaser scales a line width like it
+  scales everything else, so the alternative is a lattice four pixels thick
+  over an 8px tile on exactly the projects that are most likely to be zoomed
+  in. See the section below.
 - **A project has two axes**, and they answer different questions.
   `projection` is the shape of the space; `genre` is the program that comes
   out of it. See the two sections below.
@@ -525,6 +532,30 @@ press.
 
 ---
 
+## One screen pixel, whatever the camera is doing
+
+A width handed to Phaser's `Graphics` is in world units, and the camera scales
+it with everything else. So a lattice stroked at `1` is one pixel at 1× and
+four at 4× — and 4× is exactly what a project drawn on 8 or 16 px spaces opens
+at, which made the ground under a pixel-art project read as a drawing over it.
+
+Every overlay on this canvas therefore strokes `n / zoom`: the grid renderer,
+the selection outlines, the marquee, the drop target, the collider shapes and
+extrude mode's own faces. At 1× that is the weight it has always been, which
+is why nothing about a 32 px project changes. The grid renderer's `invalidate`
+is part of it: the lines are stroked at a width worked out from the zoom, so a
+zoom has to redraw them even when the same cells are still on screen.
+
+The one thing that cannot follow is a line in a **PSD**, which is pixels by the
+time anyone looks at it. `editor/import-anchor.ts` has the rule as `hairline`:
+an extrusion's lines bake at the weight the lattice has at the zoom the project
+opens at — its `defaultZoom` — with a floor of one pixel of the file itself,
+because half a pixel of canvas stroke is a grey smear rather than a line. A
+project at 1× gets the one world pixel it always got; a pixel-art project at 4×
+gets a crisp single pixel instead of four.
+
+---
+
 ## Three sections, not two modes
 
 `EditorMode` is `draw | code | play`. It was `edit | play`, with Code a menu
@@ -534,23 +565,38 @@ describing a selection nobody could see, undo quietly belonging to whichever of
 them had the focus. A section is the honest shape, and the header says so left
 to right in the order the work goes.
 
-What each one costs the shell is small and worth writing down.
+**Code shows what Play shows.** The project's own game runs in a frame over the
+canvas in both, because a code editor beside a still picture of the game is a
+code editor you cannot check anything in: a save restarts the thing in front of
+you, which is the only way to see whether the edit worked. What Code keeps that
+Play does not is the editor *around* the canvas — both sidebars and the panel —
+so the scene can be switched and the document adjusted while the game runs,
+before a full test in Play.
 
-- **Entering Code** puts the panel up, wherever it was last placed, and takes
-  the inspector away with its divider and its tab (`.editor.code-mode`, in
-  `editor.css`). The inspector is about what is selected on the canvas and
-  nothing in a file is; the layers panel stays, because a file and a layer are
-  often the same question. **Leaving** it takes the panel down. Anything that
-  wants a file on screen — the console's LOG link, which opens the line a
-  message was written on — asks for the mode first and the file second.
-- **The canvas stays live in Code.** The panel may be a column beside it, and a
-  drag on what is left of the canvas is an ordinary drag. So `WorldScene.setMode`
-  treats draw and code as the same thing and only play as different: a solid
-  half pulled in extrude mode is not something a trip to the code panel should
-  throw away.
-- **Play** is unchanged: the frame goes up over the canvas, the tools go down,
-  and the document is flushed first because the config the game reads is written
-  by that save.
+That makes the difference between the two a fact about the shell rather than
+about the scene, and the code says so in three places.
+
+- **`WorldScene` keeps a boolean, not a mode.** `editing` is true in Draw and
+  false in the other two; every gesture entry point asks it, and `setMode`
+  tears down a drag, a marquee and a canvas mode only when it flips. Code and
+  Play are the same answer, so switching between them changes nothing on the
+  canvas — and a solid half pulled in extrude mode survives neither, because
+  the game is about to cover the thing it was being pulled over.
+- **The stylesheet takes the tools down in both** — the rail, the tool name,
+  the selection bar, the ink's own layer, and the canvas's pointer events —
+  and the sidebars in Play only. Both halves are asserted in
+  `styles/__tests__/styles.test.ts`, because "Code keeps the sidebars" is the
+  whole reason the mode exists and a rule is an easy thing to widen by
+  accident.
+- **`editor.ts` runs the game for anything that is not Draw**, flushing the
+  document first: the config the game reads is written by that save. A scene
+  switch does the same, which is what makes the dropdown in the left sidebar
+  worth having while the game is up.
+
+Entering Code puts the panel up wherever it was last placed and leaving takes it
+down, writing a dirty file on the way out. Anything that wants a file on screen
+— the console's LOG link, which opens the line a message was written on — asks
+for the mode first and the file second.
 
 ---
 
@@ -3031,10 +3077,15 @@ growing out of a single checkbox.
 
 ## Where the code panel sits
 
-There are four places, and they are four different jobs: a row above the
-console, a column to the **left** or the **right** of the canvas, and over the
-whole shell. The first three are docks — part of the layout, with the canvas
-keeping whatever is left — and the fourth is an overlay.
+There are three places, and they are three different jobs: a row above the
+console, a column to the **right** of the canvas, and over the whole shell. The
+first two are docks — part of the layout, with the canvas keeping whatever is
+left — and the third is an overlay.
+
+There was a left dock for one build. It was the right one mirrored, and code
+about a canvas reads better *after* the canvas than in front of it, so it went
+— `readPlacement` answers "right" for anyone who was in it, which is the same
+column on the other side and the same remembered width.
 
 **It opens on the bottom.** Code in this editor is code about the thing beside
 it: the config follows the canvas, a save while a game is up restarts it, and a
@@ -3046,7 +3097,7 @@ who only ever answered that: "not pinned" was today's full screen).
 
 A column is there because a file is taller than it is wide. On a wide screen the
 bottom dock gives the editor a strip of the window's height and the canvas the
-rest; left or right gives the editor the whole height of the row, which is the
+rest; the column gives the editor the whole height of the row, which is the
 shape the thing being edited actually is.
 
 Docked, the panel is a row or a column of the shell and its divider writes an
@@ -3060,11 +3111,40 @@ bottom, a width for the two columns. Without that, moving from a column to the
 overlay does not look like an overlay; it looks like the panel jumped to the top
 of the screen, which is exactly what it did.
 
-The header carries New File and New Folder rather than the word "Code" and
-the project name. Neither said anything the user did not already know a moment
-after opening the modal from that project, and on an iPad the header is the
-difference between two rows of chrome above the file column and one. In a column
-that row wraps onto two, because 420 px has no room for one.
+### What is in the panel's own chrome
+
+The head carries **Docs** on the left, the three placement buttons and Close on
+the right. The word "Code" and the project name were there once and said nothing
+the user did not already know a moment after opening the modal from that
+project.
+
+**New File and New Folder are over the column they create into**, which is where
+they belong: they read which file is open to decide where a new one goes, and
+they used to sit in the head, a long way from the thing they make. They are the
+width of that column and shorter than a button in the head, because they are a
+strip rather than a row of chrome — and in a column dock they stack, because 170
+px is not two names wide and clipping "New Folder" to "New Fold" is the other
+answer.
+
+**The reference takes whichever side the panel has room for** (`placeDocs`):
+beside the editor when the panel is wide — the bottom dock and the full-screen
+one — because a reference page is a column of prose and the bottom dock has no
+height to spare for one; under the editor when the panel is itself a column,
+where there is no width to give away and where phaser-bench had it. Each side is
+a divider on a different axis, so each remembers its own size and the inline
+size the other one wrote comes off first — the same trap as the panel's own
+placements, one level down.
+
+**The file column folds two ways.** Its folders collapse — the list Rust returns
+is flat and sorted, so "inside" is a path prefix and a shut folder is rows not
+rendered — and the choice is remembered per install rather than per project,
+because `js/shared` means the same thing in every project this editor makes and
+a fold that reset every time Code was left is a fold nobody would use. Opening a
+file opens the folders above it, so a file reached from a console line is still
+findable in the column, and a drop into a shut folder opens it rather than
+looking like the file went nowhere. The whole column comes off on the switch
+beside the open file's path, which is the control a 420 px column dock most
+wants: the tree is the half you only need between files.
 
 ## Console
 

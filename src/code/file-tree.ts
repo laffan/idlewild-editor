@@ -40,24 +40,26 @@ export interface FileTreeCallbacks {
 /** How far the pointer must travel before a press becomes a drag. */
 const DRAG_THRESHOLD = 6;
 
+/**
+ * Which folders are shut, remembered per install.
+ *
+ * Paths rather than ids, and not scoped to a project: `js/shared` means the
+ * same thing in every project this editor makes, and a tree that reopens
+ * everything each time you leave Code mode — which now takes the panel down —
+ * would be a tree nobody bothers to fold.
+ */
+const COLLAPSED_KEY = "idlewild.code.collapsed";
+
 export class FileTree {
   readonly root: HTMLElement;
-  /**
-   * New File and New Folder, as a row the modal mounts where it likes.
-   *
-   * They belong to the tree — they create into it, and they read which file
-   * is open to decide where — but they are shown in the modal's header rather
-   * than above the column, which on an iPad is the difference between two
-   * rows of chrome and one.
-   */
-  readonly controls: HTMLElement;
-
   private readonly projectId: string;
   private readonly callbacks: FileTreeCallbacks;
   private readonly list: HTMLElement;
   private files: GameFile[] = [];
   private openPath: string | null = null;
   private drag: { path: string; isDir: boolean; release: () => void } | null = null;
+  /** The folders that are shut. Read once, written on every fold. */
+  private readonly collapsed = readCollapsed();
   /** The row under the pointer while a drag is on — see `beginDrag`. */
   private ghost: HTMLElement | null = null;
   private ghostTarget: HTMLElement | null = null;
@@ -67,7 +69,11 @@ export class FileTree {
     this.callbacks = callbacks;
 
     this.list = h("div", { class: "code-files scroll" });
-    this.controls = h(
+    // New File and New Folder, over the column they create into. They read
+    // which file is open to decide where, so they belong to the tree — and
+    // they used to sit in the modal's head, which put them a long way from
+    // the thing they make.
+    const controls = h(
       "div",
       { class: "code-new-row" },
       h(
@@ -91,12 +97,17 @@ export class FileTree {
         h("span", { text: "New Folder" }),
       ),
     );
-    this.root = h("div", { class: "code-column" }, this.list);
+    this.root = h("div", { class: "code-column" }, controls, this.list);
   }
 
-  /** Which file the editor is showing, so the row can say so. */
+  /**
+   * Which file the editor is showing, so the row can say so — and so the
+   * folders above it are open. A file opened from a console line is a file
+   * nobody navigated to, and it should still be findable in the column.
+   */
   setOpen(path: string | null): void {
     this.openPath = path;
+    if (path) this.reveal(path);
     this.render();
   }
 
@@ -121,15 +132,58 @@ export class FileTree {
 
   private render(): void {
     clear(this.list);
-    for (const file of this.files) this.list.appendChild(this.row(file));
+    for (const file of this.files) {
+      if (this.hidden(file.path)) continue;
+      this.list.appendChild(this.row(file));
+    }
+  }
+
+  /** Whether some folder above this path is shut. */
+  private hidden(path: string): boolean {
+    const parts = path.split("/");
+    for (let i = 1; i < parts.length; i++) {
+      if (this.collapsed.has(parts.slice(0, i).join("/"))) return true;
+    }
+    return false;
+  }
+
+  /** Whether a folder has anything in it, which decides whether it folds. */
+  private holds(path: string): boolean {
+    return this.files.some((file) => file.path.startsWith(`${path}/`));
+  }
+
+  /**
+   * Fold a folder, or unfold it.
+   *
+   * The rows under it are simply not rendered — the list is flat and sorted,
+   * so "inside" is a prefix — and the choice is remembered per install.
+   */
+  private toggleFolder(path: string): void {
+    if (this.collapsed.has(path)) this.collapsed.delete(path);
+    else this.collapsed.add(path);
+    writeCollapsed(this.collapsed);
+    this.render();
+  }
+
+  /** Open every folder above a path, so the row is there to be seen. */
+  private reveal(path: string): void {
+    const parts = path.split("/");
+    let changed = false;
+    for (let i = 1; i < parts.length; i++) {
+      changed = this.collapsed.delete(parts.slice(0, i).join("/")) || changed;
+    }
+    if (changed) writeCollapsed(this.collapsed);
   }
 
   private row(file: GameFile): HTMLElement {
     const depth = file.path.split("/").length - 1;
     const name = basename(file.path);
+    const folds = file.isDir && this.holds(file.path);
+    const shut = this.collapsed.has(file.path);
     const classes = ["code-file"];
     if (file.isDir) classes.push("dir");
     if (file.path === this.openPath) classes.push("active");
+    if (folds && shut) classes.push("shut");
 
     const row = h(
       "div",
@@ -139,9 +193,18 @@ export class FileTree {
         style: { paddingLeft: `${12 + depth * 14}px` },
         onPointerDown: (event: PointerEvent) => this.beginDrag(event, file),
         onClick: () => {
-          if (!file.isDir) this.callbacks.onOpen(file.path);
+          if (file.isDir) {
+            if (folds) this.toggleFolder(file.path);
+          } else {
+            this.callbacks.onOpen(file.path);
+          }
         },
       },
+      // A chevron only where there is something to fold: an empty folder that
+      // offered one would be a control that does nothing.
+      folds
+        ? icon(shut ? ICONS.chevronRight : ICONS.chevronDown, 12)
+        : h("span", { class: "code-file-gap" }),
       icon(file.isDir ? ICONS.folder : ICONS.file, 14),
       h("span", { class: "code-file-name", text: name }),
     );
@@ -203,6 +266,7 @@ export class FileTree {
     try {
       if (isDir) await gameFiles.createDir(this.projectId, name);
       else await gameFiles.createFile(this.projectId, name);
+      this.reveal(name);
       await this.reload();
       if (!isDir) this.callbacks.onOpen(name);
     } catch (err) {
@@ -409,6 +473,10 @@ export class FileTree {
 
     try {
       await gameFiles.move(this.projectId, file.path, to);
+      // Dropping into a folder that is shut would otherwise look like the file
+      // going nowhere — so the destination opens to show where it went.
+      if (folder) this.collapsed.delete(folder);
+      this.reveal(to);
       await this.reload();
       this.callbacks.onMoved(file.path, to);
     } catch (err) {
@@ -431,4 +499,30 @@ function rowFor(list: HTMLElement, path: string): HTMLElement | null {
     if (el instanceof HTMLElement && el.dataset.path === path) return el;
   }
   return null;
+}
+
+/**
+ * The shut folders, as they were left.
+ *
+ * A per-viewer convenience like every other layout memory in this editor, so
+ * localStorage rather than the document — and a bad read is simply "nothing is
+ * folded", which is the state the tree has always opened in.
+ */
+function readCollapsed(): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSED_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((path): path is string => typeof path === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeCollapsed(paths: Set<string>): void {
+  try {
+    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...paths]));
+  } catch {
+    // Private browsing, or a quota. It still folds for this session.
+  }
 }

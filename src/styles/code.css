@@ -34,33 +34,32 @@
 }
 /* A column beside the canvas: the window's full height, which is the shape a
    file is. The border goes on the edge facing the canvas. */
-.code-backdrop.dock-left,
 .code-backdrop.dock-right {
   width: 420px;
   min-width: 260px;
   height: auto;
+  border-left: var(--rule-chrome);
 }
-.code-backdrop.dock-left { border-right: var(--rule-chrome); }
-.code-backdrop.dock-right { border-left: var(--rule-chrome); }
 
 /* Docked, the chrome competes with the editor for a much shorter box. */
 .code-backdrop.docked .code-head { min-height: var(--bar-h); }
 .code-backdrop.docked .code-foot { min-height: 40px; }
 .code-backdrop.dock-bottom .code-column { width: 200px; }
 
-/* In a column there is no room for one row of chrome, so it wraps into two
-   and the file tree gets a narrower column of its own. */
-.code-backdrop.dock-left .code-head,
+/* In a column the file tree takes less of the width, and the head wraps if
+   what is in it does not fit on one line. */
 .code-backdrop.dock-right .code-head {
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px 10px;
   min-height: 0;
 }
-.code-backdrop.dock-left .code-head-right,
-.code-backdrop.dock-right .code-head-right { margin-left: 0; }
-.code-backdrop.dock-left .code-column,
-.code-backdrop.dock-right .code-column { width: 150px; }
+.code-backdrop.dock-right .code-head-right { margin-left: auto; }
+.code-backdrop.dock-right .code-column { width: 170px; }
+
+/* The file column, folded away by the switch beside the file path. The
+   divider goes with it — see CodeModal.setFilesShown. */
+.code-backdrop.files-hidden .code-column { display: none; }
 
 .code-panel {
   width: 100%;
@@ -151,8 +150,7 @@
 
 .code-body { flex: 1; min-height: 0; display: flex; }
 
-/* The file column: the tree, and nothing above it. Its two create buttons
-   live in the modal's header — see .code-new-row. */
+/* The file column: the two create buttons, then the tree. */
 .code-column {
   width: 248px;
   flex: none;
@@ -162,27 +160,35 @@
   min-height: 0;
 }
 
-/* New File and New Folder, in the header where the title used to be. */
+/* New File and New Folder, over the column they create into: the width of it,
+   and shorter than a button in the head, because they are a strip rather than
+   a row of chrome. */
 .code-new-row {
   display: flex;
-  min-width: 0;
-  border: 1px solid var(--color-neutral-700);
+  flex-wrap: wrap;
+  flex: none;
+  border-bottom: var(--rule-chrome);
 }
 .code-new {
-  min-height: 32px;
-  padding: 0 12px;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 8px;
   border: 0;
-  border-left: 1px solid var(--color-neutral-700);
+  border-left: 1px solid var(--chrome-rule);
   background: transparent;
   color: var(--chrome-text);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font: 600 12px var(--font-heading);
+  gap: 6px;
+  font: 600 11px var(--font-heading);
   white-space: nowrap;
 }
 .code-new:first-child { border-left: 0; }
+/* A column dock leaves the tree 170px, which is not two names wide — so they
+   stack rather than being clipped to "New Fold". */
+.code-backdrop.dock-right .code-new { flex-basis: 100%; }
 .code-new:hover { background: var(--chrome-rule); }
 .code-new svg { flex: none; color: var(--chrome-dim); }
 .code-new:hover svg { color: var(--chrome-text); }
@@ -202,6 +208,10 @@
   touch-action: none;
 }
 .code-file svg { flex: none; }
+/* A folder's fold arrow, and the space one would have taken on a row that
+   does not fold — so every name in the column still starts at the same x. */
+.code-file > svg:first-child { color: var(--color-neutral-500); }
+.code-file-gap { flex: none; width: 12px; }
 .code-file-name {
   flex: 1;
   min-width: 0;
@@ -299,9 +309,26 @@
   border-bottom: 1px solid var(--chrome-rule);
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 16px 0 6px;
   gap: 12px;
 }
+
+/* The file browser's own switch, at the left of the bar that names the open
+   file — which is the thing that is still there when the column is not. */
+.code-files-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.code-files-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.code-files-btn[aria-pressed="true"] { color: var(--chrome-text); }
 .code-filename { font-size: 10px; color: var(--chrome-text); }
 .code-dirty { font-size: 10px; color: var(--color-accent); }
 /* Why an edit did not take, or what a Reset just did. Right-aligned so it

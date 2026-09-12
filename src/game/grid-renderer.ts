@@ -38,7 +38,13 @@ export class GridRenderer {
     this.draw(range, camera.zoom);
   }
 
-  /** Force the next update() to redraw — after a projection or size change. */
+  /**
+   * Force the next update() to redraw — after a projection or size change.
+   *
+   * A zoom counts as one even when the same cells are still on screen: the
+   * lattice is stroked at a width worked out from the zoom, so the lines would
+   * otherwise keep the weight they had at the zoom they were drawn at.
+   */
   invalidate(): void {
     this.lastSignature = "";
   }
@@ -82,7 +88,15 @@ export class GridRenderer {
     // Fade the lines out as tiles approach the legibility floor rather than
     // popping them off at the threshold.
     const alpha = Math.min(0.9, (tilePx - MIN_VISIBLE_TILE_PX) / 30);
-    g.lineStyle(1, 0xa9c2d3, alpha);
+    // One *screen* pixel, whatever the zoom. A width in world pixels is
+    // multiplied by the camera's scale like everything else it draws, so the
+    // lattice a pixel-art project opens at 4× came out four pixels thick —
+    // heavy lines over an 8px tile, which reads as a drawing rather than as
+    // the ground under one. Dividing by the zoom is the whole fix: at 1× it
+    // is the hairline it has always been, and it stays that hairline as the
+    // camera comes in. The same arithmetic is in every other overlay on this
+    // canvas, and in the lines an extrusion bakes.
+    g.lineStyle(1 / zoom, 0xa9c2d3, alpha);
 
     // Two edges per cell, not the whole tile outline: neighbours supply the
     // other two. Stroking every outline drew each shared edge twice, which

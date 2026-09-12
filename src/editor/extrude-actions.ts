@@ -53,6 +53,7 @@ import type { WorldScene } from "../game/world-scene";
 import {
   anchorCell,
   EXPORT_SCALE,
+  hairline,
   IMPORT_SCALE,
   marksForCells,
   psdMargin,
@@ -87,6 +88,8 @@ export async function applyExtrusion(
   scene: WorldScene,
   shape: VoxelSet,
   target: ExtrudeTarget | null = null,
+  /** The zoom the project opens at, which decides how thin the lines bake. */
+  zoom = 1,
 ): Promise<boolean> {
   const bounds = shapeBounds(grid, shape);
   if (!bounds) {
@@ -110,7 +113,7 @@ export async function applyExtrusion(
   const key = target ? target.key : `extrude-${Date.now().toString(36)}`;
   const parts: PsdPart[] = [];
   for (const part of EXTRUSION_PARTS) {
-    const rgba = rasterise(grid, shape, bounds, width, height, part);
+    const rgba = rasterise(grid, shape, bounds, width, height, part, zoom);
     if (!rgba) {
       log.error("Could not rasterise the extrusion");
       return false;
@@ -253,6 +256,7 @@ function rasterise(
   width: number,
   height: number,
   part: ExtrusionPart,
+  zoom: number,
 ): Uint8ClampedArray | null {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -262,9 +266,11 @@ function rasterise(
 
   ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
   ctx.translate(-bounds.x, -bounds.y);
-  // One world pixel, which is the weight the hairline has on the canvas at
-  // zoom 1 — the size the artwork is placed back at.
-  ctx.lineWidth = 1;
+  // Set after the scale, so it is in world pixels rather than the file's —
+  // which is the frame `hairline` answers in. It is the weight the canvas's
+  // own lattice has at the zoom this project opens at, and never thinner than
+  // one pixel of the file.
+  ctx.lineWidth = hairline(zoom);
   ctx.strokeStyle = EDGE_COLOR;
   ctx.lineJoin = "round";
 

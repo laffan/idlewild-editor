@@ -10,6 +10,7 @@ import { assetBase, checkAssetServer, platform, projects } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
+import { snapshotPng } from "../game/snapshot";
 import { DrawingLayer } from "../drawing";
 import { CodePanel } from "./code-panel";
 import { Inspector } from "./inspector";
@@ -220,6 +221,7 @@ export async function mountEditor(
     host: canvasWrap,
     scene: () => handle?.scene ?? null,
     useSelectTool: () => applyTool("select", false),
+    defaultZoom: () => render.options.defaultZoom,
   });
 
   // Collider mode: the other bar along the bottom, entered from the
@@ -337,6 +339,10 @@ export async function mountEditor(
     inspector.setSelection({ kind: "none" });
     actions.update({ kind: "none" }, null);
     log.info(`Scene · ${store.activeScene.name}`);
+    // A scene is a different place, and the game places the open one. In Code
+    // the game is up while the scene dropdown is reachable, which is the whole
+    // point of that mode — so switching restarts it on where you have gone.
+    if (mode !== "draw") runGame();
   });
 
   // A paste and a drop are the same import: the bytes become a PSD, marked
@@ -349,7 +355,7 @@ export async function mountEditor(
     os,
     canvas: canvasWrap,
     scene: () => handle?.scene ?? null,
-    enabled: () => mode !== "play",
+    enabled: () => mode === "draw",
     onPsdReplaced: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
@@ -576,39 +582,62 @@ export async function mountEditor(
     handle?.scene.setSelection({ kind: "none" });
   }
 
+  /**
+   * Draw, Code or Play.
+   *
+   * **Code shows what Play shows.** The project's own game runs over the
+   * canvas in both, because a code editor beside a still picture of the game
+   * is a code editor you cannot check anything in: save a file and the thing
+   * in front of you restarts on it. What Code keeps that Play does not is the
+   * editor around it — both sidebars and the panel — so the scene can be
+   * switched and the document adjusted while the game runs, before a full
+   * test in Play.
+   *
+   * Code is a section rather than a panel that happens to be open: entering it
+   * puts the panel up wherever it was last docked, and leaving takes it down.
+   * Anything that wants a file on screen — a console line naming where it was
+   * written — asks for the mode first.
+   */
   function setMode(next: EditorMode): void {
     mode = next;
     header.setMode(next);
     shell.classList.toggle("play-mode", next === "play");
-    // The inspector is about what is on the canvas, and nothing in Code is.
     shell.classList.toggle("code-mode", next === "code");
     handle?.scene.setMode(next);
 
-    // Code is a section rather than a panel that happens to be open: entering
-    // it puts the panel up, wherever it was last docked, and leaving it takes
-    // the panel down. Anything that wants a file on screen — a console line
-    // naming where it was written — asks for the mode first.
     if (next === "code") code.show();
     else code.hide();
 
-    if (next !== "play") {
+    if (next === "draw") {
       gameFrame.stop();
       return;
     }
-    log.info("Play — running this project's own code");
-    // Flushed first, and awaited: the config the game reads is rewritten by
-    // the document's save, so starting without waiting would run the project
-    // against whatever the last debounce happened to have written.
+    log.info(
+      next === "play"
+        ? "Play — running this project's own code"
+        : "Code — the game is running beside it; a save restarts it",
+    );
+    runGame();
+  }
+
+  /**
+   * Start the game, or start it again.
+   *
+   * The document is flushed first, and awaited: the config the game reads is
+   * rewritten by the document's save, so starting without waiting would run
+   * the project against whatever the last debounce happened to have written.
+   */
+  function runGame(): void {
     void store.flush().then(() => {
-      // Play may already have been left again while that was in flight.
-      if (mode === "play") void gameFrame.start();
+      // The canvas may have been come back to while that was in flight.
+      if (mode !== "draw") void gameFrame.start();
     });
   }
 
   async function saveThumbnail(): Promise<void> {
     if (!handle) return;
     try {
-      const dataUrl = await handle.scene.snapshot();
+      const dataUrl = await snapshotPng(handle.game);
       if (dataUrl) await projects.writeThumbnail(meta.id, dataUrl);
     } catch (err) {
       log.warn("Could not save a thumbnail:", err);

@@ -17,6 +17,7 @@ import {
   anchorCell,
   EXPORT_SCALE,
   footprintForBox,
+  hairline,
   IMPORT_SCALE,
   marksForBox,
   marksForCells,
@@ -323,5 +324,36 @@ describe("planFor", () => {
     });
     // Anchored on the box's own top-left, which is where the artwork starts.
     expect(anchor).toEqual({ cx: 10 - image.width / 4, cy: 20 - image.height / 4 });
+  });
+});
+
+/**
+ * How thin a line an extrusion bakes.
+ *
+ * The canvas's own lattice is one screen pixel whatever the camera is doing;
+ * a line written into a PSD is pixels and cannot follow it. So it is baked at
+ * the lattice's weight at the zoom the project opens at — and never thinner
+ * than one pixel of the file, because half a pixel of canvas stroke is a grey
+ * smear rather than a line.
+ */
+describe("a baked hairline", () => {
+  it("is the one world pixel it always was at 1×", () => {
+    expect(hairline(1)).toBe(1);
+  });
+
+  it("thins with the zoom a pixel-art project opens at", () => {
+    expect(hairline(2)).toBeLessThan(hairline(1));
+    // One pixel of the file, which is the floor: the stroke is set before the
+    // export scale, so this is what `EXPORT_SCALE` × it comes to.
+    expect(hairline(4) * EXPORT_SCALE).toBe(1);
+    expect(hairline(16) * EXPORT_SCALE).toBe(1);
+  });
+
+  it("never asks a canvas for a line it cannot draw", () => {
+    for (const zoom of [0, -3, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const width = hairline(zoom);
+      expect(width).toBeGreaterThanOrEqual(1 / EXPORT_SCALE);
+      expect(Number.isFinite(width)).toBe(true);
+    }
   });
 });

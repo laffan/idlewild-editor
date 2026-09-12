@@ -24,6 +24,7 @@ import { describe, expect, it } from "vitest";
 // reads the same files the app ships without reaching for node's filesystem.
 import css from "../editor.css?raw";
 import codeCss from "../code.css?raw";
+import docsCss from "../docs.css?raw";
 
 /** The declarations of one rule, by property. Comments are stripped first. */
 function rule(selector: string): Record<string, string> {
@@ -112,13 +113,29 @@ describe("the code panel's placements", () => {
     expect(docked.flex).toBe("none");
   });
 
-  it("gives the bottom dock a height and the two columns a width", () => {
+  it("gives the bottom dock a height and the column a width", () => {
     expect(ruleIn(codeCss, ".code-backdrop.dock-bottom").height).toBeTruthy();
     const column = ruleIn(codeCss, ".code-backdrop.dock-right");
     expect(column.width).toBeTruthy();
     // A column takes the height of the row it is in, not the height it had as
     // a bottom dock — the inline one is removed, and this is the fallback.
     expect(column.height).toBe("auto");
+  });
+
+  it("moves the reference between the two axes the same way", () => {
+    // The same trap as the panel's own: the docked height has to stop
+    // applying, or the reference beside the editor is 260px tall in a column
+    // that is 800.
+    const beside = ruleIn(docsCss, ".docs-panel.docs-right");
+    expect(beside.width).toBeTruthy();
+    expect(beside.height).toBe("auto");
+    expect(ruleIn(docsCss, ".docs-panel").height).toBeTruthy();
+  });
+
+  it("takes the file column away with its divider", () => {
+    expect(ruleIn(codeCss, ".code-backdrop.files-hidden .code-column").display).toBe(
+      "none",
+    );
   });
 
   it("keeps the drag ghost out of the pointer's way", () => {
@@ -129,11 +146,25 @@ describe("the code panel's placements", () => {
   });
 });
 
+/**
+ * Code mode runs the game over the canvas exactly as Play does, and keeps the
+ * editor around it. Both halves are rules rather than code, so both are
+ * asserted: the tools that would have nothing to act on go down, and the
+ * sidebars — the reason the mode exists, because a scene is switched from one
+ * of them — stay up.
+ */
 describe("code mode", () => {
-  it("takes the inspector, its divider and its tab away", () => {
-    expect(rule(".editor.code-mode .edge-toggle.right").display).toBe("none");
+  it("puts the canvas tools and the ink's own layer down", () => {
+    expect(rule(".editor.code-mode .selection-actions").display).toBe("none");
+    expect(rule(".editor.code-mode .draw-surface").display).toBe("none");
+    expect(rule(".editor.code-mode .editor-canvas-wrap canvas")["pointer-events"]).toBe(
+      "none",
+    );
+  });
+
+  it("leaves both sidebars alone", () => {
     const body = withoutComments(css);
-    expect(body).toContain(".editor.code-mode .side-panel.right");
-    expect(body).toContain(".editor.code-mode .divider-right");
+    expect(body).not.toContain(".editor.code-mode .side-panel");
+    expect(body).not.toContain(".editor.code-mode .edge-toggle");
   });
 });

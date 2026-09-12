@@ -54,7 +54,11 @@ remaining pieces are wired to real slots rather than mocked.
   **Draw / Code / Play** toggle, with Publish and Project Options behind its
   menu. It insets itself out of the iPad's status bar, as the console drawer
   does out of the home indicator
-- Infinite grid, two-finger zoom, tap-to-pick. Select drags a plain rectangle
+- Infinite grid, two-finger zoom, tap-to-pick. The lattice is a hairline
+  whatever the camera is doing: a line one *screen* pixel wide, so a project
+  drawn on 8px spaces and opened at 4× gets the same thin grid as one on 64px
+  spaces at 1× rather than four-pixel rules over it. The selection outlines and
+  the lines an extrusion bakes into its PSD follow the same weight. Select drags a plain rectangle
   around things to pick up several images at once; press and hold instead and
   it asks for a patch of grid, in the grid's own shape, taking the ground
   rather than whatever is standing on it. Pan drags the camera, and holding
@@ -241,20 +245,27 @@ remaining pieces are wired to real slots rather than mocked.
   it — is rewritten on every save, so the file the code modal opens describes
   the canvas beside it and the game you play is the game you built
 - Code is a section rather than a panel that happens to be open: the middle of
-  the three at the top, and the inspector folds away while you are in it because
-  nothing in a file is on the canvas. The panel sits in one of **four** places,
-  on a row of buttons in its own header — a row above the console (the default:
-  code here is code about the canvas beside it), a column to the **left** or
-  the **right** of the canvas, where a wide screen gives a file the window's
-  full height, or over the whole editor. Each remembers its own size, and which
-  one you left it in is remembered too
-- The project's real file tree in CodeMirror 6. New File and New Folder sit in
-  the modal's header; rename, duplicate, delete and dragging files between
-  folders are on the rows, in a column with a divider of its own. A drag carries
-  a **ghost** of the row under your finger, naming the folder it would land in,
-  and that folder's row lights up as you pass it — pointer events have no drag
-  image of their own, and a finger drag with nothing following it looks like
-  nothing happening
+  the three at the top. **The canvas shows what Play shows** — the project's own
+  game, running — and what Code keeps that Play does not is the editor around
+  it: both sidebars, so you can switch scene and adjust the document while the
+  game runs, and the panel the code is in. Save a file and the thing in front of
+  you restarts on it; switch scene and it restarts there. Play is then the full
+  test rather than the first look
+- The panel sits in one of **three** places, on a row of buttons in its own
+  header — a row above the console (the default: code here is code about the
+  canvas beside it), a column to the right of it, where a wide screen gives a
+  file the window's full height, or over the whole editor. Each remembers its
+  own size, and which one you left it in is remembered too. The reference goes
+  where there is room for it: beside the editor when the panel is wide, under it
+  when the panel is itself a column
+- The project's real file tree in CodeMirror 6. New File and New Folder sit over
+  the column they create into, folders fold away — and stay folded, per
+  install — and a switch beside the open file's path takes the whole column off
+  when the code wants the room. Rename, duplicate, delete and dragging files
+  between folders are on the rows. A drag carries a **ghost** of the row under
+  your finger, naming the folder it would land in, and that folder's row lights
+  up as you pass it — pointer events have no drag image of their own, and a
+  finger drag with nothing following it looks like nothing happening
 - The editor and you do not fight over the code. A scaffolded file marks the
   runs the editor maintains — `preload`, `placeDocument` and the rest — and
   those lines come up in their own colour and refuse to be typed over. It is
