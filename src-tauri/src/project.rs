@@ -53,6 +53,71 @@ impl Genre {
     }
 }
 
+/// How a project is rendered, and what its scaffold put in it.
+///
+/// Three of the four are settings the editor and the game both read, and the
+/// editor can change them afterwards — Project Options has them. The fourth,
+/// `character`, is a fact about what New Game wrote: a project's `game/` tree
+/// is its own copy, so unticking the box later would not take a character out
+/// of code that already has one. It is kept because the scaffold has to be
+/// reproducible — a managed block's Reset asks for this file as it was first
+/// written, and the answer depends on whether a character was in it.
+///
+/// Every field has a default, and the defaults are what every project written
+/// before these existed has always been: no pixel snapping, zoom 1, and a
+/// character, because the scaffold always wrote one.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GameOptions {
+    /// Nearest-neighbour textures rather than bilinear ones — what keeps a
+    /// 16px sprite blocky instead of blurring it as it is scaled up.
+    #[serde(default)]
+    pub pixel_art: bool,
+    /// Draw on whole pixels, so a camera at a fractional scroll does not
+    /// smear a sprite across two of them.
+    #[serde(default)]
+    pub round_pixels: bool,
+    /// The zoom a scene opens at, in the editor and in the game.
+    #[serde(default = "one")]
+    pub default_zoom: f64,
+    /// Whether New Game scaffolded a character controller.
+    #[serde(default = "yes")]
+    pub character: bool,
+}
+
+impl Default for GameOptions {
+    fn default() -> Self {
+        GameOptions {
+            pixel_art: false,
+            round_pixels: false,
+            default_zoom: 1.0,
+            character: true,
+        }
+    }
+}
+
+impl GameOptions {
+    /// The zoom, with a hand-edited nonsense value brought back into range.
+    ///
+    /// It reaches a camera and a `setZoom(0)` is a blank screen, so a zero, a
+    /// negative or a NaN is not something to pass on.
+    pub fn zoom(&self) -> f64 {
+        if self.default_zoom.is_finite() && self.default_zoom > 0.0 {
+            self.default_zoom.clamp(0.05, 16.0)
+        } else {
+            1.0
+        }
+    }
+}
+
+fn one() -> f64 {
+    1.0
+}
+
+fn yes() -> bool {
+    true
+}
+
 /// The home screen's list entry. Persisted as `meta.json` in the project dir.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMeta {
@@ -69,6 +134,10 @@ pub struct ProjectMeta {
     pub updated_at: u64,
     #[serde(rename = "layerCount", default)]
     pub layer_count: u32,
+    /// Absent on every `meta.json` written before the options existed, which
+    /// reads as the defaults — see `GameOptions`.
+    #[serde(default)]
+    pub options: GameOptions,
 }
 
 impl ProjectMeta {
@@ -78,6 +147,7 @@ impl ProjectMeta {
         projection: Projection,
         genre: Genre,
         grid_size: u32,
+        options: GameOptions,
     ) -> Self {
         let now = now_ms();
         ProjectMeta {
@@ -89,6 +159,7 @@ impl ProjectMeta {
             created_at: now,
             updated_at: now,
             layer_count: 0,
+            options,
         }
     }
 }

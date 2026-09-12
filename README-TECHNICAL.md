@@ -42,6 +42,8 @@ Extension of [README.md](README.md).
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
 │  templates.rs    per-genre scaffolds, per-projection grid      │
+│  game_files.rs   the editable game/ tree, as the code modal    │
+│                  sees it                                       │
 │  publish.rs      zip export, both runtimes included            │
 │  game_config.rs  the document, as the exported game reads it   │
 │  file_server.rs  tiny_http over the project store              │
@@ -226,6 +228,47 @@ that cannot work.
 Both fields are optional on disk (`#[serde(default)]` on the Rust side,
 `genre?:` on the TypeScript one) so every project written before the choice
 existed still loads, as top down — which is what it has always been.
+
+### Options, and which of them can change
+
+`ProjectMeta.options` — `GameOptions` in `project.rs`, mirrored in `types.ts` —
+carries four fields, and they are not the same kind of thing.
+
+| field | what it is |
+| --- | --- |
+| `pixelArt` | nearest-neighbour textures rather than bilinear ones |
+| `roundPixels` | draw on whole pixels |
+| `defaultZoom` | the zoom a scene with no camera of its own opens at |
+| `character` | whether New Game scaffolded a character controller |
+
+The first three are **settings**. Each reaches two places, and neither place is
+told by the other: the editor's own Phaser game, through `game/boot.ts` at
+start-up and `game/render-options.ts` afterwards, and the exported game, through
+`game.config.json`. So a toggle in Project Options re-filters every texture on
+the canvas *and* rewrites the config the project's own code reads, and the two
+answers agree because they come from the same field.
+
+Applying `pixelArt` to a game that is already up is two jobs rather than one.
+Phaser reads it once, at construction, where it turns `antialias` off — and
+`antialias` is what every texture *source* consults for its filter as it is
+created. So `applyPixelArt` writes both fields of the live config, for the
+textures not loaded yet, and re-filters every texture already in, which
+`TextureSource.setFilter` puts through to the renderer rather than waiting for a
+reload. The exported game does none of this: it reads the value at boot, because
+a published game is never half-way through being reconfigured.
+
+`character` is the odd one, and it is **history rather than a setting**. Leaving
+a character out means not writing the lines that make one, and those lines are
+the project's own the moment they are written — so unticking a box later would
+not take a character out of code that has one. It is kept because the scaffold
+has to stay reproducible: a managed block's Reset asks Rust for the file as it
+was first written, and the answer depends on whether a character was in it. The
+sheet reports it; it does not offer it.
+
+Every field has a default, and the defaults are what every project written
+before any of this has always been: no pixel snapping, zoom 1, and a character,
+because the scaffold always wrote one. On the TypeScript side that is
+`projectOptions(meta)` rather than four `??`s at each call site.
 
 ### Scenes
 
@@ -474,10 +517,40 @@ un-prevented ⌘Z as its own editing undo, which on iPadOS surfaces as the
 system's Undo over whatever field was last touched.
 
 An iPad without a keyboard is why the buttons exist at all, and it is also why
-there are four of them. The pair in the header sits beside the Edit/Play
+there are four of them. The pair in the header sits beside the Draw/Code/Play
 toggle; the code panel carries a second pair in its footer beside Save,
-because the header is behind it whenever the panel is floating — which is
-exactly the moment a device with no ⌘ has nowhere else to press.
+because the header is behind it whenever the panel is placed over the whole
+shell — which is exactly the moment a device with no ⌘ has nowhere else to
+press.
+
+---
+
+## Three sections, not two modes
+
+`EditorMode` is `draw | code | play`. It was `edit | play`, with Code a menu
+item that opened a panel, and that made Code a thing you could be half in: the
+panel over a canvas whose mode did not know it was there, the inspector
+describing a selection nobody could see, undo quietly belonging to whichever of
+them had the focus. A section is the honest shape, and the header says so left
+to right in the order the work goes.
+
+What each one costs the shell is small and worth writing down.
+
+- **Entering Code** puts the panel up, wherever it was last placed, and takes
+  the inspector away with its divider and its tab (`.editor.code-mode`, in
+  `editor.css`). The inspector is about what is selected on the canvas and
+  nothing in a file is; the layers panel stays, because a file and a layer are
+  often the same question. **Leaving** it takes the panel down. Anything that
+  wants a file on screen — the console's LOG link, which opens the line a
+  message was written on — asks for the mode first and the file second.
+- **The canvas stays live in Code.** The panel may be a column beside it, and a
+  drag on what is left of the canvas is an ordinary drag. So `WorldScene.setMode`
+  treats draw and code as the same thing and only play as different: a solid
+  half pulled in extrude mode is not something a trip to the code panel should
+  throw away.
+- **Play** is unchanged: the frame goes up over the canvas, the tools go down,
+  and the document is flushed first because the config the game reads is written
+  by that save.
 
 ---
 
@@ -1421,7 +1494,21 @@ Dragging is pointer events, like the layer panel's, and for the same reason:
 `dragstart` never fires for touch. Unlike the layer panel it does *not*
 rearrange the DOM as it goes — a tree has one legal drop per row (into that
 folder, or into the folder holding that file) rather than a position in a
-list, so the destination row is highlighted instead.
+list — so the destination is said three other ways instead. The row being
+carried dims. The folder the release would drop into lights up, or the whole
+column does when that folder is the tree's own root. And a **ghost** of the row
+follows the pointer, carrying the name being moved and, after an arrow, the
+folder it would land in.
+
+The ghost is the one thing pointer events cost: HTML5 drag draws a picture under
+the cursor for free, and without one a finger drag on a tree that does not
+rearrange looks like nothing happening at all. It lives on `document.body`
+rather than in the column, because the column scrolls and clips, and it is inert
+to pointers — otherwise it would be the element under the finger and
+`dropTarget` would never find a row. All three marks are read from that same
+`dropTarget`, so what is highlighted is what the release will do, including
+"nothing": dragged outside the column, the ghost says so rather than going
+quiet.
 
 Rename, new file and delete ask through the app's own sheets rather than
 `window.prompt` and `window.confirm`. Every other input in the app is a
@@ -1466,6 +1553,36 @@ An export is the project's `game/` tree, its processed `assets/`, the two
 vendored runtimes, and one file the export writes rather than copies:
 `game.config.json`.
 
+The tree it copies is laid out as a small web project is:
+
+```text
+index.html
+styles.css
+js/main.js
+js/game.config.json      generated — see `game_config`
+js/lib/                  Phaser and psd-to-phaser, written in by the exporter
+js/scenes/WorldScene.js  the genre's program
+js/prefabs/character.js  what walks it, when New Game asked for one
+js/shared/grid.js        the projection, and the document's geometry
+js/shared/…              the genre's own module: navigation.js or physics.js
+```
+
+**`js/lib/` is the one directory with nothing behind it in the store.** The two
+runtimes are 1.5 MB that would be identical in every project and are already
+constants in this binary, so `file_server` answers for them while a project is
+played and `publish` writes them into the zip. Everything else is real files the
+code modal opens.
+
+**A project made before that layout keeps the one it was made with.** Its
+`game/` tree is its own copy, and nothing rewrites a page someone may have
+edited — so both halves of the runtime shim answer both layouts. The server
+strips `game/js/lib/` or `game/lib/`; the exporter reads the project's own
+`index.html` and writes the runtimes where that page asks for them
+(`publish::runtime_dir`). `templates::MOVED` does the same job for the code
+modal: a Reset asked for `js/WorldScene.js` is answered with the pristine
+`js/scenes/WorldScene.js`, because they are the same file under two names and
+the block ids inside them are identical.
+
 That file is the document, in the shape `WorldScene.js` reads it. Everything
 else in `game/` is the user's source — the code modal edits it, and an export
 must not overwrite what someone typed — but the config is *generated*, and
@@ -1489,7 +1606,9 @@ exports. What it carries:
 | `placements[]` | `P2P.place`, positioned, scaled, given a depth |
 | `zones[]` | a blocking one is ground in a platformer |
 | a placement's `collider` | the spaces that file blocks, as offsets from its `anchor` |
-| `gridSpan` | how far the grid is drawn and the character may walk |
+| `gridSpan` | how far the character may walk |
+| `pixelArt`, `roundPixels` | handed to Phaser in `main.js`, and to the camera in `applyCamera` |
+| `zoom` | `setZoom` on the main camera, in `applyCamera` |
 
 A placement carries the size it is *displayed* at beside the size the manifest
 exported, and the scene divides them — the same `applyScale` the editor's own
@@ -1500,8 +1619,20 @@ its size, since an import lands at `IMPORT_SCALE`.
 `gridSpan` is measured from the content rather than fixed at 24: fills on a
 snapping grid are addressed in cells already, and everything else — a
 placement, a rectangle fill, a boundary's outline — is in world pixels and
-divides by the grid size. It is clamped, because the scenes draw `(2n+1)²`
-cell outlines and an unbounded span is a stall.
+divides by the grid size. It is clamped because it is the bounds a search walks
+— one placement a mile from the origin would otherwise hand A\* a world to
+cross before it could answer. It used to bound the drawn lattice as well, which
+is the reason it is clamped rather than simply grown: the scenes stroked
+`(2n+1)²` cell outlines. They draw no grid now — see below — so this is the
+walkable bound and nothing else.
+
+**The scenes draw no grid.** The editor's light blue lattice is scaffolding to
+build on; a game is the thing that was built, and a published one showing the
+editor's guides is a published one that looks unfinished. So there is no
+`drawGrid` in either template and nothing calls one. A project scaffolded before
+this still has its own copy of that block and still draws it — `game/` is the
+user's tree and nothing rewrites it — and deleting the block, or the one line in
+`create()` that calls it, is the whole of turning it off.
 
 **A document that will not parse is not a reason to fail the export.** The zip
 is still a runnable game, just an empty one, so a corrupt document falls back
@@ -1604,7 +1735,12 @@ together, and neither has been exercised on either platform yet.
 manifest → zip, plus the path-traversal guards, the project scaffold, what an
 export's config carries, the shapes a file picker hands back, and the order a
 manifest lists a PSD's layers in — which the frontend mirrors and cannot check
-for itself. The asset
+for itself. The project's options are next door in `tests/options.rs`: that an
+unticked character controller means no prefab and no `spawnCharacter` rather
+than one that is never called, that no conditional marker survives into a
+project's own files either way, that a Reset asks for the scaffold the project
+was *made* with, and that changing a rendering option rewrites the config the
+game reads rather than waiting for whatever touches the document next. The asset
 server is tested over a real loopback socket — the request psd-to-phaser makes,
 byte for byte, and what comes back parsed as an HTTP response rather than
 inspected as a `PathBuf`, because the mapping from URL to file is the one
@@ -1631,7 +1767,12 @@ behind a placed PSD, what the clipboard hands a paste and where that paste
 lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest
 reader, the platformer's body step, the docs panel's markdown rendering and
-its two kinds of lookup, and the drawing layer's ported maths.
+its two kinds of lookup, what a project with no options of its own renders as,
+and the drawing layer's ported maths. The handful of CSS declarations that are
+load-bearing for input are asserted as text — the drawing surface's
+positioning, and the code panel's four placements, where a docked rule that
+stopped taking the panel out of `position: absolute` would look like a panel
+that had covered the editor.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -1645,9 +1786,9 @@ The frontend's check is `tsc --noEmit` plus `vite build`.
 the app's own entry with the Tauri modules aliased to stubs, so the layout,
 the panels and the sheets can be opened, driven and screenshotted without a
 Mac or an iPad. It boots a fixture document with three layers, one placement
-and one boundary, and reads `window.__platform`, `window.__pick` and
-`window.__manifest` so the platform split and the re-import path can be
-exercised from a script. Its query string picks the fixture's template and
+and one boundary, and reads `window.__platform`, `window.__pick`,
+`window.__manifest` and `window.__options` so the platform split, the re-import
+path and a pixel-art project can be exercised from a script. Its query string picks the fixture's template and
 style — `?template=blank&style=platformer&grid=32` — and `?safe=44` writes
 stand-in values over the safe-area tokens, which is the only way to look at
 the iPad's insets from a desktop browser. Drawing is drivable there too: CDP's
@@ -2677,12 +2818,14 @@ answers both rather than putting copies on every project's disk:
 
 | Request | Answered with | Why not on disk |
 |---|---|---|
-| `<id>/game/lib/phaser.min.js`, `…/psd-to-phaser.umd.js` | the constants `templates.rs` already holds for the exporter | 1.5 MB, identical in every project |
+| `<id>/game/js/lib/phaser.min.js`, `…/psd-to-phaser.umd.js` | the constants `templates.rs` already holds for the exporter | 1.5 MB, identical in every project |
 | `<id>/game/assets/…` | `<id>/assets/…` | the pipeline's output sits *beside* `game/` in the store and *inside* it in a zip |
 
 The traversal guard is unchanged: the rewrite happens before `resolve`, which
-still canonicalises and checks against the store root, and `game/lib/` answers
-only those two exact names.
+still canonicalises and checks against the store root, and the runtime shim
+answers only those two exact names — under `game/js/lib/`, where the scaffold
+puts them now, or under `game/lib/`, where a project made before the tree moved
+still asks for them.
 
 ### The console the game logs into
 
@@ -2851,32 +2994,77 @@ screen is what the running game reads.
 Resetting the config means *regenerating* it — its pristine form is the
 document as it stands, not the empty file a new project scaffolds with.
 
-Today the marked blocks are `preload`, `drawGrid`, `placeDocument`,
+Today the marked blocks are `preload`, `applyCamera`, `placeDocument`,
 `paintFill`, `drawOrder`, `applyDepth`, `applyScale` and `pointsToVectors`,
-the same eight in both scenes, plus the config. A test pins that the two genres mark the same set and that
+the same eight in both scenes, plus `pixelPerfect` in `main.js` and the config.
+A test pins that the two genres mark the same set and that
 every marker closes, because a block is found by id and one renamed on one side
 would quietly stop offering its Reset there.
 
-## Pinning and unpinning the code panel
+`drawGrid` was one of them and is gone: the scenes draw no lattice now. A
+project scaffolded before that still has the block, and Reset on it reports that
+there is no scaffold to go back to rather than emptying it — which is the same
+answer the modal gives for any file the template does not write, and the right
+one: what to do with a block the template dropped is the author's call.
 
-**It opens pinned.** Code in this editor is code about the thing beside it:
-the config follows the canvas, a save while a game is up restarts it, and a
+### A scaffold-time conditional, which is not the same mechanism
+
+`character` cannot reach a project through the config, because leaving a
+character out means not writing the lines that make one. So the templates carry
+one directive the scaffold resolves as it writes:
+
+```js
+// idlewild:if character
+this.spawnCharacter();
+// idlewild:end if
+```
+
+The marker lines never reach disk; what is between them does only when the
+option is on. It is deliberately *not* the managed-block mechanism, which is
+about lines the editor goes on owning after they are written — this is a choice
+made once, before the file exists. The two do not interfere because both halves
+of the editor ask `templates::template_files` for the same project: the file on
+disk and the pristine text a Reset compares against are resolved the same way,
+so a managed block's diff compares like with like. It is one level deep and one
+option wide on purpose; a nested condition would be a templating language
+growing out of a single checkbox.
+
+## Where the code panel sits
+
+There are four places, and they are four different jobs: a row above the
+console, a column to the **left** or the **right** of the canvas, and over the
+whole shell. The first three are docks — part of the layout, with the canvas
+keeping whatever is left — and the fourth is an overlay.
+
+**It opens on the bottom.** Code in this editor is code about the thing beside
+it: the config follows the canvas, a save while a game is up restarts it, and a
 console line opens the file it was written in — all of which you want to be
-looking at while it happens. Floating is one tap away and the choice is
-remembered (`codePinned`), so pinned is the default rather than the rule.
+looking at while it happens, and the bottom dock is the placement that says so
+with the least moved. The other three are one tap away and the choice is
+remembered (`codePlacement`, and the old `codePinned` is read once for anyone
+who only ever answered that: "not pinned" was today's full screen).
 
-Docked, the panel is a row of the shell and its divider writes an inline
-`height` on it. Floating, it is `position: absolute; inset: 0` — and an
-absolutely positioned box given top, bottom *and* a height is over-constrained,
-so the browser drops `bottom` and the panel hangs from the top of the shell at
-whatever height it was docked at. Unpinning therefore has to take the docked
-height off again, in `setPinned`, or it does not look unpinned: it looks like
-the panel jumped to the top of the screen, which is exactly what it did.
+A column is there because a file is taller than it is wide. On a wide screen the
+bottom dock gives the editor a strip of the window's height and the canvas the
+rest; left or right gives the editor the whole height of the row, which is the
+shape the thing being edited actually is.
+
+Docked, the panel is a row or a column of the shell and its divider writes an
+inline `height` or `width` on it. Over the shell, it is `position: absolute;
+inset: 0` — and an absolutely positioned box given top, bottom *and* a size is
+over-constrained, so the browser drops `bottom` and the panel hangs from the top
+at whatever size it was docked at. Every move therefore takes **both** inline
+sizes off first, in `place`, and the new placement's divider puts its own back —
+which is also how each placement keeps a size of its own: a height for the
+bottom, a width for the two columns. Without that, moving from a column to the
+overlay does not look like an overlay; it looks like the panel jumped to the top
+of the screen, which is exactly what it did.
 
 The header carries New File and New Folder rather than the word "Code" and
 the project name. Neither said anything the user did not already know a moment
 after opening the modal from that project, and on an iPad the header is the
-difference between two rows of chrome above the file column and one.
+difference between two rows of chrome above the file column and one. In a column
+that row wraps onto two, because 420 px has no room for one.
 
 ## Console
 
@@ -3027,17 +3215,29 @@ frame is the point of the JS half.
   looking" is a real thing to want.
 - The code modal has none of phaser-bench's Phaser-aware completions, and the
   binding runs one way: the canvas drives the code, through the generated
-  config, and code does not yet drive the canvas. Unpinned it covers the whole
-  shell; Pin docks it above the console — which is where you want it while
-  saving into a running game.
+  config, and code does not yet drive the canvas.
+- **A 1× asset still arrives at half size.** `IMPORT_SCALE` is a constant
+  rather than a per-project setting, so an 8px project importing 1× art has to
+  resize it once — and `defaultZoom` does not help, because it is a camera.
+  Neither of them is "this project's art is 1×", which is the setting a
+  pixel-art project actually wants.
+- Pixel art applies to the *editor's* textures and the game's renderer, and to
+  the camera for whole pixels — but the drawing layer's own backing canvases are
+  not re-filtered with them, so ink drawn while it is on can still be smoothed
+  as the canvas scales. The ink is baked at its own resolution; making it blocky
+  is a question about the brush engine rather than about this setting.
+- A project's `game/` tree is never migrated, which is what makes it the user's
+  — and what means the new layout, the camera block and the dropped grid reach a
+  project made before them only as far as the offer to add a missing block goes.
+  There is no "bring my tree up to date", and the three shims that keep the old
+  layout working (the server's runtime paths, the exporter's, and
+  `templates::MOVED`) are the price of not having one.
 - Re-import replaces a whole PSD. There is no diff against the previous
   parse, so a placement is matched to the new file only by its layer path.
 - The anchor mark is written on import and read on every parse after, but
   there is no way to move it from inside the editor — that is Photoshop's
   job, which is the point, but it does mean a PSD imported from elsewhere
   anchors on its canvas centre until someone adds one.
-- `IMPORT_SCALE` is a constant rather than a per-project setting. A 1× asset
-  arrives at half size and has to be resized once.
 - A stroke selection converted to a PSD is still centred on the cell under
   its middle rather than sending an `art` offset, so it can land up to half a
   space from where it was drawn. A fill conversion is exact.

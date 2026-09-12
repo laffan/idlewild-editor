@@ -23,6 +23,53 @@ export type Projection = "isometric" | "orthogonal" | "blank";
  */
 export type Genre = "topdown" | "platformer";
 
+/**
+ * How a project renders, and what its scaffold put in it.
+ *
+ * Three of the four are settings: Project Options can change them, the editor
+ * applies them to its own canvas, and the game reads them out of the generated
+ * config. The fourth, `character`, is a fact about what New Game wrote — a
+ * project's `game/` tree is its own copy, so unticking a box afterwards would
+ * not take a character out of code that already has one. It is kept because
+ * the scaffold has to be reproducible: a managed block's Reset asks Rust for
+ * the file as it was first written.
+ *
+ * Mirrored by `GameOptions` in src-tauri/src/project.rs.
+ */
+export interface GameOptions {
+  /** Nearest-neighbour textures: what keeps a 16px sprite blocky as it scales. */
+  pixelArt: boolean;
+  /** Draw on whole pixels, so a fractional scroll does not smear a sprite. */
+  roundPixels: boolean;
+  /** The zoom a scene opens at, in the editor and in the game. */
+  defaultZoom: number;
+  /** Whether New Game scaffolded a character controller. */
+  character: boolean;
+}
+
+/**
+ * What a project written before the options existed has always been: no pixel
+ * snapping, zoom 1, and a character, because the scaffold always wrote one.
+ */
+export const DEFAULT_OPTIONS: GameOptions = {
+  pixelArt: false,
+  roundPixels: false,
+  defaultZoom: 1,
+  character: true,
+};
+
+/**
+ * A project's options, filled in.
+ *
+ * Rust writes the whole object on every save, so `options` is absent only on a
+ * `meta.json` no build since has touched — and absent means the defaults.
+ * Everything in the editor reads them through here rather than writing `??`
+ * four times.
+ */
+export function projectOptions(meta: ProjectMeta): GameOptions {
+  return { ...DEFAULT_OPTIONS, ...(meta.options ?? {}) };
+}
+
 /** What the home screen lists. Cheap to load — no document body. */
 export interface ProjectMeta {
   id: string;
@@ -34,6 +81,8 @@ export interface ProjectMeta {
   createdAt: number;
   updatedAt: number;
   layerCount: number;
+  /** Absent on projects created before the options existed — see `projectOptions`. */
+  options?: GameOptions;
 }
 
 /** Integer grid coordinates. Not pixels — see lib/grid.ts for the mapping. */
@@ -387,7 +436,20 @@ export type Selection =
   | { kind: "zone"; layerId: string; zoneId: string }
   | { kind: "strokes"; layerId: string; ids: string[] };
 
-export type EditorMode = "edit" | "play";
+/**
+ * The three things the editor is for, and the header's toggle between them.
+ *
+ * **Draw** is the canvas: the tools, the inspector, everything that puts
+ * something down. **Code** is the project's own `game/` tree, which is code
+ * *about* that canvas — so the panel can be pinned to an edge and leave the
+ * canvas beside it, and the inspector steps out of the way because nothing in
+ * it is about a file. **Play** runs the project's own program over the
+ * document as it stands.
+ *
+ * Edit was what Draw is called, back when there were two of these. A document
+ * never stored the mode, so the rename is a rename and nothing else.
+ */
+export type EditorMode = "draw" | "code" | "play";
 
 /**
  * The rail's tools. Boundary is not among them: a boundary is made from

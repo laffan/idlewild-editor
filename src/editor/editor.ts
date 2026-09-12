@@ -3,7 +3,7 @@
  * panels, tool rail, terminal and sheets to it.
  */
 
-import { clear, h, ICONS, icon } from "../lib/dom";
+import { clear, h } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { describeRange, Grid } from "../lib/grid";
 import { assetBase, checkAssetServer, platform, projects } from "../lib/ipc";
@@ -23,7 +23,7 @@ import { GameFrame } from "./game-frame";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
-import { createResizer } from "./resizer";
+import { createShell } from "./shell";
 import { createPsdFileActions } from "./psd-actions";
 import { PsdLayerEditor, psdLayerOwner } from "./psd-layers";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
@@ -32,12 +32,8 @@ import { createExtrudeUi } from "./extrude";
 import { createColliderUi } from "./collider";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { confirmDeleteLayer } from "./layer-actions";
-import {
-  openAddImage,
-  openExportSelection,
-  openProjectOptions,
-  openPublish,
-} from "./sheets";
+import { openAddImage, openExportSelection, openPublish } from "./sheets";
+import { createRenderSettings } from "./render-settings";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
@@ -56,7 +52,7 @@ export async function mountEditor(
   const os = await platform();
 
   let activeLayerId = store.layers[0]?.id ?? "";
-  let mode: EditorMode = "edit";
+  let mode: EditorMode = "draw";
   let handle: GameHandle | null = null;
   let drawing: DrawingLayer | null = null;
   // Built once the scene is up — see below. The header's two buttons and the
@@ -64,10 +60,19 @@ export async function mountEditor(
   let history: HistoryUi | null = null;
 
   const canvasWrap = h("div", { class: "editor-canvas-wrap" });
+  // Pixel art, whole-pixel drawing and the zoom a scene opens at: what boot is
+  // told, and what Project Options changes. `handle` is read through a closure
+  // because the sheet is opened long after the game is up.
+  const render = createRenderSettings(meta, () => handle);
   // The console's level chip is a link when the line came from a file the
   // code modal can open. `code` is built further down, once there is a shell
   // to put it in; this only runs when something is clicked.
-  const terminal = new Terminal((site) => code.openAt(site.path, site.line));
+  const terminal = new Terminal((site) => {
+    // A line in the drawer knows which file it was written in, and the shortest
+    // way to say so is to show it — which means being in Code.
+    setMode("code");
+    code.openAt(site.path, site.line);
+  });
 
   const layers = new LayersPanel(store, {
     getActiveLayerId: () => activeLayerId,
@@ -263,25 +268,6 @@ export async function mountEditor(
     if (tool === "lasso") log.info("Lasso — sweep around strokes to select them");
   }
 
-  const leftToggle = h(
-    "button",
-    {
-      class: "edge-toggle left",
-      title: "Toggle layers",
-      onClick: () => toggleSide("left"),
-    },
-    icon(ICONS.chevronLeft, 14),
-  );
-  const rightToggle = h(
-    "button",
-    {
-      class: "edge-toggle right",
-      title: "Toggle inspector",
-      onClick: () => toggleSide("right"),
-    },
-    icon(ICONS.chevronRight, 14),
-  );
-
   const header = new EditorHeader(
     meta.name,
     `${meta.gridSize} px · ${meta.projection}`,
@@ -290,10 +276,9 @@ export async function mountEditor(
       onUndo: () => history?.undo(),
       onRedo: () => history?.redo(),
       onMode: (next) => setMode(next),
-      onCode: () => code.toggle(),
       onPasteImage: () => intake.paste(),
       onPublish: () => openPublish(meta.id, meta.name),
-      onOptions: () => openProjectOptions(meta, store.layers.length),
+      onOptions: () => render.open(store.layers.length),
     },
   );
 
@@ -304,68 +289,38 @@ export async function mountEditor(
   const gameFrame = new GameFrame(meta.id);
 
   // The header is a row of the shell, not chrome floating over the canvas, so
-  // only the tools and the selection bar are inside the canvas wrapper.
-  canvasWrap.append(
-    rail.root,
-    rail.label,
-    actions.root,
-    leftToggle,
-    rightToggle,
-    gameFrame.root,
-  );
+  // only the tools and the selection bar are inside the canvas wrapper. The
+  // two edge toggles go in too, from `createShell` — they are layout.
+  canvasWrap.append(rail.root, rail.label, actions.root, gameFrame.root);
 
-  // Draggable dividers on both sidebars and the console drawer. Sizes are a
-  // per-viewer convenience, so they live in localStorage rather than the doc.
-  const leftResizer = createResizer({
-    target: layers.root,
-    axis: "width",
-    edge: "end",
-    min: 200,
-    max: 560,
-    storageKey: "leftWidth",
+  // The rows and columns, and the dividers between them — see `shell.ts`.
+  const layout = createShell({
+    header: header.root,
+    layers,
+    canvas: canvasWrap,
+    inspector,
+    terminal,
   });
-  const rightResizer = createResizer({
-    target: inspector.root,
-    axis: "width",
-    edge: "start",
-    min: 240,
-    max: 620,
-    storageKey: "rightWidth",
-  });
-  const consoleResizer = createResizer({
-    target: terminal.body,
-    axis: "height",
-    edge: "start",
-    min: 80,
-    max: 620,
-    storageKey: "consoleHeight",
-  });
-  terminal.mountResizeHandle(consoleResizer.handle);
+  const shell = layout.root;
 
-  const shell = h(
-    "div",
-    { class: "editor" },
-    header.root,
-    h(
-      "div",
-      { class: "editor-main" },
-      layers.root,
-      leftResizer.handle,
-      canvasWrap,
-      rightResizer.handle,
-      inspector.root,
-    ),
-    terminal.root,
-  );
-
-  // Where the code modal sits in the shell, and what pinning it does to the
-  // rows around it. Built after the shell because both are facts about it.
-  const code = new CodePanel(meta.id, shell, terminal.root, (path) => {
-    // Saving code applies it: a game that is up restarts against the file
-    // just written, which is the only way to tell whether the change worked.
-    if (!gameFrame.isRunning) return;
-    gameFrame.reload();
-    log.info(`Play restarted on ${path}`);
+  // Where the code panel sits — a row above the console, a column either side
+  // of the canvas, or over the whole shell. Built after the shell because
+  // every one of those is a fact about it.
+  const code = new CodePanel({
+    projectId: meta.id,
+    shell,
+    beforeConsole: terminal.root,
+    main: layout.main,
+    canvas: canvasWrap,
+    // Its Close leaves the section rather than leaving an empty one up.
+    onClose: () => setMode("draw"),
+    onSaved: (path) => {
+      // Saving code applies it: a game that is up restarts against the file
+      // just written, which is the only way to tell whether the change worked.
+      if (!gameFrame.isRunning) return;
+      gameFrame.reload();
+      log.info(`Play restarted on ${path}`);
+    },
   });
 
   // The document's save is what rewrites `game/js/game.config.json`, so it is
@@ -394,7 +349,7 @@ export async function mountEditor(
     os,
     canvas: canvasWrap,
     scene: () => handle?.scene ?? null,
-    enabled: () => mode === "edit",
+    enabled: () => mode !== "play",
     onPsdReplaced: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
@@ -414,29 +369,32 @@ export async function mountEditor(
     onUndo: () => history?.undo(),
     onRedo: () => history?.redo(),
   });
-  leftResizer.restore();
-  rightResizer.restore();
-  consoleResizer.restore();
+  layout.restore();
 
-  handle = await bootGame(canvasWrap, {
-    store,
-    assetBase: base,
-    onSelectionChange: (selection) => onSelection(selection),
-    onCameraChange: () =>
-      actions.update(
-        handle?.scene.getSelection() ?? { kind: "none" },
-        handle?.scene.selectionScreenAnchor() ?? null,
-      ),
-    onDragStateChange: (dragging) => {
-      inspector.setSuspended(dragging);
-      layers.setSuspended(dragging);
+  handle = await bootGame(
+    canvasWrap,
+    {
+      store,
+      assetBase: base,
+      defaultZoom: render.options.defaultZoom,
+      onSelectionChange: (selection) => onSelection(selection),
+      onCameraChange: () =>
+        actions.update(
+          handle?.scene.getSelection() ?? { kind: "none" },
+          handle?.scene.selectionScreenAnchor() ?? null,
+        ),
+      onDragStateChange: (dragging) => {
+        inspector.setSuspended(dragging);
+        layers.setSuspended(dragging);
+      },
+      onViewport: (view) => drawing?.sync(view),
+      onDetachCopy: (layerId, placementId, key) =>
+        void psdFile.detach(layerId, placementId, key),
+      onExtrudeChange: () => extrude.sync(),
+      onColliderChange: () => collider.sync(),
     },
-    onViewport: (view) => drawing?.sync(view),
-    onDetachCopy: (layerId, placementId, key) =>
-      void psdFile.detach(layerId, placementId, key),
-    onExtrudeChange: () => extrude.sync(),
-    onColliderChange: () => collider.sync(),
-  });
+    render.options,
+  );
   handle.scene.activeLayerId = activeLayerId;
 
   // Undo and redo: the two header buttons, and which history a press means —
@@ -618,19 +576,20 @@ export async function mountEditor(
     handle?.scene.setSelection({ kind: "none" });
   }
 
-  function toggleSide(side: "left" | "right"): void {
-    const panel = side === "left" ? layers : inspector;
-    const resizer = side === "left" ? leftResizer : rightResizer;
-    const collapsed = panel.root.classList.contains("collapsed");
-    panel.setCollapsed(!collapsed);
-    resizer.handle.classList.toggle("collapsed", !collapsed);
-  }
-
   function setMode(next: EditorMode): void {
     mode = next;
     header.setMode(next);
     shell.classList.toggle("play-mode", next === "play");
+    // The inspector is about what is on the canvas, and nothing in Code is.
+    shell.classList.toggle("code-mode", next === "code");
     handle?.scene.setMode(next);
+
+    // Code is a section rather than a panel that happens to be open: entering
+    // it puts the panel up, wherever it was last docked, and leaving it takes
+    // the panel down. Anything that wants a file on screen — a console line
+    // naming where it was written — asks for the mode first.
+    if (next === "code") code.show();
+    else code.hide();
 
     if (next !== "play") {
       gameFrame.stop();
@@ -666,7 +625,8 @@ export async function mountEditor(
     history?.destroy();
     history = null;
     intake.stop();
-    if (mode === "play") setMode("edit");
+    // A thumbnail is of the canvas, so the game comes down first.
+    if (mode === "play") setMode("draw");
     await saveThumbnail();
     await store.flush();
     header.destroy();
@@ -679,9 +639,7 @@ export async function mountEditor(
     drawing = null;
     code.destroy();
     terminal.destroy();
-    leftResizer.destroy();
-    rightResizer.destroy();
-    consoleResizer.destroy();
+    layout.destroy();
     handle?.destroy();
     handle = null;
   }

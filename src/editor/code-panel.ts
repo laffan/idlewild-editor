@@ -1,37 +1,64 @@
 /**
- * Where the code modal lives in the shell, and what pinning it means.
+ * Where the code panel sits in the shell, and what each placement means.
  *
  * The modal itself is `code/code-modal.ts` — the file tree, the editor and the
  * reference along the bottom. What it cannot decide for itself is where in the
  * page it sits, because that is a fact about the editor's layout rather than
- * about editing code: unpinned it covers the whole shell, and pinned it is a
- * row between the canvas and the console, on a divider of its own so the two
- * stacked panels are sized the same way. So the modal reports the pin and this
- * acts on it.
+ * about editing code. So the modal reports the placement and this acts on it.
  *
- * The divider is rebuilt on each pin rather than kept, and its height is
- * restored from storage — which is what makes the docked panel come back the
- * size it was left at, within a session and across them.
+ * There are four, and they are four different jobs:
  *
- * It opens **pinned**. Code in this editor is code about the thing beside it:
- * the config follows the canvas, and a save while a game is up restarts it —
- * both of which you want to be looking at. Floating is still one tap away,
- * and which way it was left is remembered.
+ * - **Bottom** — a row between the canvas and the console, the original dock.
+ *   Code about the thing above it, with the console under both.
+ * - **Left** and **right** — a column of the main row, beside the canvas. A
+ *   wide screen has the room, and a file is taller than it is wide: the editor
+ *   gets the height of the whole window rather than a strip of it.
+ * - **Full** — over the shell, header included. A code editor wants the room,
+ *   and the canvas underneath is not what you are looking at while you are
+ *   reading a file end to end.
+ *
+ * Each is a divider on a different edge, so each remembers its own size: a
+ * height for the bottom dock, a width for the two columns. The divider is
+ * rebuilt on each move rather than kept, which is also what restores that
+ * size.
+ *
+ * Code mode opens it — see `editor.ts`. Which placement it opens in is
+ * remembered, and **bottom** is the answer for anyone who has not said: code
+ * in this editor is code about the thing beside it, and that is the placement
+ * that says so with the least moved.
  */
 
-import { CodeModal } from "../code/code-modal";
+import { CodeModal, type CodePlacement } from "../code/code-modal";
 import { createResizer, type Resizer } from "./resizer";
 
-const PINNED_KEY = "codePinned";
+const PLACEMENT_KEY = "codePlacement";
+/** What the panel was before there were four answers rather than two. */
+const LEGACY_PINNED_KEY = "codePinned";
+
+export interface CodePanelSlots {
+  projectId: string;
+  /** The editor shell: what a full-screen panel covers, and the bottom row's parent. */
+  shell: HTMLElement;
+  /** The console drawer. The bottom dock is the row above it. */
+  beforeConsole: HTMLElement;
+  /** The row holding the sidebars and the canvas: where a column dock goes. */
+  main: HTMLElement;
+  /** The canvas wrapper, which a column dock sits to the left or right of. */
+  canvas: HTMLElement;
+  /** A file in `game/` was written — the shell decides what that means. */
+  onSaved?: (path: string) => void;
+  /**
+   * The panel's own Close was pressed.
+   *
+   * The shell's business rather than this one's: Code is a section, and closing
+   * the panel means leaving it rather than sitting in an empty one. Without a
+   * handler the panel simply takes itself down.
+   */
+  onClose?: () => void;
+}
 
 export class CodePanel {
-  private readonly projectId: string;
-  private readonly shell: HTMLElement;
-  /** The console drawer: docked, the panel goes in above it. */
-  private readonly before: HTMLElement;
-  /** A file in `game/` was written — the shell decides what that means. */
-  private readonly onSaved: (path: string) => void;
-
+  private readonly slots: CodePanelSlots;
   private modal: CodeModal | null = null;
   private resizer: Resizer | null = null;
   /**
@@ -41,34 +68,56 @@ export class CodePanel {
    */
   onHistoryChange: () => void = () => {};
 
-  constructor(
-    projectId: string,
-    shell: HTMLElement,
-    before: HTMLElement,
-    onSaved: (path: string) => void = () => {},
-  ) {
-    this.projectId = projectId;
-    this.shell = shell;
-    this.before = before;
-    this.onSaved = onSaved;
+  constructor(slots: CodePanelSlots) {
+    this.slots = slots;
   }
 
   get open(): boolean {
     return this.modal !== null;
   }
 
-  toggle(): void {
-    if (this.modal) this.destroy();
-    else this.show();
+  /** Put it up, in whichever placement it was left. Safe to call twice. */
+  show(): void {
+    if (this.modal) return;
+    const modal = new CodeModal(
+      this.slots.projectId,
+      () => {
+        if (this.slots.onClose) this.slots.onClose();
+        else this.hide();
+      },
+      (placement) => this.place(placement),
+      this.slots.onSaved ?? (() => {}),
+    );
+    this.modal = modal;
+    modal.onHistoryChange = () => this.onHistoryChange();
+    // Appended before it is placed: a placement moves the panel into a row or
+    // a column of the shell, and there has to be something to move.
+    this.slots.shell.appendChild(modal.root);
+    modal.setPlacement(readPlacement());
+    this.onHistoryChange();
   }
 
-  /** Close it, leaving the shell as it was. Safe to call when it is not up. */
-  destroy(): void {
+  /**
+   * Take it down, leaving the shell as it was. Safe to call when it is not up.
+   *
+   * A dirty file is written on the way out. The modal already saves when you
+   * open another file in it, and leaving the section is the same kind of
+   * moment: an edit that vanished because the header was pressed would be the
+   * editor losing work it had been shown. `save` reads the document before it
+   * awaits the write, so tearing the view down straight afterwards is safe.
+   */
+  hide(): void {
+    void this.modal?.save();
     this.modal?.destroy();
     this.modal = null;
     this.resizer?.destroy();
     this.resizer = null;
     this.onHistoryChange();
+  }
+
+  /** The shell is going away. */
+  destroy(): void {
+    this.hide();
   }
 
   // ── the open file's history, for the two buttons in the header ────────────
@@ -94,24 +143,9 @@ export class CodePanel {
     return this.modal?.contains(node) ?? false;
   }
 
-  private show(): void {
-    this.modal = new CodeModal(
-      this.projectId,
-      () => this.destroy(),
-      (pinned) => this.setPinned(pinned),
-      this.onSaved,
-    );
-    this.modal.onHistoryChange = () => this.onHistoryChange();
-    // Appended before it is pinned: pinning moves the panel into a row of the
-    // shell, and there has to be something to move.
-    this.shell.appendChild(this.modal.root);
-    this.modal.setPinned(readPinned());
-    this.onHistoryChange();
-  }
-
-  /** Open a file at a line, opening the panel first if it is not up. */
+  /** Open a file at a line, putting the panel up first if it is not. */
   openAt(path: string, line: number): void {
-    if (!this.modal) this.show();
+    this.show();
     void this.modal?.openAt(path, line);
   }
 
@@ -124,48 +158,94 @@ export class CodePanel {
   }
 
   /**
-   * Move the panel between floating over the canvas and sitting as a row of
-   * the shell above the console.
+   * Move the panel to one of its four places.
+   *
+   * Docked, the divider writes an inline `height` or `width` on the panel.
+   * Over the shell, it is `position: absolute; inset: 0` — and an absolutely
+   * positioned box given top, bottom *and* a height is over-constrained, so
+   * the browser drops `bottom` and the panel hangs from the top of the shell at
+   * whatever size it was docked at. Every move therefore takes both inline
+   * sizes off first, and the new placement's divider puts its own back.
    */
-  private setPinned(pinned: boolean): void {
+  private place(placement: CodePlacement): void {
     const modal = this.modal;
     if (!modal) return;
-    writePinned(pinned);
+    writePlacement(placement);
 
-    if (!pinned) {
-      this.resizer?.destroy();
-      this.resizer = null;
-      this.shell.appendChild(modal.root);
+    this.resizer?.destroy();
+    this.resizer = null;
+    modal.root.style.removeProperty("height");
+    modal.root.style.removeProperty("width");
+
+    if (placement === "full") {
+      this.slots.shell.appendChild(modal.root);
       return;
     }
 
+    if (placement === "bottom") {
+      this.resizer = createResizer({
+        target: modal.root,
+        axis: "height",
+        edge: "start",
+        min: 140,
+        max: 720,
+        storageKey: "codeHeight",
+      });
+      this.slots.shell.insertBefore(this.resizer.handle, this.slots.beforeConsole);
+      this.slots.shell.insertBefore(modal.root, this.slots.beforeConsole);
+      this.resizer.restore();
+      return;
+    }
+
+    // A column beside the canvas. The divider sits between the two, which is
+    // the panel's end edge on the left and its start edge on the right.
+    const left = placement === "left";
     this.resizer = createResizer({
       target: modal.root,
-      axis: "height",
-      edge: "start",
-      min: 140,
-      max: 720,
-      storageKey: "codeHeight",
+      axis: "width",
+      edge: left ? "end" : "start",
+      min: 260,
+      max: 900,
+      storageKey: "codeWidth",
     });
-    this.shell.insertBefore(this.resizer.handle, this.before);
-    this.shell.insertBefore(modal.root, this.before);
+    if (left) {
+      this.slots.main.insertBefore(modal.root, this.slots.canvas);
+      this.slots.main.insertBefore(this.resizer.handle, this.slots.canvas);
+    } else {
+      // Whatever follows the canvas is the inspector's own divider, and the
+      // panel goes in front of it. `insertBefore(…, null)` appends, which is
+      // the right answer if nothing follows the canvas at all.
+      const after = this.slots.canvas.nextSibling;
+      this.slots.main.insertBefore(this.resizer.handle, after);
+      this.slots.main.insertBefore(modal.root, after);
+    }
     this.resizer.restore();
   }
 }
 
-/** Which way the panel was left. Pinned for anyone who has not said. */
-function readPinned(): boolean {
+/**
+ * Which placement the panel was left in.
+ *
+ * Bottom for anyone who has not said — and for anyone whose only answer is the
+ * old pinned/floating flag, where "not pinned" was today's full screen.
+ */
+function readPlacement(): CodePlacement {
   try {
-    return window.localStorage.getItem(PINNED_KEY) !== "false";
+    const stored = window.localStorage.getItem(PLACEMENT_KEY);
+    if (stored === "bottom" || stored === "left" || stored === "right") return stored;
+    if (stored === "full") return "full";
+    return window.localStorage.getItem(LEGACY_PINNED_KEY) === "false"
+      ? "full"
+      : "bottom";
   } catch {
-    return true;
+    return "bottom";
   }
 }
 
-function writePinned(pinned: boolean): void {
+function writePlacement(placement: CodePlacement): void {
   try {
-    window.localStorage.setItem(PINNED_KEY, String(pinned));
+    window.localStorage.setItem(PLACEMENT_KEY, placement);
   } catch {
-    // Private browsing, or a quota. It still pins for this session.
+    // Private browsing, or a quota. It still moves for this session.
   }
 }

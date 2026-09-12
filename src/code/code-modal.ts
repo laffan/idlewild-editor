@@ -7,12 +7,11 @@
  * autocomplete and its live preview reload are the next increment; the spec
  * asks only for a dockable modal for now.
  *
- * Unpinned it covers the whole shell — a code editor wants the room, and the
- * canvas underneath is not what you are looking at while you are in it. Pin
- * is how you get both at once: it becomes a full-width row above the console,
- * resizable on the same divider, and the canvas keeps whatever is left. Where
- * it lives in the DOM is the editor shell's business, so pinning is reported
- * rather than acted on here.
+ * Where it sits is a choice of four — a row above the console, a column either
+ * side of the canvas, or the whole shell — and the row of buttons in the header
+ * is how it is made. Which of them is in force is the editor shell's business,
+ * because it is a fact about the shell's layout, so a placement is reported
+ * rather than acted on here. See `editor/code-panel.ts`.
  *
  * Docs opens a fourth region along the bottom, on a divider of its own: the
  * Phaser reference, MDN's, and the two written guides, following the caret
@@ -55,6 +54,24 @@ import { createResizer, type Resizer } from "../editor/resizer";
 
 const languageCompartment = new Compartment();
 
+/**
+ * Where the panel sits in the shell.
+ *
+ * `bottom` is a row between the canvas and the console; `left` and `right` are
+ * columns beside the canvas; `full` covers the shell, header included. Acted on
+ * by `editor/code-panel.ts` — what it means here is which button is lit and
+ * which class the panel carries.
+ */
+export type CodePlacement = "bottom" | "left" | "right" | "full";
+
+/** The four, in the order the header offers them — left to right, as they sit. */
+const PLACEMENTS: Array<{ value: CodePlacement; label: string; title: string }> = [
+  { value: "left", label: "Left", title: "Dock to the left of the canvas" },
+  { value: "bottom", label: "Bottom", title: "Dock above the console" },
+  { value: "right", label: "Right", title: "Dock to the right of the canvas" },
+  { value: "full", label: "Full", title: "Cover the editor" },
+];
+
 export class CodeModal {
   readonly root: HTMLElement;
   private readonly projectId: string;
@@ -69,12 +86,13 @@ export class CodeModal {
   private view: EditorView | null = null;
   private openPath: string | null = null;
   private dirty = false;
-  private pinned = false;
-  private readonly pinButton: HTMLButtonElement;
+  /** Null until the shell has placed it, which it does as soon as it is up. */
+  private placement: CodePlacement | null = null;
+  private readonly placementButtons = new Map<CodePlacement, HTMLButtonElement>();
   private readonly docsButton: HTMLButtonElement;
   private readonly undoButton: HTMLButtonElement;
   private readonly redoButton: HTMLButtonElement;
-  private readonly onPinChange: (pinned: boolean) => void;
+  private readonly onPlacementChange: (placement: CodePlacement) => void;
   /** A file was written. The shell restarts a running game against it. */
   private readonly onSaved: (path: string) => void;
   /**
@@ -94,11 +112,11 @@ export class CodeModal {
   constructor(
     projectId: string,
     onClose: () => void,
-    onPinChange: (pinned: boolean) => void,
+    onPlacementChange: (placement: CodePlacement) => void,
     onSaved: (path: string) => void = () => {},
   ) {
     this.projectId = projectId;
-    this.onPinChange = onPinChange;
+    this.onPlacementChange = onPlacementChange;
     this.onSaved = onSaved;
     this.tree = new FileTree(projectId, {
       onOpen: (path) => void this.openFile(path),
@@ -156,22 +174,25 @@ export class CodeModal {
       h("span", { text: "Docs" }),
     ) as HTMLButtonElement;
 
-    this.pinButton = h(
-      "button",
-      {
-        class: "code-pin-btn",
-        title: "Dock above the console",
+    // Four buttons rather than one toggle: there is no natural pair here, and
+    // a control that cycled through four places would be a guessing game.
+    const dockGroup = h("div", { class: "code-dock" }, icon(ICONS.pin, 15));
+    for (const { value, label, title } of PLACEMENTS) {
+      const button = h("button", {
+        class: "code-dock-btn",
+        type: "button",
+        title,
+        text: label,
         "aria-pressed": "false",
-        onClick: () => this.setPinned(!this.pinned),
-      },
-      icon(ICONS.pin, 15),
-      h("span", { text: "Pin" }),
-    );
+        onClick: () => this.setPlacement(value),
+      }) as HTMLButtonElement;
+      this.placementButtons.set(value, button);
+      dockGroup.appendChild(button);
+    }
 
     // A pair of its own beside Save, as well as the two in the header. The
-    // header's are out of reach whenever the panel is floating — it covers
-    // the whole shell — and on an iPad with no keyboard those are the only
-    // way to undo. `mousedown` is swallowed so pressing one does not take the
+    // header's are out of reach whenever the panel is placed over the whole
+    // shell, and on an iPad with no keyboard those are the only way to undo. `mousedown` is swallowed so pressing one does not take the
     // caret out of the editor it is about.
     const keepFocus = (event: Event) => event.preventDefault();
     this.undoButton = h(
@@ -221,7 +242,7 @@ export class CodeModal {
           "div",
           { class: "code-head-right" },
           this.docsButton,
-          this.pinButton,
+          dockGroup,
           h(
             "button",
             { class: "icon-btn", title: "Close", onClick: onClose },
@@ -310,27 +331,25 @@ export class CodeModal {
     this.onHistoryChange();
   }
 
-  /** Dock it above the console, or float it back over the canvas. */
-  setPinned(pinned: boolean): void {
-    if (pinned === this.pinned) return;
-    this.pinned = pinned;
-    this.root.classList.toggle("docked", pinned);
-    // Docked, the divider writes an inline height on this element. Floating,
-    // the panel is `position: absolute; inset: 0` — and an absolutely
-    // positioned box given top, bottom *and* a height is over-constrained, so
-    // the browser drops `bottom` and the panel hangs from the top of the
-    // shell at whatever height it was docked at. Unpinning therefore has to
-    // take the docked height off again, or it does not look unpinned.
-    if (!pinned) this.root.style.removeProperty("height");
-    this.pinButton.setAttribute("aria-pressed", String(pinned));
-    this.pinButton.title = pinned
-      ? "Float over the canvas"
-      : "Dock above the console";
-    this.onPinChange(pinned);
-  }
-
-  get isPinned(): boolean {
-    return this.pinned;
+  /**
+   * Put the panel somewhere: a row above the console, a column either side of
+   * the canvas, or over the whole shell.
+   *
+   * The classes are what the stylesheet reads — `docked` for the three that are
+   * part of the layout, and the direction for which edge each takes. Moving it
+   * in the DOM, and the inline size its divider writes, are the shell's.
+   */
+  setPlacement(placement: CodePlacement): void {
+    if (placement === this.placement) return;
+    this.placement = placement;
+    this.root.classList.toggle("docked", placement !== "full");
+    for (const side of ["left", "right", "bottom"] as const) {
+      this.root.classList.toggle(`dock-${side}`, placement === side);
+    }
+    for (const [value, button] of this.placementButtons) {
+      button.setAttribute("aria-pressed", String(value === placement));
+    }
+    this.onPlacementChange(placement);
   }
 
   /**

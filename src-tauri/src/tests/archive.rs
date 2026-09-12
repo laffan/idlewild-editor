@@ -11,7 +11,7 @@
 //! assertion about a constant.
 
 use crate::archive;
-use crate::project::{Genre, Projection};
+use crate::project::{GameOptions, Genre, Projection};
 use crate::store;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -79,8 +79,14 @@ fn document() -> String {
 /// A project with a document, a source PSD, a processed asset and an edited
 /// file in `game/` — one of everything an archive is supposed to carry.
 fn seeded(name: &str) -> String {
-    let meta = store::create_project(name, Projection::Isometric, Genre::Topdown, 64)
-        .expect("project should be created");
+    let meta = store::create_project(
+        name,
+        Projection::Isometric,
+        Genre::Topdown,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
     store::write_doc(&meta.id, &document()).expect("document should save");
 
     std::fs::write(
@@ -94,7 +100,7 @@ fn seeded(name: &str) -> String {
     std::fs::write(asset.join("data.json"), r#"{"name":"tower"}"#)
         .expect("manifest should write");
 
-    store::write_game_file(&meta.id, "js/WorldScene.js", "// edited by hand\n")
+    store::write_game_file(&meta.id, "js/scenes/WorldScene.js", "// edited by hand\n")
         .expect("scene should save");
     meta.id
 }
@@ -163,7 +169,8 @@ fn a_project_survives_a_round_trip_through_an_idlewild_file() {
 
         // And the code, as it was edited rather than as the template writes it.
         assert_eq!(
-            store::read_game_file(&opened.id, "js/WorldScene.js").expect("scene should read"),
+            store::read_game_file(&opened.id, "js/scenes/WorldScene.js")
+                .expect("scene should read"),
             "// edited by hand\n",
         );
 

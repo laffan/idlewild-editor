@@ -10,7 +10,7 @@
 //! Split from `scaffolds` for the 700-line rule; it shares the store the rest
 //! of the suite creates projects in.
 
-use crate::project::{Genre, Projection};
+use crate::project::{GameOptions, Genre, Projection};
 use crate::{store, templates};
 
 /// The config the project's own code reads follows the document.
@@ -21,8 +21,14 @@ use crate::{store, templates};
 /// empty world. Every save regenerates it.
 #[test]
 fn saving_the_document_rewrites_the_config_the_game_reads() {
-    let meta = store::create_project("Synced", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Synced",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let config = |id: &str| -> serde_json::Value {
@@ -82,7 +88,7 @@ fn saving_the_document_rewrites_the_config_the_game_reads() {
 
         store::write_doc(
             &meta.id,
-            &templates::starter_doc(Projection::Orthogonal, Genre::Topdown, 32),
+            &templates::starter_doc(&store::read_meta(&meta.id).expect("meta should read")),
         )
         .expect("document should save");
         store::write_game_file(&meta.id, "js/game.config.json", "{}")
@@ -105,8 +111,14 @@ fn saving_the_document_rewrites_the_config_the_game_reads() {
 /// keys cover every scene so a switch in someone's own code has its textures.
 #[test]
 fn the_config_carries_every_scene_and_places_the_open_one() {
-    let meta = store::create_project("Scened", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Scened",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         store::write_doc(
@@ -199,8 +211,14 @@ fn the_config_carries_every_scene_and_places_the_open_one() {
 /// that has never been through the frontend.
 #[test]
 fn a_document_written_before_scenes_still_reaches_the_config() {
-    let meta = store::create_project("Legacy doc", Projection::Blank, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Legacy doc",
+        Projection::Blank,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         store::write_doc(
@@ -256,8 +274,14 @@ fn a_document_written_before_scenes_still_reaches_the_config() {
 /// already writes.
 #[test]
 fn the_config_spawns_on_the_scenes_start_point() {
-    let meta = store::create_project("Spawned", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Spawned",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let config = |id: &str| -> serde_json::Value {
@@ -330,8 +354,14 @@ fn the_config_spawns_on_the_scenes_start_point() {
 /// put it there.
 #[test]
 fn the_span_reaches_a_point_put_down_a_long_way_out() {
-    let meta = store::create_project("Distant", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Distant",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         store::write_doc(

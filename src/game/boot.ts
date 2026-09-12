@@ -9,6 +9,7 @@
 
 import Phaser from "phaser";
 import PsdToPhaser from "psd-to-phaser";
+import type { GameOptions } from "../lib/types";
 import { WorldScene, type WorldSceneConfig } from "./world-scene";
 
 export interface GameHandle {
@@ -34,9 +35,19 @@ function exposePhaserGlobal(): void {
   if (!scope.Phaser) scope.Phaser = Phaser;
 }
 
+/**
+ * `options` is the project's rendering choices, at boot rather than after it.
+ *
+ * Phaser reads `pixelArt` and `roundPixels` once, as the game is constructed —
+ * `pixelArt` turns `antialias` off, and that is what every texture source
+ * consults for its filter. So a project that is pixel-perfect is pixel-perfect
+ * from its first texture, and the toggles in Project Options reach a game
+ * already running through `game/render-options.ts` instead.
+ */
 export function bootGame(
   parent: HTMLElement,
   config: WorldSceneConfig,
+  options: GameOptions,
 ): Promise<GameHandle> {
   exposePhaserGlobal();
 
@@ -47,6 +58,8 @@ export function bootGame(
       type: Phaser.WEBGL,
       parent,
       backgroundColor: "#d9e6ef",
+      pixelArt: options.pixelArt,
+      roundPixels: options.roundPixels,
       scale: {
         mode: Phaser.Scale.RESIZE,
         width: "100%",

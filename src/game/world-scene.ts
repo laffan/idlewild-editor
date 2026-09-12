@@ -27,10 +27,14 @@ import { fillRegion } from "./fill-region";
 import { instanceMembers, instanceOf } from "./instance";
 import type { Viewport } from "../drawing";
 
-
 export interface WorldSceneConfig {
   store: DocStore;
   assetBase: string;
+  /**
+   * The zoom a scene with no camera of its own opens at. A project option
+   * rather than a document field, so it arrives rather than being read.
+   */
+  defaultZoom: number;
   onSelectionChange: (selection: Selection) => void;
   onCameraChange: () => void;
   /**
@@ -72,7 +76,7 @@ export class WorldScene extends Phaser.Scene {
   private drops!: DropTargets;
   private marquee!: Marquee;
 
-  private mode: EditorMode = "edit";
+  private mode: EditorMode = "draw";
   private selection: Selection = { kind: "none" };
   private drag!: DragController;
   /** The modes that take the canvas over: extrude, and collider. */
@@ -149,6 +153,7 @@ export class WorldScene extends Phaser.Scene {
       this.cameras.main.centerOn(saved.x, saved.y);
       this.cameraPlaced = true;
     } else {
+      this.cameras.main.setZoom(this.config.defaultZoom);
       this.cameras.main.centerOn(0, 0);
       // Scale.RESIZE settles a frame or two after create(), and centring
       // against the pre-resize viewport leaves the origin off-screen. Keep
@@ -230,7 +235,7 @@ export class WorldScene extends Phaser.Scene {
     // origin, for one nobody has looked at yet.
     const saved = this.store.activeScene.camera;
     this.cameraPlaced = true;
-    this.cameras.main.setZoom(saved?.zoom ?? 1);
+    this.cameras.main.setZoom(saved?.zoom ?? this.config.defaultZoom);
     this.cameras.main.centerOn(saved?.x ?? 0, saved?.y ?? 0);
     this.gridRenderer.invalidate();
     this.config.onCameraChange();
@@ -334,7 +339,7 @@ export class WorldScene extends Phaser.Scene {
 
   centreOnOrigin(): void {
     this.cameraPlaced = true;
-    this.cameras.main.setZoom(1);
+    this.cameras.main.setZoom(this.config.defaultZoom);
     this.cameras.main.centerOn(0, 0);
     this.gridRenderer.invalidate();
     this.persistCamera();
@@ -640,7 +645,12 @@ export class WorldScene extends Phaser.Scene {
 
   setMode(mode: EditorMode): void {
     if (this.mode === mode) return;
+    const wasPlaying = this.mode === "play";
     this.mode = mode;
+    // Draw and Code are both editing: the canvas is still there, still
+    // interactive, and a solid half pulled is not something a trip to the code
+    // panel should throw away. Only play mode stops the tools.
+    if (!wasPlaying && mode !== "play") return;
     this.drag.cancel();
     // Nothing can be dropped on a running game, so a highlight left over
     // from a drag that ended in Play would never be cleared.

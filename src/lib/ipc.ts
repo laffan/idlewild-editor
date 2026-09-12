@@ -1,7 +1,7 @@
 /** Typed wrappers over the Tauri command surface in src-tauri/src/lib.rs. */
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Genre, ProjectMeta, Projection } from "./types";
+import type { GameOptions, Genre, ProjectMeta, Projection } from "./types";
 
 /**
  * Bytes as the command surface takes them.
@@ -230,7 +230,34 @@ export const projects = {
     projection: Projection,
     gridSize: number,
     genre: Genre,
-  ) => invoke<ProjectMeta>("create_project", { name, projection, gridSize, genre }),
+    options: GameOptions,
+  ) =>
+    invoke<ProjectMeta>("create_project", {
+      name,
+      projection,
+      gridSize,
+      genre,
+      options,
+    }),
+  /**
+   * Change how a project renders. Hands back the meta as written, and rewrites
+   * the config the project's own code reads — so a game that is up picks the
+   * change up on its next start.
+   *
+   * The scaffold's own choice, whether a character controller was written, is
+   * not among them: a project's `game/` tree is its own copy, and unticking a
+   * box cannot take a character out of code that already has one.
+   */
+  setOptions: (
+    id: string,
+    options: Pick<GameOptions, "pixelArt" | "roundPixels" | "defaultZoom">,
+  ) =>
+    invoke<ProjectMeta>("set_project_options", {
+      id,
+      pixelArt: options.pixelArt,
+      roundPixels: options.roundPixels,
+      defaultZoom: options.defaultZoom,
+    }),
   rename: (id: string, name: string) =>
     invoke<ProjectMeta>("rename_project", { id, name }),
   remove: (id: string) => invoke<void>("delete_project", { id }),

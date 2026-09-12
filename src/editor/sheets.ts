@@ -8,7 +8,7 @@ import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
 import { psd, publish, toBase64 } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
-import type { ProjectMeta } from "../lib/types";
+import { projectOptions, type GameOptions, type ProjectMeta } from "../lib/types";
 import { isMobile } from "../lib/platform";
 import * as log from "../lib/log";
 import { clipboardImage } from "./clipboard";
@@ -337,12 +337,74 @@ export function openPublish(projectId: string, projectName: string): void {
   );
 }
 
-export function openProjectOptions(meta: ProjectMeta, layerCount: number): void {
+/** The three options Project Options can change, as it hands them back. */
+export type RenderOptions = Pick<
+  GameOptions,
+  "pixelArt" | "roundPixels" | "defaultZoom"
+>;
+
+/**
+ * Project Options: what the project is, and the three things about it that can
+ * still be changed.
+ *
+ * The template, the style and the grid scale are facts — the document is
+ * addressed in them and the scaffold was written for them — so they are read
+ * out rather than offered. The rendering settings are not: pixel art, whole-pixel
+ * drawing and the zoom a scene opens at reach the canvas and the game through
+ * values either of them reads at the time, so they are controls, and each one
+ * takes effect as it is changed rather than on the way out. There is no Cancel
+ * because there is no pending state to abandon.
+ *
+ * The character controller is in between, and is listed as a fact: it was lines
+ * in a file, and the file became the project's own the moment it was written.
+ * Unticking a box now would not take a character out of code that has one, so
+ * the row says what happened instead of pretending to undo it.
+ */
+export function openProjectOptions(
+  meta: ProjectMeta,
+  layerCount: number,
+  onApply: (options: RenderOptions) => void,
+): void {
   const sheet = openSheet({
     title: "Project Options",
     subtitle: meta.name,
     width: 600,
   });
+
+  const options = projectOptions(meta);
+  const live: RenderOptions = {
+    pixelArt: options.pixelArt,
+    roundPixels: options.roundPixels,
+    defaultZoom: options.defaultZoom,
+  };
+  const apply = () => onApply({ ...live });
+
+  // The three that can change, first: they are the reason to open this sheet,
+  // and the facts under them are a reference rather than a form.
+  sheet.body.append(
+    toggleRow(
+      "Pixel art",
+      "Nearest-neighbour textures, so scaling keeps the pixels",
+      live.pixelArt,
+      (on) => {
+        live.pixelArt = on;
+        apply();
+      },
+    ),
+    toggleRow(
+      "Round pixels",
+      "Draw on whole pixels, so a fractional scroll does not smear a sprite",
+      live.roundPixels,
+      (on) => {
+        live.roundPixels = on;
+        apply();
+      },
+    ),
+    zoomRow(live.defaultZoom, (zoom) => {
+      live.defaultZoom = zoom;
+      apply();
+    }),
+  );
 
   const rows: Array<[string, string]> = [
     ["Template", meta.projection],
@@ -352,6 +414,12 @@ export function openProjectOptions(meta: ProjectMeta, layerCount: number): void 
       meta.projection === "blank"
         ? `${meta.gridSize} px · nothing snaps`
         : `${meta.gridSize} px`,
+    ],
+    [
+      "Character",
+      options.character
+        ? "Scaffolded · js/prefabs/character.js"
+        : "None — the project places the document and nothing moves",
     ],
     ["Layers", String(layerCount)],
     ["Created", new Date(meta.createdAt).toLocaleString()],
@@ -371,6 +439,71 @@ export function openProjectOptions(meta: ProjectMeta, layerCount: number): void 
 
   sheet.actions.appendChild(
     h("button", { class: "btn btn-primary", text: "Done", onClick: sheet.close }),
+  );
+}
+
+/** One switchable option, laid out on the same grid as the rows above it. */
+function toggleRow(
+  label: string,
+  hint: string,
+  initial: boolean,
+  onChange: (on: boolean) => void,
+): HTMLElement {
+  const box = h("input", { type: "checkbox", class: "check-box" }) as HTMLInputElement;
+  box.checked = initial;
+  box.addEventListener("change", () => onChange(box.checked));
+
+  return h(
+    "div",
+    { class: "sheet-row control" },
+    h("div", { class: "sheet-row-key m", text: label }),
+    h(
+      "div",
+      { class: "sheet-row-value" },
+      h("label", { class: "check" }, box, h("span", { class: "check-hint", text: hint })),
+    ),
+  );
+}
+
+/**
+ * The zoom a scene opens at.
+ *
+ * A number rather than a row of presets, because a project already has a value
+ * and a preset row that did not include it would silently change it. Committed
+ * on change — which for a number input is a typed digit or a step — and only
+ * when it is a number the control's own bounds allow.
+ */
+function zoomRow(initial: number, onChange: (zoom: number) => void): HTMLElement {
+  const input = h("input", {
+    class: "input sheet-row-input",
+    type: "number",
+    min: "0.25",
+    max: "8",
+    step: "0.25",
+  }) as HTMLInputElement;
+  input.value = String(initial);
+  input.addEventListener("change", () => {
+    const zoom = Number(input.value);
+    if (!Number.isFinite(zoom) || zoom <= 0) {
+      input.value = String(initial);
+      return;
+    }
+    onChange(Math.min(8, Math.max(0.25, zoom)));
+  });
+
+  return h(
+    "div",
+    { class: "sheet-row control" },
+    h("div", { class: "sheet-row-key m", text: "Default zoom" }),
+    h(
+      "div",
+      { class: "sheet-row-value" },
+      input,
+      h("span", {
+        class: "check-hint",
+        text: "What a scene with no camera of its own opens at",
+      }),
+    ),
   );
 }
 

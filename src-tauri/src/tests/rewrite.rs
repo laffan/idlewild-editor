@@ -364,12 +364,18 @@ fn the_layer_list_reads_a_grouped_file_as_a_tree() {
 /// back rather than flattening it.
 #[test]
 fn a_grouped_file_round_trips_through_the_layer_list() {
-    use crate::project::{Genre, Projection};
+    use crate::project::{GameOptions, Genre, Projection};
     use crate::psd_layers::{self, LayerEdit};
     use crate::store;
 
-    let meta = store::create_project("Groups", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Groups",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let outcome = std::panic::catch_unwind(|| {
         let id = &meta.id;

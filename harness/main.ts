@@ -19,6 +19,14 @@ import { mountEditor } from "../src/editor/editor";
 // globals, and both have to be set before the editor mounts.
 const projection = (window as any).__projection ?? "isometric";
 const genre = (window as any).__genre ?? "topdown";
+// And its rendering options, so pixel art and a default zoom can be opened
+// here the way a project that was created with them would be.
+const options = (window as any).__options ?? {
+  pixelArt: false,
+  roundPixels: false,
+  defaultZoom: 1,
+  character: true,
+};
 
 void mountEditor(
   document.getElementById("app")!,
@@ -31,6 +39,7 @@ void mountEditor(
     createdAt: Date.now(),
     updatedAt: Date.now(),
     layerCount: 3,
+    options,
   },
   { onBack: () => {} },
 );

@@ -1,18 +1,24 @@
-import { createGrid } from "./grid.js";
-import { createBody, solidsFromDocument, stepBody } from "./physics.js";
-import config from "./game.config.json" with { type: "json" };
+import { createGrid } from "../shared/grid.js";
+// idlewild:if character
+import { createCharacter } from "../prefabs/character.js";
+// idlewild:end if
+import config from "../game.config.json" with { type: "json" };
 
-// The platformer template. Side-on: gravity pulls down the screen, the
-// character runs and jumps, and the document's *blocking* geometry — every
-// fill marked not-walkable, every blocking boundary — is the ground it stands
-// on rather than an obstacle to route around. That is the whole difference
-// between the two styles: the same document, read as a floor plan or as a
-// cross-section.
+// The top-down template. One *Phaser* scene serves all three projections —
+// the difference between diamonds, squares and bare pixels lives in grid.js,
+// and the projection reaches it through the config the editor wrote. That is
+// a different sense of the word from the editor's scenes, which are places in
+// your project; this one class places whichever of them is open.
 //
-// Physics is hand-rolled in physics.js rather than taken from Arcade. What a
-// platformer needs from a body is an AABB sweep against a list of solids, and
-// keeping it in a file of the project's own is what makes it something to
-// change rather than a plugin to configure around.
+// What the character routes around: a fill marked not-walkable, and the
+// collider of every placed PSD — the spaces the editor says that file stands
+// on.
+//
+// A blank project has no lattice, so it navigates on a square lattice of the
+// project's nominal unit — the grid scale chosen in New Game, which is what
+// that setting is for on a template that does not snap. Nothing draws the
+// lattice here on any template: the editor's light blue grid is scaffolding
+// for building on, and a game is the thing you built.
 //
 // This is the program the editor's Play runs, over the project's own files.
 //
@@ -36,6 +42,7 @@ export class WorldScene extends Phaser.Scene {
   // idlewild:begin preload
   preload() {
     this.grid = createGrid(config.projection, config.grid);
+    this.nav = this.grid.snaps ? this.grid : createGrid("orthogonal", config.grid);
     for (const key of config.psdKeys ?? []) {
       this.P2P.load.load(this, key, `assets/${key}`);
     }
@@ -43,51 +50,50 @@ export class WorldScene extends Phaser.Scene {
   // idlewild:end preload
 
   create() {
-    this.solids = solidsFromDocument(this.grid, config.layers ?? []);
-    this.drawGrid();
+    this.readColliders();
+    this.applyCamera();
     this.placeDocument();
+    // idlewild:if character
     this.spawnCharacter();
-    this.bindControls();
+
+    this.input.on("pointerup", (pointer) => {
+      const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+      this.character.moveTo(this.nav.worldToCell(world.x, world.y));
+    });
+    // idlewild:end if
   }
 
-  update(_time, delta) {
-    if (!this.body) return;
-    // A tab left in the background hands back one enormous frame; a body
-    // stepped by it teleports through the floor.
-    stepBody(this.body, this.solids, this.keys, Math.min(delta, 50) / 1000);
-    this.character.setPosition(this.body.x, this.body.y);
+  /**
+   * The camera the project opens at.
+   *
+   * `config.zoom` is the default zoom from Project Options, and
+   * `config.roundPixels` the other half of pixel-perfect rendering — the
+   * renderer is told about it in main.js, and the camera has to be told too
+   * or a fractional scroll still smears what it draws.
+   */
+  // idlewild:begin applyCamera
+  applyCamera() {
+    this.cameras.main.setZoom(config.zoom ?? 1);
+    this.cameras.main.roundPixels = config.roundPixels === true;
   }
-
-  // idlewild:begin drawGrid
-  drawGrid() {
-    if (!this.grid.snaps) return;
-    const g = this.add.graphics().setDepth(-1000);
-    g.lineStyle(1, 0xa9c2d3, 1);
-    const span = config.gridSpan ?? 24;
-    for (let cx = -span; cx <= span; cx++) {
-      for (let cy = -span; cy <= span; cy++) {
-        g.strokePoints(
-          pointsToVectors(this.grid.cellPolygon(cx, cy)),
-          true,
-          true,
-        );
-      }
-    }
-  }
-  // idlewild:end drawGrid
+  // idlewild:end applyCamera
 
   // idlewild:begin placeDocument
   placeDocument() {
+    // Layers are stored top-first; Phaser depth counts upward, so the last
+    // layer in the list is the furthest back.
     const layers = config.layers ?? [];
     layers.forEach((layer, index) => {
       const depth = layers.length - index;
       if (layer.visible === false) return;
 
-      for (const fill of layer.fills ?? []) this.paintFill(fill, depth);
-      // Back to front, once for the whole layer. Seen from the side nothing
-      // sorts on Y — a cross-section has no nearer and further — so this is
-      // the order things were placed in, with each PSD's own stack inside it.
-      const order = drawOrder(layer.placements ?? [], false);
+      for (const fill of layer.fills ?? []) {
+        this.paintFill(fill, depth);
+      }
+      // Back to front, once for the whole layer: each placement takes the
+      // next depth up, so what is above what is decided here rather than by
+      // the order Phaser happened to be handed the objects in.
+      const order = drawOrder(layer.placements ?? [], config.projection === "isometric");
       order.forEach((placement, step) => {
         const object = this.P2P.place(this, placement.psdKey, placement.layerPath);
         if (object && object.setPosition) {
@@ -107,78 +113,116 @@ export class WorldScene extends Phaser.Scene {
       fill.color ?? "#ec3013",
     ).color;
     g.fillStyle(color, 1);
-    for (const box of this.grid.fillBoxes(fill)) {
-      g.fillRect(box.x, box.y, box.width, box.height);
+
+    if (fill.rect) {
+      g.fillRect(fill.rect.x, fill.rect.y, fill.rect.width, fill.rect.height);
+      return;
+    }
+    for (const cell of fill.cells ?? []) {
+      g.fillPoints(
+        pointsToVectors(this.grid.cellPolygon(cell.cx, cell.cy)),
+        true,
+        true,
+      );
     }
   }
   // idlewild:end paintFill
 
+  // idlewild:if character
   /**
-   * Where the character starts.
+   * Where the character starts, and what walks there.
    *
    * `config.spawn` is the space the editor's Point tool designated as this
    * scene's start point, or the origin when it has none. Every point in the
    * scene is in `config.layers[].points` beside it — an id, a name and a
    * cell — so a door, a trigger or a second spawn is a matter of finding the
    * one you named and reading its cell.
+   *
+   * The character itself is a prefab: `js/prefabs/character.js`, which owns
+   * the body and the walk. This is the one line that says where it stands.
    */
   spawnCharacter() {
     const start = config.spawn ?? { cx: 0, cy: 0 };
-    const world = this.grid.cellCentre(start.cx, start.cy);
-    const width = this.grid.size * 0.4;
-    const height = this.grid.size * 0.8;
-
-    this.body = createBody(world.x, world.y, width, height);
-    this.character = this.add
-      .rectangle(this.body.x, this.body.y, width, height, 0x201e1d)
-      .setDepth(1e6);
-    this.cameras.main.startFollow(this.character, true, 0.14, 0.14);
+    this.character = createCharacter(this, {
+      grid: this.grid,
+      nav: this.nav,
+      start,
+      isWalkable: (cx, cy) => this.isWalkable(cx, cy),
+    });
+    this.cameras.main.startFollow(this.character.sprite, true, 0.12, 0.12);
   }
+  // idlewild:end if
 
   /**
-   * Arrow keys and WASD.
+   * The spaces placed PSDs block, worked out once.
    *
-   * The keyboard and nothing else. There were three buttons pinned to the
-   * viewport here for a touchscreen, and they were a guess at a game nobody
-   * has written yet: a template's job is to run, not to decide what the
-   * controls of your platformer look like. Adding them back is
-   * `this.add.rectangle(...).setScrollFactor(0).setInteractive()` and a pair
-   * of `held.add` / `held.delete` handlers on the set below.
+   * A collider rides on the first placement of each unit, as offsets from the
+   * space that unit hangs from — the editor stores it that way so a file can
+   * be dropped twice and block the same shape both times. Resolving them here
+   * rather than inside `isWalkable` matters: that runs once per node of every
+   * search, and the document does not change while a published game is
+   * running.
+   *
+   * Cells where there are cells, boxes where there are not. On a snapping
+   * project the character walks the same lattice the collider was drawn on,
+   * so the spaces *are* the answer — and reducing an isometric diamond to its
+   * box first would block the neighbours its corners reach into.
+   *
+   * This and `isWalkable` are read whether or not this project scaffolded a
+   * character: they are facts about the document, and whatever walks it —
+   * the prefab, or something you write instead — asks them.
    */
-  bindControls() {
-    const keys = { left: false, right: false, jump: false };
-    this.keys = keys;
-
-    const held = new Set();
-    const map = {
-      ArrowLeft: "left",
-      KeyA: "left",
-      ArrowRight: "right",
-      KeyD: "right",
-      ArrowUp: "jump",
-      KeyW: "jump",
-      Space: "jump",
-    };
-    const apply = () => {
-      keys.left = held.has("left");
-      keys.right = held.has("right");
-      keys.jump = held.has("jump");
-    };
-
-    this.input.keyboard.on("keydown", (event) => {
-      const action = map[event.code];
-      if (!action) return;
-      event.preventDefault();
-      held.add(action);
-      apply();
-    });
-    this.input.keyboard.on("keyup", (event) => {
-      const action = map[event.code];
-      if (!action) return;
-      held.delete(action);
-      apply();
-    });
+  readColliders() {
+    this.blockedCells = new Set();
+    this.colliderBoxes = [];
+    for (const layer of config.layers ?? []) {
+      if (layer.visible === false) continue;
+      for (const placement of layer.placements ?? []) {
+        const collider = placement.collider;
+        if (!collider || !collider.blocking) continue;
+        if (this.grid.snaps && !collider.rect) {
+          for (const cell of this.grid.colliderCells(collider, placement.anchor)) {
+            this.blockedCells.add(`${cell.cx},${cell.cy}`);
+          }
+        } else {
+          this.colliderBoxes.push(
+            ...this.grid.colliderBoxes(collider, placement.anchor),
+          );
+        }
+      }
+    }
   }
+
+  isWalkable(cx, cy) {
+    const span = config.gridSpan ?? 24;
+    if (Math.abs(cx) > span || Math.abs(cy) > span) return false;
+    if (this.blockedCells.has(`${cx},${cy}`)) return false;
+
+    const centre = this.nav.cellCentre(cx, cy);
+    for (const box of this.colliderBoxes) {
+      if (contains(box, centre)) return false;
+    }
+    for (const layer of config.layers ?? []) {
+      for (const fill of layer.fills ?? []) {
+        if (fill.walkable) continue;
+        for (const box of this.grid.fillBoxes(fill)) {
+          if (contains(box, centre)) return false;
+        }
+      }
+    }
+    return true;
+  }
+}
+
+function contains(box, p) {
+  // Half-open, so a point on a shared edge belongs to one box rather than to
+  // both — otherwise a run of adjacent fills blocks a cell either side of it.
+  return (
+    p.x >= box.x &&
+    p.x < box.x + box.width &&
+    p.y >= box.y &&
+    p.y < box.y + box.height
+  );
 }
 
 /**
@@ -281,6 +325,13 @@ function applyScale(object, placement) {
 }
 // idlewild:end applyScale
 
+/**
+ * The flat point lists `grid.js` returns, as Phaser's graphics want them.
+ *
+ * A diamond cell is a polygon rather than a rectangle, so anything filling or
+ * stroking one goes through here — `paintFill` does, and so will whatever you
+ * draw over the lattice yourself.
+ */
 // idlewild:begin pointsToVectors
 function pointsToVectors(flat) {
   const out = [];

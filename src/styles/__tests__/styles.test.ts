@@ -20,13 +20,24 @@
  */
 
 import { describe, expect, it } from "vitest";
-// The stylesheet as text, through Vite's own `?raw` — which is how the test
-// reads the same file the app ships without reaching for node's filesystem.
+// The stylesheets as text, through Vite's own `?raw` — which is how the test
+// reads the same files the app ships without reaching for node's filesystem.
 import css from "../editor.css?raw";
+import codeCss from "../code.css?raw";
 
 /** The declarations of one rule, by property. Comments are stripped first. */
 function rule(selector: string): Record<string, string> {
-  const body = withoutComments(css);
+  return ruleIn(css, selector);
+}
+
+/**
+ * The same, in a named stylesheet.
+ *
+ * A grouped selector is found by its **last** member, since that is the one
+ * followed by the brace.
+ */
+function ruleIn(source: string, selector: string): Record<string, string> {
+  const body = withoutComments(source);
   const at = body.indexOf(`\n${selector} {`);
   if (at < 0) throw new Error(`no rule for ${selector}`);
   const open = body.indexOf("{", at);
@@ -73,5 +84,56 @@ describe("the drawing layer's stylesheet", () => {
     const canvas = rule(".draw-stage canvas");
     expect(canvas.position).toBe("absolute");
     expect(canvas["pointer-events"]).toBe("none");
+  });
+});
+
+/**
+ * Where the code panel sits, which is four rules and one trap.
+ *
+ * Floating, the panel is `position: absolute; inset: 0`. A box given top,
+ * bottom *and* a size is over-constrained, so the browser drops `bottom` and
+ * the panel hangs from the top of the shell at whatever size it was docked at
+ * — which is why `editor/code-panel.ts` takes both inline sizes off on every
+ * move, and why the docked rules have to be the ones carrying a size. If the
+ * docked rules stopped taking the panel out of that positioning, a dock would
+ * look like a panel that had covered the editor.
+ */
+describe("the code panel's placements", () => {
+  it("floats over the whole shell when it is not docked", () => {
+    const floating = ruleIn(codeCss, ".code-backdrop");
+    expect(floating.position).toBe("absolute");
+    expect(floating.inset).toBe("0");
+  });
+
+  it("takes a docked panel out of that positioning and out of the flex flow", () => {
+    const docked = ruleIn(codeCss, ".code-backdrop.docked");
+    expect(docked.position).toBe("static");
+    expect(docked.inset).toBe("auto");
+    expect(docked.flex).toBe("none");
+  });
+
+  it("gives the bottom dock a height and the two columns a width", () => {
+    expect(ruleIn(codeCss, ".code-backdrop.dock-bottom").height).toBeTruthy();
+    const column = ruleIn(codeCss, ".code-backdrop.dock-right");
+    expect(column.width).toBeTruthy();
+    // A column takes the height of the row it is in, not the height it had as
+    // a bottom dock — the inline one is removed, and this is the fallback.
+    expect(column.height).toBe("auto");
+  });
+
+  it("keeps the drag ghost out of the pointer's way", () => {
+    const ghost = ruleIn(codeCss, ".code-drag-ghost");
+    expect(ghost.position).toBe("fixed");
+    // Under the finger, it would be the element `dropTarget` found.
+    expect(ghost["pointer-events"]).toBe("none");
+  });
+});
+
+describe("code mode", () => {
+  it("takes the inspector, its divider and its tab away", () => {
+    expect(rule(".editor.code-mode .edge-toggle.right").display).toBe("none");
+    const body = withoutComments(css);
+    expect(body).toContain(".editor.code-mode .side-panel.right");
+    expect(body).toContain(".editor.code-mode .divider-right");
   });
 });

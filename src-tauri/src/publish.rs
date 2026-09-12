@@ -56,7 +56,7 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
             .and_then(|doc| crate::game_config::from_document(&meta, &doc))
         {
             Ok(config) => config,
-            Err(_) => crate::game_config::empty(meta.projection, meta.genre, meta.grid_size),
+            Err(_) => crate::game_config::empty(&meta),
         };
         zip.start_file(format!("{root}/{generated}"), options)
             .map_err(|e| e.to_string())?;
@@ -74,14 +74,17 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
         }
 
         // Runtime libraries. Both are vendored into the binary, so an export
-        // ships the exact builds the project was made against.
+        // ships the exact builds the project was made against. They go where
+        // this project's own page asks for them — see `runtime_dir`.
+        let runtime = runtime_dir(&game);
         for (name, source) in [
             ("psd-to-phaser.umd.js", crate::templates::P2P_UMD),
             ("phaser.min.js", crate::templates::PHASER),
         ] {
-            zip.start_file(format!("{root}/lib/{name}"), options)
+            zip.start_file(format!("{root}/{runtime}{name}"), options)
                 .map_err(|e| e.to_string())?;
-            zip.write_all(source.as_bytes()).map_err(|e| e.to_string())?;
+            zip.write_all(source.as_bytes())
+                .map_err(|e| e.to_string())?;
         }
 
         zip.start_file(format!("{root}/README.txt"), options)
@@ -92,6 +95,24 @@ pub fn build_zip(project_id: &str) -> Result<Vec<u8>, String> {
         zip.finish().map_err(|e| e.to_string())?;
     }
     Ok(buf)
+}
+
+/// Where this project's `index.html` loads Phaser and psd-to-phaser from.
+///
+/// The scaffold keeps them in `js/lib/`, beside the code that uses them. A
+/// project made before the tree was restructured loads them from `lib/`, and
+/// its `game/` tree is its own copy — nothing rewrites a page someone may have
+/// edited — so the page is what gets asked. A project whose index says neither
+/// gets the current layout, which is the only thing this build can be right
+/// about.
+fn runtime_dir(game: &Path) -> &'static str {
+    let index = std::fs::read_to_string(game.join("index.html")).unwrap_or_default();
+    if !index.contains(crate::templates::RUNTIME_DIR)
+        && index.contains(crate::templates::LEGACY_RUNTIME_DIR)
+    {
+        return crate::templates::LEGACY_RUNTIME_DIR;
+    }
+    crate::templates::RUNTIME_DIR
 }
 
 /// Copy a directory into the archive, skipping the relative paths in `skip`.

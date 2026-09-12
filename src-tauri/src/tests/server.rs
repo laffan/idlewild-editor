@@ -11,7 +11,7 @@
 //! of the suite creates projects in.
 
 use crate::file_server;
-use crate::project::{Genre, Projection};
+use crate::project::{GameOptions, Genre, Projection};
 use crate::store;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -70,8 +70,14 @@ fn the_asset_server_serves_a_project_and_nothing_above_it() {
     let (port, ready) = file_server::start().expect("the server should bind");
     ready.recv().expect("the listener thread should start");
 
-    let meta = store::create_project("Server", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Server",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let manifest = r#"{"name":"hut","width":8,"height":8,"layers":[]}"#;
@@ -142,8 +148,14 @@ fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
     let (port, ready) = file_server::start().expect("the server should bind");
     ready.recv().expect("the listener thread should start");
 
-    let meta = store::create_project("Played", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Played",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let id = &meta.id;
@@ -156,7 +168,7 @@ fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
         // publishes are the same file.
         assert!(!page.body.contains("idlewild-game-console"));
 
-        let scene = get(port, &format!("/{id}/game/js/WorldScene.js"));
+        let scene = get(port, &format!("/{id}/game/js/scenes/WorldScene.js"));
         assert_eq!(scene.status, 200);
         assert_eq!(
             scene.header("Content-Type"),
@@ -176,17 +188,21 @@ fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
         );
         assert!(played.body.contains("js/main.js"), "the page itself survives");
 
-        // The runtimes an export carries, answered from this binary.
-        for name in ["phaser.min.js", "psd-to-phaser.umd.js"] {
-            let runtime = get(port, &format!("/{id}/game/lib/{name}"));
-            assert_eq!(runtime.status, 200, "{name} should be served");
-            assert!(!runtime.body.is_empty(), "{name} came back empty");
+        // The runtimes an export carries, answered from this binary — at the
+        // path the scaffold uses now, and at the one projects made before the
+        // tree moved still ask for.
+        for dir in ["js/lib", "lib"] {
+            for name in ["phaser.min.js", "psd-to-phaser.umd.js"] {
+                let runtime = get(port, &format!("/{id}/game/{dir}/{name}"));
+                assert_eq!(runtime.status, 200, "{dir}/{name} should be served");
+                assert!(!runtime.body.is_empty(), "{dir}/{name} came back empty");
+            }
+            assert_eq!(
+                get(port, &format!("/{id}/game/{dir}/anything-else.js")).status,
+                404,
+                "only the two vendored runtimes are answered",
+            );
         }
-        assert_eq!(
-            get(port, &format!("/{id}/game/lib/anything-else.js")).status,
-            404,
-            "only the two vendored runtimes are answered",
-        );
 
         // Processed assets, which the game asks for relative to itself.
         let manifest = r#"{"name":"hut","width":8,"height":8,"layers":[]}"#;

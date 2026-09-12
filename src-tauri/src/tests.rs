@@ -10,17 +10,20 @@
 //! writes and psd-to-json reports back. `rewrite` is what a *second* write to
 //! the same file has to keep. `scaffolds` is what a *project* is made of —
 //! the starter document, the runnable game each template selection writes,
-//! what an export carries, and the tree the code modal edits.
+//! what an export carries, and the tree the code modal edits. `options` is the
+//! per-project settings — pixel-perfect rendering, the default zoom, and the
+//! character controller New Game can leave out.
 
 mod archive;
 mod config;
 mod marks;
+mod options;
 mod rewrite;
 mod scaffolds;
 mod server;
 mod stacking;
 
-use crate::project::{Genre, Projection};
+use crate::project::{GameOptions, Genre, Projection};
 use crate::{psd_pipeline, psd_write, publish, store};
 
 /// Solid-colour RGBA, so a round trip can be checked pixel by pixel.
@@ -166,8 +169,14 @@ fn stems_are_safe_for_paths_and_keys() {
 /// folder shape `P2P.load.load(scene, key, 'assets/<key>')` expects.
 #[test]
 fn a_project_round_trips_an_image_through_psd_to_json() {
-    let meta = store::create_project("Pipeline test", Projection::Isometric, Genre::Topdown, 64)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Pipeline test",
+        Projection::Isometric,
+        Genre::Topdown,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     // Everything below runs against the real store, so clean up whatever
     // happens — including on a failed assertion.
@@ -222,8 +231,14 @@ fn a_project_round_trips_an_image_through_psd_to_json() {
 /// otherwise every import places an empty group.
 #[test]
 fn a_converted_image_names_its_layer_after_the_key() {
-    let meta = store::create_project("Naming", Projection::Isometric, Genre::Topdown, 64)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Naming",
+        Projection::Isometric,
+        Genre::Topdown,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let bytes = psd_write::psd_from_rgba_marked("build", 8, 8, swatch(8, 8, [1, 2, 3, 255]), None)
@@ -275,8 +290,14 @@ fn a_converted_image_names_its_layer_after_the_key() {
 fn renaming_a_psd_renames_the_layer_it_named_after_itself() {
     use psd::{LayerBuilder, PsdBuilder};
 
-    let meta = store::create_project("Layer names", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Layer names",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         // Two layers: one named after the file, one named by a person.
@@ -344,8 +365,14 @@ fn psd_keys_cannot_escape_the_project() {
 /// placement in the document points at it.
 #[test]
 fn reimporting_replaces_the_file_behind_a_key() {
-    let meta = store::create_project("Re-import", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Re-import",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
@@ -401,8 +428,14 @@ fn reimporting_replaces_the_file_behind_a_key() {
 /// the point of renaming a file is not to claim anything about its contents.
 #[test]
 fn renaming_a_psd_moves_its_file_and_its_assets() {
-    let meta = store::create_project("Rename", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Rename",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
@@ -483,8 +516,14 @@ fn psd_layers_can_be_reordered_and_renamed() {
     use crate::psd_layers::{self, LayerEdit};
     use crate::psd_write::{AnchorMarks, MarkPoint};
 
-    let meta = store::create_project("Layers", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Layers",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let id = &meta.id;
@@ -586,8 +625,14 @@ fn psd_layers_can_be_reordered_and_renamed() {
 fn every_sprite_layer_exports_a_png_named_after_the_layer() {
     use psd::{LayerBuilder, PsdBuilder};
 
-    let meta = store::create_project("Layer names", Projection::Isometric, Genre::Topdown, 64)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Layer names",
+        Projection::Isometric,
+        Genre::Topdown,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let mut builder = PsdBuilder::new(64, 64);

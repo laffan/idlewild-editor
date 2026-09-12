@@ -10,7 +10,7 @@
 //! of the suite creates projects in, and `swatch`.
 
 use super::swatch;
-use crate::project::{Genre, Projection};
+use crate::project::{GameOptions, Genre, Projection};
 use crate::{psd_pipeline, store};
 
 /// The manifest lists a PSD's layers top-first, and says how they were stacked.
@@ -26,8 +26,14 @@ use crate::{psd_pipeline, store};
 fn a_manifest_lists_layers_top_first() {
     use psd::{LayerBuilder, PsdBuilder};
 
-    let meta = store::create_project("Stacking", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Stacking",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         // `add_layer` stacks bottom-up, so this is a hut with the ground at

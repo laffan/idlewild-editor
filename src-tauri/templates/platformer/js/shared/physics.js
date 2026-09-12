@@ -1,6 +1,6 @@
-// Side-on physics, shared with the editor (src/game/platformer.ts). Keep the
-// two in step: a project should play the same way inside the editor and out
-// of it, and a difference here is a difference nobody would look for.
+// Side-on physics. The project's own copy, and the only one: Play runs this
+// file rather than a second implementation in the editor, so a project plays
+// the same way inside the editor and out of it by construction.
 //
 // Hand-rolled rather than taken from Arcade: what a platformer needs from a
 // body is an AABB swept against a list of rectangles, and keeping it in a

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 // The two scaffolded scenes as text, the way the Rust side takes them:
 // `include_str!` there, `?raw` here, one file either way.
-import topdownSource from "../../../src-tauri/templates/topdown/js/WorldScene.js?raw";
-import platformerSource from "../../../src-tauri/templates/platformer/js/WorldScene.js?raw";
+import topdownSource from "../../../src-tauri/templates/topdown/js/scenes/WorldScene.js?raw";
+import platformerSource from "../../../src-tauri/templates/platformer/js/scenes/WorldScene.js?raw";
 import { drawOrder } from "../doc-renderer";
 import type { Placement } from "../../lib/types";
 

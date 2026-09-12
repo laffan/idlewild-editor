@@ -114,6 +114,25 @@
 .seg-opt[disabled]:hover { background: transparent; }
 .sheet.light .seg-opt[disabled]:hover { background: transparent; }
 
+/* A checkbox and its label, as one hit target — pixel perfect, and whether a
+   character controller gets scaffolded. The whole row is a label so a thumb
+   aimed anywhere near the words still lands on the box. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--hit);
+  cursor: pointer;
+}
+.check-box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+.check-label { font: 600 15px var(--font-heading); }
+
 /* A list of choices, as in Add Image */
 .sheet-list { display: flex; flex-direction: column; }
 .sheet-list-item {
@@ -151,3 +170,22 @@
   width: 150px;
 }
 .sheet-row-value { font: 500 15px var(--font-body); flex: 1; }
+/* A row that is a control rather than a fact — the rendering options. The
+   label stays in the key column, so the switches line up with the values
+   above them. */
+.sheet-row.control { min-height: 68px; }
+.sheet-row.control .sheet-row-value {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+/* What the control does, beside it rather than under it: these rows are a
+   list, and a line under each one would read as a row of its own. */
+.check-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-neutral-600);
+}
+/* One number, so a box the width of one. */
+.sheet-row-input { width: 104px; flex: none; }

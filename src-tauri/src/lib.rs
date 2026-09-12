@@ -5,6 +5,7 @@ mod archive;
 mod clipboard;
 mod file_server;
 mod game_config;
+mod game_files;
 mod project;
 mod psd_layers;
 mod psd_marks;
@@ -17,7 +18,7 @@ mod templates;
 #[cfg(test)]
 mod tests;
 
-use project::{GameFile, Genre, ImportResult, OutputFile, ProjectMeta, Projection};
+use project::{GameOptions, Genre, ImportResult, OutputFile, ProjectMeta, Projection};
 use psd_pipeline::ProcessOptions;
 use psd_write::AnchorMarks;
 use tauri::{Emitter, Manager};
@@ -92,13 +93,17 @@ fn list_projects() -> Result<Vec<ProjectMeta>, String> {
 }
 
 /// `genre` is optional so a caller that predates the choice still works; it
-/// means top down, which is what every project made before it was.
+/// means top down, which is what every project made before it was. `options`
+/// is optional for the same reason, and means the defaults — no pixel
+/// snapping, zoom 1, and a character controller, which is what every project
+/// scaffolded before New Game asked.
 #[tauri::command]
 fn create_project(
     name: String,
     projection: String,
     grid_size: u32,
     genre: Option<String>,
+    options: Option<GameOptions>,
 ) -> Result<ProjectMeta, String> {
     let projection = match projection.as_str() {
         "isometric" => Projection::Isometric,
@@ -116,7 +121,29 @@ fn create_project(
     if projection == Projection::Isometric && genre == Genre::Platformer {
         return Err("An isometric project cannot be a platformer".into());
     }
-    store::create_project(&name, projection, genre, grid_size)
+    store::create_project(
+        &name,
+        projection,
+        genre,
+        grid_size,
+        options.unwrap_or_default(),
+    )
+}
+
+/// Change how a project renders: pixel art, whole-pixel drawing, the zoom a
+/// scene opens at. What Project Options writes.
+///
+/// The scaffold's own choice — whether a character controller was written — is
+/// not here: a project's `game/` tree is its own copy, and unticking a box
+/// would not take a character out of code that already has one.
+#[tauri::command]
+fn set_project_options(
+    id: String,
+    pixel_art: bool,
+    round_pixels: bool,
+    default_zoom: f64,
+) -> Result<ProjectMeta, String> {
+    store::set_project_options(&id, pixel_art, round_pixels, default_zoom)
 }
 
 #[tauri::command]
@@ -178,61 +205,6 @@ fn write_thumbnail(id: String, png_base64: String) -> Result<(), String> {
         .decode(data)
         .map_err(|e| format!("Bad thumbnail data: {e}"))?;
     store::write_thumbnail(&id, &bytes)
-}
-
-// ── the editable game/ tree ─────────────────────────────────────────────────
-
-#[tauri::command]
-fn list_game_files(id: String) -> Result<Vec<GameFile>, String> {
-    store::list_game_files(&id)
-}
-
-#[tauri::command]
-fn read_game_file(id: String, path: String) -> Result<String, String> {
-    store::read_game_file(&id, &path)
-}
-
-/// One file of `game/` as the scaffold wrote it.
-///
-/// The code modal marks the lines the editor maintains and offers a Reset
-/// beside each managed block; this is what Reset puts back. It is asked for
-/// on every open, so a file the template does not write answers with an error
-/// and the modal simply treats that file as the user's alone.
-#[tauri::command]
-fn read_game_template(id: String, path: String) -> Result<String, String> {
-    store::read_game_template(&id, &path)
-}
-
-#[tauri::command]
-fn write_game_file(id: String, path: String, content: String) -> Result<(), String> {
-    store::write_game_file(&id, &path, &content)
-}
-
-#[tauri::command]
-fn create_game_file(id: String, path: String) -> Result<(), String> {
-    store::create_game_file(&id, &path)
-}
-
-#[tauri::command]
-fn create_game_dir(id: String, path: String) -> Result<(), String> {
-    store::create_game_dir(&id, &path)
-}
-
-/// Move or rename, which are the same operation with different intent.
-#[tauri::command]
-fn move_game_path(id: String, from: String, to: String) -> Result<(), String> {
-    store::move_game_path(&id, &from, &to)
-}
-
-/// Copy, returning the path the copy actually took.
-#[tauri::command]
-fn copy_game_path(id: String, path: String) -> Result<String, String> {
-    store::copy_game_path(&id, &path)
-}
-
-#[tauri::command]
-fn delete_game_path(id: String, path: String) -> Result<(), String> {
-    store::delete_game_path(&id, &path)
 }
 
 // ── PSD pipeline ────────────────────────────────────────────────────────────
@@ -647,6 +619,7 @@ pub fn run() {
             platform,
             list_projects,
             create_project,
+            set_project_options,
             rename_project,
             delete_project,
             duplicate_project,
@@ -655,15 +628,15 @@ pub fn run() {
             write_document,
             read_thumbnail,
             write_thumbnail,
-            list_game_files,
-            read_game_file,
-            read_game_template,
-            write_game_file,
-            create_game_file,
-            create_game_dir,
-            move_game_path,
-            copy_game_path,
-            delete_game_path,
+            game_files::list_game_files,
+            game_files::read_game_file,
+            game_files::read_game_template,
+            game_files::write_game_file,
+            game_files::create_game_file,
+            game_files::create_game_dir,
+            game_files::move_game_path,
+            game_files::copy_game_path,
+            game_files::delete_game_path,
             import_image,
             import_image_bytes,
             read_clipboard,

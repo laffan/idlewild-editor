@@ -1,9 +1,10 @@
-/* Code modal — the file column and editor column, floating over the canvas
-   or pinned as a full-width row above the console. */
+/* Code modal — the file column and editor column, in one of four places: a
+   row above the console, a column either side of the canvas, or over the whole
+   shell. See editor/code-panel.ts for what each one is for. */
 
-/* Floating, it fills the canvas: a code editor wants the room, and the
-   canvas underneath it is not what you are looking at while you are in it.
-   Pin is how you get both at once. */
+/* Full: it covers the shell, header included. A code editor wants the room,
+   and the canvas underneath is not what you are looking at while you are
+   reading a file end to end. The other three are docks. */
 .code-backdrop {
   position: absolute;
   inset: 0;
@@ -13,9 +14,10 @@
   padding: 0;
 }
 
-/* Pinned: a row of the shell rather than an overlay, so the canvas keeps
-   whatever height is left and stays reachable. The divider above writes an
-   inline height over this one, exactly as it does for the console. */
+/* Docked: part of the layout rather than an overlay, so the canvas keeps
+   whatever is left of the row or the column and stays reachable. The divider
+   writes an inline height or width over this one, exactly as it does for the
+   console and the sidebars. */
 .code-backdrop.docked {
   position: static;
   inset: auto;
@@ -24,14 +26,41 @@
   display: block;
   padding: 0;
   background: transparent;
+}
+.code-backdrop.dock-bottom {
   height: 320px;
   min-height: 140px;
   border-top: var(--rule-chrome);
 }
+/* A column beside the canvas: the window's full height, which is the shape a
+   file is. The border goes on the edge facing the canvas. */
+.code-backdrop.dock-left,
+.code-backdrop.dock-right {
+  width: 420px;
+  min-width: 260px;
+  height: auto;
+}
+.code-backdrop.dock-left { border-right: var(--rule-chrome); }
+.code-backdrop.dock-right { border-left: var(--rule-chrome); }
+
 /* Docked, the chrome competes with the editor for a much shorter box. */
 .code-backdrop.docked .code-head { min-height: var(--bar-h); }
 .code-backdrop.docked .code-foot { min-height: 40px; }
-.code-backdrop.docked .code-column { width: 200px; }
+.code-backdrop.dock-bottom .code-column { width: 200px; }
+
+/* In a column there is no room for one row of chrome, so it wraps into two
+   and the file tree gets a narrower column of its own. */
+.code-backdrop.dock-left .code-head,
+.code-backdrop.dock-right .code-head {
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  min-height: 0;
+}
+.code-backdrop.dock-left .code-head-right,
+.code-backdrop.dock-right .code-head-right { margin-left: 0; }
+.code-backdrop.dock-left .code-column,
+.code-backdrop.dock-right .code-column { width: 150px; }
 
 .code-panel {
   width: 100%;
@@ -61,9 +90,9 @@
   color: var(--chrome-dim);
 }
 
-/* Floating, the panel covers the whole shell — the editor header included —
-   so it is the thing standing under the iPad's status bar and it owns the
-   inset. Docked it is a row between two rows, and insets nothing. */
+/* Over the whole shell — the editor header included — the panel is the thing
+   standing under the iPad's status bar, so it owns the inset. Docked it is a row
+   between two rows or a column between two columns, and insets nothing. */
 .code-backdrop:not(.docked) .code-head {
   min-height: calc(60px + var(--safe-top));
   padding-top: var(--safe-top);
@@ -92,6 +121,33 @@
   border-color: var(--color-accent);
   color: #fff;
 }
+
+/* Where the panel sits: four buttons rather than one toggle, because there is
+   no natural pair and a control that cycled through four places would be a
+   guessing game. The pin glyph labels the group. */
+.code-dock {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-neutral-700);
+}
+.code-dock > svg {
+  flex: none;
+  align-self: center;
+  margin: 0 8px;
+  color: var(--chrome-dim);
+}
+.code-dock-btn {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 11px var(--font-heading);
+  white-space: nowrap;
+}
+.code-dock-btn:hover { background: var(--chrome-rule); }
+.code-dock-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 
 .code-body { flex: 1; min-height: 0; display: flex; }
 
@@ -182,17 +238,59 @@
   .code-file-menu { opacity: 1; }
 }
 
-/* Dragging a file or folder. Unlike the layer panel the rows do not move —
-   a tree has one legal drop per row, so the destination is marked instead. */
+/* Dragging a file or folder. Unlike the layer panel the rows do not move — a
+   tree has one legal drop per row — so the destination is said three ways
+   instead: the row being carried dims, the folder it would land in lights up,
+   and the ghost under the pointer names it. See code/file-tree.ts. */
 .code-files.dragging { cursor: grabbing; }
 .code-files.dragging .code-file { pointer-events: none; }
-.code-file.dragged { opacity: 0.5; }
+.code-file.dragged { opacity: 0.4; }
+
+/* The folder the release would drop into. An outline as well as a tint: on a
+   row that is already the open file, a tint alone is a change of shade. */
 .code-file.drop-into {
-  background: var(--chrome-rule);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
   color: var(--chrome-text);
 }
+.code-file.drop-into svg { color: var(--color-accent-400); }
+/* The tree's own root, which is every row at once rather than any of them. */
 .code-files.drop-root { box-shadow: inset 0 0 0 2px var(--color-accent); }
+
+/* The ghost of the row being dragged.
+
+   Pointer events have no drag image of their own — that is the one thing HTML5
+   drag gives for free, and it is the reason a finger drag on an iPad otherwise
+   looks like nothing is happening. On `document.body` rather than in the
+   column, because the column scrolls and clips; inert to pointers, or it would
+   be the thing under the finger and the row under it would never be found. */
+.code-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 60vw;
+  padding: 6px 10px;
+  background: var(--chrome-bg);
+  border: 1px solid var(--color-accent);
+  box-shadow: var(--shadow-lg);
+  color: var(--chrome-text);
+  font: 400 12px var(--font-mono);
+}
+.code-drag-ghost svg { flex: none; color: var(--chrome-dim); }
+.code-ghost-name { white-space: nowrap; }
+/* Where it would land, or that it would not. */
+.code-ghost-target {
+  font-size: 10px;
+  color: var(--color-accent-400);
+  white-space: nowrap;
+}
+.code-drag-ghost.outside { border-color: var(--color-neutral-600); }
+.code-drag-ghost.outside .code-ghost-target { color: var(--chrome-dim); }
 
 .code-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .code-bar {

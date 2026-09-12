@@ -14,7 +14,7 @@
 //!       game/              the editable project source the code modal shows
 //! ```
 
-use crate::project::{now_ms, GameFile, Genre, ProjectMeta, Projection};
+use crate::project::{now_ms, GameFile, GameOptions, Genre, ProjectMeta, Projection};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -103,21 +103,51 @@ pub fn create_project(
     projection: Projection,
     genre: Genre,
     grid_size: u32,
+    options: GameOptions,
 ) -> Result<ProjectMeta, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let dir = project_dir(&id)?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let meta = ProjectMeta::new(id.clone(), name.to_string(), projection, genre, grid_size);
+    let meta = ProjectMeta::new(
+        id.clone(),
+        name.to_string(),
+        projection,
+        genre,
+        grid_size,
+        options,
+    );
     write_meta(&meta)?;
     // Scaffolded before the document is written, because writing a document
     // regenerates the config inside `game/` and there has to be a `game/` to
     // regenerate it in.
-    crate::templates::scaffold_game(&game_dir(&id)?, name, projection, genre, grid_size)?;
-    write_doc(
-        &id,
-        &crate::templates::starter_doc(projection, genre, grid_size),
-    )?;
+    crate::templates::scaffold_game(&game_dir(&id)?, &meta)?;
+    write_doc(&id, &crate::templates::starter_doc(&meta))?;
+    Ok(meta)
+}
+
+/// Change what a project is rendered with, and hand back the meta as written.
+///
+/// Only the three options that are settings rather than history: `character`
+/// is a fact about what the scaffold wrote and unticking it afterwards would
+/// not take a character out of code that already has one.
+///
+/// The config the project's own code reads carries all three, so it is
+/// rewritten here — otherwise the editor would change and the game would not
+/// until the next time something touched the document.
+pub fn set_project_options(
+    id: &str,
+    pixel_art: bool,
+    round_pixels: bool,
+    default_zoom: f64,
+) -> Result<ProjectMeta, String> {
+    let mut meta = read_meta(id)?;
+    meta.options.pixel_art = pixel_art;
+    meta.options.round_pixels = round_pixels;
+    meta.options.default_zoom = default_zoom;
+    meta.updated_at = now_ms();
+    write_meta(&meta)?;
+    let _ = sync_game_config(id);
     Ok(meta)
 }
 
@@ -234,13 +264,7 @@ pub fn read_game_template(id: &str, rel: &str) -> Result<String, String> {
         let config = crate::game_config::from_document(&meta, &read_doc(id)?)?;
         return serde_json::to_string_pretty(&config).map_err(|e| e.to_string());
     }
-    crate::templates::template_file(
-        rel,
-        &meta.name,
-        meta.projection,
-        meta.genre,
-        meta.grid_size,
-    )
+    crate::templates::template_file(rel, &meta)
 }
 
 pub fn write_thumbnail(id: &str, png: &[u8]) -> Result<(), String> {

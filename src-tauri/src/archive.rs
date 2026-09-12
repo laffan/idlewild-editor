@@ -31,7 +31,7 @@
 //! second source of truth for where a project lives. The fields worth keeping
 //! are in the manifest, and an import writes a fresh `meta.json` around them.
 
-use crate::project::{now_ms, Genre, ProjectMeta, Projection};
+use crate::project::{now_ms, GameOptions, Genre, ProjectMeta, Projection};
 use crate::store;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -87,6 +87,11 @@ pub struct ArchivedProject {
     pub created_at: u64,
     #[serde(rename = "layerCount", default)]
     pub layer_count: u32,
+    /// How it renders, and whether its scaffold wrote a character. Absent on
+    /// an archive written before the options existed, which reads as the
+    /// defaults — and the defaults are what such a project was.
+    #[serde(default)]
+    pub options: GameOptions,
 }
 
 /// Write a project to `dest` as a `.idlewild` file.
@@ -118,6 +123,7 @@ pub fn export(project_id: &str, dest: &Path) -> Result<(), String> {
             grid_size: meta.grid_size,
             created_at: meta.created_at,
             layer_count: meta.layer_count,
+            options: meta.options,
         },
     };
     zip.start_file(MANIFEST, options).map_err(|e| e.to_string())?;
@@ -239,6 +245,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
         project.projection,
         project.genre,
         project.grid_size,
+        project.options,
     );
     meta.created_at = project.created_at;
     meta.updated_at = now_ms();
@@ -246,13 +253,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
     store::write_meta(&meta)?;
 
     if !store::game_dir(id)?.join("index.html").exists() {
-        crate::templates::scaffold_game(
-            &store::game_dir(id)?,
-            &project.name,
-            project.projection,
-            project.genre,
-            project.grid_size,
-        )?;
+        crate::templates::scaffold_game(&store::game_dir(id)?, &meta)?;
     }
     // Not fatal: a document this build cannot parse still opens as a project,
     // and the editor will say so far more usefully than an import would.

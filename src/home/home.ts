@@ -62,11 +62,19 @@ export function renderHome(
               choice.projection,
               choice.gridSize,
               choice.genre,
+              choice.options,
             );
-            log.info(
-              `Created ${meta.name} (${meta.projection}, ${choice.genre}, ` +
-                `${meta.gridSize}px)`,
-            );
+            const notes = [
+              meta.projection,
+              choice.genre,
+              `${meta.gridSize}px`,
+              ...(choice.options.pixelArt ? ["pixel perfect"] : []),
+              ...(choice.options.defaultZoom === 1
+                ? []
+                : [`${choice.options.defaultZoom}× zoom`]),
+              ...(choice.options.character ? [] : ["no character"]),
+            ];
+            log.info(`Created ${meta.name} (${notes.join(", ")})`);
             callbacks.onOpenProject(meta);
           } catch (err) {
             log.error("Could not create project:", err);

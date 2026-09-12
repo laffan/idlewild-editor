@@ -60,11 +60,16 @@ const DOC = {
 /** A live game tree, so the code column's operations can be driven. */
 const TREE: Array<{ path: string; isDir: boolean }> = [
   { path: "index.html", isDir: false },
-  { path: "css", isDir: true },
-  { path: "css/styles.css", isDir: false },
+  { path: "styles.css", isDir: false },
   { path: "js", isDir: true },
-  { path: "js/WorldScene.js", isDir: false },
   { path: "js/main.js", isDir: false },
+  { path: "js/prefabs", isDir: true },
+  { path: "js/prefabs/character.js", isDir: false },
+  { path: "js/scenes", isDir: true },
+  { path: "js/scenes/WorldScene.js", isDir: false },
+  { path: "js/shared", isDir: true },
+  { path: "js/shared/grid.js", isDir: false },
+  { path: "js/shared/navigation.js", isDir: false },
 ];
 
 /**
@@ -275,6 +280,26 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       };
     }
     case "list_projects": return [];
+    // Project Options writes through this, and reads the meta it hands back.
+    // Echoed rather than stored: there is no store here, and what the editor
+    // does with the answer is set its own copy of the options to it.
+    case "set_project_options":
+      return {
+        id: "demo",
+        name: "Marsh Kingdom",
+        projection: (window as any).__projection ?? "isometric",
+        genre: (window as any).__genre ?? "topdown",
+        gridSize: (window as any).__gridSize ?? 64,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        layerCount: 3,
+        options: {
+          pixelArt: Boolean((args as any)?.pixelArt),
+          roundPixels: Boolean((args as any)?.roundPixels),
+          defaultZoom: Number((args as any)?.defaultZoom ?? 1),
+          character: true,
+        },
+      };
     // Publish's two exits write to a path the dialog stub hands back; there
     // is no store here to write out of, so both simply succeed.
     case "publish_site":

@@ -8,10 +8,18 @@
  *
  * Dragging uses pointer events rather than HTML5 drag-and-drop, for the same
  * reason the layer panel does: the iPad is a first-class target and
- * `dragstart` never fires for touch. Unlike the layer panel it does *not*
- * rearrange the DOM as it goes — a file tree has one legal drop per row
- * (into that folder, or beside it at that folder's level) rather than a
- * position in a list, so the row being dropped on is highlighted instead.
+ * `dragstart` never fires for touch. Using them costs the one thing HTML5 drag
+ * gives for free, which is the picture under the pointer, so this draws its
+ * own: a **ghost** of the row follows the finger, carrying the name being moved
+ * and, after an arrow, the folder it would land in.
+ *
+ * Unlike the layer panel the rows do *not* rearrange as the drag goes — a file
+ * tree has one legal drop per row (into that folder, or into the folder holding
+ * that file) rather than a position in a list. So the destination is said three
+ * ways instead: the row being dragged dims, the destination folder's row lights
+ * up — or the whole column does, for the tree's own root — and the ghost names
+ * it. None of them is a guess: every one is read from the same `dropTarget`
+ * that the release will use.
  */
 
 import { clear, h, ICONS, icon } from "../lib/dom";
@@ -50,6 +58,9 @@ export class FileTree {
   private files: GameFile[] = [];
   private openPath: string | null = null;
   private drag: { path: string; isDir: boolean; release: () => void } | null = null;
+  /** The row under the pointer while a drag is on — see `beginDrag`. */
+  private ghost: HTMLElement | null = null;
+  private ghostTarget: HTMLElement | null = null;
 
   constructor(projectId: string, callbacks: FileTreeCallbacks) {
     this.projectId = projectId;
@@ -101,8 +112,9 @@ export class FileTree {
   }
 
   destroy(): void {
-    this.drag?.release();
-    this.drag = null;
+    // Through `endDrag`, because a ghost lives on `document.body`: the column
+    // going away would otherwise leave it on screen with nothing holding it.
+    if (this.drag) this.endDrag();
   }
 
   // ── rendering ─────────────────────────────────────────────────────────────
@@ -270,9 +282,12 @@ export class FileTree {
         armed = true;
         this.list.classList.add("dragging");
         rowFor(this.list, file.path)?.classList.add("dragged");
+        this.showGhost(file);
       }
       moved.preventDefault();
-      this.highlight(this.dropTarget(moved.clientX, moved.clientY));
+      const target = this.dropTarget(moved.clientX, moved.clientY);
+      this.highlight(target);
+      this.moveGhost(moved.clientX, moved.clientY, target);
     };
 
     const onUp = (ended: PointerEvent) => {
@@ -297,10 +312,51 @@ export class FileTree {
   private endDrag(): void {
     this.drag?.release();
     this.drag = null;
-    this.list.classList.remove("dragging");
+    this.list.classList.remove("dragging", "drop-root");
     for (const el of this.list.querySelectorAll(".dragged, .drop-into")) {
       el.classList.remove("dragged", "drop-into");
     }
+    this.ghost?.remove();
+    this.ghost = null;
+    this.ghostTarget = null;
+  }
+
+  /**
+   * The picture that follows the pointer.
+   *
+   * On `document.body` rather than inside the column, because the column
+   * scrolls and clips and a ghost that disappeared at its edge would be worse
+   * than none. Inert to pointers, or it would be the thing under the finger
+   * and `dropTarget` would never see a row.
+   */
+  private showGhost(file: GameFile): void {
+    // Not the uppercase micro-label the rest of the chrome uses: this is a
+    // path, and a path that reads JS/SHARED is a path you would not type.
+    this.ghostTarget = h("span", { class: "code-ghost-target" });
+    this.ghost = h(
+      "div",
+      { class: "code-drag-ghost" },
+      icon(file.isDir ? ICONS.folder : ICONS.file, 14),
+      h("span", { class: "code-ghost-name", text: basename(file.path) }),
+      this.ghostTarget,
+    );
+    document.body.appendChild(this.ghost);
+  }
+
+  /**
+   * Move it, and say where the drop would go.
+   *
+   * Below and right of the pointer, so on a touchscreen the name is not under
+   * the finger holding it. The destination is the same answer the release will
+   * use: a folder's path, the root, or nothing at all outside the column —
+   * which is a drag that would be cancelled, and says so.
+   */
+  private moveGhost(x: number, y: number, target: string | null): void {
+    if (!this.ghost || !this.ghostTarget) return;
+    this.ghost.style.transform = `translate(${x + 14}px, ${y + 10}px)`;
+    this.ghostTarget.textContent =
+      target === null ? "release to cancel" : `→ ${target || "game/"}`;
+    this.ghost.classList.toggle("outside", target === null);
   }
 
   /**

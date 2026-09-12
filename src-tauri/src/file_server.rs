@@ -9,7 +9,7 @@
 //! It also serves the project's `game/` tree *as an export*, which is what
 //! play mode runs in a frame over the canvas. Two paths exist only in an
 //! export's layout and are answered here rather than duplicated on every
-//! project's disk: `game/lib/<runtime>` is Phaser and psd-to-phaser, both
+//! project's disk: `game/js/lib/<runtime>` is Phaser and psd-to-phaser, both
 //! vendored into this binary, and `game/assets/…` is the processed PSD output,
 //! which sits *beside* `game/` in the store and *inside* it in a zip. With
 //! those two shims the same `index.html` runs in both places, so what plays
@@ -114,14 +114,23 @@ fn store_path(decoded: &str) -> String {
     }
 }
 
-/// The runtime behind `game/lib/<name>`, if that is what was asked for.
+/// The runtime behind `game/js/lib/<name>`, if that is what was asked for.
 ///
 /// An export carries its own copy of both; a project in the store does not,
 /// because they are 1.5 MB that would be identical in every project and are
 /// already in this binary for the exporter to write.
+///
+/// Both layouts answer. The scaffold keeps them in `js/lib/` now, beside the
+/// code that uses them, and a project made before that still asks for `lib/`
+/// — its `game/` tree is its own copy, and nothing rewrites a page someone
+/// may have edited. Only these two exact names, in either place.
 fn vendored_runtime(decoded: &str) -> Option<&'static str> {
     let (_id, rest) = decoded.split_once('/')?;
-    match rest.strip_prefix("game/lib/")? {
+    let name = rest.strip_prefix("game/").and_then(|rest| {
+        rest.strip_prefix(crate::templates::RUNTIME_DIR)
+            .or_else(|| rest.strip_prefix(crate::templates::LEGACY_RUNTIME_DIR))
+    })?;
+    match name {
         "phaser.min.js" => Some(crate::templates::PHASER),
         "psd-to-phaser.umd.js" => Some(crate::templates::P2P_UMD),
         _ => None,

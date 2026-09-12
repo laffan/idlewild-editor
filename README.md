@@ -32,13 +32,28 @@ remaining pieces are wired to real slots rather than mocked.
 
 - Project list with thumbnails, long-press rename / duplicate / delete
 - New Game: template (isometric, orthogonal, blank), style (top down,
-  platformer) and grid scale (32–256 px). Blank has no lattice: a selection is
-  the exact rectangle it was dragged across, and a fill on it is one rectangle
-  rather than a run of spaces
-- A full-width header carrying the project, undo and redo, and the Edit/Play
-  toggle, with Code, Publish and Project Options behind its menu. It insets
-  itself out of the iPad's status bar, as the console drawer does out of the
-  home indicator
+  platformer) and grid scale (8–256 px — 8 and 16 are there for pixel art,
+  where a space is a sprite rather than a room). Blank has no lattice: a
+  selection is the exact rectangle it was dragged across, and a fill on it is
+  one rectangle rather than a run of spaces
+- And how it renders, on the same sheet. **Pixel perfect** is one box for the
+  two settings that go together — nearest-neighbour textures, so a 16px sprite
+  scaled up stays blocky, and whole-pixel drawing, so a camera at a fractional
+  scroll does not smear it. **Default zoom** is what a scene opens at, here and
+  in the game; 8px art usually wants 3× or 4×. Both are in Project Options
+  afterwards, as two switches and a number, and changing one is live: the
+  canvas re-filters every texture it has and the config the game reads is
+  rewritten under it
+- **A character controller, optionally.** Ticked — the default — New Game
+  writes `js/prefabs/character.js` and the line in the scene that puts it down:
+  a prefab that walks the grid over A\*, or runs and jumps along it. Unticked,
+  neither is written, and the project places the document and waits for yours.
+  It is the one choice Project Options reports rather than offers, because it
+  was lines in a file and the file is yours from the moment it is written
+- A full-width header carrying the project, undo and redo, and the
+  **Draw / Code / Play** toggle, with Publish and Project Options behind its
+  menu. It insets itself out of the iPad's status bar, as the console drawer
+  does out of the home indicator
 - Infinite grid, two-finger zoom, tap-to-pick. Select drags a plain rectangle
   around things to pick up several images at once; press and hold instead and
   it asks for a patch of grid, in the grid's own shape, taking the ground
@@ -213,7 +228,8 @@ remaining pieces are wired to real slots rather than mocked.
   in your own code is a matter of reading `config.scenes`
 - Play runs **the project's own code**: the `game/` tree you see in the code
   modal, loaded over the local server exactly the way a published export loads
-  it, in a frame over the canvas. Save a file while it is up and the game
+  it, in a frame over the canvas. No grid lines: the editor's light blue lattice
+  is scaffolding to build on, and a game is the thing you built. Save a file while it is up and the game
   restarts on what you just wrote. Top down is a character that walks the grid
   over A*, side-on is one that runs and jumps with the arrow keys — and both
   of those are files in the project now, so they are something to change
@@ -224,11 +240,21 @@ remaining pieces are wired to real slots rather than mocked.
 - `js/game.config.json` — the document in the shape the project's code reads
   it — is rewritten on every save, so the file the code modal opens describes
   the canvas beside it and the game you play is the game you built
-- Code modal: the project's real file tree in CodeMirror 6, pinned above the
-  console by default — code here is code about the canvas beside it — or
-  full-screen. New File and New Folder sit in its header; rename,
-  duplicate, delete and dragging files between folders are on the rows, in a
-  column with a divider of its own
+- Code is a section rather than a panel that happens to be open: the middle of
+  the three at the top, and the inspector folds away while you are in it because
+  nothing in a file is on the canvas. The panel sits in one of **four** places,
+  on a row of buttons in its own header — a row above the console (the default:
+  code here is code about the canvas beside it), a column to the **left** or
+  the **right** of the canvas, where a wide screen gives a file the window's
+  full height, or over the whole editor. Each remembers its own size, and which
+  one you left it in is remembered too
+- The project's real file tree in CodeMirror 6. New File and New Folder sit in
+  the modal's header; rename, duplicate, delete and dragging files between
+  folders are on the rows, in a column with a divider of its own. A drag carries
+  a **ghost** of the row under your finger, naming the folder it would land in,
+  and that folder's row lights up as you pass it — pointer events have no drag
+  image of their own, and a finger drag with nothing following it looks like
+  nothing happening
 - The editor and you do not fight over the code. A scaffolded file marks the
   runs the editor maintains — `preload`, `placeDocument` and the rest — and
   those lines come up in their own colour and refuse to be typed over. It is
@@ -259,6 +285,26 @@ remaining pieces are wired to real slots rather than mocked.
   it: it opens the file in the code modal and puts the caret on it. Works for
   warnings and errors too, and steps over Phaser's own frames — a
   `console.log` reached through a callback still names the line you typed
+- The game a project scaffolds is laid out the way you would lay one out
+  yourself:
+
+  ```text
+  index.html
+  styles.css
+  js/main.js
+  js/game.config.json     the document, generated on every save
+  js/lib/                 Phaser and psd-to-phaser
+  js/scenes/WorldScene.js
+  js/prefabs/character.js
+  js/shared/grid.js       the projection, and the document's geometry
+  js/shared/navigation.js A* — or physics.js, for a platformer
+  ```
+
+  `js/lib/` is the only directory that is not on your disk while you work: the
+  two runtimes are 1.5 MB that would be the same in every project, so the local
+  server answers for them and an export writes them in. A project made before
+  this layout keeps the one it was made with — your `game/` tree is your copy —
+  and plays and publishes from wherever its own `index.html` says
 - Publish has two exits. **Export site** is a zip you can serve: the game, its
   processed assets and both runtimes, so the exported game opens showing what
   the editor showed. **Export project** is a `.idlewild` file — the project

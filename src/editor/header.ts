@@ -6,10 +6,16 @@
  * the bottom, so the canvas sits between two rules instead of underneath a
  * hovering toolbar.
  *
- * Code, Publish and Project Options live in the hamburger's menu. They are
- * destinations rather than tools — nothing about them is per-stroke — and
- * folding them in leaves the header carrying only the project, undo and redo,
- * and the Edit/Play mode it is in.
+ * The toggle carries the three things this editor is: **Draw**, the canvas;
+ * **Code**, the project's own `game/` tree; **Play**, that code running over
+ * the document. Code used to be a menu item that opened a panel, which made it
+ * a thing you could be half in — the panel open behind a mode that did not know
+ * about it. It is a section now, left to right in the order you work.
+ *
+ * Publish and Project Options stay in the hamburger's menu. They are
+ * destinations rather than modes — you come back from them to where you were —
+ * and folding them in leaves the header carrying the project, undo and redo,
+ * and the mode it is in.
  *
  * Undo and redo sit next to that toggle rather than in the menu because they
  * are the two buttons an iPad needs most: ⌘Z wants a keyboard, and the device
@@ -27,19 +33,24 @@ export interface HeaderCallbacks {
   onUndo: () => void;
   onRedo: () => void;
   onMode: (mode: EditorMode) => void;
-  onCode: () => void;
   /** Import whatever image is on the clipboard, into the middle of the view. */
   onPasteImage: () => void;
   onPublish: () => void;
   onOptions: () => void;
 }
 
+/** The three sections, in the order the header offers them. */
+const MODES: Array<{ value: EditorMode; label: string }> = [
+  { value: "draw", label: "Draw" },
+  { value: "code", label: "Code" },
+  { value: "play", label: "Play" },
+];
+
 export class EditorHeader {
   readonly root: HTMLElement;
   private readonly undoButton: HTMLButtonElement;
   private readonly redoButton: HTMLButtonElement;
-  private readonly editButton: HTMLButtonElement;
-  private readonly playButton: HTMLButtonElement;
+  private readonly modeButtons = new Map<EditorMode, HTMLButtonElement>();
   private readonly menuButton: HTMLButtonElement;
   private menu: MenuHandle | null = null;
 
@@ -77,18 +88,17 @@ export class EditorHeader {
       icon(ICONS.redo, 17),
     ) as HTMLButtonElement;
 
-    this.editButton = h("button", {
-      class: "mode-btn",
-      text: "Edit",
-      "aria-pressed": "true",
-      onClick: () => callbacks.onMode("edit"),
-    });
-    this.playButton = h("button", {
-      class: "mode-btn",
-      text: "Play",
-      "aria-pressed": "false",
-      onClick: () => callbacks.onMode("play"),
-    });
+    const modeToggle = h("div", { class: "mode-toggle" });
+    for (const { value, label } of MODES) {
+      const button = h("button", {
+        class: "mode-btn",
+        text: label,
+        "aria-pressed": String(value === "draw"),
+        onClick: () => callbacks.onMode(value),
+      }) as HTMLButtonElement;
+      this.modeButtons.set(value, button);
+      modeToggle.appendChild(button);
+    }
 
     this.menuButton = h(
       "button",
@@ -115,7 +125,7 @@ export class EditorHeader {
       h("div", { class: "header-grid m", text: gridLabel }),
       h("div", { class: "header-spacer" }),
       h("div", { class: "header-history-pair" }, this.undoButton, this.redoButton),
-      h("div", { class: "mode-toggle" }, this.editButton, this.playButton),
+      modeToggle,
       this.menuButton,
     );
   }
@@ -135,8 +145,9 @@ export class EditorHeader {
   }
 
   setMode(mode: EditorMode): void {
-    this.editButton.setAttribute("aria-pressed", String(mode === "edit"));
-    this.playButton.setAttribute("aria-pressed", String(mode === "play"));
+    for (const [value, button] of this.modeButtons) {
+      button.setAttribute("aria-pressed", String(value === mode));
+    }
   }
 
   /** The menu outlives the header's own DOM, so leaving tears it down. */
@@ -154,7 +165,6 @@ export class EditorHeader {
     this.menu = openMenu(
       this.menuButton,
       [
-        { label: "Code", glyph: ICONS.code, onSelect: callbacks.onCode },
         // ⌘V does this too, on the machines that have a ⌘ — which an iPad
         // does not, and an iPad is what this editor is mostly used on.
         {

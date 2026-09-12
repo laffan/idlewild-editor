@@ -544,6 +544,17 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 .terminal-line { font-family: var(--font-mono); }
 .terminal-body { user-select: text; -webkit-user-select: text; }
 
+/* Code mode takes the inspector away, with its divider and its tab.
+
+   The inspector describes what is selected on the canvas, and nothing in the
+   code panel is on the canvas: in Code the width it was using is width the
+   editor can have instead. The layers panel stays — a file and a layer are
+   often the same question — and so does the canvas, which is the thing the
+   code is about. See editor/shell.ts for the divider's class. */
+.editor.code-mode .side-panel.right,
+.editor.code-mode .divider-right,
+.editor.code-mode .edge-toggle.right { display: none; }
+
 /* Play mode hides the chrome the spec says closes. */
 .editor.play-mode .side-panel,
 .editor.play-mode .tool-rail,

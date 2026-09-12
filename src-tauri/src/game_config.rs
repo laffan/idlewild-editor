@@ -20,7 +20,7 @@
 //! — a document written by a build that did not have zones, or instances, or
 //! rectangle fills still exports.
 
-use crate::project::{Genre, ProjectMeta, Projection};
+use crate::project::ProjectMeta;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -33,12 +33,19 @@ use std::collections::{HashMap, HashSet};
 /// its own.
 pub const CONFIG_REL: &str = "js/game.config.json";
 
-/// How far out the grid is drawn and the character may walk, in cells.
+/// How far the character may walk, in cells.
 ///
-/// The scenes draw `(2n+1)²` cell outlines, so this cannot simply grow to fit
-/// a large project — but a project whose content sits outside it would come
-/// out with its far side unreachable, which is worse. The span holds the
-/// content with room to spare, within these two bounds.
+/// It is measured from the content, because a project whose content sits
+/// outside it would come out with its far side unreachable. The ceiling is
+/// what stops a document with one placement a mile from the origin — or a
+/// hand-edited coordinate — from handing a search a world it has to walk
+/// across before it can answer. The span holds the content with room to
+/// spare, within these two bounds.
+///
+/// It used to bound the drawn lattice as well, which is why it is clamped
+/// rather than simply grown: the scenes stroked `(2n+1)²` cell outlines. They
+/// draw no grid now — that is the editor's scaffolding, not the game's — so
+/// this is the walkable bound and nothing else.
 const MIN_SPAN: i64 = 24;
 const MAX_SPAN: i64 = 128;
 /// Cells of clear space left around the content.
@@ -46,11 +53,9 @@ const SPAN_MARGIN: i64 = 4;
 
 /// The config a fresh project scaffolds with: the shape of the space, and
 /// nothing in it.
-pub fn empty(projection: Projection, genre: Genre, grid_size: u32) -> Value {
+pub fn empty(meta: &ProjectMeta) -> Value {
     config(
-        projection,
-        genre,
-        grid_size,
+        meta,
         MIN_SPAN,
         json!({ "cx": 0, "cy": 0 }),
         json!([]),
@@ -112,9 +117,7 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
         .unwrap_or(Cell { cx: 0.0, cy: 0.0 });
 
     Ok(config(
-        meta.projection,
-        meta.genre,
-        meta.grid_size,
+        meta,
         span,
         json!(spawn),
         json!(keys),
@@ -143,9 +146,7 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
 /// says which one `layers` mirrors.
 #[allow(clippy::too_many_arguments)]
 fn config(
-    projection: Projection,
-    genre: Genre,
-    grid_size: u32,
+    meta: &ProjectMeta,
     span: i64,
     spawn: Value,
     psd_keys: Value,
@@ -154,10 +155,18 @@ fn config(
     active_scene: Value,
 ) -> Value {
     json!({
-        "projection": projection.as_str(),
-        "genre": genre.as_str(),
-        "grid": grid_size,
+        "projection": meta.projection.as_str(),
+        "genre": meta.genre.as_str(),
+        "grid": meta.grid_size,
         "gridSpan": span,
+        // The rendering options, as the project's own code reads them:
+        // `main.js` hands the first two to Phaser and the scene gives the
+        // other two to its camera. They ride in the generated file rather
+        // than being written into the scaffold as literals, so a toggle in
+        // Project Options reaches a game whose code nobody has touched.
+        "pixelArt": meta.options.pixel_art,
+        "roundPixels": meta.options.round_pixels,
+        "zoom": meta.options.zoom(),
         "spawn": spawn,
         "psdKeys": psd_keys,
         "layers": layers,

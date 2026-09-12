@@ -5,12 +5,28 @@
 //! path from climbing out of the store. The PSD pipeline is next door in
 //! `tests.rs`; the two share only the store they both create projects in.
 
-use crate::project::{Genre, Projection};
+use crate::project::{GameOptions, Genre, ProjectMeta, Projection};
 use crate::{publish, store, templates};
+
+/// A meta to ask the templates a question about, without a project on disk.
+///
+/// `template_files` and `starter_doc` answer for a project rather than for a
+/// list of fields, which is what lets the options reach both — so a test that
+/// only wants the text still has to say which project it means.
+fn seed(projection: Projection, genre: Genre, grid_size: u32, options: GameOptions) -> ProjectMeta {
+    ProjectMeta::new(
+        "seed".into(),
+        "Seed".into(),
+        projection,
+        genre,
+        grid_size,
+        options,
+    )
+}
 
 #[test]
 fn relative_paths_cannot_escape_the_project() {
-    assert!(store::safe_relative("js/WorldScene.js").is_ok());
+    assert!(store::safe_relative("js/scenes/WorldScene.js").is_ok());
     assert!(store::safe_relative("../../../etc/passwd").is_err());
     assert!(store::safe_relative("/etc/passwd").is_err());
 }
@@ -31,7 +47,12 @@ fn publish_names_survive_awkward_project_titles() {
 
 #[test]
 fn starter_documents_carry_the_chosen_template_and_grid() {
-    let doc = templates::starter_doc(Projection::Isometric, Genre::Topdown, 128);
+    let doc = templates::starter_doc(&seed(
+        Projection::Isometric,
+        Genre::Topdown,
+        128,
+        GameOptions::default(),
+    ));
     let value: serde_json::Value = serde_json::from_str(&doc).expect("valid JSON");
     assert_eq!(value["projection"], "isometric");
     assert_eq!(value["genre"], "topdown");
@@ -44,7 +65,12 @@ fn starter_documents_carry_the_chosen_template_and_grid() {
 
     // Both axes reach the document, because the editor reads its play mode
     // out of it rather than out of the project's meta.
-    let blank = templates::starter_doc(Projection::Blank, Genre::Platformer, 32);
+    let blank = templates::starter_doc(&seed(
+        Projection::Blank,
+        Genre::Platformer,
+        32,
+        GameOptions::default(),
+    ));
     let value: serde_json::Value = serde_json::from_str(&blank).expect("valid JSON");
     assert_eq!(value["projection"], "blank");
     assert_eq!(value["genre"], "platformer");
@@ -54,10 +80,22 @@ fn starter_documents_carry_the_chosen_template_and_grid() {
 /// and both axes reach the config the scene reads at runtime.
 #[test]
 fn each_style_scaffolds_the_program_it_runs() {
-    let top = store::create_project("Top", Projection::Blank, Genre::Topdown, 48)
-        .expect("project should be created");
-    let side = store::create_project("Side", Projection::Orthogonal, Genre::Platformer, 48)
-        .expect("project should be created");
+    let top = store::create_project(
+        "Top",
+        Projection::Blank,
+        Genre::Topdown,
+        48,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+    let side = store::create_project(
+        "Side",
+        Projection::Orthogonal,
+        Genre::Platformer,
+        48,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let paths = |id: &str| -> Vec<String> {
@@ -69,26 +107,42 @@ fn each_style_scaffolds_the_program_it_runs() {
         };
 
         let top_paths = paths(&top.id);
-        assert!(top_paths.iter().any(|p| p == "js/navigation.js"));
+        assert!(top_paths.iter().any(|p| p == "js/shared/navigation.js"));
         assert!(
-            !top_paths.iter().any(|p| p == "js/physics.js"),
+            !top_paths.iter().any(|p| p == "js/shared/physics.js"),
             "a top-down project ships no body step: {top_paths:?}"
         );
 
         let side_paths = paths(&side.id);
-        assert!(side_paths.iter().any(|p| p == "js/physics.js"));
+        assert!(side_paths.iter().any(|p| p == "js/shared/physics.js"));
         assert!(
-            !side_paths.iter().any(|p| p == "js/navigation.js"),
+            !side_paths.iter().any(|p| p == "js/shared/navigation.js"),
             "a platformer ships no pathfinder: {side_paths:?}"
         );
 
-        // The scenes really are different programs, not one file twice.
+        // The scenes really are different programs, not one file twice — and
+        // each genre's character is its own prefab.
         let top_scene =
-            store::read_game_file(&top.id, "js/WorldScene.js").expect("scene should read");
+            store::read_game_file(&top.id, "js/scenes/WorldScene.js").expect("scene should read");
         let side_scene =
-            store::read_game_file(&side.id, "js/WorldScene.js").expect("scene should read");
-        assert!(top_scene.contains("findPath"));
-        assert!(side_scene.contains("stepBody"));
+            store::read_game_file(&side.id, "js/scenes/WorldScene.js").expect("scene should read");
+        assert!(top_scene.contains("spawnCharacter"));
+        assert!(side_scene.contains("stepBody") || side_scene.contains("solidsFromDocument"));
+        assert!(store::read_game_file(&top.id, "js/prefabs/character.js")
+            .expect("the prefab should read")
+            .contains("findPath"));
+        assert!(store::read_game_file(&side.id, "js/prefabs/character.js")
+            .expect("the prefab should read")
+            .contains("stepBody"));
+
+        // Neither draws a grid. The editor's lattice is scaffolding to build
+        // on; a game is the thing that was built.
+        for scene in [&top_scene, &side_scene] {
+            assert!(
+                !scene.contains("drawGrid"),
+                "a played scene should not draw the editor's grid"
+            );
+        }
 
         let config: serde_json::Value = serde_json::from_str(
             &store::read_game_file(&top.id, "js/game.config.json").expect("config should read"),
@@ -110,8 +164,14 @@ fn each_style_scaffolds_the_program_it_runs() {
 /// one written before the choice existed still reads, as top down.
 #[test]
 fn project_meta_defaults_a_missing_genre_to_top_down() {
-    let meta = store::create_project("Legacy", Projection::Orthogonal, Genre::Platformer, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Legacy",
+        Projection::Orthogonal,
+        Genre::Platformer,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         assert_eq!(
@@ -141,22 +201,29 @@ fn project_meta_defaults_a_missing_genre_to_top_down() {
 
 #[test]
 fn a_new_project_scaffolds_a_runnable_game() {
-    let meta = store::create_project("Scaffold test", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Scaffold test",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let files = store::list_game_files(&meta.id).expect("files should list");
         let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
         for expected in [
             "index.html",
+            "styles.css",
             "js/main.js",
-            "js/WorldScene.js",
-            "js/grid.js",
+            "js/scenes/WorldScene.js",
+            "js/prefabs/character.js",
+            "js/shared/grid.js",
             // The top-down scene's own module; a platformer gets physics.js
             // instead — see `each_style_scaffolds_the_program_it_runs`.
-            "js/navigation.js",
+            "js/shared/navigation.js",
             "js/game.config.json",
-            "css/styles.css",
         ] {
             assert!(paths.contains(&expected), "{expected} missing from {paths:?}");
         }
@@ -193,8 +260,14 @@ fn a_new_project_scaffolds_a_runnable_game() {
 /// work with it.
 #[test]
 fn the_game_tree_can_be_managed_without_losing_files() {
-    let meta = store::create_project("Files", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Files",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let id = &meta.id;
@@ -275,8 +348,14 @@ fn the_game_tree_can_be_managed_without_losing_files() {
 /// document has to reach the archive, and it reaches it through that file.
 #[test]
 fn an_export_carries_the_document_in_its_config() {
-    let meta = store::create_project("Export", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Export",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let doc = serde_json::json!({
@@ -358,8 +437,14 @@ fn an_export_carries_the_document_in_its_config() {
 /// in the runtime's solid list.
 #[test]
 fn an_export_carries_what_each_placed_psd_blocks() {
-    let meta = store::create_project("Colliders", Projection::Isometric, Genre::Topdown, 64)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Colliders",
+        Projection::Isometric,
+        Genre::Topdown,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let doc = serde_json::json!({
@@ -439,8 +524,14 @@ fn an_export_carries_what_each_placed_psd_blocks() {
 /// export is still a runnable game, just an empty one.
 #[test]
 fn an_export_survives_a_document_it_cannot_read() {
-    let meta = store::create_project("Corrupt", Projection::Isometric, Genre::Platformer, 64)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Corrupt",
+        Projection::Isometric,
+        Genre::Platformer,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         store::write_doc(&meta.id, "{ not json").expect("document should write");
@@ -481,16 +572,30 @@ fn count_in_zip(bytes: &[u8], name: &str) -> usize {
 /// What a managed block's Reset in the code modal puts back.
 #[test]
 fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
-    let meta = store::create_project("Pristine", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Pristine",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
-        let scene = store::read_game_template(&meta.id, "js/WorldScene.js")
+        let scene = store::read_game_template(&meta.id, "js/scenes/WorldScene.js")
             .expect("the scene has a scaffold");
         assert_eq!(
             scene,
-            store::read_game_file(&meta.id, "js/WorldScene.js").expect("scene should read"),
+            store::read_game_file(&meta.id, "js/scenes/WorldScene.js").expect("scene should read"),
             "an untouched file and its template are the same thing"
+        );
+        // A project made before the tree was restructured keeps its scene at
+        // the old path, and Reset has to go on working in it: the old name
+        // answers with the file it became.
+        assert_eq!(
+            store::read_game_template(&meta.id, "js/WorldScene.js")
+                .expect("the old path is the same file"),
+            scene,
         );
         // The markers the code modal reads ownership from.
         assert!(scene.contains("// idlewild:begin placeDocument"));
@@ -523,11 +628,8 @@ fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
 fn both_scenes_mark_the_same_blocks_and_close_every_one() {
     for genre in [Genre::Topdown, Genre::Platformer] {
         let scene = templates::template_file(
-            "js/WorldScene.js",
-            "Marks",
-            Projection::Orthogonal,
-            genre,
-            32,
+            "js/scenes/WorldScene.js",
+            &seed(Projection::Orthogonal, genre, 32, GameOptions::default()),
         )
         .expect("the scene has a scaffold");
 
@@ -545,7 +647,7 @@ fn both_scenes_mark_the_same_blocks_and_close_every_one() {
             open,
             [
                 "preload",
-                "drawGrid",
+                "applyCamera",
                 "placeDocument",
                 "paintFill",
                 "drawOrder",

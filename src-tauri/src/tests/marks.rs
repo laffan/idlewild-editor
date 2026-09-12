@@ -11,7 +11,7 @@
 //! both create projects in, and `swatch`.
 
 use super::swatch;
-use crate::project::{Genre, Projection};
+use crate::project::{GameOptions, Genre, Projection};
 use crate::{psd_pipeline, psd_write, store};
 
 /// A paste, end to end.
@@ -26,8 +26,14 @@ use crate::{psd_pipeline, psd_write, store};
 fn a_pasted_image_carries_its_anchor_and_footprint() {
     use crate::psd_write::{AnchorMarks, MarkPoint};
 
-    let meta = store::create_project("Pasted", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Pasted",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         let marks = AnchorMarks {
@@ -115,8 +121,14 @@ fn a_pasted_image_carries_its_anchor_and_footprint() {
 fn an_import_marks_its_anchor_and_grid_footprint() {
     use crate::psd_write::{AnchorMarks, MarkPoint};
 
-    let meta = store::create_project("Marks", Projection::Orthogonal, Genre::Topdown, 32)
-        .expect("project should be created");
+    let meta = store::create_project(
+        "Marks",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
         // One orthogonal grid space at the anchor: a 32 px square whose
