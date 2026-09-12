@@ -10,9 +10,16 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
-import { placeableLayers, placedPosition, stackOrder, type Manifest } from "../lib/manifest";
+import {
+  anchorImpliedBy,
+  anchorOffset,
+  placeableLayers,
+  positionFrom,
+  stackOrder,
+  type Manifest,
+} from "../lib/manifest";
 import type { Grid } from "../lib/grid";
-import type { Placement } from "../lib/types";
+import type { Placement, Point } from "../lib/types";
 import * as log from "../lib/log";
 
 /**
@@ -35,6 +42,9 @@ import * as log from "../lib/log";
  * it was. That is what lets an artist resize the canvas, move the artwork
  * inside it, or redraw the whole thing: as long as the mark stays on the
  * spot that should sit on that grid space, the artwork comes back lined up.
+ *
+ * And when the mark is *gone* — a file flattened on save, an edit that came
+ * home as a picture — nothing moves at all. See `anchorFor`.
  */
 export function reconcilePlacements(
   store: DocStore,
@@ -43,8 +53,88 @@ export function reconcilePlacements(
   manifest: Manifest,
   renames?: ReadonlyMap<string, string>,
 ): void {
-  reviseExisting(store, grid, key, manifest, renames);
-  adoptNewLayers(store, grid, key, manifest);
+  const anchor = anchorFor(store, grid, key, manifest, renames);
+  reviseExisting(store, grid, key, manifest, anchor, renames);
+  adoptNewLayers(store, grid, key, manifest, anchor);
+}
+
+/**
+ * The point in the canvas that goes on the placement's grid space.
+ *
+ * The `P | anchor` mark, when the file still has one. It usually does: a PSD
+ * picked back out of Files is the bytes that went out, mark and all, and an
+ * artist who resizes the canvas or moves the artwork moves the dot with it,
+ * which is the whole design.
+ *
+ * A file can come back **without** one, though, and that is where this earns
+ * its keep. Flatten a PSD on save and the mark goes with every other layer;
+ * bring the edit home through the photo library, or as a PNG, and what lands
+ * is a picture with no marks in it at all — `reimport` writes none, because
+ * the file coming back is supposed to be carrying its own.
+ *
+ * `anchorOffset` answers that with the canvas centre, which is the only
+ * defensible guess about a file nobody has placed and a bad one about a file
+ * already standing on the grid: it moves the artwork by however far the
+ * centre is from where the mark was. On an extrusion that is most of a grid
+ * space, because the margin is not symmetric about the anchor — the solid
+ * reaches up and the footprint stays down — which is the "it no longer
+ * matches the grid" this is here to stop.
+ *
+ * So a file with no mark is pinned by **what is already on the canvas**: the
+ * anchor it would have needed for the first placement that still resolves to
+ * land where that placement is standing now. Every other layer is positioned
+ * against the same point, which keeps the file's own arrangement — a layer
+ * added in Photoshop still arrives beside the one it was drawn beside — and
+ * moves nothing that was already right.
+ */
+function anchorFor(
+  store: DocStore,
+  grid: Grid,
+  key: string,
+  manifest: Manifest,
+  renames?: ReadonlyMap<string, string>,
+): Point {
+  if (manifest.anchor) return manifest.anchor;
+
+  for (const layer of store.layers) {
+    for (const placement of layer.placements) {
+      if (placement.psdKey !== key) continue;
+      const entry = manifest.all.find(
+        (l) => l.path === resolvePath(manifest, placement, renames),
+      );
+      if (!entry) continue;
+      log.warn(
+        `${key}.psd came back with no "P | anchor" — holding it where it is. ` +
+          "Bring a PSD home rather than a flattened copy to keep the mark.",
+      );
+      return anchorImpliedBy(
+        grid.cellToWorld(placement.anchor),
+        placement,
+        entry,
+        scaleXOf(placement),
+        scaleYOf(placement),
+      );
+    }
+  }
+  return anchorOffset(manifest);
+}
+
+/** Where a placement's layer has got to in the new file, if it is still there. */
+function resolvePath(
+  manifest: Manifest,
+  placement: Placement,
+  renames?: ReadonlyMap<string, string>,
+): string {
+  const renamed = renames?.get(placement.layerPath) ?? placement.layerPath;
+  return repointed(manifest, renamed) ?? renamed;
+}
+
+function scaleXOf(placement: Placement): number {
+  return placement.width / (placement.naturalWidth || placement.width);
+}
+
+function scaleYOf(placement: Placement): number {
+  return placement.height / (placement.naturalHeight || placement.height);
 }
 
 /**
@@ -111,6 +201,7 @@ function adoptNewLayers(
   grid: Grid,
   key: string,
   manifest: Manifest,
+  anchor: Point,
 ): void {
   const taken = new Set<string>();
   let sibling: { layerId: string; placement: Placement } | null = null;
@@ -123,11 +214,9 @@ function adoptNewLayers(
   }
   if (!sibling) return;
 
-  const scale =
-    sibling.placement.width /
-    (sibling.placement.naturalWidth || sibling.placement.width);
-  const anchor = sibling.placement.anchor;
-  const world = grid.cellToWorld(anchor);
+  const scale = scaleXOf(sibling.placement);
+  const cell = sibling.placement.anchor;
+  const world = grid.cellToWorld(cell);
 
   const stack = stackOrder(manifest);
   for (const entry of placeableLayers(manifest)) {
@@ -137,7 +226,7 @@ function adoptNewLayers(
     if (standsFor(taken, entry.path)) continue;
     const width = entry.width || manifest.width;
     const height = entry.height || manifest.height;
-    const at = placedPosition(world, manifest, entry, scale, scale);
+    const at = positionFrom(world, anchor, entry, scale, scale);
     store.addPlacement(sibling.layerId, {
       psdKey: key,
       layerPath: entry.path,
@@ -147,7 +236,7 @@ function adoptNewLayers(
       height: height * scale,
       naturalWidth: width,
       naturalHeight: height,
-      anchor,
+      anchor: cell,
       // Part of the same placed thing as the layers it arrived beside, so
       // the PSD still moves as one.
       instance: sibling.placement.instance,
@@ -162,6 +251,7 @@ function reviseExisting(
   grid: Grid,
   key: string,
   manifest: Manifest,
+  anchor: Point,
   renames?: ReadonlyMap<string, string>,
 ): void {
   // Re-read from the file rather than kept: reordering a PSD's layers in the
@@ -197,13 +287,13 @@ function reviseExisting(
         continue;
       }
 
-      const scaleX = placement.width / (placement.naturalWidth || placement.width);
-      const scaleY = placement.height / (placement.naturalHeight || placement.height);
+      const scaleX = scaleXOf(placement);
+      const scaleY = scaleYOf(placement);
       const width = entry.width || manifest.width;
       const height = entry.height || manifest.height;
 
       const world = grid.cellToWorld(placement.anchor);
-      const at = placedPosition(world, manifest, entry, scaleX, scaleY);
+      const at = positionFrom(world, anchor, entry, scaleX, scaleY);
       store.updatePlacement(layer.id, placement.id, {
         layerPath: path,
         x: at.x,

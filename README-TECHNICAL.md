@@ -2223,6 +2223,59 @@ themselves with a margin on.
 Nothing reaches the document until Apply. The shape lives in the mode object,
 so Cancel is dropping it and entering play mode drops it too.
 
+### A file that comes home without its mark
+
+`P | anchor` is what keeps a PSD on its grid space, and a round trip through
+Files gives it back untouched — the bytes that went out are the bytes that
+come back, and an artist who resizes the canvas or moves the artwork moves the
+dot with them, which is the design working rather than surviving. Run through
+the real writer and the real pipeline, an extrusion re-imported as a PSD lands
+on exactly the same world point it left from, and cropping every layer to its
+ink on the way — which is what a paint app does on save — does not move it
+either.
+
+Two round trips do not give it back. An editor that **flattens** on save takes
+the mark with every other layer, and an edit brought home through the photo
+library or as a PNG arrives as a picture with no marks in it at all —
+`reimport` writes none, because the file coming back is supposed to be
+carrying its own.
+
+`anchorOffset` answered that with the canvas centre. That is the only
+defensible guess about a file nobody has placed, and a bad one about a file
+already standing on the grid: the artwork moves by however far the centre is
+from where the mark was. Measured on a 2 × 2 plate pulled up three — a
+512 × 480 canvas with the artwork at (128, 64) and the dot at (256, 288) —
+flattening moved it **64 world pixels sideways and 8 down**, a whole tile off
+the grid, and coming back as a picture dropped it a **full tile height**. The
+margin is what makes it that bad: the room is not symmetric about the anchor,
+because the solid reaches up out of the footprint and the footprint stays
+down, so the centre of the canvas is nowhere near the dot.
+
+So `reconcile.ts` asks for the anchor once, at the top, and a file with no
+mark is pinned by **what is already on the canvas** — `anchorImpliedBy` runs
+the placement formula backwards over the first placement that still resolves,
+giving the anchor that file would have needed to land where the thing is
+standing now. Every other layer is positioned against the same point, so the
+file's own arrangement is kept: a layer added in Photoshop still arrives
+beside the one it was drawn beside. A key with no placements at all falls
+through to the canvas centre, which is right — there is nothing to be pinned
+by, and it is a first placement rather than a re-import.
+
+The pin is recomputed on every parse, so a file that has lost its mark goes on
+working. What it cannot do any more is **move**: re-anchoring by dragging the
+dot in Photoshop is gone with the dot, so the console says so by name the
+first time a parse finds no mark. Putting the mark back into a file that
+arrived without one is the obvious next step and is not done here — it means
+writing a layer into somebody else's stack, which is the one thing
+`import_file_as_psd` deliberately does not do.
+
+The placement's own box is still the **artwork**, not the canvas, which is
+what makes the margin safe: `defaultCollider` reads that box for everything
+that is not an extrusion, so a canvas-sized box would put a ring of blocked
+spaces around every converted fill, and picking would catch a placement from a
+space away from anything drawn. The room to paint in is real and is in the
+file; it is deliberately not a bigger thing on the grid.
+
 ### Continuing an extrusion
 
 Pixels cannot say where the columns were, so Apply used to be a one-way door.

@@ -179,3 +179,120 @@ describe("a manifest whose categories are spelled differently", () => {
     expect(paths(s)).toEqual(["extrude-abc"]);
   });
 });
+
+/**
+ * A file that comes home without its mark.
+ *
+ * The numbers are a real extrusion's, read off the pipeline: a 2 × 2 plate
+ * pulled up three on a 64 px isometric grid writes a 512 × 480 canvas with
+ * the artwork at (128, 64), 256 × 320, and the anchor dot at (256, 288). Put
+ * on the space at (0, 0) and displayed at a half, that is a placement at
+ * (-64, -112).
+ *
+ * Two things can happen to that file out of the app, and neither leaves the
+ * mark behind: an editor that flattens on save, and an edit that comes back
+ * through the photo library or as a PNG, which `reimport` converts with no
+ * marks at all. `anchorOffset` then answers with the canvas centre and the
+ * artwork lands somewhere else — most of a grid space away, because the
+ * margin is not symmetric about the anchor.
+ */
+describe("a re-import that lost its anchor", () => {
+  const APPLIED = JSON.stringify({
+    name: "extrude-abc",
+    width: 512,
+    height: 480,
+    layers: [
+      { name: "anchor", category: "point", x: 256, y: 288, width: 12, height: 12 },
+      { name: "grid-2x2", category: "zone", x: 128, y: 224, width: 256, height: 192 },
+      {
+        name: "extrude-abc",
+        category: "sprite",
+        x: 128,
+        y: 64,
+        width: 256,
+        height: 320,
+      },
+    ],
+  });
+
+  /** The same file flattened: one layer over the whole canvas, marks gone. */
+  const FLATTENED = JSON.stringify({
+    name: "extrude-abc",
+    width: 512,
+    height: 480,
+    layers: [
+      { name: "extrude-abc", category: "sprite", x: 0, y: 0, width: 512, height: 480 },
+    ],
+  });
+
+  /** And the same edit back as a picture: the canvas is the artwork. */
+  const AS_IMAGE = JSON.stringify({
+    name: "extrude-abc",
+    width: 256,
+    height: 320,
+    layers: [
+      { name: "extrude-abc", category: "sprite", x: 0, y: 0, width: 256, height: 320 },
+    ],
+  });
+
+  function applied(): Placement {
+    return {
+      ...placement("extrude-abc", "extrude-abc"),
+      x: -64,
+      y: -112,
+      width: 128,
+      height: 160,
+      naturalWidth: 256,
+      naturalHeight: 320,
+    };
+  }
+
+  it("puts a marked file back exactly where it was", () => {
+    const s = store(applied());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(APPLIED));
+    const after = s.layers[0].placements[0];
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  it("holds a flattened file where it is instead of centring it", () => {
+    const s = store(applied());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(FLATTENED));
+    const after = s.layers[0].placements[0];
+    // The canvas centre would have put it at (-128, -120): a whole tile
+    // sideways, and off the grid.
+    expect([after.x, after.y]).toEqual([-64, -112]);
+    // The artwork really is the whole canvas now, so the box says so.
+    expect([after.width, after.height]).toEqual([256, 240]);
+  });
+
+  it("holds an edit that came back as a picture", () => {
+    const s = store(applied());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(AS_IMAGE));
+    const after = s.layers[0].placements[0];
+    // The centre would have dropped it a full tile height, to (-64, -80).
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  it("keeps the file's own arrangement for a layer added beside it", () => {
+    const WITH_EXTRA = JSON.stringify({
+      name: "extrude-abc",
+      width: 256,
+      height: 320,
+      layers: [
+        { name: "roof", category: "sprite", x: 40, y: 0, width: 100, height: 60 },
+        { name: "extrude-abc", category: "sprite", x: 0, y: 0, width: 256, height: 320 },
+      ],
+    });
+    const s = store(applied());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(WITH_EXTRA));
+    const roof = s.layers[0].placements.find((p) => p.layerPath === "roof");
+    // 40 px right of the artwork in the file, so 20 on the grid beside it.
+    expect(roof && [roof.x, roof.y]).toEqual([-44, -112]);
+  });
+
+  it("still centres a file nothing has placed, which is the only guess left", () => {
+    const s = store();
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(AS_IMAGE));
+    expect(s.layers[0].placements).toHaveLength(0);
+  });
+});

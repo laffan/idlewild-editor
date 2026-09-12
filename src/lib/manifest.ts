@@ -246,10 +246,49 @@ export function placedPosition(
   scaleX: number,
   scaleY: number,
 ): Point {
-  const anchor = anchorOffset(manifest);
+  return positionFrom(world, anchorOffset(manifest), entry, scaleX, scaleY);
+}
+
+/**
+ * The same, against an anchor named outright rather than read from the file.
+ *
+ * A re-import is the one caller that has a better answer than the manifest
+ * does. `anchorOffset` falls back to the canvas centre for a file with no
+ * mark, which is the only defensible guess about a file nobody has placed —
+ * and quite wrong about one that is already standing on the grid. See
+ * `game/reconcile.ts`.
+ */
+export function positionFrom(
+  world: Point,
+  anchor: Point,
+  entry: Point,
+  scaleX: number,
+  scaleY: number,
+): Point {
   return {
     x: world.x + (entry.x - anchor.x) * scaleX,
     y: world.y + (entry.y - anchor.y) * scaleY,
+  };
+}
+
+/**
+ * The anchor a file *would* need for a layer to land on a given spot.
+ *
+ * The placement formula run backwards. What it is for: a file that has come
+ * back from another program without its `P | anchor` — flattened, or saved
+ * as a PNG — still has to go back where it was, and where it was is a fact
+ * the document holds even though the file has stopped saying it.
+ */
+export function anchorImpliedBy(
+  world: Point,
+  at: Point,
+  entry: Point,
+  scaleX: number,
+  scaleY: number,
+): Point {
+  return {
+    x: entry.x - (at.x - world.x) / (scaleX || 1),
+    y: entry.y - (at.y - world.y) / (scaleY || 1),
   };
 }
 

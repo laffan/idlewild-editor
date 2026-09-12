@@ -122,7 +122,10 @@ remaining pieces are wired to real slots rather than mocked.
 - Every import carries its grid space into the PSD as two marks a game never
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork
-  re-anchors to it — which is how you make something stand on its tile
+  re-anchors to it — which is how you make something stand on its tile. A
+  file that comes back **without** the dot — flattened on save, or brought
+  home through Photos as a picture — is held where it is instead of being
+  re-centred on its canvas, and the console says the mark has gone
 - **Scenes**, the way Phaser means them: a set of layers and a canvas of its
   own. A project is several places — a title screen, a cave, the overworld —
   sharing a grid, a genre and a pile of PSDs but not a single thing standing
