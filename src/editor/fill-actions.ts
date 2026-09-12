@@ -99,8 +99,15 @@ export async function convertFillToPsd(
       ),
     );
 
-    await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
-    store.removeFill(selection.layerId, selection.fillId);
+    // The block-out going and the artwork arriving are one thing, so undo
+    // takes them back together rather than leaving a fill that is also a PSD.
+    store.history.begin();
+    try {
+      await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+      store.removeFill(selection.layerId, selection.fillId);
+    } finally {
+      store.history.end();
+    }
     log.info(
       `${describe(fill)} → ${result.key}.psd (${result.width}×${result.height})`,
     );

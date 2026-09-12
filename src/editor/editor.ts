@@ -17,6 +17,7 @@ import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
 import { bindShortcuts } from "./shortcuts";
+import { createHistoryUi } from "./history";
 import { startIntake } from "./intake";
 import { GameFrame } from "./game-frame";
 import { Terminal } from "./terminal";
@@ -283,6 +284,8 @@ export async function mountEditor(
     `${meta.gridSize} px · ${meta.projection}`,
     {
       onBack: () => void leave(),
+      onUndo: () => history.undo(),
+      onRedo: () => history.redo(),
       onMode: (next) => setMode(next),
       onCode: () => code.toggle(),
       onPasteImage: () => intake.paste(),
@@ -397,6 +400,15 @@ export async function mountEditor(
 
   clear(container);
   container.appendChild(shell);
+  // Undo and redo: the two header buttons, and which of the document's
+  // history and the code editor's a press means — see editor/history.ts.
+  const history = createHistoryUi({
+    store,
+    code,
+    header,
+    scene: () => handle?.scene ?? null,
+  });
+
   const stopShortcuts = bindShortcuts({
     currentTool: () => rail.tool,
     applyTool: (tool) => applyTool(tool, false),
@@ -405,6 +417,8 @@ export async function mountEditor(
       return !!selection && selection.kind !== "none" && selection.kind !== "layer";
     },
     onDelete: () => deleteSelection(),
+    onUndo: () => history.undo(),
+    onRedo: () => history.redo(),
   });
   leftResizer.restore();
   rightResizer.restore();
@@ -573,7 +587,7 @@ export async function mountEditor(
   async function strokesToPsd(): Promise<void> {
     const selection = handle?.scene.getSelection();
     if (selection?.kind !== "strokes" || !drawing || !handle) return;
-    await convertStrokesToPsd(meta.id, grid, drawing, handle.scene, selection);
+    await convertStrokesToPsd(meta.id, store, grid, drawing, handle.scene, selection);
   }
 
   /** Hand a filled run of grid spaces to its layer as a placed PSD. */
@@ -649,6 +663,7 @@ export async function mountEditor(
 
   async function teardown(): Promise<void> {
     stopShortcuts();
+    history.destroy();
     intake.stop();
     if (mode === "play") setMode("edit");
     await saveThumbnail();

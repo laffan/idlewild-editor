@@ -170,21 +170,35 @@ export class DragController {
     const world = this.host.worldAt(screenX, screenY);
     const grabCell = this.host.grid.worldToCell(world);
 
+    // Everything the gesture writes is one undo step. A drag writes on every
+    // pointer move — that is what makes the canvas follow the finger — and a
+    // history that stepped back through it a space at a time would be a
+    // history of the gesture rather than of the document.
     if (selection.kind === "placement") {
-      return this.beginPlacement(selection, world, grabCell, modifiers);
+      return this.grouped(() =>
+        this.beginPlacement(selection, world, grabCell, modifiers),
+      );
     }
     if (selection.kind === "placements") {
-      return this.beginPlacements(selection, world, grabCell, modifiers);
+      return this.grouped(() =>
+        this.beginPlacements(selection, world, grabCell, modifiers),
+      );
     }
     if (selection.kind === "fill") {
       // A fill has no file behind it, so shift has nothing to detach.
-      return this.beginFill(selection, world, grabCell, modifiers.alt);
+      return this.grouped(() =>
+        this.beginFill(selection, world, grabCell, modifiers.alt),
+      );
     }
     if (selection.kind === "zone") {
-      return this.beginZone(selection, world, grabCell, modifiers.alt);
+      return this.grouped(() =>
+        this.beginZone(selection, world, grabCell, modifiers.alt),
+      );
     }
     if (selection.kind === "point") {
-      return this.beginPoint(selection, world, grabCell, modifiers.alt);
+      return this.grouped(() =>
+        this.beginPoint(selection, world, grabCell, modifiers.alt),
+      );
     }
     return false;
   }
@@ -281,11 +295,15 @@ export class DragController {
   end(): void {
     if (!this.state) return;
     this.state = null;
+    // Closes the step `begin` opened. A gesture that moved nothing leaves no
+    // step at all — see `DocHistory.end`.
+    this.host.store.history.end();
     this.host.onDragStateChange(false);
   }
 
   /** Drop the gesture without telling the host — a mode change, a teardown. */
   cancel(): void {
+    if (this.state) this.host.store.history.end();
     this.state = null;
   }
 
@@ -497,6 +515,23 @@ export class DragController {
       cell: dragged.cell,
     });
     return true;
+  }
+
+  /**
+   * Open an undo step for a gesture that is starting, and close it if it
+   * turns out not to have started after all.
+   *
+   * A `begin*` that answers false grabbed nothing — the pointer went down
+   * somewhere that is not the selection — and leaving a group open there
+   * would swallow the next thing the user did into a step that never began.
+   * The option-drag copies are inside it too, which is what makes an
+   * option-drag one step rather than a copy followed by a move.
+   */
+  private grouped(begin: () => boolean): boolean {
+    this.host.store.history.begin();
+    const took = begin();
+    if (!took) this.host.store.history.end();
+    return took;
   }
 
   private start(state: DragState): void {

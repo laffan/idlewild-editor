@@ -136,3 +136,19 @@ function copyPlacements(placements: readonly Placement[]): Placement[] {
     return copy;
   });
 }
+
+/**
+ * The next unclaimed "Point N" across the scene.
+ *
+ * Counting the points and adding one is not enough: delete Point 1 of two and
+ * the next one made would be Point 2 again, and two points with one name is
+ * the one thing a name is for avoiding. So it walks up from one until it
+ * finds a name nothing is using.
+ */
+export function nextPointName(layers: readonly Layer[]): string {
+  const taken = new Set(layers.flatMap((l) => l.points.map((p) => p.name)));
+  for (let n = 1; ; n++) {
+    const name = `Point ${n}`;
+    if (!taken.has(name)) return name;
+  }
+}

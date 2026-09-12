@@ -303,3 +303,22 @@
   color: var(--chrome-dim);
 }
 .code-foot .btn { min-height: 40px; padding: 0 16px; font-size: 13px; }
+/* Pushes undo and redo to the right end of the footer bar. */
+.code-foot-spacer { flex: 1; }
+/* Undo and redo for the open file. The header carries a pair too, but they
+   are behind this panel whenever it is floating, which is exactly when an
+   iPad with no keyboard has nowhere else to press. */
+.code-history {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: var(--rule-chrome);
+  background: transparent;
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.code-history:hover:not(:disabled) { background: var(--chrome-rule); }
+.code-history:disabled { color: var(--chrome-rule); cursor: default; }

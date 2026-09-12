@@ -31,6 +31,7 @@ type StrokeSelection = Extract<Selection, { kind: "strokes" }>;
 
 export async function convertStrokesToPsd(
   projectId: string,
+  store: DocStore,
   grid: Grid,
   drawing: DrawingLayer,
   scene: WorldScene,
@@ -69,8 +70,14 @@ export async function convertStrokesToPsd(
     });
     if (!result) return;
 
-    await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
-    drawing.removeStrokes(selection.ids);
+    // The ink going and the artwork arriving are one thing.
+    store.history.begin();
+    try {
+      await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+      drawing.removeStrokes(selection.ids);
+    } finally {
+      store.history.end();
+    }
     log.info(
       `${strokes.length} strokes → ${result.key}.psd ` +
         `(${result.width}×${result.height})`,
@@ -92,13 +99,16 @@ export function convertStrokesToZone(
     return;
   }
 
-  const zone = store.addZone(selection.layerId, {
-    name: `Boundary ${(store.layer(selection.layerId)?.zones.length ?? 0) + 1}`,
-    points,
-    // A boundary is drawn to stop something; play mode reads this when it
-    // builds the navigation grid.
-    blocking: true,
+  const zone = store.history.group(() => {
+    const made = store.addZone(selection.layerId, {
+      name: `Boundary ${(store.layer(selection.layerId)?.zones.length ?? 0) + 1}`,
+      points,
+      // A boundary is drawn to stop something; play mode reads this when it
+      // builds the navigation grid.
+      blocking: true,
+    });
+    drawing.removeStrokes(selection.ids);
+    return made;
   });
-  drawing.removeStrokes(selection.ids);
   log.info(`${strokes.length} strokes → ${zone.name} (${points.length} points)`);
 }

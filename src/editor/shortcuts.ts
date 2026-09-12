@@ -1,14 +1,25 @@
 /**
  * The editor's keyboard.
  *
- * Two shortcuts, and they have nothing to do with each other except that both
+ * A handful of shortcuts, and what they have in common is that all of them
  * have to stand down for a text field — which is the reason they live
- * together rather than in the two places that own them.
+ * together rather than in the places that own them.
  *
  * Space borrows the Pan tool for as long as it is held. That is what makes a
  * Select tool which no longer pans bearable: the camera is one thumb away
  * from wherever you are, and the tool comes back the moment the key is up.
  * An iPad has no space bar, which is why Pan is a rail tool as well.
+ *
+ * ⌘Z and ⇧⌘Z are undo and redo, on the surface the focus is in — see
+ * `editor/history.ts`, which decides that and owns the two header buttons
+ * that do the same thing without a keyboard. An iPad with a hardware keyboard
+ * sends both exactly as a Mac does, so there is one code path; an iPad
+ * without one has the buttons, which is why they exist. Control stands in for
+ * ⌘ so a keyboard that has no Command key is not locked out.
+ *
+ * `preventDefault` matters here rather than being tidy: WKWebView takes an
+ * un-prevented ⌘Z as its own editing undo, and on iPadOS that surfaces as the
+ * system's Undo over whatever field was last touched.
  */
 
 import type { ToolId } from "../lib/types";
@@ -21,6 +32,8 @@ export interface ShortcutHost {
   /** Whether Delete has anything to act on. */
   hasSelection: () => boolean;
   onDelete: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
 }
 
 /** Listen until the returned teardown is called. */
@@ -41,7 +54,20 @@ export function bindShortcuts(host: ShortcutHost): () => void {
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
+    // A field owns its own undo, and CodeMirror — which is `contenteditable`,
+    // not an input — owns the code editor's through its own keymap. Both are
+    // the history this would have reached anyway.
     if (isTyping(event.target)) return;
+
+    // ⌘Z / ⇧⌘Z. `key` comes through as an upper-case Z when shift is down, so
+    // the letter is compared case-insensitively and shift is read separately.
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+      if (event.altKey) return;
+      event.preventDefault();
+      if (event.shiftKey) host.onRedo();
+      else host.onUndo();
+      return;
+    }
 
     // Held, not toggled: auto-repeat fires this over and over, and only the
     // first one has a tool worth remembering.

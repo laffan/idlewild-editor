@@ -15,6 +15,11 @@
  * A switch fires `scene` as well as `change`. `change` means the document
  * moved; `scene` means everything on the canvas is now about somewhere else,
  * which is a redraw rather than a refresh — see `WorldScene.reloadScene`.
+ *
+ * Undo lives on `history`, and it works *because* of the immutability rule:
+ * a commit already builds a document that shares everything it did not
+ * touch, so remembering the one before it costs a pointer — see
+ * `lib/doc-history.ts`.
  */
 
 import type {
@@ -34,7 +39,8 @@ import type {
   Zone,
 } from "./types";
 import { doc as docIpc } from "./ipc";
-import { emptyLayer, copyLayer, makeId, withScenes } from "./doc-shape";
+import { emptyLayer, copyLayer, makeId, nextPointName, withScenes } from "./doc-shape";
+import { DocHistory } from "./doc-history";
 import * as log from "./log";
 
 // Re-exported because they were this module's before `doc-shape.ts` was split
@@ -47,6 +53,17 @@ const SAVE_DEBOUNCE_MS = 800;
 
 export class DocStore extends EventTarget {
   readonly projectId: string;
+
+  /**
+   * Undo and redo over this document — `lib/doc-history.ts` says what a step
+   * is. A field rather than methods here: the stack has a `change` event of
+   * its own, so the header's two buttons listen to the thing they are about.
+   */
+  readonly history: DocHistory = new DocHistory({
+    current: () => this.state,
+    restore: (doc) => this.restore(doc),
+  });
+
   private state: GameDoc;
   private saveTimer: number | null = null;
   private dirty = false;
@@ -109,11 +126,14 @@ export class DocStore extends EventTarget {
   }
 
   /** Look somewhere else. Fires `scene` after `change`, so a listener that
-   *  redraws runs after one that re-reads. */
+   *  redraws runs after one that re-reads. Not an edit, so not undoable:
+   *  looking at another scene is navigation, and undo is for what you did. */
   setActiveScene(sceneId: string): void {
     if (sceneId === this.state.activeSceneId) return;
     if (!this.scene(sceneId)) return;
-    this.commit({ ...this.state, activeSceneId: sceneId });
+    this.history.silence(() =>
+      this.commit({ ...this.state, activeSceneId: sceneId }),
+    );
     this.dispatchEvent(new CustomEvent("scene"));
   }
 
@@ -195,9 +215,28 @@ export class DocStore extends EventTarget {
   // ── mutation ──────────────────────────────────────────────────────────────
 
   private commit(next: GameDoc): void {
+    // Where it was. The stack decides whether that is a step of its own.
+    this.history.record(this.state);
     this.state = next;
     this.dirty = true;
     this.dispatchEvent(new CustomEvent("change"));
+    this.scheduleSave();
+  }
+
+  /**
+   * Put a remembered document back — undo and redo, and nothing else.
+   *
+   * Not `commit`: a restore must not record itself, and it may arrive in a
+   * different scene than the one on screen, which is a rebuild rather than a
+   * refresh. It fires the events an edit fires, so nothing downstream has to
+   * know an undo is what moved the document.
+   */
+  private restore(next: GameDoc): void {
+    const elsewhere = next.activeSceneId !== this.state.activeSceneId;
+    this.state = next;
+    this.dirty = true;
+    this.dispatchEvent(new CustomEvent("change"));
+    if (elsewhere) this.dispatchEvent(new CustomEvent("scene"));
     this.scheduleSave();
   }
 
@@ -652,21 +691,5 @@ export class DocStore extends EventTarget {
       this.saveTimer = null;
     }
     await this.save();
-  }
-}
-
-/**
- * The next unclaimed "Point N" across the scene.
- *
- * Counting the points and adding one is not enough: delete Point 1 of two and
- * the next one made would be Point 2 again, and two points with one name is
- * the one thing a name is for avoiding. So it walks up from one until it
- * finds a name nothing is using.
- */
-function nextPointName(layers: readonly Layer[]): string {
-  const taken = new Set(layers.flatMap((l) => l.points.map((p) => p.name)));
-  for (let n = 1; ; n++) {
-    const name = `Point ${n}`;
-    if (!taken.has(name)) return name;
   }
 }

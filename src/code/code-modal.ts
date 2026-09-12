@@ -31,7 +31,15 @@
 
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  redo,
+  redoDepth,
+  undo,
+  undoDepth,
+} from "@codemirror/commands";
 import { javascript } from "@codemirror/lang-javascript";
 import { html as htmlLang } from "@codemirror/lang-html";
 import { css as cssLang } from "@codemirror/lang-css";
@@ -64,9 +72,17 @@ export class CodeModal {
   private pinned = false;
   private readonly pinButton: HTMLButtonElement;
   private readonly docsButton: HTMLButtonElement;
+  private readonly undoButton: HTMLButtonElement;
+  private readonly redoButton: HTMLButtonElement;
   private readonly onPinChange: (pinned: boolean) => void;
   /** A file was written. The shell restarts a running game against it. */
   private readonly onSaved: (path: string) => void;
+  /**
+   * Told when what undo and redo would do here has moved, so the header's own
+   * pair can follow. Set by `editor/code-panel.ts`; the pair in this modal's
+   * footer is updated from the same place — see `historyMoved`.
+   */
+  onHistoryChange: () => void = () => {};
   /** Which open is the current one — see `openFile`. */
   private openToken = 0;
   private noteTimer: number | null = null;
@@ -152,6 +168,43 @@ export class CodeModal {
       h("span", { text: "Pin" }),
     );
 
+    // A pair of its own beside Save, as well as the two in the header. The
+    // header's are out of reach whenever the panel is floating — it covers
+    // the whole shell — and on an iPad with no keyboard those are the only
+    // way to undo. `mousedown` is swallowed so pressing one does not take the
+    // caret out of the editor it is about.
+    const keepFocus = (event: Event) => event.preventDefault();
+    this.undoButton = h(
+      "button",
+      {
+        class: "code-history",
+        title: "Undo (⌘Z)",
+        "aria-label": "Undo",
+        disabled: "",
+        onMouseDown: keepFocus,
+        onClick: () => {
+          this.undo();
+          this.historyMoved();
+        },
+      },
+      icon(ICONS.undo, 15),
+    ) as HTMLButtonElement;
+    this.redoButton = h(
+      "button",
+      {
+        class: "code-history",
+        title: "Redo (⇧⌘Z)",
+        "aria-label": "Redo",
+        disabled: "",
+        onMouseDown: keepFocus,
+        onClick: () => {
+          this.redo();
+          this.historyMoved();
+        },
+      },
+      icon(ICONS.redo, 15),
+    ) as HTMLButtonElement;
+
     const panel = h(
       "div",
       { class: "code-panel", onClick: (e: Event) => e.stopPropagation() },
@@ -202,6 +255,9 @@ export class CodeModal {
               onClick: () => void this.save(),
             }),
             h("div", { class: "m", text: "⌘S" }),
+            h("div", { class: "code-foot-spacer" }),
+            this.undoButton,
+            this.redoButton,
           ),
         ),
       ),
@@ -213,6 +269,45 @@ export class CodeModal {
     this.filesResizer.restore();
     this.docsResizer.restore();
     void this.reloadFiles();
+  }
+
+  /**
+   * CodeMirror's own history, which the editor has always had over ⌘Z and
+   * which the header's two buttons reach into when the caret is in here.
+   *
+   * A history per open file rather than one across the modal: `openFile`
+   * builds a fresh `EditorState`, and undoing back past the file you are
+   * looking at into edits made in another one is not a thing to want.
+   */
+  undo(): boolean {
+    return this.view ? undo(this.view) : false;
+  }
+
+  redo(): boolean {
+    return this.view ? redo(this.view) : false;
+  }
+
+  get canUndo(): boolean {
+    return !!this.view && undoDepth(this.view.state) > 0;
+  }
+
+  get canRedo(): boolean {
+    return !!this.view && redoDepth(this.view.state) > 0;
+  }
+
+  /** Whether an element is inside this modal — see `editor/history.ts`. */
+  contains(node: Node | null): boolean {
+    return !!node && this.root.contains(node);
+  }
+
+  /**
+   * The open file's history has moved. Both pairs of buttons follow: this
+   * modal's own, and — through the shell — the two in the header.
+   */
+  private historyMoved(): void {
+    this.undoButton.disabled = !this.canUndo;
+    this.redoButton.disabled = !this.canRedo;
+    this.onHistoryChange();
   }
 
   /** Dock it above the console, or float it back over the canvas. */
@@ -290,6 +385,7 @@ export class CodeModal {
     this.view?.destroy();
     this.view = null;
     this.tree.setOpen(null);
+    this.historyMoved();
   }
 
   private async openFile(path: string): Promise<void> {
@@ -349,7 +445,13 @@ export class CodeModal {
           onMissing: (ids) => this.offerMissing(path, ids),
         }),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) this.setDirty(true);
+          if (update.docChanged) {
+            this.setDirty(true);
+            // Typing, undoing and redoing all move what the four history
+            // buttons would do, and `docChanged` covers all three: an undo is
+            // a transaction like any other.
+            this.historyMoved();
+          }
           // Automatic mode is the docs panel following the caret, so it wants
           // every move of it — and a typed character moves it too.
           if (update.docChanged || update.selectionSet) this.reportCursor();
@@ -371,8 +473,10 @@ export class CodeModal {
       this.view = new EditorView({ state, parent: this.editorHost });
     }
     // A new file is a new language as far as the reference is concerned, even
-    // before the caret has moved in it.
+    // before the caret has moved in it — and a new file is an empty history,
+    // which the buttons above have to be told about.
     this.reportCursor();
+    this.historyMoved();
   }
 
   /**

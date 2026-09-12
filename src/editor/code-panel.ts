@@ -34,6 +34,12 @@ export class CodePanel {
 
   private modal: CodeModal | null = null;
   private resizer: Resizer | null = null;
+  /**
+   * What undo and redo would do in here has moved — either because the file
+   * was typed in, or because the panel opened or closed and there is now a
+   * different history to reach. Set by `editor/history.ts`.
+   */
+  onHistoryChange: () => void = () => {};
 
   constructor(
     projectId: string,
@@ -62,6 +68,30 @@ export class CodePanel {
     this.modal = null;
     this.resizer?.destroy();
     this.resizer = null;
+    this.onHistoryChange();
+  }
+
+  // ── the open file's history, for the two buttons in the header ────────────
+
+  undo(): boolean {
+    return this.modal?.undo() ?? false;
+  }
+
+  redo(): boolean {
+    return this.modal?.redo() ?? false;
+  }
+
+  get canUndo(): boolean {
+    return this.modal?.canUndo ?? false;
+  }
+
+  get canRedo(): boolean {
+    return this.modal?.canRedo ?? false;
+  }
+
+  /** Whether the focus is in here, which is what decides who ⌘Z belongs to. */
+  contains(node: Node | null): boolean {
+    return this.modal?.contains(node) ?? false;
   }
 
   private show(): void {
@@ -71,10 +101,12 @@ export class CodePanel {
       (pinned) => this.setPinned(pinned),
       this.onSaved,
     );
+    this.modal.onHistoryChange = () => this.onHistoryChange();
     // Appended before it is pinned: pinning moves the panel into a row of the
     // shell, and there has to be something to move.
     this.shell.appendChild(this.modal.root);
     this.modal.setPinned(readPinned());
+    this.onHistoryChange();
   }
 
   /** Open a file at a line, opening the panel first if it is not up. */

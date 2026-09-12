@@ -303,6 +303,139 @@ and content notify keys.
 
 ---
 
+## Undo
+
+The whole thing is a stack of `GameDoc` snapshots, and it is cheap for exactly
+one reason: the hard rule at the top of this file. **Document objects are
+immutable once stored**, so every commit already builds a new document that
+shares every subtree it did not touch. Remembering the one before it is a
+pointer copy. A hundred of them — the cap — cost about what a hundred pointers
+cost, and a stroke-heavy layer is a hundred references to the *same* strokes.
+
+The alternative reading is an inverse operation per mutation, and it would
+need one for each of the thirty-odd methods on `DocStore` plus a fresh one for
+every method added after. That pays for itself when a snapshot is expensive.
+Here it is not. `lib/doc-history.ts` is the stack; `DocStore.commit` hands it
+the state it is about to replace, and `DocStore.restore` — deliberately not
+`commit` — is how one comes back.
+
+### A step is a thing you did, not a write the editor made
+
+The gap between those two is where all the work is. A drag writes on every
+pointer move, because that is what makes the canvas follow the finger; a
+dropped PSD writes once per layer in the file and once more for its collider.
+Recording each of those would be a history of the *loop*, and undoing a drag
+would mean pressing ⌘Z forty times.
+
+So a caller can say three things about a write:
+
+| | What it means | Where |
+|---|---|---|
+| *(nothing)* | one step | every ordinary mutation |
+| `history.begin()` / `end()` | the writes between them are one step | `game/drag.ts`, either end of a gesture |
+| `history.group(fn)` | the same, when the writes are in one place | placing a PSD, Apply, the two conversions |
+| `history.silence(fn)` | not the user's edit; leave no step | the migrations that run on open |
+
+`begin`/`end` is a pair rather than only a callback because the two ends of a
+drag are two events — a pointer-down and a release — and there is no function
+that spans them. A group that wrote nothing leaves no step behind, and that
+falls out rather than being checked for: the entry is pushed by the *first*
+write inside the group, so a drag that never left the space it started on
+pushes nothing at all. `Drag.begin` therefore opens the group before asking
+whether the gesture grabbed anything, and closes it again when the answer is
+no — an open group nobody closed would swallow whatever the user did next.
+
+`silence` exists because `PsdPlacements.migrate` runs when a project opens: it
+backfills the unit and stack fields old documents lack, and writes a default
+collider for every placed key that has none. An undo stack whose first entry
+is *un-repair the document you just opened* is worse than no undo.
+
+Two things are quiet for a different reason. **A scene switch is navigation,
+not an edit** — looking somewhere else is not something to take back, and
+`setActiveScene` is silenced for that. And **a camera move never commits at
+all**, which it did not before this either; see Autosave.
+
+### Where it stops
+
+Some edits move a file on disk, and a document snapshot cannot describe that.
+Renaming a PSD moves `psd/<key>.psd` and its whole `assets/<key>/` tree and
+repoints every placement in every scene; re-importing one replaces the file
+under a key it keeps. Restoring a document from before either of those would
+leave placements pointing at a layer path — or a key — that is not there any
+more, which is the one failure this codebase already calls corruption rather
+than staleness: nothing renders, and nothing on screen says why.
+
+So `history.clear()` is a **barrier**, and `PsdPlacements.reload` and
+`.rename` raise it. Every caller of those goes through them — the inspector's
+Re-parse and Re-import, a rewritten layer stack, a drop onto an image already
+on the canvas, a re-applied extrusion — so the rule is in one place rather
+than at six call sites that have to remember it.
+
+Everything else that writes a file is safe to go back past, because the file
+it wrote stays where it is: undoing an import removes the placement and leaves
+the PSD in `psd/`, and redoing it puts the placement back onto a key that is
+still registered. The orphan is the cost, and it is the same orphan a delete
+leaves.
+
+### What a restore has to fire
+
+`change` means the document moved; `scene` means everything on the canvas is
+now about somewhere else. A restore works out which it is by comparing
+`activeSceneId`, and fires `change` first in either case — so a listener that
+re-reads runs before one that redraws, exactly as an edit and a switch do.
+Nothing downstream had to learn that undo exists: the panels, the renderers
+and the drawing layer re-read on the events they already listened to.
+
+The **selection** is the one thing that is the editor's rather than the
+document's, and an undo can leave it naming a placement that has gone — the
+inspector would go on describing it and the overlay would outline nothing. So
+`lib/selection.ts` asks whether it still names something and
+`editor/history.ts` drops it when it does not. Only there: everywhere else,
+the thing that removes an object clears the selection on its way out.
+
+### Two histories, and which one a press means
+
+The code editor has had its own undo since it was ported — CodeMirror's
+`history()`, per open file, over ⌘Z. What did not exist is a rule for which of
+the two a press reaches, and with the code panel pinned both are on screen at
+once.
+
+**The rule is where you last worked**, read from `focusin` *and* a captured
+`pointerdown`. Two events rather than one because half this editor cannot take
+focus at all: the Phaser canvas and the drawing surface are not focusable, so
+putting a pencil on one fires no focus event of any kind and ⌘Z would go on
+meaning the file you were last typing in. The header is excluded from the
+reckoning, and its two buttons swallow their own `mousedown`, so pressing one
+neither reassigns the next press nor takes the caret out of the editor it is
+about.
+
+⌘Z typed *inside* CodeMirror never reaches `editor/history.ts` at all:
+`isTyping` stands the global handler down for anything `contenteditable`, and
+CodeMirror's own keymap has the key. That is the same history the button would
+have reached, so the two paths agree. The buttons are the case that has to be
+explicit, because a press of one leaves the caret exactly where it was.
+
+### The keys, and the iPad
+
+⌘Z and ⇧⌘Z, in `editor/shortcuts.ts` with the rest of the editor's keyboard.
+An iPad with a hardware keyboard sends both exactly as a Mac does — same
+`metaKey`, same `key` — so there is one code path rather than a platform
+split. `key` arrives as an upper-case `Z` when shift is down, so the letter is
+compared case-insensitively and shift is read separately. Control stands in
+for ⌘ so a keyboard without a Command key is not locked out.
+
+`preventDefault` is load-bearing rather than tidy: WKWebView takes an
+un-prevented ⌘Z as its own editing undo, which on iPadOS surfaces as the
+system's Undo over whatever field was last touched.
+
+An iPad without a keyboard is why the buttons exist at all, and it is also why
+there are four of them. The pair in the header sits beside the Edit/Play
+toggle; the code panel carries a second pair in its footer beside Save,
+because the header is behind it whenever the panel is floating — which is
+exactly the moment a device with no ⌘ has nowhere else to press.
+
+---
+
 ## Gesture routing
 
 All pointer input over the canvas goes through one arbiter,
@@ -1446,7 +1579,8 @@ running it on a device.
 
 `vitest` covers the pure halves — the grid projection, fill geometry,
 picking (a point's and both marquees'), what is drawn over what, resize
-geometry, the unit arithmetic
+geometry, undo's three answers about a write and what a restored document is,
+whether a selection still names something, the unit arithmetic
 behind a placed PSD, what the clipboard hands a paste and where that paste
 lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest
@@ -2716,8 +2850,22 @@ frame is the point of the JS half.
   work at anyway.
 - The project thumbnail is a snapshot of Phaser's canvas, so a layer that is
   only a sketch photographs blank.
-- There is no undo. The drawing layer wants it most — Hush routes every
-  engine mutation into a snapshot stack — and it is the next thing to build.
+- **A step has no name.** The stack holds snapshots and nothing else, so the
+  buttons say "Undo" rather than "Undo Move image", and the console says
+  nothing when a step goes back. Labelling would mean threading a string
+  through every mutation on `DocStore`, and what the canvas does when you
+  press it is already the answer most of the time.
+- Undoing an import leaves the PSD it wrote in `psd/`, and undoing a
+  conversion leaves the file the fill or the sketch became. Nothing points at
+  them, and redo finds them still registered — but a project accumulates
+  orphans that only a re-export sheds.
+- The two file operations that raise a history barrier — renaming a PSD, and
+  bringing an edited one back — clear **both** stacks rather than fencing the
+  part of the document they actually touched. Twenty steps of grid work are
+  gone the moment a file is renamed, which is heavy-handed for safety that a
+  per-key fence would give more cheaply.
+- An undo that lands in another scene switches to it, which is right, but it
+  arrives with no notice — the canvas simply becomes somewhere else.
 - Strokes do not reach a publish, and play mode is a publish now, so they do
   not reach play either. They are scaffolding for the PSDs and boundaries they
   become.

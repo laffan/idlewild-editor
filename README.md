@@ -35,9 +35,10 @@ remaining pieces are wired to real slots rather than mocked.
   platformer) and grid scale (32–256 px). Blank has no lattice: a selection is
   the exact rectangle it was dragged across, and a fill on it is one rectangle
   rather than a run of spaces
-- A full-width header carrying the project and the Edit/Play toggle, with
-  Code, Publish and Project Options behind its menu. It insets itself out of
-  the iPad's status bar, as the console drawer does out of the home indicator
+- A full-width header carrying the project, undo and redo, and the Edit/Play
+  toggle, with Code, Publish and Project Options behind its menu. It insets
+  itself out of the iPad's status bar, as the console drawer does out of the
+  home indicator
 - Infinite grid, two-finger zoom, tap-to-pick. Select drags a plain rectangle
   around things to pick up several images at once; press and hold instead and
   it asks for a patch of grid, in the grid's own shape, taking the ground
@@ -182,6 +183,18 @@ remaining pieces are wired to real slots rather than mocked.
   the wall. It is the canvas that grows and nothing else: the artwork keeps
   its size and its place on the grid, and blocks exactly what it did
 - Delete removes whatever is selected
+- **Undo and redo**, from the two buttons beside Edit or from ⌘Z and ⇧⌘Z —
+  the same keys on a Mac and on an iPad with a keyboard attached, and the
+  buttons for an iPad without one. A step is a thing you did rather than a
+  write the editor made: dragging an image across ten spaces is one step, and
+  so is a dropped PSD however many layers came in with it. The two buttons
+  follow what you are working on — put the caret in the code editor and they
+  undo there instead, in that file's own history, which is the same one ⌘Z has
+  always had in it. The code panel carries a pair of its own beside Save, for
+  when it is floating over the header. Undo does not reach across the things
+  the editor cannot take back: renaming a PSD, or bringing an edited one home,
+  moves a file on disk, and the history stops there rather than restoring a
+  document that names a file which is no longer where it says
 - Export a selection as a transparent PNG (save or copy), from the inspector
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
   to the system editor on macOS and to the share sheet on iPadOS. Re-import
@@ -253,8 +266,6 @@ remaining pieces are wired to real slots rather than mocked.
 
 - Hush's blit-forward re-anchor, so panning a stroke-heavy layer past the
   drawing backing's edge slides its pixels instead of re-baking them
-- Undo, which the drawing layer wants first and the rest of the editor
-  wants too
 - Pattern fills rendering their PSD texture rather than a tint
 - Phaser-aware autocomplete in the code modal, and the other direction of the
   canvas ↔ code binding: the canvas drives the code today, through the config

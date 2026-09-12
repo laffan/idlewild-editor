@@ -96,52 +96,61 @@ export class PsdPlacements {
     const world = this.host.grid.cellToWorld(at);
     await this.load(key);
 
-    // Everything this call places is one thing on the canvas. A PSD with a
-    // background, a building and a roof was dropped once and should move
-    // once; the layers are reachable individually through a double-tap.
-    const instance = makeId("psd");
+    // One drop is one undo step. A PSD with a background, a building and a
+    // roof writes four times — one placement per layer, then the collider —
+    // and a history that stepped back out of it a layer at a time would be a
+    // history of the loop rather than of the drop.
+    this.host.store.history.begin();
+    try {
+      // Everything this call places is one thing on the canvas. A PSD with a
+      // background, a building and a roof was dropped once and should move
+      // once; the layers are reachable individually through a double-tap.
+      const instance = makeId("psd");
 
-    // What the PSD says is on top of what. Kept on each placement because a
-    // re-import can restack the file, and once a placement is in the document
-    // there is nothing in it that says which of two layers was above.
-    const stack = stackOrder(manifest);
+      // What the PSD says is on top of what. Kept on each placement because a
+      // re-import can restack the file, and once a placement is in the
+      // document nothing in it says which of two layers was above.
+      const stack = stackOrder(manifest);
 
-    let last: Placement | null = null;
-    for (const entry of layers) {
-      const width = entry.width || manifest.width;
-      const height = entry.height || manifest.height;
-      const at2 = placedPosition(world, manifest, entry, scale, scale);
-      const placement = this.host.store.addPlacement(layer.id, {
-        psdKey: key,
-        layerPath: entry.path,
-        x: at2.x,
-        y: at2.y,
-        width: width * scale,
-        height: height * scale,
-        // The size the manifest exported at, which the displayed size is
-        // measured against — so a re-import can keep this scale.
-        naturalWidth: width,
-        naturalHeight: height,
-        anchor: at,
-        instance,
-        order: stack.get(entry.path) ?? 0,
-      });
-      this.placeOne(layer.id, placement);
-      last = placement;
-    }
+      let last: Placement | null = null;
+      for (const entry of layers) {
+        const width = entry.width || manifest.width;
+        const height = entry.height || manifest.height;
+        const at2 = placedPosition(world, manifest, entry, scale, scale);
+        const placement = this.host.store.addPlacement(layer.id, {
+          psdKey: key,
+          layerPath: entry.path,
+          x: at2.x,
+          y: at2.y,
+          width: width * scale,
+          height: height * scale,
+          // The size the manifest exported at, which the displayed size is
+          // measured against — so a re-import can keep this scale.
+          naturalWidth: width,
+          naturalHeight: height,
+          anchor: at,
+          instance,
+          order: stack.get(entry.path) ?? 0,
+        });
+        this.placeOne(layer.id, placement);
+        last = placement;
+      }
 
-    // What the file blocks, before anyone has said otherwise. Written here
-    // rather than left to be derived on demand so that everything reading the
-    // document downstream — play mode, the export, the inspector — reads one
-    // answer rather than three implementations of the same guess.
-    this.syncCollider(key);
+      // What the file blocks, before anyone has said otherwise. Written here
+      // rather than left to be derived on demand so that everything reading
+      // the document downstream — play mode, the export, the inspector —
+      // reads one answer rather than three implementations of the same guess.
+      this.syncCollider(key);
 
-    if (last) {
-      this.host.setSelection({
-        kind: "placement",
-        layerId: layer.id,
-        placementId: last.id,
-      });
+      if (last) {
+        this.host.setSelection({
+          kind: "placement",
+          layerId: layer.id,
+          placementId: last.id,
+        });
+      }
+    } finally {
+      this.host.store.history.end();
     }
   }
 
@@ -185,6 +194,11 @@ export class PsdPlacements {
     manifestJson: string,
     renames?: ReadonlyMap<string, string>,
   ): Promise<void> {
+    // Undo stops here. The file on disk is a different file now, so every
+    // document state before this one names layers it may no longer have, and
+    // a placement restored onto one can never render — see
+    // `DocHistory.clear`.
+    this.host.store.history.clear();
     reconcilePlacements(
       this.host.store,
       this.host.grid,
@@ -219,6 +233,9 @@ export class PsdPlacements {
    * rewrite the key on each placement, and load and place the new one.
    */
   async rename(from: string, to: string): Promise<void> {
+    // And here, for the same reason: the file has moved, so a placement
+    // restored to the old key points at nothing.
+    this.host.store.history.clear();
     this.host.docRenderer.detachKey(from);
     evictPsd(this.host.scene, this.plugin(), from, this.otherPsdKeys(from));
 
@@ -362,6 +379,12 @@ export class PsdPlacements {
    * been looked at.
    */
   migrate(): void {
+    // Not the user's edit, so not a step. An undo stack whose first entry is
+    // "un-repair the document you just opened" is worse than no undo.
+    this.host.store.history.silence(() => this.repair());
+  }
+
+  private repair(): void {
     for (const layer of this.host.store.layers) {
       const assigned = new Map<string, string>();
       for (const placement of layer.placements) {
@@ -422,11 +445,13 @@ export class PsdPlacements {
       }
     }
 
-    for (const layer of this.host.store.layers) {
-      for (const placement of layer.placements) {
-        this.placeOne(layer.id, this.migrateLayerPath(layer.id, placement));
+    this.host.store.history.silence(() => {
+      for (const layer of this.host.store.layers) {
+        for (const placement of layer.placements) {
+          this.placeOne(layer.id, this.migrateLayerPath(layer.id, placement));
+        }
       }
-    }
+    });
     this.host.refresh();
   }
 

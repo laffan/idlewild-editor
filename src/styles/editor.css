@@ -102,6 +102,34 @@
 /* Takes the slack, so everything after it is pinned to the right edge. */
 .header-spacer { flex: 1; min-width: 8px; }
 
+/* Undo and redo, immediately before the Edit/Play toggle. Two square hit
+   targets of the bar's own height, so they are a finger's width on an iPad
+   without the header growing to accommodate them. */
+.header-history-pair {
+  display: flex;
+  flex: none;
+  border-left: var(--rule-chrome);
+}
+.header-history {
+  width: var(--bar-h);
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.header-history:hover:not(:disabled) { background: var(--chrome-rule); }
+/* Nothing to go back to. Dimmed rather than hidden: a control that comes and
+   goes is harder to aim at than one that is simply not available yet, and on
+   a touch screen aim is the whole cost. */
+.header-history:disabled {
+  color: var(--chrome-rule);
+  cursor: default;
+}
+
 .icon-btn {
   width: var(--bar-h);
   border: 0;

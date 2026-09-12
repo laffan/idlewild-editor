@@ -145,6 +145,11 @@ export const ICONS = {
   code: ["m9 8-5 4 5 4", "m15 8 5 4-5 4"],
   publish: ["M12 19V5", "M5 12l7-7 7 7"],
   menu: ["M4 7h16", "M4 12h16", "M4 17h16"],
+  /* An arrow curving back on itself, and its mirror. Undo and redo: the same
+     glyph pair the two header buttons carry, drawn so the difference between
+     them is legible at 17px — the hook is on opposite sides. */
+  undo: ["M9 14 4 9l5-5", "M4 9h10a6 6 0 0 1 0 12h-3"],
+  redo: ["m15 14 5-5-5-5", "M20 9H10a6 6 0 0 0 0 12h3"],
   /* An open book, for the reference along the bottom of the code modal. */
   book: ["M12 7v13", "M12 7C9.5 5 6.5 4.6 4 5v13c2.5-.4 5.5 0 8 2", "M12 7c2.5-2 5.5-2.4 8-2v13c-2.5-.4-5.5 0-8 2"],
   pin: ["M9 4h6", "M10 4v6l-3 4v2h10v-2l-3-4V4", "M12 16v5"],

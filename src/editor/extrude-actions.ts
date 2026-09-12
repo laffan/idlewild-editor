@@ -155,21 +155,13 @@ export async function applyExtrusion(
       ? await psd.rewriteParts(projectId, key, width, height, parts, marks)
       : await psd.fromParts(projectId, key, width, height, parts, marks);
 
-    // Written before the artwork is placed, not after: placing selects the
-    // new PSD, and the inspector builds its layer list from that selection —
-    // so a record written afterwards would arrive too late for the row that
-    // offers the way back in.
-    store.setExtrusion(result.key, { voxels: [...shape], anchor });
-
-    if (target && result.key === target.key) {
-      // The footprint may have grown past where it started, which moves the
-      // space the artwork hangs from. Reconciliation positions each placement
-      // from the anchor the document holds for it, so that has to say where
-      // the artwork is *now* before the new manifest is read.
-      reanchor(store, result.key, anchor);
-      await scene.reloadPsd(result.key, result.manifest);
-    } else {
-      await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+    // Apply is one step: the solid's record and the artwork it was written
+    // as arrive together, and undo takes both back.
+    store.history.begin();
+    try {
+      await applyPlacement(store, scene, result, target, anchor, shape);
+    } finally {
+      store.history.end();
     }
     log.info(
       `${describeShape(grid, shape)} → ${result.key}.psd ` +
@@ -180,6 +172,36 @@ export async function applyExtrusion(
     log.error("Could not turn the extrusion into a PSD:", err);
     return false;
   }
+}
+
+/**
+ * Where the artwork Apply just wrote goes: onto the grid for the first time,
+ * or back under the placements a continued extrusion already had.
+ */
+async function applyPlacement(
+  store: DocStore,
+  scene: WorldScene,
+  result: { key: string; manifest: string },
+  target: { key: string } | null,
+  anchor: Cell,
+  shape: VoxelSet,
+): Promise<void> {
+  // Written before the artwork is placed, not after: placing selects the new
+  // PSD, and the inspector builds its layer list from that selection — so a
+  // record written afterwards would arrive too late for the row that offers
+  // the way back in.
+  store.setExtrusion(result.key, { voxels: [...shape], anchor });
+
+  if (target && result.key === target.key) {
+    // The footprint may have grown past where it started, which moves the
+    // space the artwork hangs from. Reconciliation positions each placement
+    // from the anchor the document holds for it, so that has to say where the
+    // artwork is *now* before the new manifest is read.
+    reanchor(store, result.key, anchor);
+    await scene.reloadPsd(result.key, result.manifest);
+    return;
+  }
+  await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
 }
 
 /**
