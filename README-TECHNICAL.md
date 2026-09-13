@@ -2448,6 +2448,23 @@ answering is whether anything said no. The console says when it bites, because
 a pattern that silently stops half way across the screen looks like a bug in
 the pattern.
 
+**A copy must be let go of before its textures are.** A re-import, a rename
+and a repoint each evict the textures behind a key and load them again, and
+the doc renderer's `detachKey` has always covered its own objects. A pattern
+layer's copies are the first Phaser objects on this canvas the *document* has
+no record of, so nothing knew to tell them — and a sprite drawing against a
+frame whose source has been destroyed is not a blank sprite. It is
+`frame.source.resolution` of null, thrown inside the renderer, on every frame
+from then on: the pass dies part-way through and nothing is flushed, so the
+lattice stops appearing and the canvas freezes on its last good frame.
+`PsdHost.releaseKey` is the hook, called beside every `detachKey`, and it is
+where a future renderer that makes objects from a PSD hooks in too.
+
+`invalidate` is not enough on its own, which is the part worth remembering: a
+copy is kept when the file it came from still *looks* the same, and after a
+re-import that is exactly the case — same key, same layer path, same size, and
+a texture that has gone. `dropKey` destroys.
+
 **Nothing on one is picked on the canvas.** `picking.ts` makes a pattern layer
 inert to the pointer, for the reason a locked one is but a different one:
 there is no single object under the pointer for a tap to *name*. The copies
@@ -4156,7 +4173,12 @@ console is a record of what happened rather than a document.
   object; the row selects the lot, which is the granularity both conversions
   work at anyway.
 - The project thumbnail is a snapshot of Phaser's canvas, so a layer that is
-  only a sketch photographs blank.
+  only a sketch photographs blank. It is also the one thing leaving a project
+  waits for, and `renderer.snapshot` queues its callback for the end of the
+  next render pass — so a pass that cannot finish used to mean a promise that
+  never settled and a Back button that did nothing. It times out now: no
+  picture is an answer, and a thumbnail must not be able to hold the door
+  shut.
 - The minimap re-bakes whenever the framing moves, and the framing moves on
   every pan where the camera is not already inside the work — which is most of
   them. It is cheap because what it draws is boxes and sampled lines rather

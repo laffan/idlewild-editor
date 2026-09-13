@@ -57,6 +57,14 @@ interface Live {
   object: PlacedObject;
   /** What it is a copy of, so a palette change can be told from a pan. */
   signature: string;
+  /**
+   * The file behind it, held outright rather than read back out of the
+   * signature. `dropKey` is the one thing here that has to be exactly right
+   * — everything it fails to destroy goes on drawing against a texture that
+   * has gone — and picking a field out of a composed string is not the way
+   * to be exactly right about anything.
+   */
+  psdKey: string;
 }
 
 export class PatternRender {
@@ -151,7 +159,7 @@ export class PatternRender {
         const object = this.make(element);
         if (!object) continue;
         place(object, element, x, y, base);
-        this.live.set(key, { object, signature: shape });
+        this.live.set(key, { object, signature: shape, psdKey: element.psdKey });
       }
     });
 
@@ -168,6 +176,33 @@ export class PatternRender {
       destroy(held.object);
       this.live.delete(key);
     }
+  }
+
+  /**
+   * Drop every copy made from one PSD, before its textures go.
+   *
+   * A re-import, a rename and a repoint all evict the textures behind a key
+   * and load them again — and a copy here is a Phaser group holding sprites
+   * on exactly those textures. Left alone it goes on being drawn against a
+   * frame whose source has been destroyed, which is not a blank sprite: it is
+   * `frame.source.resolution` of null, thrown inside the renderer, every
+   * frame from then on. The render pass dies part-way through, so the lattice
+   * stops being drawn, and anything waiting on a completed pass — the
+   * thumbnail a project is closed by, for one — waits for ever.
+   *
+   * `invalidate` is not enough on its own. A copy is kept when the file it
+   * came from still looks the same, and after a re-import that is exactly the
+   * case: the same key, the same layer path, the same size, and a texture
+   * that has gone. So this destroys, and the rebuild happens on the next
+   * frame from the rule, which costs nothing.
+   */
+  dropKey(psdKey: string): void {
+    for (const [key, held] of this.live) {
+      if (held.psdKey !== psdKey) continue;
+      destroy(held.object);
+      this.live.delete(key);
+    }
+    this.lastRange = "";
   }
 
   /** Take every copy down — a scene switch, or the layer stopping being one. */

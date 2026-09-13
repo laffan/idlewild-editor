@@ -37,6 +37,17 @@ export interface PsdHost {
   readonly store: DocStore;
   readonly grid: Grid;
   readonly docRenderer: DocRenderer;
+  /**
+   * Let go of everything *else* on the canvas holding this file's textures.
+   *
+   * The doc renderer's own objects go through `detachKey`; this is for the
+   * renderers that hold Phaser objects the document has no record of — a
+   * pattern layer's copies, which are worked out from the camera. Evicting a
+   * texture out from under one of those is a throw inside Phaser's renderer
+   * on every frame afterwards, so every path that evicts has to call this
+   * first. A new renderer that makes objects from a PSD hooks in here.
+   */
+  releaseKey(psdKey: string): void;
   /** Where this project's processed assets are served from. */
   readonly assetBase: string;
   /** The layer new work lands on. */
@@ -235,6 +246,7 @@ export class PsdPlacements {
     );
 
     this.host.docRenderer.detachKey(key);
+    this.host.releaseKey(key);
     evictPsd(this.host.scene, this.plugin(), key, this.otherPsdKeys(key));
     await this.load(key);
 
@@ -264,6 +276,10 @@ export class PsdPlacements {
     // restored to the old key points at nothing.
     this.host.store.history.clear();
     this.host.docRenderer.detachKey(from);
+    // Both names: the copies were made under the old key and the new one is
+    // about to be loaded, and a pattern layer's palette follows the rename.
+    this.host.releaseKey(from);
+    this.host.releaseKey(to);
     evictPsd(this.host.scene, this.plugin(), from, this.otherPsdKeys(from));
 
     // Across every scene, not just the one on screen: a file is one file for
@@ -334,6 +350,10 @@ export class PsdPlacements {
     }
 
     this.host.docRenderer.detachOne(placement.id);
+    // The placement is about to point somewhere else, and on a pattern layer
+    // that placement is a palette entry — so both files' copies are stale.
+    this.host.releaseKey(placement.psdKey);
+    this.host.releaseKey(key);
     this.host.store.updatePlacement(selection.layerId, selection.placementId, {
       psdKey: key,
       layerPath: entry.path,

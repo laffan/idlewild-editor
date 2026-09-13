@@ -236,6 +236,7 @@ export class WorldScene extends Phaser.Scene {
       reselect: () => this.setSelection(this.selection),
       refresh: () => this.refresh(),
       onPsdsLoaded: () => this.config.onPsdsLoaded?.(),
+      releaseKey: (key) => sceneRef.patterns.dropKey(key),
     });
 
     this.store.addEventListener("change", () => {
