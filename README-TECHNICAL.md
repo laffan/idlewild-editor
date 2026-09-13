@@ -2649,18 +2649,50 @@ same key would be two things to keep in step for nothing. What makes it a
 background is the layer it is on.
 
 The file is written in Rust — `psd_background.rs` — and no pixels cross the
-bridge. Thirty tiles by ten at psd-to-json's 512px slice is a 78-megapixel
-RGBA buffer, and base64 of that is four hundred megabytes of string through
-an IPC bridge. Zeroed pages cost almost nothing to allocate and compress to
-almost nothing in the file, so the one place the size is real is
-`MAX_BACKGROUND_PIXELS`, which turns "sixty by forty" from an allocation
-nobody recovers from into a sentence naming the limit.
+bridge. A backdrop is an RGBA buffer the size of the whole backdrop, and
+base64 of a big one is hundreds of megabytes of string through an IPC bridge.
+Zeroed pages cost almost nothing to allocate and compress to almost nothing in
+the file, so the one place the size is real is `MAX_BACKGROUND_PIXELS`, which
+turns a careless count from an allocation nobody recovers from into a sentence
+naming the limit. The sheet holds the same number and says so while somebody
+is still typing.
+
+**A tile is a grid space.** The sheet asks for a count and Rust is told a size
+in pixels, because how wide a space is — and whether it is a diamond — is
+something only the editor knows. It was psd-to-json's 512px slice, which is a
+number about how a tileset is cut up for the runtime to load and says nothing
+about how much ground a backdrop covers: "thirty tiles wide" came out fifteen
+thousand pixels across on a thirty-two pixel grid, four hundred and eighty
+spaces of ground for a strip somebody wanted thirty. The slice is still 512
+and still `ProcessOptions`'; it is simply not the question being asked. What
+the editor sends is `generatePsdForRegion`'s arithmetic — the range's world
+bounds at `EXPORT_SCALE`, with `marksForSelection`'s footprint — so the file
+opens with the grid drawn on it and lands over exactly the spaces asked for.
+
+Writing one is the longest wait in the editor, most of it inside a single
+`await`, so `openPsdProgress` holds an undismissable sheet with the shared
+indeterminate bar and each stage the pipeline names. The stages are the ones
+already going to the console drawer as `psd-log-line`; nothing new is
+reported, it is simply put in front of whoever is waiting.
 
 It is anchored on the origin space with its **top-left** on it rather than
 centred the way an imported image is: a backdrop has an opinion about where it
-begins and none about where its middle is, and a strip thirty tiles wide
-centred on the origin would start fifteen tiles off the left of everything
+begins and none about where its middle is, and a strip thirty spaces wide
+centred on the origin would start fifteen spaces off the left of everything
 anybody has built.
+
+**What a painted `T | Background` becomes is not what it looks like.** It
+comes back as a **tileset**, cut into slices whose textures are
+`Background_tile_<col>_<row>`; nothing is ever loaded under the name
+`Background`, and the sprite row the artist paints into is a *child* of the
+tileset that psd-to-phaser never loads as a sprite — its categoriser descends
+into a group and stops at a tileset. Both ends of the editor were asking the
+sprite question about it: `canPlace` looked for a texture named `Background`,
+answered no every frame, and never placed a backdrop that had been written,
+parsed and loaded; and `reportMissing` warned that `background` had no texture,
+which is true and means nothing. `textureNeeds` in `lib/manifest.ts` is now
+the single answer to *which textures is this layer owed*, read by both, and
+pinned on the Rust side by `a_painted_backdrop_is_a_tileset_of_slices`.
 
 ### What the exported game is told
 
@@ -4295,10 +4327,14 @@ console is a record of what happened rather than a document.
   `MAX_ON_SCREEN` exists to bound. A scatter dense enough to matter wants a
   blitter or a render texture, and at that point the ceiling becomes a
   performance note rather than a wall.
-- An image background is written as a canvas of whole tiles with one clear
-  sprite layer inside `T | Background`. Nothing samples what the artist
-  paints back into a *smaller* file, so a backdrop asked for at thirty tiles
-  stays thirty tiles wide however much of it is left transparent.
+- An image background is written as a canvas covering the spaces asked for,
+  with one clear sprite layer inside `T | Background`. Nothing samples what
+  the artist paints back into a *smaller* file, so a backdrop asked for at
+  thirty spaces stays thirty spaces wide however much of it is left
+  transparent.
+- The progress a background sheet shows is indeterminate. The pipeline names
+  the stage it has reached and not how far through it is, and a bar filling at
+  a rate nobody measured would be a guess dressed as a measurement.
 - A pattern shape drawn with the pencil is baked to cells when it is made and
   never re-baked. Changing the grid size afterwards leaves the spaces where
   they were rather than following the line that produced them.

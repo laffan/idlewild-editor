@@ -188,9 +188,11 @@ remaining pieces are wired to real slots rather than mocked.
   camera-locked and have no extent — a backdrop is wherever you are looking,
   which is the only reading that never shows its own edge — so the inspector
   offers colours and a direction and nothing about size or position.
-  **Image** asks how many tiles the backdrop should be, 30 × 10 by default,
-  and writes a PSD that size with an anchor and a `T | Background` group
-  holding one sprite layer to paint into. That file is a placement like any
+  **Image** asks how much ground the backdrop covers — in grid spaces, 30 ×
+  10 by default — and writes a PSD that size with an anchor, the grid drawn
+  on it and a `T | Background` group holding one sprite layer to paint into.
+  It is the longest wait in the editor, so the sheet stays up and says what
+  the pipeline is doing while it happens. That file is a placement like any
   other, so it drags, exports and stacks the way everything else does; what
   makes it a background is the layer it is on
 - Layers, under the scene they belong to: drag by the grip to reorder, rename,

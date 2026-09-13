@@ -10,6 +10,7 @@
 
 import Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
+import { textureNeeds } from "../lib/manifest";
 import * as log from "../lib/log";
 
 /** How long to wait on psd-to-phaser before placing anyway. */
@@ -162,21 +163,29 @@ async function explain(url: string): Promise<void> {
 }
 
 /**
- * Say which of a PSD's sprites have no texture behind them.
+ * Say which of a PSD's layers have no texture behind them.
  *
  * A placement whose texture never arrived draws nothing, and "the image
  * disappeared" is not a diagnosis. This turns it into a line naming the
  * layer, which is usually enough to find the layer in Photoshop that caused
  * it.
+ *
+ * Which textures a layer is owed is `textureNeeds`'s answer rather than this
+ * one's, and that matters here as much as it does at the gate: a sprite
+ * *inside a tileset* is never loaded as a sprite — the plugin's categoriser
+ * stops at the tileset — so counting it as missing warned about every
+ * backdrop this editor writes, on a file that was perfectly well loaded.
  */
 function reportMissing(
   scene: Phaser.Scene,
   p2p: PsdToPhaser,
   key: string,
 ): void {
-  const missing = spriteNames(p2p, key).filter(
-    (name) => !scene.textures.exists(name),
-  );
+  const original = (p2p.getData(key) as { original?: unknown } | undefined)
+    ?.original;
+  const missing = textureNeeds((original as { layers?: unknown })?.layers)
+    .filter((need) => !need.keys.every((k) => scene.textures.exists(k)))
+    .map((need) => need.name);
   if (missing.length === 0) return;
   log.warn(
     `${key}: no texture loaded for ${missing.join(", ")} — ` +
@@ -262,29 +271,5 @@ function walkNames(layers: unknown, out: string[]): void {
     const node = layer as { name?: unknown; children?: unknown };
     if (typeof node.name === "string" && node.name) out.push(node.name);
     walkNames(node.children, out);
-  }
-}
-
-/** The sprite layers a loaded PSD expects a texture for. */
-function spriteNames(p2p: PsdToPhaser, key: string): string[] {
-  const original = (p2p.getData(key) as { original?: unknown } | undefined)
-    ?.original;
-  const out: string[] = [];
-  walkSprites((original as { layers?: unknown })?.layers, out);
-  return out;
-}
-
-function walkSprites(layers: unknown, out: string[]): void {
-  if (!Array.isArray(layers)) return;
-  for (const layer of layers) {
-    const node = layer as {
-      name?: unknown;
-      category?: unknown;
-      children?: unknown;
-    };
-    if (node.category === "sprite" && typeof node.name === "string") {
-      out.push(node.name);
-    }
-    walkSprites(node.children, out);
   }
 }

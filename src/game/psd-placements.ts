@@ -18,6 +18,7 @@ import {
   hasRootAnchor,
   parseManifest,
   textureKey,
+  textureNeeds,
   placeableLayers,
   placedPosition,
   placedVisibility,
@@ -128,19 +129,34 @@ export class PsdPlacements {
    *
    * Three questions, and the first two are not the same. `getData` says the
    * *manifest* parsed, which psd-to-phaser records the moment `data.json`
-   * lands — several frames before any image does. The **texture** is what its
-   * own `place` looks for, keyed on the manifest layer's own name, and
-   * missing it is what prints *Texture not found for sprite*. And `held` is
-   * the third: an instant before an eviction both the others say yes and the
-   * textures are about to go.
+   * lands — several frames before any image does. The **textures** are what
+   * its own `place` looks for, and missing one is what prints *Texture not
+   * found for sprite*. And `held` is the third: an instant before an eviction
+   * both the others say yes and the textures are about to go.
+   *
+   * Which textures those are is a question about the layer's *category*, not
+   * about its name. A sprite wants one under its own name; a tileset wants
+   * one per slice and nothing under its own name at all — so asking the
+   * sprite question about a tileset answered no for ever, and a backdrop
+   * painted in Photoshop came back to a canvas that never drew it. See
+   * `textureNeeds`. A path the manifest does not know falls back to the leaf
+   * name, which is the only thing that can be said about it.
    *
    * Handed to the pattern renderer as well, because the question is the same
    * one and the answer must not be able to differ.
    */
   canPlace(psdKey: string, layerPath: string): boolean {
     if (this.held.has(psdKey)) return false;
-    if (!this.plugin()?.getData(psdKey)) return false;
-    return this.host.scene.textures.exists(textureKey(layerPath));
+    const data = this.plugin()?.getData(psdKey) as
+      | { original?: { layers?: unknown } }
+      | undefined;
+    if (!data) return false;
+    const needs = textureNeeds(data.original?.layers, layerPath);
+    const keys =
+      needs.length > 0
+        ? needs.flatMap((need) => need.keys)
+        : [textureKey(layerPath)];
+    return keys.every((key) => this.host.scene.textures.exists(key));
   }
 
   /**

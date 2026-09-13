@@ -225,3 +225,59 @@ describe("while a file is being rewritten", () => {
     expect(psds.canPlace("tower", "tower")).toBe(true);
   });
 });
+
+/**
+ * And the third question is not one question.
+ *
+ * A backdrop's `T | Background` is a tileset: its textures are named per
+ * 512px slice and nothing is ever loaded under the layer's own name. The gate
+ * asked the sprite question about it, answered no every frame, and a backdrop
+ * that had been written, parsed and loaded was placed exactly never — the
+ * fourth appearance of this same invariant, from the one end that had not yet
+ * broken.
+ */
+describe("a layer that is not a sprite", () => {
+  const backdrop = {
+    original: {
+      layers: [
+        {
+          name: "Background",
+          category: "tileset",
+          columns: 2,
+          rows: 1,
+          children: [{ name: "background", category: "sprite" }],
+        },
+      ],
+    },
+  };
+
+  it("is ready when its slices are in, not when its own name is", () => {
+    const { psds, data, textures } = setUp(["backdrop"]);
+    data.set("backdrop", backdrop);
+    textures.delete("backdrop");
+    expect(psds.canPlace("backdrop", "Background")).toBe(false);
+
+    textures.add("Background_tile_0_0");
+    expect(psds.canPlace("backdrop", "Background")).toBe(false);
+    textures.add("Background_tile_1_0");
+    expect(psds.canPlace("backdrop", "Background")).toBe(true);
+  });
+
+  /** A texture under the layer's own name is not one the plugin ever loads. */
+  it("is not made ready by a texture named after the layer", () => {
+    const { psds, data, textures } = setUp(["backdrop"]);
+    data.set("backdrop", backdrop);
+    textures.add("Background");
+    expect(psds.canPlace("backdrop", "Background")).toBe(false);
+  });
+
+  /** The sprite inside it is never loaded as a sprite, so never waited for. */
+  it("does not wait for the row the artist paints into", () => {
+    const { psds, data, textures } = setUp(["backdrop"]);
+    data.set("backdrop", backdrop);
+    textures.add("Background_tile_0_0");
+    textures.add("Background_tile_1_0");
+    expect(textures.has("background")).toBe(false);
+    expect(psds.canPlace("backdrop", "Background")).toBe(true);
+  });
+});

@@ -60,7 +60,7 @@ export class PenBar {
   constructor(callbacks: PenBarCallbacks) {
     this.title = h("div", { class: "mode-title", text: "Pen Mode" });
     this.size = h("div", { class: "mode-size" });
-    this.progress = h("div", { class: "mode-progress", hidden: "true" });
+    this.progress = h("div", { class: "progress-bar mode-progress", hidden: "true" });
     this.cancel = h("button", {
       text: "Cancel",
       onClick: callbacks.onCancel,

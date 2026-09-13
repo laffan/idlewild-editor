@@ -364,27 +364,29 @@ export const psd = {
       marks,
     }),
   /**
-   * An empty tiled backdrop, `cols` x `rows` tiles across.
+   * An empty tiled backdrop, `width` x `height` pixels.
    *
    * What New Background writes for an image backdrop: a PSD the size the
    * backdrop is going to be, holding the anchor mark and `T | Background`
    * with one transparent sprite layer to paint into. No pixels cross the
    * bridge — the buffer is tens of megapixels and Rust writes it.
+   *
+   * In pixels rather than in grid spaces because the grid is the editor's:
+   * how wide a space is, and whether it is a diamond, is a question Rust has
+   * no way to ask. See `editor/background-actions.ts`.
    */
   background: (
     id: string,
     name: string,
-    cols: number,
-    rows: number,
-    tileSize: number,
+    width: number,
+    height: number,
     marks: AnchorMarks,
   ) =>
     invoke<ImportResult>("create_background_psd", {
       id,
       name,
-      cols,
-      rows,
-      tileSize,
+      width,
+      height,
       marks,
     }),
   /**

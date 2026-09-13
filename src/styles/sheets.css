@@ -45,6 +45,9 @@
 .sheet.light .sheet-sub { color: var(--color-neutral-700); }
 
 .sheet-body { padding: 20px 24px; overflow: auto; }
+/* The shared indeterminate bar (controls.css) sitting in a sheet's flow,
+   with the stage line it belongs to underneath. */
+.sheet-body > .progress-bar { margin: 2px 0 12px; }
 .sheet-actions {
   padding: 20px 24px;
   display: flex;

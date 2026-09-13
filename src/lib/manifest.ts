@@ -468,3 +468,97 @@ export function stackOrder(manifest: Manifest): Map<string, number> {
     placeable.map((layer, index) => [layer.path, placeable.length - 1 - index]),
   );
 }
+
+/**
+ * One layer's textures: what the layer is called, and the keys it needs.
+ *
+ * A layer does not always want *one* texture, and that is the whole reason
+ * this exists. A sprite wants a texture under its own name. A tileset wants
+ * one per slice — `Background_tile_0_0` and along — and nothing under its own
+ * name at all. Asking the sprite question about a tileset is how a thirty-
+ * tile backdrop came back from Photoshop and was never drawn: the gate that
+ * decides whether an object may be made looked for a texture that does not
+ * exist for that category and quietly answered no, every frame, for ever.
+ */
+export interface TextureNeed {
+  /** The layer's own name, which is what a warning has to say out loud. */
+  name: string;
+  /** Every texture key psd-to-phaser will have loaded for it. */
+  keys: string[];
+}
+
+/**
+ * The textures a manifest — or one layer of it — is waiting on.
+ *
+ * Written against the **raw** layers rather than a parsed `Manifest` because
+ * both callers hold psd-to-phaser's own copy of the document, under
+ * `getData(key).original`, and re-serialising it to re-parse it would be a
+ * JSON round trip per placement.
+ *
+ * The walk mirrors the plugin's own categoriser, which is the only thing that
+ * makes the answer true: it descends into a **group** and stops at a
+ * **tileset**, so a sprite nested inside one is never loaded as a sprite and
+ * is never waited for. Points and zones carry no pixels and want nothing.
+ *
+ * `path` scopes the answer to one layer and everything under it, addressed
+ * the way `place()` addresses them — names joined by slashes. A path that
+ * names nothing in this manifest comes back empty, which the caller has to
+ * read as *no answer* rather than as *nothing to wait for*.
+ */
+export function textureNeeds(layers: unknown, path?: string): TextureNeed[] {
+  const root = path === undefined ? layers : findLayer(layers, path.split("/"));
+  const out: TextureNeed[] = [];
+  if (path === undefined) collectNeeds(root, out);
+  else if (root) collectNeeds([root], out);
+  return out;
+}
+
+function findLayer(layers: unknown, names: string[]): unknown {
+  if (!Array.isArray(layers) || names.length === 0) return null;
+  const [head, ...rest] = names;
+  for (const raw of layers) {
+    const node = (raw ?? {}) as Record<string, unknown>;
+    if (String(node.name ?? "") !== head) continue;
+    return rest.length === 0 ? node : findLayer(node.children, rest);
+  }
+  return null;
+}
+
+function collectNeeds(layers: unknown, out: TextureNeed[]): void {
+  if (!Array.isArray(layers)) return;
+  for (const raw of layers) {
+    const node = (raw ?? {}) as Record<string, unknown>;
+    const name = String(node.name ?? "");
+    switch (toCategory(node.category, node.type)) {
+      case "sprite":
+        if (name) out.push({ name, keys: [name] });
+        break;
+      case "tileset":
+        if (name) out.push({ name, keys: tileKeys(node, name) });
+        break;
+      case "group":
+        collectNeeds(node.children, out);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+/**
+ * Every slice of a tileset, by the key the plugin loads and places it under.
+ *
+ * `<name>_tile_<col>_<row>`, read off the plugin's `loadTile` and its
+ * `placeTileset` — which build the same string from the same two counts the
+ * manifest carries. A tileset with no counts is one slice, which is what the
+ * plugin's own loop comes to.
+ */
+function tileKeys(node: Record<string, unknown>, name: string): string[] {
+  const columns = Math.max(1, Math.round(Number(node.columns ?? 1)) || 1);
+  const rows = Math.max(1, Math.round(Number(node.rows ?? 1)) || 1);
+  const keys: string[] = [];
+  for (let col = 0; col < columns; col++) {
+    for (let row = 0; row < rows; row++) keys.push(`${name}_tile_${col}_${row}`);
+  }
+  return keys;
+}

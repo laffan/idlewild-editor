@@ -158,3 +158,48 @@
   padding: 0;
 }
 .cp-swatch:hover { border-color: var(--color-accent); }
+
+/* ── the indeterminate progress bar ──────────────────────────────────────── */
+
+/* Something moving while a PSD is being written or rebuilt. Indeterminate on
+   purpose: the pipeline reports the stage it has reached, not how far through
+   it is, and a bar filling at a rate nobody measured would be a guess dressed
+   as a measurement.
+
+   Shared rather than pen mode's own, because the wait is: a thirty-space
+   backdrop is tens of megapixels to slice, and the sheet that asked for it
+   has the same thing to say while it happens. Whoever uses it decides where
+   it sits — `.mode-progress` pins it to the mode bar's bottom edge, a sheet
+   leaves it in the flow. */
+.progress-bar {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  background: var(--chrome-rule);
+}
+.progress-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 28%;
+  background: var(--color-accent);
+  animation: progress-slide 1.1s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(460%); }
+}
+/* Still something rather than nothing, for anyone who has asked the system
+   for less movement: it fades where it would have travelled. */
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar::after {
+    width: 100%;
+    animation: progress-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes progress-pulse {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 1; }
+  }
+}

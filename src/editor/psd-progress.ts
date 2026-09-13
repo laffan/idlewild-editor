@@ -24,6 +24,8 @@
  */
 
 import { listen } from "@tauri-apps/api/event";
+import { h } from "../lib/dom";
+import { openSheet } from "../lib/sheet";
 
 /**
  * Follow the pipeline's stages until the returned function is called.
@@ -55,5 +57,50 @@ export function watchPsdStages(onStage: (stage: string) => void): () => void {
     stopped = true;
     unlisten?.();
     unlisten = null;
+  };
+}
+
+/** A sheet that says what is happening, until it is told to go. */
+export interface PsdProgress {
+  /** Say what is being waited on now, in the app's own words. */
+  stage: (line: string) => void;
+  close: () => void;
+}
+
+/**
+ * Hold the screen while a PSD is written, with the pipeline's own words on it.
+ *
+ * For the waits long enough that a closed sheet and a still canvas read as
+ * nothing having happened. A backdrop thirty spaces across is tens of
+ * megapixels to allocate, write, parse and slice, and most of that is inside
+ * one `await` with nothing to show for it — so the sheet stays up, the bar
+ * moves, and each stage the pipeline names arrives underneath it.
+ *
+ * Undismissable, because there is nothing a tap could cancel: the work is in
+ * Rust and already running. It is closed by whoever opened it, however that
+ * went — a refusal has to take the sheet down with it or the app is locked
+ * behind a wait that is over.
+ */
+export function openPsdProgress(
+  title: string,
+  subtitle: string,
+  first: string,
+): PsdProgress {
+  const sheet = openSheet({ title, subtitle, width: 460, dismissable: false });
+  const line = h("div", { class: "field-hint", text: first });
+  sheet.body.append(h("div", { class: "progress-bar" }), line);
+
+  const unwatch = watchPsdStages((said) => {
+    line.textContent = said;
+  });
+
+  return {
+    stage: (said: string) => {
+      line.textContent = said;
+    },
+    close: () => {
+      unwatch();
+      sheet.close();
+    },
   };
 }

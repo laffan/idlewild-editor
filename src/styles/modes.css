@@ -88,44 +88,13 @@
 .mode-bar button[disabled] { color: var(--chrome-dim); }
 .mode-bar button[disabled]:hover { background: transparent; }
 
-/* Something moving while a PSD is being rebuilt, along the bar's own bottom
-   edge. Indeterminate on purpose: the pipeline reports the stage it has
-   reached, not how far through it is, and a bar filling at a rate nobody
-   measured would be a guess dressed as a measurement. */
+/* The shared bar (see controls.css), pinned along the mode bar's own bottom
+   edge rather than sitting in the flow. */
 .mode-progress {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 2px;
-  overflow: hidden;
-  background: var(--chrome-rule);
-}
-.mode-progress::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 28%;
-  background: var(--color-accent);
-  animation: mode-progress 1.1s ease-in-out infinite;
-}
-@keyframes mode-progress {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(460%); }
-}
-/* Still something rather than nothing, for anyone who has asked the system
-   for less movement: it fades where it would have travelled. */
-@media (prefers-reduced-motion: reduce) {
-  .mode-progress::after {
-    width: 100%;
-    animation: mode-progress-pulse 1.6s ease-in-out infinite;
-  }
-  @keyframes mode-progress-pulse {
-    0%, 100% { opacity: 0.25; }
-    50% { opacity: 1; }
-  }
 }
 
 /* While a canvas mode is up, the selection that started it is gone and its
