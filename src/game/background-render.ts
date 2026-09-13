@@ -38,14 +38,22 @@ const DEPTH_STRIDE = 1000;
 const BEHIND = 1;
 
 export class BackgroundRender {
-  private readonly graphics: Phaser.GameObjects.Graphics;
+  private readonly scene: Phaser.Scene;
   private readonly store: DocStore;
+  /**
+   * One graphics object per background layer, keyed by layer id.
+   *
+   * Not one shared between them. Depth is a property of the object rather
+   * than of a shape drawn into it, so a single graphics could only hold one
+   * answer — and two background layers with different depths is exactly what
+   * a scene with a sky behind a parallax band is.
+   */
+  private readonly surfaces = new Map<string, Phaser.GameObjects.Graphics>();
   private signature = "";
 
-  constructor(graphics: Phaser.GameObjects.Graphics, store: DocStore) {
-    this.graphics = graphics;
+  constructor(scene: Phaser.Scene, store: DocStore) {
+    this.scene = scene;
     this.store = store;
-    this.graphics.setDepth(-20_000);
   }
 
   /** Redraw when the view or the document has moved. Cheap every frame. */
@@ -81,7 +89,7 @@ export class BackgroundRender {
       if (layerKind(layer) !== "background" || !layer.visible) return;
       for (const background of backgroundsOf(layer)) {
         parts.push(
-          `${index}:${background.kind}:${background.color ?? ""}:` +
+          `${layer.id}:${index}:${background.kind}:${background.color ?? ""}:` +
             `${background.gradient?.from ?? ""}:${background.gradient?.to ?? ""}:` +
             `${background.gradient?.angle ?? 0}`,
         );
@@ -91,22 +99,47 @@ export class BackgroundRender {
   }
 
   private draw(view: Phaser.Geom.Rectangle): void {
-    const g = this.graphics;
-    g.clear();
-
     const layers = this.store.layers;
+    const seen = new Set<string>();
+
     layers.forEach((layer, index) => {
       if (layerKind(layer) !== "background" || !layer.visible) return;
-      const base = (layers.length - index) * DEPTH_STRIDE;
-      // Depth is the graphics object's, not per shape, so the layer furthest
-      // back wins the whole surface. Backdrops are painted back-most last in
-      // the list, and the list is drawn in order, so the front-most is on top.
-      g.setDepth(base - BEHIND);
-      // Back-most last in the document, so it is painted first here.
-      for (const background of [...backgroundsOf(layer)].reverse()) {
+      const backgrounds = backgroundsOf(layer);
+      if (backgrounds.length === 0) return;
+      seen.add(layer.id);
+
+      const g = this.surface(layer.id);
+      g.clear();
+      g.setDepth((layers.length - index) * DEPTH_STRIDE - BEHIND);
+      // Back-most last in the document, so it is painted first here and
+      // whatever is in front of it goes over the top.
+      for (const background of [...backgrounds].reverse()) {
         paint(g, background, view);
       }
     });
+
+    // A layer that has stopped being a background one, gone invisible, or
+    // lost its last backdrop leaves nothing behind.
+    for (const [layerId, g] of this.surfaces) {
+      if (seen.has(layerId)) continue;
+      g.destroy();
+      this.surfaces.delete(layerId);
+    }
+  }
+
+  private surface(layerId: string): Phaser.GameObjects.Graphics {
+    const held = this.surfaces.get(layerId);
+    if (held) return held;
+    const made = this.scene.add.graphics();
+    this.surfaces.set(layerId, made);
+    return made;
+  }
+
+  /** Take every backdrop down — a scene switch is a different world. */
+  clear(): void {
+    for (const g of this.surfaces.values()) g.destroy();
+    this.surfaces.clear();
+    this.signature = "";
   }
 }
 
@@ -117,7 +150,7 @@ function paint(
 ): void {
   if (background.kind === "gradient" && background.gradient) {
     const { from, to, angle } = background.gradient;
-    const [tl, tr, bl, br] = corners(from, to, angle);
+    const [tl, tr, bl, br] = gradientCorners(from, to, angle);
     g.fillGradientStyle(tl, tr, bl, br, 1);
   } else {
     g.fillStyle(hexToNumber(background.color ?? "#2b3b4a"), 1);
@@ -132,16 +165,20 @@ function paint(
  * which is a gradient at any angle if — and only if — each corner is the
  * colour the gradient's own axis has at that corner. So each corner is
  * projected onto the axis and the two stops mixed at the fraction that comes
- * back. Zero degrees is top to bottom, which is what a sky is.
+ * back. Zero degrees runs top to bottom — `from` at the top — which is what a
+ * sky is.
  */
-function corners(
+export function gradientCorners(
   from: string,
   to: string,
   angle: number,
 ): [number, number, number, number] {
-  const radians = ((angle - 90) * Math.PI) / 180;
-  const dx = Math.cos(radians);
-  const dy = Math.sin(radians);
+  // The direction the gradient *runs*, written out rather than derived: zero
+  // is down, ninety is right, and the arrows on the control say so. Screen
+  // y counts downward, which is why this is sin/cos rather than cos/sin.
+  const radians = (angle * Math.PI) / 180;
+  const dx = Math.sin(radians);
+  const dy = Math.cos(radians);
   // A unit square about its own centre: the projection only needs the
   // corners' *directions*, since the fraction is normalised over the span.
   const box: Array<[number, number]> = [

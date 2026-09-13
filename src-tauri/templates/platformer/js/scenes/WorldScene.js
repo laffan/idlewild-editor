@@ -433,9 +433,11 @@ function pointsToVectors(flat) {
  */
 // idlewild:begin gradientCorners
 function gradientCorners(from, to, angle) {
-  const radians = ((angle - 90) * Math.PI) / 180;
-  const dx = Math.cos(radians);
-  const dy = Math.sin(radians);
+  // The direction the gradient runs: zero is down, ninety is right. Screen y
+  // counts downward, which is why this is sin/cos rather than cos/sin.
+  const radians = (angle * Math.PI) / 180;
+  const dx = Math.sin(radians);
+  const dy = Math.cos(radians);
   const box = [
     [-0.5, -0.5],
     [0.5, -0.5],

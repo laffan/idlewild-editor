@@ -136,7 +136,7 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#d9e6ef");
 
     this.gridRenderer = new GridRenderer(this.add.graphics(), this.grid);
-    this.backgrounds = new BackgroundRender(this.add.graphics(), this.store);
+    this.backgrounds = new BackgroundRender(this, this.store);
     this.patterns = new PatternRender(this, this.store, this.grid);
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
@@ -272,9 +272,10 @@ export class WorldScene extends Phaser.Scene {
     this.adjusting = null;
     this.setSelection({ kind: "none" });
     this.activeLayerId = this.store.layers[0]?.id ?? "";
-    // Every copy on screen belongs to the scene that has just been left.
+    // Every copy and every backdrop on screen belongs to the scene that has
+    // just been left.
     this.patterns.clear();
-    this.backgrounds.invalidate();
+    this.backgrounds.clear();
 
     this.docRenderer.render();
     void this.psds.loadAll();
