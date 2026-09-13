@@ -165,6 +165,18 @@ remaining pieces are wired to real slots rather than mocked.
   would go with it — it asks first, and the PSDs themselves stay in the
   project. A scene keeps its last layer, and the button says so rather than
   disappearing
+- **A minimap**, along the bottom of that sidebar: the scene from far enough
+  away to see all of it, with a frame around what the canvas is showing and
+  the rest of the world dimmed behind it. There are no edges to fit, so what
+  it frames is everything you have put down *together with* where you are
+  standing — move about inside your own work and the picture holds still, and
+  pan off the edge of it and the picture opens out until both are in view,
+  which is how you get back. Tap it to stand somewhere, or drag to run the
+  camera across the scene; the zoom you are at is beside its name. Fills come
+  in their own colour, placed PSDs as the space they take up, boundaries and
+  points as the marks they are on the canvas, and a sketch as the line it was
+  drawn as — and a layer you have hidden is hidden here too. It keeps its own
+  height, like every other divider in the shell
 - **Points**, from the rail: tap and a named place lands on that space, in
   the layer palette and on the canvas. Rename it in the inspector, drag it a
   space at a time, delete it. One point per scene can be its **start point** —

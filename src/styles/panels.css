@@ -84,6 +84,63 @@
 .panel-add:hover { background: var(--chrome-rule); }
 .panel-body { flex: 1; }
 
+/* The minimap, along the bottom of the sidebar.
+
+   The column reads as the questions in the order you ask them: which place am
+   I in, what is in it, and where am I standing in it. It keeps its own height
+   per install, like every other divider in the shell. */
+.minimap {
+  flex: none;
+  border-top: var(--rule-chrome);
+  display: flex;
+  flex-direction: column;
+}
+.minimap-head {
+  flex: none;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 16px;
+}
+.minimap-zoom {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--chrome-dim);
+  font-variant-numeric: tabular-nums;
+}
+/* The map itself is the canvas ground seen from far away, which is what makes
+   it read as the same place the editor is showing. */
+.minimap-body {
+  flex: none;
+  height: 140px;
+  position: relative;
+  overflow: hidden;
+  background: var(--canvas-bg);
+  cursor: crosshair;
+  /* A drag on the map moves the camera. Without this the iPad takes it as a
+     scroll of the panel behind it and the camera never moves. */
+  touch-action: none;
+}
+.minimap-body.scrubbing { cursor: grabbing; }
+.minimap-canvas { display: block; width: 100%; height: 100%; }
+
+/* Where the camera is standing: a positioned element rather than paint,
+   because a pan moves it every frame and the map under it has not changed.
+
+   The shadow is the rest of the world, dimmed — an outline alone is hard to
+   pick out of a map that is itself drawn in the accent, and a wash *inside*
+   the frame tints the one part of the map anybody is reading. The spread is
+   past any size the panel can be; the body clips it. */
+.minimap-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border: 1px solid var(--color-accent);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--chrome-bg) 20%, transparent);
+  pointer-events: none;
+}
+
 /* Layer rows */
 .layer-row {
   display: flex;

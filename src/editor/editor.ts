@@ -11,7 +11,7 @@ import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
 import { snapshotPng } from "../game/snapshot";
-import { DEFAULT_STYLE, DrawingLayer, PIXEL_BRUSH } from "../drawing";
+import { DrawingLayer } from "../drawing";
 import { CodePanel } from "./code-panel";
 import { Inspector } from "./inspector";
 import { EditorHeader } from "./header";
@@ -29,11 +29,12 @@ import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
-import { penToolEffect, type PenTool } from "./pen-rail";
+import { createToolRouting } from "./tool-routing";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { confirmDeleteLayer } from "./layer-actions";
 import { openAddImage, openExportSelection, openPublish } from "./sheets";
 import { createRenderSettings } from "./render-settings";
+import { Minimap } from "./minimap";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
@@ -52,8 +53,6 @@ export async function mountEditor(
   const os = await platform();
 
   let activeLayerId = store.layers[0]?.id ?? "";
-  /** The brush the pencil had before the pen rail's Pixels borrowed it. */
-  let remembered = DEFAULT_STYLE.brushId;
   let mode: EditorMode = "draw";
   let handle: GameHandle | null = null;
   let drawing: DrawingLayer | null = null;
@@ -80,30 +79,41 @@ export async function mountEditor(
     code.openAt(site.path, site.line);
   });
 
-  const layers = new LayersPanel(store, {
-    getActiveLayerId: () => activeLayerId,
-    getSelection: () => handle?.scene.getSelection() ?? { kind: "none" },
-    onSelectLayer: (layerId) => {
-      setActiveLayer(layerId);
-      layers.render();
-      handle?.scene.setSelection({ kind: "layer", layerId });
-    },
-    onSelectItem: (selection) => {
-      // Selecting something inside a layer makes that layer the active one,
-      // so the next Fill or Add Image lands where the user is looking.
-      const layerId =
-        selection.kind === "placement" ||
-        selection.kind === "placements" ||
-        selection.kind === "fill" ||
-        selection.kind === "point" ||
-        selection.kind === "zone" ||
-        selection.kind === "strokes"
-          ? selection.layerId
-          : activeLayerId;
-      setActiveLayer(layerId);
-      handle?.scene.setSelection(selection);
-    },
+  // Where you are standing, along the bottom of the left sidebar. Built
+  // before the panel it goes in, and reaching the scene through a closure
+  // because the canvas is not up until the end of this function.
+  const minimap = new Minimap(store, grid, {
+    centreOn: (x, y) => handle?.scene.centreOn(x, y),
   });
+
+  const layers = new LayersPanel(
+    store,
+    {
+      getActiveLayerId: () => activeLayerId,
+      getSelection: () => handle?.scene.getSelection() ?? { kind: "none" },
+      onSelectLayer: (layerId) => {
+        setActiveLayer(layerId);
+        layers.render();
+        handle?.scene.setSelection({ kind: "layer", layerId });
+      },
+      onSelectItem: (selection) => {
+        // Selecting something inside a layer makes that layer the active one,
+        // so the next Fill or Add Image lands where the user is looking.
+        const layerId =
+          selection.kind === "placement" ||
+          selection.kind === "placements" ||
+          selection.kind === "fill" ||
+          selection.kind === "point" ||
+          selection.kind === "zone" ||
+          selection.kind === "strokes"
+            ? selection.layerId
+            : activeLayerId;
+        setActiveLayer(layerId);
+        handle?.scene.setSelection(selection);
+      },
+    },
+    minimap.root,
+  );
 
   const inspector = new Inspector(store, grid, {
     onFillColor: (color) => applyFillColour(color),
@@ -228,11 +238,11 @@ export async function mountEditor(
     host: canvasWrap,
     scene: () => handle?.scene ?? null,
     drawing: () => drawing,
-    useSelectTool: () => applyTool("select", false),
-    usePencil: () => applyTool("pencil", false),
+    useSelectTool: () => tools.apply("select", false),
+    usePencil: () => tools.apply("pencil", false),
     inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
-    onPenTool: (tool) => applyPenTool(tool),
+    onPenTool: (tool) => tools.applyPen(tool),
     onPsdWritten: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
@@ -241,54 +251,17 @@ export async function mountEditor(
   const { extrude, collider, pen } = modes;
 
   // Pencil, eraser and lasso hand the pointer to the drawing layer; select
-  // and pan leave it with the game canvas and its gesture arbiter.
-  const rail = new ToolRail((tool: ToolId) => applyTool(tool));
-
-  /** Put one of pen mode's own three in the pointer's hands, or take it back. */
-  function applyPenTool(tool: PenTool): void {
-    if (!drawing) return;
-    if (tool === "pixels" && drawing.style.brushId !== PIXEL_BRUSH) {
-      remembered = drawing.style.brushId;
-    }
-    const effect = penToolEffect(tool, remembered);
-    drawing.style = { ...drawing.style, ...effect.style };
-    applyTool(effect.tool, false);
-    inspector.updateStrokeStyle(drawing.style);
-  }
-
-  /**
-   * Put a tool in the pointer's hands.
-   *
-   * Called by the rail and by the space bar, which borrows Pan for as long as
-   * it is held. `rail.setTool` is what the space bar needs from it: the rail
-   * has to show what the pointer is actually doing, or holding space looks
-   * like nothing happened.
-   */
-  function applyTool(tool: ToolId, announce = true): void {
-    rail.setTool(tool);
-    const drawingTool =
-      tool === "pencil" || tool === "eraser" || tool === "lasso" || tool === "fill"
-        ? tool
-        : null;
-    handle?.scene.suspendGestures(drawingTool !== null);
-    handle?.scene.setGestureMode(
-      tool === "pan" ? "pan" : tool === "point" ? "point" : "select",
-    );
-    // A hand over the canvas, whether Pan was picked from the rail or
-    // borrowed with the space bar. The class carries it rather than an inline
-    // style so the drawing layer's own crosshair still wins where it is up.
-    canvasWrap.classList.toggle("panning", tool === "pan");
-    canvasWrap.classList.toggle("placing", tool === "point");
-    drawing?.setTool(drawingTool);
-    inspector.setDrawingTool(drawingTool, drawing?.style ?? null);
-    if (!announce) return;
-    if (tool === "select") log.info("Select — drag a box around what you want");
-    if (tool === "pan") log.info("Pan tool: drag to move the camera");
-    if (tool === "point") log.info("Point — tap to put one down; drag still pans");
-    if (tool === "pencil") log.info("Pencil — draw with a pencil or a mouse; fingers pan");
-    if (tool === "lasso") log.info("Lasso — sweep around strokes to select them");
-    if (tool === "fill") log.info("Fill — sweep a closed shape and it fills");
-  }
+  // and pan leave it with the game canvas and its gesture arbiter. What each
+  // of them means to the pointer is `tool-routing.ts`; `tools` is read through
+  // a closure here because the rail is built before it.
+  const rail = new ToolRail((tool: ToolId) => tools.apply(tool));
+  const tools = createToolRouting({
+    rail,
+    canvas: canvasWrap,
+    scene: () => handle?.scene ?? null,
+    drawing: () => drawing,
+    inspector,
+  });
 
   const header = new EditorHeader(
     meta.name,
@@ -386,7 +359,7 @@ export async function mountEditor(
   container.appendChild(shell);
   const stopShortcuts = bindShortcuts({
     currentTool: () => rail.tool,
-    applyTool: (tool) => applyTool(tool, false),
+    applyTool: (tool) => tools.apply(tool, false),
     hasSelection: () => {
       const selection = handle?.scene.getSelection();
       return !!selection && selection.kind !== "none" && selection.kind !== "layer";
@@ -413,7 +386,10 @@ export async function mountEditor(
         inspector.setSuspended(dragging);
         layers.setSuspended(dragging);
       },
-      onViewport: (view) => drawing?.sync(view),
+      onViewport: (view) => {
+        drawing?.sync(view);
+        minimap.setViewport(view);
+      },
       onDetachCopy: (layerId, placementId, key) =>
         void psdFile.detach(layerId, placementId, key),
       onExtrudeChange: () => extrude.sync(),
@@ -680,6 +656,7 @@ export async function mountEditor(
     await saveThumbnail();
     await store.flush();
     header.destroy();
+    minimap.destroy();
     layers.destroy();
     inspector.destroy();
     gameFrame.destroy();

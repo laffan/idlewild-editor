@@ -81,7 +81,16 @@ export class LayersPanel {
   /** Layers whose contents are shown. Expansion is per-session UI state. */
   private readonly expanded = new Set<string>();
 
-  constructor(store: DocStore, callbacks: LayersPanelCallbacks) {
+  /**
+   * `footer` is what sits under the list, along the bottom of the sidebar:
+   * the minimap. Handed in rather than built here because it is about the
+   * canvas rather than about the layers — this panel only owns where it goes.
+   */
+  constructor(
+    store: DocStore,
+    callbacks: LayersPanelCallbacks,
+    footer?: HTMLElement,
+  ) {
     this.store = store;
     this.callbacks = callbacks;
 
@@ -109,6 +118,7 @@ export class LayersPanel {
         ),
       ),
       this.body,
+      footer,
     );
 
     store.addEventListener("change", () => {

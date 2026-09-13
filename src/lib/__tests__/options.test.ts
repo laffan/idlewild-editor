@@ -16,9 +16,9 @@ import {
   ZOOM_RANGE,
   type ProjectMeta,
 } from "../types";
-// The scene as text, through Vite's own `?raw`: importing it would pull
-// Phaser into a test that wants one constant out of it.
-import worldScene from "../../game/world-scene.ts?raw";
+// The scene's camera as text, through Vite's own `?raw`: importing it would
+// pull Phaser into a test that wants one constant out of it.
+import sceneCamera from "../../game/scene-camera.ts?raw";
 
 function meta(options?: ProjectMeta["options"]): ProjectMeta {
   return {
@@ -80,7 +80,7 @@ describe("a project's options", () => {
  * The zoom the sheet takes and the zoom the canvas can show have to be the
  * same range.
  *
- * They were not: `MAX_ZOOM` in the scene was 4 while Project Options accepted
+ * They were not: `MAX_ZOOM` in the camera was 4 while Project Options accepted
  * up to 8, so a pixel-art project asked for 6×, got 6× written into the
  * config its game reads, and got 4× on the canvas beside it. Nothing failed —
  * the number was simply clamped on the way to the camera, which is a setting
@@ -90,7 +90,7 @@ describe("a project's options", () => {
 describe("the zoom a project can be set to", () => {
   it("is a range the editor's own camera can reach", () => {
     expect(ZOOM_RANGE).toEqual({ min: 0.25, max: 8 });
-    expect(worldScene).toContain("const MAX_ZOOM = ZOOM_RANGE.max;");
+    expect(sceneCamera).toContain("const MAX_ZOOM = ZOOM_RANGE.max;");
   });
 
   it("contains the zoom a project with no opinion opens at", () => {

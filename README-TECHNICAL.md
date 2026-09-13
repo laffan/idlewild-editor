@@ -623,6 +623,84 @@ gets a crisp single pixel instead of four.
 
 ---
 
+## The minimap
+
+Along the bottom of the left sidebar, under the layers. The column then reads
+as the questions in the order anybody asks them: which place am I in, what is
+in it, and where am I standing in it. The third had no answer before — the
+canvas is effectively infinite, and work you had drifted away from could only
+be found by panning until it came back.
+
+**There is no "fit the whole map in the box".** The lattice is recomputed from
+the camera over exactly the cells it can see and there is nothing to hit, so a
+document has no extent of its own to frame. What `editor/minimap-view.ts`
+frames instead is the **union of everything that has been put down and the
+camera's own rectangle**, padded by a margin. That union is what makes the
+thing usable in both directions: move about inside your own work and the
+picture holds perfectly still, because the union is the work; walk off the
+edge of it and the picture opens out until both you and the work are in view,
+which is the only way back. A scene with nothing in it frames the camera
+alone, and the two hairlines through the origin are all there is to see.
+
+The union is then grown to the **shape of the box** rather than letterboxed
+into it. A `contain` fit leaves a strip down two sides, and those strips are
+world as much as the middle is — painting them as anything else would draw an
+edge onto a canvas that has none. Growing instead means one scale describes
+both axes, which is the whole of the projection: `world → box` is a subtract
+and a multiply, and `toWorld` is what a finger on the map is pointing at.
+
+**The frame is a div, not paint.** A pan moves the camera every frame while
+the map underneath has not changed, and repainting a document to move one
+rectangle is the per-frame work this editor keeps off the main thread
+everywhere else. So the content is baked into the canvas only when the
+document or the framing actually changes — a string of the world rect, the
+scale, the box and a revision counter decides — and the camera is a positioned
+element over the top of it, dimming the rest of the world with one enormous
+`box-shadow` that the body clips. It is the same bargain the drawing layer's
+stage strikes with its backing canvas, for the same reason.
+
+It draws from the **document**, not from the scene: the box a placement
+occupies rather than its artwork, a fill's own colour, a boundary's polygon, a
+stroke as the line it was drawn as, and the markers a point gets on the canvas.
+So it needs none of the texture machinery, works before a PSD has loaded, and
+costs a second WebGL camera nothing. Layers that are hidden are hidden here
+too, and a placed PSD is floored at a couple of map pixels — a sprite a
+fraction of a pixel wide antialiases away to nothing, and a map that shows
+nothing where there is something is worse than one that shows it roughly.
+Strokes are sampled to at most 96 points, which at this size is the same line
+drawn faster.
+
+**A scrub freezes the projection.** A press names a place and the camera goes
+there at the zoom it is already at; the finger keeps naming places until it
+comes up. But centring the camera can widen the union — that is exactly what
+walking off the edge of the document does — so re-fitting mid-drag would slide
+the map out from under the finger driving it. The view is taken once, at
+pointer-down, and held for the gesture; the fit is redone on release.
+
+### The camera came out of the scene
+
+`world-scene.ts` was at the 700-line limit, and the minimap needed one more
+thing from it: somewhere to say "stand here". The camera is the part of that
+file with a life of its own — it arrives from the document, it is written back
+to the document as it moves, and it outlives every tool that borrows it — so
+`game/scene-camera.ts` is the clamp, the moves and the persistence, and the
+scene keeps the reads. What it needs told about, it is handed as callbacks: the
+lattice to invalidate, the chrome to re-stroke after a zoom, and the viewport
+to publish.
+
+Three call sites now share it rather than one: the gesture arbiter, the drawing
+layer's own two-finger navigation through `panScreen` / `zoomAt`, and the
+minimap through `centreOn`. `MIN_ZOOM` and `MAX_ZOOM` live there now, which is
+why `tests/options.test.ts` reads that file for the constant.
+
+`editor/tool-routing.ts` came out of `editor.ts` in the same breath and for the
+same rule. What a tool means to the pointer — who gets the raw input, what a
+drag on empty space does, what the cursor is, what the inspector describes —
+was four screens down a file that is otherwise wiring, and the pen rail's three
+tools belong with it because they are a brush swap wearing a tool's clothes.
+
+---
+
 ## Three sections, not two modes
 
 `EditorMode` is `draw | code | play`. It was `edit | play`, with Code a menu
@@ -1972,7 +2050,8 @@ running it on a device.
 
 `vitest` covers the pure halves — the grid projection, fill geometry,
 picking (a point's and both marquees'), what is drawn over what, resize
-geometry, undo's three answers about a write and what a restored document is,
+geometry, what the minimap frames and that the camera is always inside it,
+undo's three answers about a write and what a restored document is,
 what each canvas mode counts as one step of its own, whether a selection still
 names something, the unit arithmetic
 behind a placed PSD, what the clipboard hands a paste and where that paste
@@ -1982,9 +2061,10 @@ reader, the platformer's body step, the docs panel's markdown rendering and
 its two kinds of lookup, what a project with no options of its own renders as,
 and the drawing layer's ported maths. The handful of CSS declarations that are
 load-bearing for input are asserted as text — the drawing surface's
-positioning, and the code panel's four placements, where a docked rule that
+positioning, the code panel's four placements, where a docked rule that
 stopped taking the panel out of `position: absolute` would look like a panel
-that had covered the editor.
+that had covered the editor, and the minimap's `touch-action`, without which
+an iPad takes a drag on the map as a scroll of the sidebar it is in.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -3750,6 +3830,16 @@ console is a record of what happened rather than a document.
   work at anyway.
 - The project thumbnail is a snapshot of Phaser's canvas, so a layer that is
   only a sketch photographs blank.
+- The minimap re-bakes whenever the framing moves, and the framing moves on
+  every pan where the camera is not already inside the work — which is most of
+  them. It is cheap because what it draws is boxes and sampled lines rather
+  than artwork, and a heavy scene measured under software rendering costs it
+  under two milliseconds a frame; the version after this one bakes the content
+  once at its own framing and blits it, the way the drawing layer presents its
+  backing rather than repainting it.
+- A minimap tap moves the camera but never the zoom, so there is no framing a
+  region by dragging a box on it, and no way back to the whole document in one
+  gesture.
 - **A step has no name.** The stack holds snapshots and nothing else, so the
   buttons say "Undo" rather than "Undo Move image", and the console says
   nothing when a step goes back. Labelling would mean threading a string

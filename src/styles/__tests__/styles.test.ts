@@ -25,6 +25,7 @@ import { describe, expect, it } from "vitest";
 import css from "../editor.css?raw";
 import codeCss from "../code.css?raw";
 import docsCss from "../docs.css?raw";
+import panelsCss from "../panels.css?raw";
 
 /** The declarations of one rule, by property. Comments are stripped first. */
 function rule(selector: string): Record<string, string> {
@@ -166,5 +167,29 @@ describe("code mode", () => {
     const body = withoutComments(css);
     expect(body).not.toContain(".editor.code-mode .side-panel");
     expect(body).not.toContain(".editor.code-mode .edge-toggle");
+  });
+});
+
+/**
+ * The minimap is driven by a drag, and two of its rules are what make that
+ * drag reach it at all. Without `touch-action: none` the iPad takes the
+ * gesture as a scroll of the sidebar and the camera never moves — the same
+ * failure the layer grip's own rule exists to prevent. And the frame is
+ * positioned against the body it is inside: taken out of `position: absolute`
+ * it lays out in the flow *after* the canvas and pushes the map out of the
+ * panel, which looks like a minimap that has stopped drawing.
+ */
+describe("the minimap's stylesheet", () => {
+  it("gives the map the whole gesture", () => {
+    expect(ruleIn(panelsCss, ".minimap-body")["touch-action"]).toBe("none");
+    expect(ruleIn(panelsCss, ".minimap-body").position).toBe("relative");
+    expect(ruleIn(panelsCss, ".minimap-body").overflow).toBe("hidden");
+  });
+
+  it("keeps the camera's frame over the map and out of the way", () => {
+    const frame = ruleIn(panelsCss, ".minimap-frame");
+    expect(frame.position).toBe("absolute");
+    // Under the pointer it would swallow the press that moves the camera.
+    expect(frame["pointer-events"]).toBe("none");
   });
 });

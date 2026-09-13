@@ -12,10 +12,10 @@
 import Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import { ZOOM_RANGE } from "../lib/types";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
+import { SceneCamera } from "./scene-camera";
 import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { SelectionOverlay } from "./selection-overlay";
@@ -65,17 +65,14 @@ export interface WorldSceneConfig {
   onPenChange?: () => void;
 }
 
-const MIN_ZOOM = 0.1;
-// As far in as Project Options may set a project, or the setting lies: this
-// was 4 while the sheet took 8, so 6× reached the game and 4× the canvas.
-const MAX_ZOOM = ZOOM_RANGE.max;
-
 export class WorldScene extends Phaser.Scene {
   private config!: WorldSceneConfig;
   private store!: DocStore;
   grid!: Grid;
 
   private rig!: CameraRig;
+  /** The camera, its clamp and its place in the document — `scene-camera.ts`. */
+  private cam!: SceneCamera;
   private gridRenderer!: GridRenderer;
   private docRenderer!: DocRenderer;
   private overlay!: SelectionOverlay;
@@ -93,10 +90,6 @@ export class WorldScene extends Phaser.Scene {
   /** The modes that take the canvas over: extrude, and collider. */
   modes!: CanvasModes;
   private psds!: PsdPlacements;
-  /** Set once the camera is where it should stay — restored, or user-moved. */
-  private cameraPlaced = false;
-  /** The last camera state pushed to `onViewport`, to skip idle frames. */
-  private lastView = "";
   /** The layer new work lands on. */
   activeLayerId = "";
   /** The rail's tool, as the gesture arbiter sees it — see `setGestureMode`. */
@@ -160,19 +153,27 @@ export class WorldScene extends Phaser.Scene {
       onPenChange: () => this.config.onPenChange?.(),
     });
 
-    const saved = this.store.activeScene.camera;
-    if (saved) {
-      this.cameras.main.setZoom(saved.zoom);
-      this.cameras.main.centerOn(saved.x, saved.y);
-      this.cameraPlaced = true;
-    } else {
-      this.cameras.main.setZoom(this.config.defaultZoom());
-      this.cameras.main.centerOn(0, 0);
-      // Scale.RESIZE settles a frame or two after create(), and centring
-      // against the pre-resize viewport leaves the origin off-screen. Keep
-      // re-centring until the user takes the camera themselves.
-      this.scale.on(Phaser.Scale.Events.RESIZE, this.recentreUntilTouched, this);
-    }
+    // Where the camera is, what it is allowed to do, and where that is
+    // written down — see `scene-camera.ts`. Built after the renderers it
+    // tells about a move, and before the arbiter that drives it.
+    this.cam = new SceneCamera({
+      scene: this,
+      store: this.store,
+      defaultZoom: () => this.config.defaultZoom(),
+      onInvalidate: () => this.gridRenderer.invalidate(),
+      onScaled: () => {
+        // Selection chrome is sized against the zoom, so it has to be redrawn.
+        this.overlay.render(
+          this.selection,
+          this.store,
+          this.cam.zoom,
+          this.adjusting,
+        );
+        this.modes.refresh();
+      },
+      onChange: () => this.config.onCameraChange(),
+      onViewport: this.config.onViewport,
+    });
 
     this.rig = new CameraRig(this.game.canvas, {
       onTap: (x, y) => this.handleTap(x, y),
@@ -192,9 +193,9 @@ export class WorldScene extends Phaser.Scene {
       onMarqueeStart: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
       onMarqueeMove: (x, y) => this.extendMarquee(x, y),
       onMarqueeEnd: () => this.endMarquee(),
-      onPan: (dx, dy) => this.pan(dx, dy),
-      onZoom: (factor, cx, cy) => this.zoom(factor, cx, cy),
-      onChange: () => this.persistCamera(),
+      onPan: (dx, dy) => this.cam.pan(dx, dy),
+      onZoom: (factor, cx, cy) => this.cam.zoomBy(factor, cx, cy),
+      onChange: () => this.cam.persist(),
     });
 
     this.psds = new PsdPlacements({
@@ -246,12 +247,7 @@ export class WorldScene extends Phaser.Scene {
 
     // Where you were standing in the scene you are arriving in — or the
     // origin, for one nobody has looked at yet.
-    const saved = this.store.activeScene.camera;
-    this.cameraPlaced = true;
-    this.cameras.main.setZoom(saved?.zoom ?? this.config.defaultZoom());
-    this.cameras.main.centerOn(saved?.x ?? 0, saved?.y ?? 0);
-    this.gridRenderer.invalidate();
-    this.config.onCameraChange();
+    this.cam.arrive();
   }
 
   override update(_time: number, _delta: number): void {
@@ -260,48 +256,32 @@ export class WorldScene extends Phaser.Scene {
     // camera the way the lattice does — a pan moves it as surely as a zoom.
     // A no-op while the mode is down.
     this.modes.pen.refresh();
-    this.publishViewport();
+    this.cam.publish();
   }
 
   /** How the world maps onto the screen right now. */
   viewport(): Viewport {
-    const camera = this.cameras.main;
-    const topLeft = camera.getWorldPoint(0, 0);
-    return {
-      originX: topLeft.x,
-      originY: topLeft.y,
-      zoom: camera.zoom,
-      width: camera.width,
-      height: camera.height,
-    };
-  }
-
-  /**
-   * Push the camera out when it has moved.
-   *
-   * Driven from `update` rather than from the gesture arbiter because the
-   * camera also moves without a gesture — a window resize, a re-centre, the
-   * restore on open — and a stage left behind by any of those shows its ink
-   * in the wrong place. The string compare is what keeps an idle frame free.
-   */
-  private publishViewport(): void {
-    if (!this.config.onViewport) return;
-    const view = this.viewport();
-    const key = `${view.originX}|${view.originY}|${view.zoom}|${view.width}|${view.height}`;
-    if (key === this.lastView) return;
-    this.lastView = key;
-    this.config.onViewport(view);
+    return this.cam.viewport();
   }
 
   /** Camera moves the drawing layer asks for while it owns the pointer. */
   panScreen(dxScreen: number, dyScreen: number): void {
-    this.pan(dxScreen, dyScreen);
-    this.persistCamera();
+    this.cam.pan(dxScreen, dyScreen);
+    this.cam.persist();
   }
 
   zoomAt(factor: number, screenX: number, screenY: number): void {
-    this.zoom(factor, screenX, screenY);
-    this.persistCamera();
+    this.cam.zoomBy(factor, screenX, screenY);
+    this.cam.persist();
+  }
+
+  /** Stand somewhere else at the zoom you are at — what the minimap asks for. */
+  centreOn(worldX: number, worldY: number): void {
+    this.cam.centreOn(worldX, worldY);
+  }
+
+  centreOnOrigin(): void {
+    this.cam.centreOnOrigin();
   }
 
   /** Repaint from the document. Cheap: everything here is retained state. */
@@ -313,53 +293,6 @@ export class WorldScene extends Phaser.Scene {
       this.cameras.main.zoom,
       this.adjusting,
     );
-  }
-
-  // ── camera ────────────────────────────────────────────────────────────────
-
-  private pan(dxScreen: number, dyScreen: number): void {
-    const camera = this.cameras.main;
-    camera.scrollX -= dxScreen / camera.zoom;
-    camera.scrollY -= dyScreen / camera.zoom;
-  }
-
-  private zoom(factor: number, screenX: number, screenY: number): void {
-    const camera = this.cameras.main;
-    const before = camera.getWorldPoint(screenX, screenY);
-    camera.setZoom(
-      Phaser.Math.Clamp(camera.zoom * factor, MIN_ZOOM, MAX_ZOOM),
-    );
-    // Keep the point under the fingers fixed while the scale changes.
-    const after = camera.getWorldPoint(screenX, screenY);
-    camera.scrollX += before.x - after.x;
-    camera.scrollY += before.y - after.y;
-    this.gridRenderer.invalidate();
-    // Selection chrome is sized against the zoom, so it has to be redrawn.
-    this.overlay.render(this.selection, this.store, camera.zoom, this.adjusting);
-    this.modes.refresh();
-  }
-
-  /** Re-centre on the origin while the viewport is still settling. */
-  private recentreUntilTouched(): void {
-    if (this.cameraPlaced) return;
-    this.cameras.main.centerOn(0, 0);
-    this.gridRenderer.invalidate();
-  }
-
-  private persistCamera(): void {
-    // Any camera movement from here on is the user's; stop re-centring.
-    this.cameraPlaced = true;
-    const camera = this.cameras.main;
-    this.store.setCamera(camera.midPoint.x, camera.midPoint.y, camera.zoom);
-    this.config.onCameraChange();
-  }
-
-  centreOnOrigin(): void {
-    this.cameraPlaced = true;
-    this.cameras.main.setZoom(this.config.defaultZoom());
-    this.cameras.main.centerOn(0, 0);
-    this.gridRenderer.invalidate();
-    this.persistCamera();
   }
 
   // ── selection ─────────────────────────────────────────────────────────────
@@ -690,7 +623,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   shutdownScene(): void {
-    this.scale.off(Phaser.Scale.Events.RESIZE, this.recentreUntilTouched, this);
+    this.cam.destroy();
     this.rig.destroy();
     this.drops.destroy();
     this.marquee.destroy();
