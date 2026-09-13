@@ -13,6 +13,7 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid, fillShape } from "../lib/grid";
 import { fillAt } from "../lib/doc-shape";
 import { layerKind } from "../lib/layer-kinds";
+import { ordersByHand } from "../lib/units";
 import { instanceOf } from "./instance";
 import {
   applyHidden,
@@ -353,7 +354,12 @@ export class DocRenderer {
       // Back to front, once for the whole layer: every placement then takes
       // the next depth up, so what is above what is decided here rather than
       // by the order Phaser happened to be handed the objects in.
-      const order = drawOrder(layer.placements, isometric);
+      //
+      // Whose order that is, is the layer's to say — see `ordersByHand`. An
+      // isometric scene sorts an *object* layer on screen Y; a layer of
+      // backdrops has no such answer in it, so it keeps the order somebody
+      // dragged it into, and the panel lists it the same way.
+      const order = drawOrder(layer.placements, !ordersByHand(layer, isometric));
 
       order.forEach((placement, step) => {
         if (!this.draws(layer, placement)) return;
@@ -620,12 +626,15 @@ export function hexToNumber(hex: string): number {
  *
  * Two orderings, one inside the other.
  *
- * **Between placed PSDs.** An isometric scene sorts them on screen Y, so a
- * thing standing nearer the viewer draws in front of one behind it. A unit
- * sorts on its *own* Y rather than each of its layers separately: a roof sits
- * higher up the screen than the tower under it, and sorting the two against
- * each other would put the roof behind the building every time. Flat
- * projections leave them in the order they were placed.
+ * **Between placed PSDs.** Sort on screen Y and a thing standing nearer the
+ * viewer draws in front of one behind it, which is what an isometric object
+ * layer wants. A unit sorts on its *own* Y rather than each of its layers
+ * separately: a roof sits higher up the screen than the tower under it, and
+ * sorting the two against each other would put the roof behind the building
+ * every time. Otherwise they are left in the order they were placed — every
+ * layer of a flat projection, and a pattern or background layer of either,
+ * neither of which holds things standing anywhere. The caller decides; see
+ * `ordersByHand` in `lib/units.ts`.
  *
  * **Within one placed PSD.** The author's stack, and nothing else. A PSD is a
  * stack of layers and the order is the artwork — psd-to-json reports it,

@@ -14,6 +14,7 @@
  * kind-specific edits use.
  */
 
+import { layerKind } from "./layer-kinds";
 import type { Layer, Placement } from "./types";
 
 /** The unit a placement belongs to. Absent on documents written before units
@@ -40,25 +41,53 @@ export function unitsOf(placements: readonly Placement[]): Placement[][] {
 }
 
 /**
- * The same, in the order they are actually drawn.
+ * Whether this layer's order is the document's, or the projection's.
  *
- * Two orderings, and only one of them is anybody's to choose. On a flat
- * projection the document's order is the answer, which is what makes dragging
- * a row in the layer panel mean something. An **isometric** scene sorts on
- * screen Y instead, because a thing standing nearer the viewer draws in front
- * of one behind it — that is not a default, it is what makes the projection
- * read as a space at all, so it wins. The sort is stable, so the document's
- * order still separates two units standing on the same row.
+ * On a flat projection the document's order is the answer everywhere, which
+ * is what makes dragging a row in the layer panel mean something. On an
+ * **isometric** one an object layer sorts on screen Y instead, because a
+ * thing standing nearer the viewer draws in front of one behind it — that is
+ * not a default, it is what makes the projection read as a space at all, so
+ * there it wins.
  *
- * The panel lists units through here for exactly that reason: on isometric a
- * list in document order would be a list the canvas ignores.
+ * **The other two kinds are not that.** Y-sorting answers *which of these two
+ * things is nearer*, and neither a pattern's palette nor a layer of backdrops
+ * is a set of things standing in the space at all.
+ *
+ * A pattern layer's placements are the palette a rule scatters, every one of
+ * them anchored on the same space, and what the copies are drawn from is
+ * `paletteOf` reading `layer.placements` straight through — so sorting them
+ * on Y sorts a column of identical numbers, and the order that really decides
+ * which element lands where was the document's all along.
+ *
+ * A background layer's are backdrops: parallax bands, a horizon, a sky. Which
+ * is in front of which is a decision, not a position — they are behind
+ * everything and often behind each other at the same Y — so the order is the
+ * one somebody dragged them into.
+ *
+ * Either way the projection is not being overridden. It is being asked a
+ * question it has no answer to.
+ */
+export function ordersByHand(layer: Layer, isometric: boolean): boolean {
+  return !isometric || layerKind(layer) !== "object";
+}
+
+/**
+ * A layer's units, in the order they are actually drawn.
+ *
+ * Which order that is, is `ordersByHand`'s answer. Where it sorts, the sort
+ * is stable, so the document's order still separates two units standing on
+ * the same row.
+ *
+ * The panel lists units through here for exactly that reason: a list in an
+ * order the canvas ignores is a list whose rows move and change nothing.
  */
 export function unitsInDrawOrder(
-  placements: readonly Placement[],
+  layer: Layer,
   isometric: boolean,
 ): Placement[][] {
-  const units = unitsOf(placements);
-  if (!isometric) return units;
+  const units = unitsOf(layer.placements);
+  if (ordersByHand(layer, isometric)) return units;
   const top = (unit: Placement[]) => Math.min(...unit.map((p) => p.y));
   return [...units].sort((a, b) => top(a) - top(b));
 }

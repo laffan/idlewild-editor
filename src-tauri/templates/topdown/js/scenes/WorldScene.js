@@ -112,7 +112,15 @@ export class WorldScene extends Phaser.Scene {
       // Back to front, once for the whole layer: each placement takes the
       // next depth up, so what is above what is decided here rather than by
       // the order Phaser happened to be handed the objects in.
-      const order = drawOrder(layer.placements ?? [], config.projection === "isometric");
+      //
+      // Screen Y only on an *object* layer. Sorting on Y answers which of two
+      // things standing in the space is nearer, and a layer of backdrops holds
+      // no such things — they are behind everything and often behind each
+      // other at the same Y — so it keeps the order it was given. The editor
+      // lists and reorders it the same way; see `ordersByHand` there.
+      const sortOnY =
+        config.projection === "isometric" && (layer.kind ?? "object") === "object";
+      const order = drawOrder(layer.placements ?? [], sortOnY);
       order.forEach((placement, step) => {
         const object = this.P2P.place(this, placement.psdKey, placement.layerPath);
         if (object && object.setPosition) {
@@ -370,8 +378,10 @@ function contains(box, p) {
  * thing standing nearer the viewer draws in front of one behind it. A unit
  * sorts on its *own* Y rather than each of its layers separately: a roof sits
  * higher up the screen than the tower under it, and sorting the two against
- * each other would put the roof behind the building every time. Flat
- * projections leave them in the order they were placed.
+ * each other would put the roof behind the building every time. Otherwise
+ * they are left in the order they were placed, which is what `isometric`
+ * false means — a flat projection, or a layer holding nothing that stands in
+ * the space for the sort to answer about. The caller decides.
  *
  * **Within one placed PSD.** The author's stack, and nothing else — that is
  * what `order` is, counting up from the back of the file.

@@ -70,12 +70,14 @@ export interface LayerItemContext {
   isAnchored?: (psdKey: string) => boolean;
   /**
    * Whether the project is isometric, which decides what order the placed
-   * files are listed in.
+   * files on an **object** layer are listed in.
    *
-   * The list is in **draw order**, and on an isometric scene that is screen Y
-   * rather than the document's order — see `unitsInDrawOrder`. A list in
-   * document order there would be a list the canvas ignores, and the row you
-   * dragged would stay where you put it while nothing moved on screen.
+   * The list is in **draw order**, and on an isometric scene an object
+   * layer's is screen Y rather than the document's — see `ordersByHand`. A
+   * list in document order there would be a list the canvas ignores, and the
+   * row you dragged would stay where you put it while nothing moved on
+   * screen. A pattern or background layer is the other way round: the
+   * document's order is the only one either of them has.
    */
   isometric?: boolean;
 }
@@ -112,7 +114,7 @@ export function layerItems(
     });
   }
 
-  for (const unit of unitsInDrawOrder(layer.placements, context.isometric ?? false)) {
+  for (const unit of unitsInDrawOrder(layer, context.isometric ?? false)) {
     const [first] = unit;
     // Only on an object layer. A pattern layer's placements are its palette
     // and a background layer's are scenery — neither is a thing standing on a

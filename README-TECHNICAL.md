@@ -2735,18 +2735,37 @@ position in a list, and a file takes a layer *or* a position. `reorderUnit`
 moves every placement of the unit as a block and leaves `order` — what is on
 top *inside* the file — alone, because that is the file's business.
 
-**An isometric scene does not get a say, and the panel says so by listing
-differently.** `drawOrder` sorts units on screen Y there, so a thing standing
-nearer the viewer draws in front of one behind it — that is not a default a
-manual order should override, it is what makes the projection read as a space
-at all. So `unitsInDrawOrder` sorts the *list* the same way, and the grip
-carries without reordering: a list in document order under a canvas that
-ignored it would be a row that stayed where you put it while nothing moved.
-The sort is stable, so two units on the same row keep the document's order.
+**An isometric object layer does not get a say, and the panel says so by
+listing differently.** `drawOrder` sorts units on screen Y there, so a thing
+standing nearer the viewer draws in front of one behind it — that is not a
+default a manual order should override, it is what makes the projection read
+as a space at all. So `unitsInDrawOrder` sorts the *list* the same way, and
+the grip carries without reordering: a list in document order under a canvas
+that ignored it would be a row that stayed where you put it while nothing
+moved. The sort is stable, so two units on the same row keep the document's
+order.
 
-Flat projections take the document's order straight through — to the canvas
-through `drawOrder`, and to the exported game through `game.config.json`,
-which carries `placements` in exactly that order.
+**A pattern or background layer is not that, on either projection.**
+Y-sorting answers *which of these two things is nearer*, and neither kind
+holds things standing in the space for it to answer about. A pattern layer's
+placements are the palette a rule scatters, every one anchored on the same
+grid space, and `paletteOf` reads `layer.placements` straight through to
+decide which element lands where — so sorting them on Y sorts a column of
+identical numbers while the order that really matters was the document's all
+along. A background layer's are backdrops: parallax bands, a horizon, a sky,
+behind everything and often behind each other at the same Y, where which is in
+front is a decision rather than a position.
+
+`ordersByHand(layer, isometric)` in `lib/units.ts` is the single answer, and
+three things read it so they cannot disagree: `unitsInDrawOrder` for the list,
+the panel for whether the grip reorders or only carries, and `DocRenderer` for
+what it hands `drawOrder`. The scene template mirrors the same condition at
+its own `placeDocument` call, so Play and a published export stack a layer of
+backdrops the way the editor drew it.
+
+Flat projections take the document's order straight through everywhere — to
+the canvas through `drawOrder`, and to the exported game through
+`game.config.json`, which carries `placements` in exactly that order.
 
 ### Two senses of "layer", and why the panels must not mix them
 
@@ -2792,11 +2811,13 @@ So depth is now assigned from an explicit order. `drawOrder` sorts one
 document layer's placements back to front, and each takes the next depth up
 from the layer's base:
 
-- **Between placed PSDs**, an isometric scene still sorts on screen Y, so
+- **Between placed PSDs**, an isometric *object* layer sorts on screen Y, so
   nearer things draw in front. A unit sorts on its *own* Y — the topmost of
   its members — rather than each layer separately, which for a single-layer
-  PSD is the same number it used before. Flat projections leave units in the
-  order they were placed.
+  PSD is the same number it used before. Everything else leaves units in the
+  order they were placed: every layer of a flat projection, and a pattern or
+  background layer of either. `drawOrder` itself takes a plain boolean; the
+  rule that decides it is `ordersByHand`, above.
 - **Within one placed PSD**, the author's stack and nothing else.
 
 The stack is recorded on each placement as `order`, because once a placement

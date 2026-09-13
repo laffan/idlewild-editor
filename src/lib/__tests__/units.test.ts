@@ -9,7 +9,13 @@
 
 import { describe, expect, it } from "vitest";
 import { emptyLayer } from "../doc-shape";
-import { reorderUnit, unitKey, unitsInDrawOrder, unitsOf } from "../units";
+import {
+  ordersByHand,
+  reorderUnit,
+  unitKey,
+  unitsInDrawOrder,
+  unitsOf,
+} from "../units";
 import type { Layer, Placement } from "../types";
 
 function placement(id: string, instance: string, y = 0): Placement {
@@ -54,13 +60,13 @@ describe("grouping placements into units", () => {
   });
 });
 
-describe("the order they draw in", () => {
+describe("the order an object layer draws in", () => {
   it("is the document's on a flat projection, which is what a drag writes", () => {
-    const placements = [
+    const shuffled = layer(
       placement("a", "tower", 500),
       placement("b", "tree", 100),
-    ];
-    expect(names(unitsInDrawOrder(placements, false))).toEqual(["tower", "tree"]);
+    );
+    expect(names(unitsInDrawOrder(shuffled, false))).toEqual(["tower", "tree"]);
   });
 
   /**
@@ -70,22 +76,73 @@ describe("the order they draw in", () => {
    * rather than showing an order the canvas ignores.
    */
   it("is screen Y on an isometric one, whatever the document says", () => {
-    const placements = [
+    const shuffled = layer(
       placement("a", "tower", 500),
       placement("b", "tree", 100),
-    ];
-    expect(names(unitsInDrawOrder(placements, true))).toEqual(["tree", "tower"]);
+    );
+    expect(names(unitsInDrawOrder(shuffled, true))).toEqual(["tree", "tower"]);
   });
 
   it("takes a unit's top edge, so a roof does not sort against its own tower", () => {
     const tower = [placement("t1", "tower", 400), placement("t2", "tower", 200)];
     const tree = placement("tr", "tree", 300);
-    expect(names(unitsInDrawOrder([...tower, tree], true))).toEqual(["tower", "tree"]);
+    expect(names(unitsInDrawOrder(layer(...tower, tree), true))).toEqual([
+      "tower",
+      "tree",
+    ]);
   });
 
   it("leaves two units on the same row in the order the document has them", () => {
-    const placements = [placement("a", "tower", 100), placement("b", "tree", 100)];
-    expect(names(unitsInDrawOrder(placements, true))).toEqual(["tower", "tree"]);
+    const flat = layer(placement("a", "tower", 100), placement("b", "tree", 100));
+    expect(names(unitsInDrawOrder(flat, true))).toEqual(["tower", "tree"]);
+  });
+});
+
+/**
+ * The two kinds a projection has nothing to say about.
+ *
+ * Y-sorting answers *which of these two things is nearer*. A pattern layer's
+ * placements are a palette, all anchored on the same space and read straight
+ * through by `paletteOf` to decide which element lands where; a background
+ * layer's are backdrops, behind everything and often behind each other at the
+ * same Y. Sorting either on screen Y sorts something that is not a position,
+ * and leaves a grip that moves a row and changes nothing.
+ */
+describe("the order a pattern or background layer draws in", () => {
+  const kinded = (kind: Layer["kind"]) => ({
+    ...layer(placement("a", "tower", 500), placement("b", "tree", 100)),
+    kind,
+  });
+
+  it("is the document's on a pattern layer, on either projection", () => {
+    expect(names(unitsInDrawOrder(kinded("pattern"), false))).toEqual([
+      "tower",
+      "tree",
+    ]);
+    expect(names(unitsInDrawOrder(kinded("pattern"), true))).toEqual([
+      "tower",
+      "tree",
+    ]);
+  });
+
+  it("is the document's on a background layer, on either projection", () => {
+    expect(names(unitsInDrawOrder(kinded("background"), false))).toEqual([
+      "tower",
+      "tree",
+    ]);
+    expect(names(unitsInDrawOrder(kinded("background"), true))).toEqual([
+      "tower",
+      "tree",
+    ]);
+  });
+
+  /** The one question the panel and the renderer both ask before sorting. */
+  it("is what the grip and the canvas both read", () => {
+    expect(ordersByHand(kinded(undefined), false)).toBe(true);
+    expect(ordersByHand(kinded(undefined), true)).toBe(false);
+    expect(ordersByHand(kinded("object"), true)).toBe(false);
+    expect(ordersByHand(kinded("pattern"), true)).toBe(true);
+    expect(ordersByHand(kinded("background"), true)).toBe(true);
   });
 });
 

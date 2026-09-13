@@ -201,10 +201,12 @@ remaining pieces are wired to real slots rather than mocked.
   has a grip of its own. Where you let go decides what it meant: over a
   different layer it is carried there, over its own it is **moved in the order
   that layer draws in**, on the canvas and in the game alike. An isometric
-  scene is the exception and says so by listing differently — it sorts what it
-  draws on screen Y, so a thing standing nearer you draws in front of one
-  behind it, and the list is sorted to match rather than showing an order the
-  canvas would ignore.
+  **object** layer is the exception and says so by listing differently — it
+  sorts what it draws on screen Y, so a thing standing nearer you draws in
+  front of one behind it, and the list is sorted to match rather than showing
+  an order the canvas would ignore. Pattern and background layers reorder by
+  hand on every projection: a palette all anchored on one space and a stack of
+  backdrops behind everything have no nearer and further for a sort to find.
   The two senses of the word stay apart: a layer here is Phaser's — draw order
   over anything at all — so a placed PSD is **one row** however many layers are
   inside the file, and the stack inside it belongs to the inspector. Select a

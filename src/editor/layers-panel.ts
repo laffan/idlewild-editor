@@ -23,6 +23,7 @@
 import { clear, h, ICONS, icon } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
 import { LAYER_KINDS, layerKind } from "../lib/layer-kinds";
+import { ordersByHand } from "../lib/units";
 import { LayerDrags } from "./layer-drag";
 import { openMenu } from "../lib/menu";
 import type { Layer, Selection } from "../lib/types";
@@ -87,7 +88,8 @@ export class LayersPanel {
   private readonly drags: LayerDrags;
   /** Layers whose contents are shown. Expansion is per-session UI state. */
   private readonly expanded = new Set<string>();
-  /** Whether placed files are listed — and reorderable — in document order. */
+  /** Whether an object layer's placed files are listed — and reorderable —
+   *  in document order or in screen-Y order. See `ordersByHand`. */
   private readonly isometric: boolean;
 
   /**
@@ -213,13 +215,18 @@ export class LayersPanel {
                     event,
                     layer.id,
                     draggable,
-                    // No unit means carry only. An isometric scene sorts what
-                    // it draws on screen Y — a thing nearer the viewer draws
-                    // in front of one behind it, which is what makes the
-                    // projection read as a space — so the document's order is
-                    // not the answer there and a row that moved would be a
-                    // row the canvas ignored. The list is Y-sorted to match.
-                    this.isometric ? null : item.unit ?? null,
+                    // No unit means carry only: a row that cannot be
+                    // reordered can still be dragged to another layer. An
+                    // isometric scene sorts an *object* layer on screen Y — a
+                    // thing nearer the viewer draws in front of one behind it,
+                    // which is what makes the projection read as a space — so
+                    // the document's order is not the answer there and a row
+                    // that moved would be a row the canvas ignored. A pattern
+                    // or background layer holds no such things, so it reorders
+                    // by hand on either projection. See `ordersByHand`.
+                    ordersByHand(layer, this.isometric)
+                      ? item.unit ?? null
+                      : null,
                   )
               : undefined,
           ),

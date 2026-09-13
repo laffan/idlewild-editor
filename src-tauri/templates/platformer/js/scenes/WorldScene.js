@@ -279,8 +279,10 @@ export class WorldScene extends Phaser.Scene {
  * thing standing nearer the viewer draws in front of one behind it. A unit
  * sorts on its *own* Y rather than each of its layers separately: a roof sits
  * higher up the screen than the tower under it, and sorting the two against
- * each other would put the roof behind the building every time. Flat
- * projections leave them in the order they were placed.
+ * each other would put the roof behind the building every time. Otherwise
+ * they are left in the order they were placed, which is what `isometric`
+ * false means — a flat projection, or a layer holding nothing that stands in
+ * the space for the sort to answer about. The caller decides.
  *
  * **Within one placed PSD.** The author's stack, and nothing else — that is
  * what `order` is, counting up from the back of the file.
