@@ -175,6 +175,28 @@ export const ICONS = {
   sidebar: ["M4 5h16v14H4z", "M10 5v14"],
   /* Sliders — Project Options, which is settings rather than navigation. */
   sliders: ["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 5v4", "M9 15v4"],
+  /* The three kinds of layer, as the dropdown under the `+` offers them and
+     as each row carries afterwards. A stack of sheets for the ordinary one,
+     a scatter for the pattern, and a framed field for the backdrop — three
+     silhouettes rather than three variations, because the point of the chip
+     is to be read without being looked at. */
+  layerObject: ["m12 3 9 5-9 5-9-5 9-5Z", "m3 13 9 5 9-5"],
+  layerPattern: [
+    "M6 6h.01",
+    "M13 4h.01",
+    "M19 8h.01",
+    "M8 13h.01",
+    "M15 12h.01",
+    "M5 19h.01",
+    "M12 19h.01",
+    "M19 17h.01",
+  ],
+  layerBackground: ["M3 5h18v14H3z", "m3 16 5-5 4 4 3-3 6 5"],
+  /* Two stops fading into each other: a gradient backdrop's own row. */
+  gradient: ["M4 4h16v16H4z", "M4 12h16", "M4 8h16", "M4 16h16"],
+  /* A triangle with a bar in it — the one glyph here that means something is
+     wrong rather than something is available. */
+  warning: ["M12 3 22 20H2L12 3Z", "M12 10v4", "M12 17h.01"],
   /* A drag handle. Round line caps turn each zero-length segment into a dot,
      which is how a six-dot grip is drawn without leaving the stroked-path
      vocabulary the rest of this set uses. */

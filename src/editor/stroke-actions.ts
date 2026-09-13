@@ -1,19 +1,21 @@
 /**
- * The two bridges out of the drawing layer.
+ * The bridges out of the drawing layer.
  *
- * A sketch is not the point; what it becomes is. The spec asks for exactly
- * two exits — hand a group of strokes to a layer as a PSD to flesh out
- * elsewhere, or turn it into a boundary — and both are actions on a lasso
- * selection rather than tools of their own.
+ * A sketch is not the point; what it becomes is. Two of these were the spec's
+ * — hand a group of strokes to a layer as a PSD to flesh out elsewhere, or
+ * turn it into a boundary — and the third is the pencil's half of a pattern
+ * shape. All three are actions on a lasso selection rather than tools of
+ * their own.
  *
- * Both consume the strokes. The PSD and the zone are the same shape in a
- * better form, and leaving the ink behind means every sketch you convert is
- * drawn twice: once as strokes and once as the thing it became, in the same
- * place, at the same size.
+ * Every one of them consumes the strokes. The PSD, the zone and the shape are
+ * the same outline in a better form, and leaving the ink behind means every
+ * sketch you convert is drawn twice: once as strokes and once as the thing it
+ * became, in the same place, at the same size.
  */
 
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
+import { addPatternShapePoints } from "../lib/layer-kinds";
 import type { Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { DrawingLayer } from "../drawing";
@@ -135,4 +137,47 @@ export function convertStrokesToZone(
     return made;
   });
   log.info(`${strokes.length} strokes → ${zone.name} (${points.length} points)`);
+}
+
+/**
+ * Strokes → an area a pattern is confined to.
+ *
+ * The pencil's half of Add Shape, and the same outline a boundary would have
+ * been: `strokesToZonePoints` simplifies the path the same way, because a
+ * shape only has to be accurate to the space it confines. What is stored is
+ * the outline *and* the spaces under it — see `addPatternShapePoints` — so the
+ * canvas can draw the line somebody drew and the pattern can ask a set rather
+ * than walking a polygon per element per frame.
+ *
+ * The layer is named rather than taken from the selection: the ink is often
+ * drawn on whatever layer was active, and the shape belongs to the pattern
+ * layer the panel asked from.
+ */
+export function convertStrokesToPatternShape(
+  store: DocStore,
+  grid: Grid,
+  drawing: DrawingLayer,
+  selection: StrokeSelection,
+  layerId: string,
+): void {
+  const strokes = drawing.strokesById(selection.ids);
+  const points = strokesToZonePoints(strokes, store.gridSize);
+  if (points.length < 3) {
+    log.warn("A pattern shape needs an outline — that selection has no region");
+    return;
+  }
+
+  const shape = store.history.group(() => {
+    const made = addPatternShapePoints(store, layerId, grid, points);
+    if (made) drawing.removeStrokes(selection.ids);
+    return made;
+  });
+  if (!shape) {
+    log.warn("That outline covers no whole space — draw a larger one");
+    return;
+  }
+  log.info(
+    `${strokes.length} strokes → ${shape.name} ` +
+      `(${shape.cells?.length ?? 0} spaces)`,
+  );
 }

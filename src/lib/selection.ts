@@ -33,6 +33,8 @@ export function selectionAlive(store: DocStore, selection: Selection): boolean {
       return has(layer.points, selection.pointId);
     case "zone":
       return has(layer.zones, selection.zoneId);
+    case "background":
+      return has(layer.backgrounds ?? [], selection.backgroundId);
     // Every member, not any: a drag moves them together and the inspector
     // counts them, so a list half of which has gone is a lie either way.
     case "placements":

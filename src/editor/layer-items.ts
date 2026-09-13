@@ -17,6 +17,8 @@
 
 import { h, ICONS, icon } from "../lib/dom";
 import { instanceOf } from "../game/instance";
+import { backgroundsOf, layerKind } from "../lib/layer-kinds";
+import type { LayerKind } from "../lib/types";
 import { describeFill, type Layer, type Placement, type Selection } from "../lib/types";
 
 export interface LayerItem {
@@ -38,6 +40,29 @@ export interface LayerItem {
    * name.
    */
   members?: string[];
+  /**
+   * What is wrong with this thing, in the fewest words that say it.
+   *
+   * One use so far: a PSD on an object layer with no `P | anchor` at the root
+   * of its stack. The row greys out and carries the word rather than being
+   * hidden or refused — the file is placed, it draws, and what it cannot do
+   * is keep its place when somebody edits it in Photoshop. That is worth
+   * saying where the file is listed, and not worth throwing the artwork away
+   * over.
+   */
+  warning?: string;
+}
+
+/** What a row needs to know that the layer itself does not say. */
+export interface LayerItemContext {
+  /** The scene's start point, so a point's row can say it is the one. */
+  startPointId?: string;
+  /**
+   * Whether a PSD carries its anchor mark at the root — the rule an object
+   * layer enforces. Absent means "do not ask", which is what the callers that
+   * only want the list (a test, a count) mean.
+   */
+  isAnchored?: (psdKey: string) => boolean;
 }
 
 /**
@@ -48,11 +73,37 @@ export interface LayerItem {
  * is the one. Optional, because the two callers that only want the list
  * (a test, a count) have no scene to ask.
  */
-export function layerItems(layer: Layer, startPointId?: string): LayerItem[] {
+export function layerItems(
+  layer: Layer,
+  context: LayerItemContext = {},
+): LayerItem[] {
   const items: LayerItem[] = [];
+  const kind = layerKind(layer);
+
+  // Backdrops first, because they are the only thing on a background layer
+  // that is not also a placed file and the list reads better with its own
+  // subject at the top.
+  for (const background of backgroundsOf(layer)) {
+    items.push({
+      selection: {
+        kind: "background",
+        layerId: layer.id,
+        backgroundId: background.id,
+      },
+      label: background.name,
+      detail: background.kind === "gradient" ? "gradient" : "colour",
+      path: background.kind === "gradient" ? ICONS.gradient : ICONS.fill,
+      swatch: background.color ?? background.gradient?.from,
+    });
+  }
 
   for (const unit of placedUnits(layer)) {
     const [first] = unit;
+    // Only on an object layer. A pattern layer's placements are its palette
+    // and a background layer's are scenery — neither is a thing standing on a
+    // grid space, so neither has anywhere to be anchored *to*.
+    const unanchored =
+      kind === "object" && context.isAnchored?.(first.psdKey) === false;
     items.push({
       selection: {
         kind: "placement",
@@ -63,6 +114,7 @@ export function layerItems(layer: Layer, startPointId?: string): LayerItem[] {
       detail: describeUnit(unit),
       path: ICONS.file,
       members: unit.map((p) => p.id),
+      ...(unanchored ? { warning: "No anchor" } : {}),
     });
   }
 
@@ -77,7 +129,7 @@ export function layerItems(layer: Layer, startPointId?: string): LayerItem[] {
   }
 
   for (const point of layer.points) {
-    const start = point.id === startPointId;
+    const start = point.id === context.startPointId;
     items.push({
       selection: { kind: "point", layerId: layer.id, pointId: point.id },
       label: point.name,
@@ -153,6 +205,9 @@ export function renderLayerItem(
   const classes = ["layer-item"];
   if (active) classes.push("active");
   if (onGrip) classes.push("has-grip");
+  // Greyed rather than hidden or crossed out: the file is there and it draws,
+  // and what the row is saying is that one thing about it is missing.
+  if (item.warning) classes.push("warned");
 
   const row = h(
     "button",
@@ -167,7 +222,14 @@ export function renderLayerItem(
       ? h("span", { class: "layer-item-swatch", style: { background: item.swatch } })
       : icon(item.path, 13),
     h("span", { class: "layer-item-label", text: item.label }),
-    h("span", { class: "layer-item-detail m", text: item.detail }),
+    item.warning
+      ? h(
+          "span",
+          { class: "layer-item-warning m", title: `${item.label}: ${item.warning}` },
+          icon(ICONS.warning, 12),
+          h("span", { text: item.warning }),
+        )
+      : h("span", { class: "layer-item-detail m", text: item.detail }),
   );
 
   if (onGrip) {
@@ -217,7 +279,79 @@ export function isSelected(item: LayerItem, selection: Selection): boolean {
       return selection.kind === "point" && a.pointId === selection.pointId;
     case "zone":
       return selection.kind === "zone" && a.zoneId === selection.zoneId;
+    case "background":
+      return (
+        selection.kind === "background" &&
+        a.backgroundId === selection.backgroundId
+      );
     default:
       return false;
   }
+}
+
+// ── how a layer's own row reads ─────────────────────────────────────────────
+//
+// The summary under a layer's name, the glyph beside it and the line an empty
+// one shows. They live here rather than in the panel because they are about
+// what is *on* a layer, which is this file's subject — and because the panel
+// is at its line limit.
+
+/** The glyph each kind of layer carries, in the row and in the menu. */
+export const KIND_ICONS: Record<LayerKind, readonly string[]> = {
+  object: ICONS.layerObject,
+  pattern: ICONS.layerPattern,
+  background: ICONS.layerBackground,
+};
+
+/**
+ * What an expanded layer with nothing on it says.
+ *
+ * Three kinds, three different next steps — and "Nothing on this layer" on a
+ * background layer is true and useless, because the thing to do about it is
+ * the button directly underneath.
+ */
+export function emptyText(layer: Layer): string {
+  switch (layerKind(layer)) {
+    case "pattern":
+      return "Drop a PSD here to scatter it";
+    case "background":
+      return "Nothing behind this scene yet";
+    default:
+      return "Nothing on this layer";
+  }
+}
+
+export function describe(layer: Layer): string {
+  const kind = layerKind(layer);
+  const parts: string[] = [];
+  // A pattern layer's placements are the elements it scatters rather than
+  // things standing anywhere, so counting them as PSDs would say the wrong
+  // thing about what is on the layer.
+  if (kind === "pattern" && layer.placements.length) {
+    const spec = layer.pattern;
+    parts.push(`${spec?.type ?? "random"} pattern`);
+  } else if (layer.placements.length) {
+    parts.push(`${layer.placements.length} psd`);
+  }
+  if (backgroundsOf(layer).length) {
+    parts.push(count(backgroundsOf(layer).length, "backdrop"));
+  }
+  if (layer.fills.length) {
+    // Two kinds of fill in one count: a run of spaces contributes its spaces,
+    // a rectangle contributes itself. Counting only cells reported a blank
+    // project's fills as nothing at all.
+    const cells = layer.fills.reduce((n, f) => n + f.cells.length, 0);
+    const rects = layer.fills.filter((f) => f.rect).length;
+    if (cells) parts.push(count(cells, "cell"));
+    if (rects) parts.push(count(rects, "fill"));
+  }
+  if (layer.points.length) parts.push(count(layer.points.length, "point"));
+  if (layer.zones.length) parts.push(count(layer.zones.length, "zone"));
+  if (layer.strokes.length) parts.push(count(layer.strokes.length, "stroke"));
+  return parts.length ? parts.join(" · ") : "empty";
+}
+
+/** These read at a glance, and "1 strokes" stops the glance. */
+export function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

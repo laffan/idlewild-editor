@@ -7,6 +7,7 @@ mod file_server;
 mod game_config;
 mod game_files;
 mod project;
+mod psd_background;
 mod psd_layers;
 mod psd_marks;
 mod psd_paint;
@@ -206,7 +207,7 @@ fn write_thumbnail(id: String, png_base64: String) -> Result<(), String> {
 /// The pipeline's commentary, as an event. It is what the console drawer
 /// shows and, since the PSD commands stopped running on the main thread, what
 /// the pen bar shows as progress — see `psd-progress.ts`.
-fn logger(app: &tauri::AppHandle) -> impl Fn(&str) + '_ {
+pub(crate) fn logger(app: &tauri::AppHandle) -> impl Fn(&str) + '_ {
     move |line: &str| {
         let _ = app.emit("psd-log-line", line.to_string());
     }
@@ -661,6 +662,7 @@ pub fn run() {
             read_clipboard,
             read_dropped_file,
             create_psd_from_rgba,
+            psd_background::create_background_psd,
             create_psd_group_from_rgba,
             rewrite_psd_group_from_rgba,
             reprocess_psd,

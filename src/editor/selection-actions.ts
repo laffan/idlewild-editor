@@ -32,6 +32,15 @@ export interface SelectionActionCallbacks {
   onAddImage: () => void;
   onGeneratePsd: () => void;
   onExtrude: () => void;
+  /**
+   * Confine the active pattern layer to this patch of grid.
+   *
+   * The one button here that is not about turning space into content: it says
+   * *where* something already on the layer is allowed to be. It only appears
+   * when the active layer is a pattern layer, because on any other layer it
+   * would have nothing to confine.
+   */
+  onPatternShape: () => void;
 }
 
 function clamp(value: number, low: number, high: number): number {
@@ -44,6 +53,7 @@ const MARGIN = 12;
 export class SelectionActions {
   readonly root: HTMLElement;
   private readonly size: HTMLElement;
+  private readonly patternShape: HTMLElement;
   private readonly grid: Grid;
 
   constructor(grid: Grid, callbacks: SelectionActionCallbacks) {
@@ -58,6 +68,24 @@ export class SelectionActions {
       grid.snaps && h("button", { text: "Extrude", onClick: callbacks.onExtrude }),
       this.size,
     );
+    this.patternShape = h("button", {
+      text: "Pattern Shape",
+      onClick: callbacks.onPatternShape,
+    });
+    // Inserted before the size readout, which is the row's last element.
+    this.root.insertBefore(this.patternShape, this.size);
+    this.patternShape.hidden = true;
+  }
+
+  /**
+   * Offer Pattern Shape, or stop.
+   *
+   * Told by the shell rather than worked out here: which layer is active is
+   * the shell's business, and this bar is handed a selection and a place to
+   * float rather than the document.
+   */
+  setPatternLayer(on: boolean): void {
+    this.patternShape.hidden = !on;
   }
 
   update(selection: Selection, anchor: SelectionAnchor | null): void {

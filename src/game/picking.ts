@@ -18,7 +18,23 @@
  */
 
 import { convexOverlapsRect, type Grid } from "../lib/grid";
+import { layerKind } from "../lib/layer-kinds";
 import type { Layer, MapPoint, Placement, Point, Rect, Zone } from "../lib/types";
+
+/**
+ * Whether the pointer can mean anything on this layer.
+ *
+ * Locked and hidden layers are inert, the rule Hush applies to its own pick
+ * paths — and so is a **pattern** layer, for a different reason. Its
+ * placements are the palette the pattern is made of rather than things
+ * standing anywhere, so there is no one object under the pointer for a tap to
+ * name: the copies on screen are worked out from the camera and belong to no
+ * record. A pattern layer is reached from the sidebar, which is where the
+ * thing it holds — a rule — actually is.
+ */
+function pickable(layer: Layer): boolean {
+  return !layer.locked && layer.visible && layerKind(layer) !== "pattern";
+}
 
 /** What a hit-test returns: the document record, not the rendered object. */
 export interface PickResult {
@@ -74,7 +90,7 @@ export function pickZone(
   worldY: number,
 ): ZonePickResult | undefined {
   for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
+    if (!pickable(layer)) continue;
     for (let i = layer.zones.length - 1; i >= 0; i--) {
       const zone = layer.zones[i];
       if (pointInPolygon({ x: worldX, y: worldY }, zone.points)) {
@@ -102,7 +118,7 @@ export function pickPoint(
   let best: PointPickResult | undefined;
   let nearest = pointReach(grid);
   for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
+    if (!pickable(layer)) continue;
     for (const point of layer.points) {
       const at = grid.cellCentre(point.cell);
       const distance = Math.hypot(at.x - worldX, at.y - worldY);
@@ -172,7 +188,7 @@ export function pickPlacementsIn(
   outline: readonly Point[],
 ): { layerId: string; ids: string[] } | null {
   for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
+    if (!pickable(layer)) continue;
     const ids = layer.placements
       .filter((p) => convexOverlapsRect(outline, placementRect(p)))
       .map((p) => p.id);
@@ -196,7 +212,7 @@ export function pickPlacement(
   worldY: number,
 ): PickResult | undefined {
   for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
+    if (!pickable(layer)) continue;
     for (let i = layer.placements.length - 1; i >= 0; i--) {
       const placement = layer.placements[i];
       if (

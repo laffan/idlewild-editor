@@ -179,6 +179,32 @@ export function isExtrusionPart(key: string, name: string): boolean {
   return EXTRUSION_PARTS.some((part) => extrusionPartName(key, part) === named);
 }
 
+/**
+ * Whether a PSD carries the anchor mark at the **root** of its layer stack.
+ *
+ * Not the same question `manifest.anchor` answers. That one finds the mark
+ * wherever it is, because a file whose author tucked it inside a folder
+ * should still land where they put it. This one is the *rule* an object layer
+ * enforces: the mark has to be a top-level layer, where anybody opening the
+ * file sees it and nothing else in the stack can hide it, turn it off or take
+ * it away by being deleted.
+ *
+ * Written against the raw manifest layers rather than a parsed `Manifest`
+ * because the caller has psd-to-phaser's copy of the document in hand — the
+ * plugin keeps it under `getData(key).original` — and re-serialising it to
+ * re-parse it would be a JSON round trip per row of the layer panel.
+ */
+export function hasRootAnchor(layers: unknown): boolean {
+  if (!Array.isArray(layers)) return false;
+  return layers.some((raw) => {
+    const node = (raw ?? {}) as Record<string, unknown>;
+    return (
+      toCategory(node.category, node.type) === "point" &&
+      String(node.name ?? "").trim().toLowerCase() === ANCHOR_LAYER
+    );
+  });
+}
+
 function findAnchor(all: readonly ManifestLayer[]): { x: number; y: number } | null {
   const point = all.find(
     (l) => l.category === "point" && l.name.toLowerCase() === ANCHOR_LAYER,

@@ -279,3 +279,24 @@ function toBase64(bytes: Uint8ClampedArray): string {
   }
   return btoa(binary);
 }
+
+/**
+ * What the inspector's colour picker means, which depends on what is selected.
+ *
+ * A fill selected is recoloured — and turned back into a colour fill, since
+ * picking a colour is how somebody says they no longer want the pattern. A
+ * grid selection has nothing to recolour yet, so the colour fills it, which
+ * is the same thing the floating bar's Fill does.
+ */
+export function applyFillColour(
+  store: DocStore,
+  scene: WorldScene | null,
+  color: string,
+): void {
+  const selection = scene?.getSelection();
+  if (selection?.kind === "fill") {
+    store.updateFill(selection.layerId, selection.fillId, { kind: "color", color });
+    return;
+  }
+  if (selection?.kind === "region") scene?.fillSelection(color, false);
+}

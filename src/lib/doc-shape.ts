@@ -7,7 +7,15 @@
  * turned into before anything else reads it.
  */
 
-import type { GameDoc, Layer, Placement, Scene, StoredDoc } from "./types";
+import type {
+  Cell,
+  FillPatch,
+  GameDoc,
+  Layer,
+  Placement,
+  Scene,
+  StoredDoc,
+} from "./types";
 
 let nextId = 0;
 export function makeId(prefix: string): string {
@@ -151,4 +159,29 @@ export function nextPointName(layers: readonly Layer[]): string {
     const name = `Point ${n}`;
     if (!taken.has(name)) return name;
   }
+}
+
+/**
+ * The fill covering a space on a layer, if any.
+ *
+ * A pure question about a layer rather than about the document, which is why
+ * it is here and not on the store: the store is at its line limit and this
+ * needed nothing from it but the layer it was handed.
+ *
+ * A `rect` fill exists only on a project whose grid does not snap, and there
+ * a cell *is* a world pixel — so its coordinates are the point to test the
+ * rectangle against, with no projection in between.
+ */
+export function fillAt(layer: Layer | undefined, cell: Cell): FillPatch | undefined {
+  return layer?.fills.find((f) => {
+    if (f.rect) {
+      return (
+        cell.cx >= f.rect.x &&
+        cell.cx <= f.rect.x + f.rect.width &&
+        cell.cy >= f.rect.y &&
+        cell.cy <= f.rect.y + f.rect.height
+      );
+    }
+    return f.cells.some((c) => c.cx === cell.cx && c.cy === cell.cy);
+  });
 }

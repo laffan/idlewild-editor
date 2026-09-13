@@ -27,11 +27,17 @@ import { exportSelectionPng } from "./export-selection";
 import { createShell } from "./shell";
 import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
-import { convertFillToPsd, generatePsdForRegion } from "./fill-actions";
+import { openNewBackground, type BackgroundDeps } from "./background-actions";
+import { createPatternShapes } from "./pattern-actions";
+import {
+  applyFillColour,
+  convertFillToPsd,
+  generatePsdForRegion,
+} from "./fill-actions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
-import { confirmDeleteLayer } from "./layer-actions";
+import { confirmDeleteLayer, deleteSelected } from "./layer-actions";
 import { openAddImage, openExportSelection, openPublish } from "./sheets";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
@@ -122,18 +128,45 @@ export async function mountEditor(
           selection.kind === "fill" ||
           selection.kind === "point" ||
           selection.kind === "zone" ||
+          selection.kind === "background" ||
           selection.kind === "strokes"
             ? selection.layerId
             : activeLayerId;
         setActiveLayer(layerId);
         handle?.scene.setSelection(selection);
       },
+      // A fact about the file rather than about the document, so it is asked
+      // of the scene — see `PsdPlacements.anchored`.
+      isAnchored: (key) => handle?.scene.psdAnchored(key) ?? true,
+      onNewBackground: (layerId, anchor) =>
+        openNewBackground(anchor, layerId, backgrounds),
     },
     minimap.root,
   );
 
+  /** Add Shape, and the request it holds between the two halves of one. */
+  const shapes = createPatternShapes({
+    store,
+    grid,
+    drawing: () => drawing,
+    getSelection: () => handle?.scene.getSelection() ?? { kind: "none" },
+    setSelection: (selection) => handle?.scene.setSelection(selection),
+    activeLayerId: () => activeLayerId,
+    useTool: (tool) => tools.apply(tool, false),
+  });
+
+  /** What New Background needs: the project, the grid and a way to place. */
+  const backgrounds: BackgroundDeps = {
+    projectId: meta.id,
+    store,
+    grid,
+    scene: () => handle?.scene ?? null,
+    onSelect: (selection) => handle?.scene.setSelection(selection),
+  };
+
   const inspector = new Inspector(store, grid, {
-    onFillColor: (color) => applyFillColour(color),
+    onFillColor: (color) =>
+      applyFillColour(store, handle?.scene ?? null, color),
     onToggleWalkable: (walkable) => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "fill") return;
@@ -144,6 +177,15 @@ export async function mountEditor(
     onEditCollider: () => collider.open(),
     onStrokesToPsd: () => void strokesToPsd(),
     onStrokesToZone: () => strokesToZone(),
+    isAnchored: (key) => handle?.scene.psdAnchored(key) ?? true,
+    // Add Shape, both ways round — `pattern-actions.ts`. Neither makes the
+    // shape itself: one asks for a patch of grid and the other for an
+    // outline, and the button that finishes the job is beside what was drawn
+    // or selected.
+    patternShapeTarget: () => shapes.target(),
+    onStrokesToPatternShape: () => shapes.fromStrokes(),
+    onAddShapeFromSelection: (layerId) => shapes.askFromSelection(layerId),
+    onAddShapeByDrawing: (layerId) => shapes.askByDrawing(layerId),
     onFillToPsd: () => void fillToPsd(),
     onRemoveReference: (key) => void removeReference(key),
     // Renaming a layer changes the path a placement reads, so the rename map
@@ -243,6 +285,7 @@ export async function mountEditor(
       void generatePsdForRegion(meta.id, grid, scene, selection.from, selection.to);
     },
     onExtrude: () => extrude.open(),
+    onPatternShape: () => shapes.fromSelection(),
   });
 
   // The three bars along the bottom of the canvas — a solid being pulled out
@@ -495,56 +538,16 @@ export async function mountEditor(
     layers.render();
   }
 
-  function applyFillColour(color: string): void {
-    const selection = handle?.scene.getSelection();
-    if (selection?.kind === "fill") {
-      store.updateFill(selection.layerId, selection.fillId, {
-        kind: "color",
-        color,
-      });
-      return;
-    }
-    if (selection?.kind === "region") {
-      handle?.scene.fillSelection(color, false);
-    }
-  }
-
-  /**
-   * Delete removes whatever is selected — the same thing the inspector's
-   * last button does.
-   *
-   * Ignored while the caret is in a field, which is every layer name, every
-   * numeric input, the colour picker's hex box and the whole code editor:
-   * there, backspace means backspace. `isContentEditable` is what catches
-   * CodeMirror, which is a div rather than a textarea.
-   */
+  /** Delete removes whatever is selected — see `layer-actions.ts`. */
   function deleteSelection(): void {
     const selection = handle?.scene.getSelection();
     if (!selection) return;
-    if (selection.kind === "fill") {
-      store.removeFill(selection.layerId, selection.fillId);
-    } else if (selection.kind === "placement") {
-      // The scene decides how much of a placed PSD goes: the whole thing, or
-      // the one layer of it that has been opened up.
-      handle?.scene.removeSelectedPlacement();
-      return;
-    } else if (selection.kind === "placements") {
-      // Every image the marquee caught, whole. A unit opened up for layer
-      // adjustment is the one case where part of a PSD can go, and a marquee
-      // is never that.
-      for (const id of selection.ids) {
-        store.removePlacement(selection.layerId, id);
-      }
-    } else if (selection.kind === "point") {
-      store.removePoint(selection.layerId, selection.pointId);
-    } else if (selection.kind === "zone") {
-      store.removeZone(selection.layerId, selection.zoneId);
-    } else if (selection.kind === "strokes") {
-      drawing?.removeStrokes(selection.ids);
-    } else {
-      return;
-    }
-    handle?.scene.setSelection({ kind: "none" });
+    deleteSelected(selection, {
+      store,
+      removeSelectedPlacement: () => handle?.scene.removeSelectedPlacement(),
+      removeStrokes: (ids) => drawing?.removeStrokes(ids),
+      clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
+    });
   }
 
   /**
@@ -598,6 +601,7 @@ export async function mountEditor(
     convertStrokesToZone(store, drawing, selection);
     handle?.scene.setSelection({ kind: "none" });
   }
+
 
   /**
    * Draw, Code or Play.

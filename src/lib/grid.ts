@@ -365,3 +365,54 @@ export function rectContains(rect: Rect, p: Point): boolean {
     p.y <= rect.y + rect.height
   );
 }
+
+/**
+ * The spaces a drawn outline covers.
+ *
+ * What a pattern shape drawn with the pencil is baked down to the moment it
+ * is made. A polygon says where a boundary *is*; a pattern asks, once per
+ * element per frame, whether a space is inside one — and a point-in-polygon
+ * walk per space per frame over a shape carrying a few hundred vertices is
+ * the difference between a pan and a stall. The outline is kept beside the
+ * spaces for drawing, so the canvas still shows the line that was drawn.
+ *
+ * A space is in when its **centre** is in, which is the same rule navigation
+ * uses and for the same reason `cellCentre` exists: a corner belongs to four
+ * cells at once and answers for all of them.
+ */
+export function cellsInPolygon(grid: Grid, points: readonly Point[]): Cell[] {
+  if (points.length < 3) return [];
+  const box = pointsBounds(points);
+  const corners = [
+    grid.worldToCell({ x: box.x, y: box.y }),
+    grid.worldToCell({ x: box.x + box.width, y: box.y }),
+    grid.worldToCell({ x: box.x, y: box.y + box.height }),
+    grid.worldToCell({ x: box.x + box.width, y: box.y + box.height }),
+  ];
+  const x0 = Math.min(...corners.map((c) => c.cx));
+  const x1 = Math.max(...corners.map((c) => c.cx));
+  const y0 = Math.min(...corners.map((c) => c.cy));
+  const y1 = Math.max(...corners.map((c) => c.cy));
+
+  const out: Cell[] = [];
+  for (let cy = y0; cy <= y1; cy++) {
+    for (let cx = x0; cx <= x1; cx++) {
+      if (polygonContains(points, grid.cellCentre({ cx, cy }))) out.push({ cx, cy });
+    }
+  }
+  return out;
+}
+
+/** Ray casting, closed implicitly — the same shape a `Zone` is stored in. */
+export function polygonContains(points: readonly Point[], p: Point): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i];
+    const b = points[j];
+    const straddles = a.y > p.y !== b.y > p.y;
+    if (straddles && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}

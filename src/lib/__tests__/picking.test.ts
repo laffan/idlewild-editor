@@ -495,7 +495,7 @@ describe("a point in the layer list", () => {
   });
 
   it("says so instead when it is the scene's start", () => {
-    const [row] = layerItems(layer("l1", { points: [point] }), "p1");
+    const [row] = layerItems(layer("l1", { points: [point] }), { startPointId: "p1" });
     expect(row.detail).toBe("start");
   });
 

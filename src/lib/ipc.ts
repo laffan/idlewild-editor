@@ -364,6 +364,30 @@ export const psd = {
       marks,
     }),
   /**
+   * An empty tiled backdrop, `cols` x `rows` tiles across.
+   *
+   * What New Background writes for an image backdrop: a PSD the size the
+   * backdrop is going to be, holding the anchor mark and `T | Background`
+   * with one transparent sprite layer to paint into. No pixels cross the
+   * bridge — the buffer is tens of megapixels and Rust writes it.
+   */
+  background: (
+    id: string,
+    name: string,
+    cols: number,
+    rows: number,
+    tileSize: number,
+    marks: AnchorMarks,
+  ) =>
+    invoke<ImportResult>("create_background_psd", {
+      id,
+      name,
+      cols,
+      rows,
+      tileSize,
+      marks,
+    }),
+  /**
    * A PSD whose artwork is a *group* of raster layers rather than one sprite.
    *
    * What an extrusion writes. Every part is the same size and sits at the

@@ -11,6 +11,8 @@
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, fillShape } from "../lib/grid";
+import { fillAt } from "../lib/doc-shape";
+import { layerKind } from "../lib/layer-kinds";
 import { instanceOf } from "./instance";
 import {
   applyHidden,
@@ -261,6 +263,14 @@ export class DocRenderer {
     const isometric = this.grid.projection === "isometric";
 
     layers.forEach((layer, index) => {
+      // A pattern layer's placements are its palette rather than its
+      // contents: what stands where is `pattern-render.ts`'s answer, worked
+      // out from the camera. Drawing them here as well would put one of every
+      // element in a heap on the anchor space, underneath the pattern made of
+      // them — and `seen` deliberately leaves them out, so anything already
+      // on the canvas from before the layer became a pattern is destroyed.
+      if (layerKind(layer) === "pattern") return;
+
       const base = (layers.length - index) * DEPTH_STRIDE;
       // Back to front, once for the whole layer: every placement then takes
       // the next depth up, so what is above what is decided here rather than
@@ -418,7 +428,7 @@ export class DocRenderer {
 
     const cell: Cell = this.grid.worldToCell(world);
     const layer = this.store.layer(activeLayerId);
-    const fill = layer && !layer.locked ? this.store.fillAt(layer.id, cell) : undefined;
+    const fill = layer && !layer.locked ? fillAt(layer, cell) : undefined;
     if (fill && layer) return { kind: "fill", layerId: layer.id, fillId: fill.id };
 
     return { kind: "none" };

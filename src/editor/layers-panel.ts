@@ -22,8 +22,18 @@
 
 import { clear, h, ICONS, icon } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
+import { LAYER_KINDS, layerKind } from "../lib/layer-kinds";
+import { openMenu } from "../lib/menu";
 import type { Layer, Selection } from "../lib/types";
-import { isSelected, layerItems, renderLayerItem } from "./layer-items";
+import {
+  count,
+  describe,
+  emptyText,
+  isSelected,
+  KIND_ICONS,
+  layerItems,
+  renderLayerItem,
+} from "./layer-items";
 import { ScenesBar } from "./scenes-bar";
 
 export interface LayersPanelCallbacks {
@@ -32,6 +42,20 @@ export interface LayersPanelCallbacks {
   onSelectItem: (selection: Selection) => void;
   getActiveLayerId: () => string;
   getSelection: () => Selection;
+  /**
+   * Whether a PSD carries the anchor mark at the root of its stack.
+   *
+   * The rule object layers enforce, and a question about the *file* rather
+   * than about the document — so it is asked rather than read, and asked of
+   * the scene, which is what holds the parsed manifests. A panel built with
+   * no scene behind it answers yes, which is the answer that shows nothing.
+   */
+  isAnchored: (psdKey: string) => boolean;
+  /**
+   * Put something behind everything on a background layer. The anchor is the
+   * button itself, which the menu hangs under.
+   */
+  onNewBackground: (layerId: string, anchor: HTMLElement) => void;
 }
 
 /**
@@ -104,15 +128,16 @@ export class LayersPanel {
         "div",
         { class: "panel-head" },
         h("div", { class: "panel-title m", text: "Layers" }),
+        // Three kinds of layer, so the `+` asks which. A menu rather than
+        // three buttons: object is the one anybody wants nine times in ten,
+        // and a row of equals would say otherwise.
         h(
           "button",
           {
             class: "panel-add",
             title: "Add layer",
-            onClick: () => {
-              const layer = this.store.addLayer();
-              this.callbacks.onSelectLayer(layer.id);
-            },
+            onClick: (event: Event) =>
+              this.openKindMenu(event.currentTarget as HTMLElement),
           },
           icon(ICONS.plus, 15),
         ),
@@ -167,12 +192,14 @@ export class LayersPanel {
       this.body.appendChild(group);
 
       if (!this.expanded.has(layer.id)) return;
-      const items = layerItems(layer, this.store.activeScene.startPointId);
+      const items = layerItems(layer, {
+        startPointId: this.store.activeScene.startPointId,
+        isAnchored: this.callbacks.isAnchored,
+      });
       if (items.length === 0 && layer.strokes.length === 0) {
         group.appendChild(
-          h("div", { class: "layer-item empty m", text: "Nothing on this layer" }),
+          h("div", { class: "layer-item empty m", text: emptyText(layer) }),
         );
-        return;
       }
 
       for (const item of items) {
@@ -222,6 +249,29 @@ export class LayersPanel {
           ),
         );
       }
+
+      // A background layer's own way of getting something onto it. Nothing on
+      // one can be put down by aiming at the canvas — a backdrop is wherever
+      // the camera is — so the button lives at the foot of the list it adds
+      // to, which is the one place a backdrop is a thing you can see.
+      if (layerKind(layer) === "background") {
+        group.appendChild(
+          h("button", {
+            class: "layer-item add",
+            text: "New Background",
+            onClick: (event: Event) => {
+              event.stopPropagation();
+              // Make it the active layer first: what the menu writes lands on
+              // whatever is active, the way Fill and Add Image do.
+              this.callbacks.onSelectLayer(layer.id);
+              this.callbacks.onNewBackground(
+                layer.id,
+                event.currentTarget as HTMLElement,
+              );
+            },
+          }),
+        );
+      }
     });
 
     this.restoreName(editing);
@@ -260,6 +310,29 @@ export class LayersPanel {
   destroy(): void {
     this.endDrag(false);
     this.endItemDrag(null);
+  }
+
+  /**
+   * The dropdown the `+` opens: one row per kind of layer.
+   *
+   * The new layer is selected on the way out, as it always was — a layer you
+   * asked for and then have to find is a layer you asked for twice — and a
+   * kind that has something to hold is expanded, so the row that puts the
+   * first thing on it is already in front of you.
+   */
+  private openKindMenu(anchor: HTMLElement): void {
+    openMenu(
+      anchor,
+      LAYER_KINDS.map(({ kind, label }) => ({
+        label,
+        glyph: KIND_ICONS[kind],
+        onSelect: () => {
+          const layer = this.store.addLayer(undefined, kind);
+          if (kind !== "object") this.expanded.add(layer.id);
+          this.callbacks.onSelectLayer(layer.id);
+        },
+      })),
+    );
   }
 
   /** Show a layer's contents, e.g. after selecting something inside it. */
@@ -499,7 +572,8 @@ export class LayersPanel {
   }
 
   private row(layer: Layer, active: boolean): HTMLElement {
-    const classes = ["layer-row"];
+    const kind = layerKind(layer);
+    const classes = ["layer-row", `kind-${kind}`];
     if (active) classes.push("active");
     if (layer.locked) classes.push("locked");
 
@@ -528,6 +602,17 @@ export class LayersPanel {
         onClick: () => this.callbacks.onSelectLayer(layer.id),
       },
       this.grip(layer),
+      // What kind of layer this is, before its name. A glyph rather than a
+      // word: the three read apart at a glance, the column is narrow, and the
+      // inspector says it in words for anyone who wants them.
+      h(
+        "span",
+        {
+          class: "layer-kind",
+          title: LAYER_KINDS.find((k) => k.kind === kind)?.label ?? "Layer",
+        },
+        icon(KIND_ICONS[kind], 14),
+      ),
       h(
         "button",
         {
@@ -577,27 +662,4 @@ export class LayersPanel {
       ),
     );
   }
-}
-
-function describe(layer: Layer): string {
-  const parts: string[] = [];
-  if (layer.placements.length) parts.push(`${layer.placements.length} psd`);
-  if (layer.fills.length) {
-    // Two kinds of fill in one count: a run of spaces contributes its spaces,
-    // a rectangle contributes itself. Counting only cells reported a blank
-    // project's fills as nothing at all.
-    const cells = layer.fills.reduce((n, f) => n + f.cells.length, 0);
-    const rects = layer.fills.filter((f) => f.rect).length;
-    if (cells) parts.push(count(cells, "cell"));
-    if (rects) parts.push(count(rects, "fill"));
-  }
-  if (layer.points.length) parts.push(count(layer.points.length, "point"));
-  if (layer.zones.length) parts.push(count(layer.zones.length, "zone"));
-  if (layer.strokes.length) parts.push(count(layer.strokes.length, "stroke"));
-  return parts.length ? parts.join(" · ") : "empty";
-}
-
-/** These read at a glance, and "1 strokes" stops the glance. */
-export function count(n: number, noun: string): string {
-  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

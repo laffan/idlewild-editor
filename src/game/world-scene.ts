@@ -18,6 +18,8 @@ import { CameraRig, type RigMode } from "./camera-rig";
 import { SceneCamera } from "./scene-camera";
 import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
+import { BackgroundRender } from "./background-render";
+import { PatternRender } from "./pattern-render";
 import { SelectionOverlay } from "./selection-overlay";
 import { DropTargets, type PlacedTarget } from "./drop-target";
 import { Marquee } from "./marquee";
@@ -63,6 +65,15 @@ export interface WorldSceneConfig {
   onColliderChange?: () => void;
   /** Pen mode has started or finished. */
   onPenChange?: () => void;
+  /**
+   * Every PSD the open scene places has loaded.
+   *
+   * The panels ask the plugin what is in a file — whether it carries an
+   * anchor mark — and the answer changes the moment the manifest arrives.
+   * Nothing about the *document* changes when it does, so without this the
+   * rows would keep showing what was true before anything had been read.
+   */
+  onPsdsLoaded?: () => void;
 }
 
 export class WorldScene extends Phaser.Scene {
@@ -74,6 +85,10 @@ export class WorldScene extends Phaser.Scene {
   /** The camera, its clamp and its place in the document — `scene-camera.ts`. */
   private cam!: SceneCamera;
   private gridRenderer!: GridRenderer;
+  /** Colours and gradients behind everything — `background-render.ts`. */
+  private backgrounds!: BackgroundRender;
+  /** A pattern layer, worked out from the camera — `pattern-render.ts`. */
+  private patterns!: PatternRender;
   private docRenderer!: DocRenderer;
   private overlay!: SelectionOverlay;
   private drops!: DropTargets;
@@ -121,6 +136,8 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#d9e6ef");
 
     this.gridRenderer = new GridRenderer(this.add.graphics(), this.grid);
+    this.backgrounds = new BackgroundRender(this.add.graphics(), this.store);
+    this.patterns = new PatternRender(this, this.store, this.grid);
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
     this.drops = new DropTargets(this.add.graphics(), this.store);
@@ -212,9 +229,17 @@ export class WorldScene extends Phaser.Scene {
       setSelection: (selection) => this.setSelection(selection),
       reselect: () => this.setSelection(this.selection),
       refresh: () => this.refresh(),
+      onPsdsLoaded: () => this.config.onPsdsLoaded?.(),
     });
 
-    this.store.addEventListener("change", () => this.refresh());
+    this.store.addEventListener("change", () => {
+      // A pattern's rule and a backdrop's colours live in the document, and
+      // both are drawn from the camera rather than from a record — so neither
+      // has anything to notice a change on its own.
+      this.patterns.invalidate();
+      this.backgrounds.invalidate();
+      this.refresh();
+    });
     // A different scene is not a changed document, it is a different canvas.
     this.store.addEventListener("scene", () => this.reloadScene());
     this.psds.migrate();
@@ -241,6 +266,9 @@ export class WorldScene extends Phaser.Scene {
     this.adjusting = null;
     this.setSelection({ kind: "none" });
     this.activeLayerId = this.store.layers[0]?.id ?? "";
+    // Every copy on screen belongs to the scene that has just been left.
+    this.patterns.clear();
+    this.backgrounds.invalidate();
 
     this.docRenderer.render();
     void this.psds.loadAll();
@@ -252,6 +280,11 @@ export class WorldScene extends Phaser.Scene {
 
   override update(_time: number, _delta: number): void {
     this.gridRenderer.update(this.cameras.main);
+    // Both of these are worked out from the camera rather than stored, the
+    // way the lattice is: a backdrop is wherever you are looking, and a
+    // pattern is a rule evaluated over the spaces the viewport can see.
+    this.backgrounds.update(this.cameras.main);
+    this.patterns.sync(this.gridRenderer.visibleRange(this.cameras.main));
     // Pen mode's dim is cut out of what the camera can see, so it follows the
     // camera the way the lattice does — a pan moves it as surely as a zoom.
     // A no-op while the mode is down.
@@ -586,6 +619,16 @@ export class WorldScene extends Phaser.Scene {
   /** Move every placement on one PSD key over to another. */
   renamePsd(from: string, to: string): Promise<void> {
     return this.psds.rename(from, to);
+  }
+
+  /**
+   * Whether a PSD carries the anchor mark at the root of its stack.
+   *
+   * The rule an object layer enforces, asked by the panels rather than by
+   * anything on the canvas — see `PsdPlacements.anchored`.
+   */
+  psdAnchored(key: string): boolean {
+    return this.psds.anchored(key);
   }
 
   /** Point one placement at a different PSD and redraw it. */

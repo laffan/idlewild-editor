@@ -30,6 +30,7 @@ import type {
   GameDoc,
   Genre,
   Layer,
+  LayerKind,
   MapPoint,
   Placement,
   Projection,
@@ -40,6 +41,7 @@ import type {
 } from "./types";
 import { doc as docIpc } from "./ipc";
 import { emptyLayer, copyLayer, makeId, nextPointName, withScenes } from "./doc-shape";
+import { nextLayerName } from "./layer-kinds";
 import { UndoHistory } from "./history";
 import * as log from "./log";
 
@@ -255,14 +257,31 @@ export class DocStore extends EventTarget {
     }));
   }
 
-  private replaceLayer(layerId: string, update: (layer: Layer) => Layer): void {
+  /**
+   * Rewrite one layer of the active scene.
+   *
+   * Public because what a *kind* of layer holds — a pattern's rule, a
+   * background layer's backdrops — is `lib/layer-kinds.ts`'s subject rather
+   * than this file's, and this is the one thing those edits need from the
+   * store. Everything in here that edits a layer goes through it too.
+   */
+  editLayer(layerId: string, update: (layer: Layer) => Layer): void {
     this.replaceLayers((layers) =>
       layers.map((l) => (l.id === layerId ? update(l) : l)),
     );
   }
 
-  addLayer(name?: string): Layer {
-    const layer = emptyLayer(`Layer ${this.layers.length + 1}`, name);
+  /**
+   * A new layer on top of the stack.
+   *
+   * `kind` is what the dropdown under the `+` chooses, and it is written out
+   * even for an object layer: absent means object for every document written
+   * before there were three of them, but a layer made *now* says what it is,
+   * so nothing downstream has to tell "old" from "deliberately an object".
+   */
+  addLayer(name?: string, kind: LayerKind = "object"): Layer {
+    const fallback = nextLayerName(this.layers, kind);
+    const layer = { ...emptyLayer(fallback, name), kind };
     this.replaceLayers((layers) => [layer, ...layers]);
     return layer;
   }
@@ -283,15 +302,15 @@ export class DocStore extends EventTarget {
   }
 
   renameLayer(layerId: string, name: string): void {
-    this.replaceLayer(layerId, (l) => ({ ...l, name }));
+    this.editLayer(layerId, (l) => ({ ...l, name }));
   }
 
   setLayerLocked(layerId: string, locked: boolean): void {
-    this.replaceLayer(layerId, (l) => ({ ...l, locked }));
+    this.editLayer(layerId, (l) => ({ ...l, locked }));
   }
 
   setLayerVisible(layerId: string, visible: boolean): void {
-    this.replaceLayer(layerId, (l) => ({ ...l, visible }));
+    this.editLayer(layerId, (l) => ({ ...l, visible }));
   }
 
   /** Move a layer by `delta` places in the top-first list. */
@@ -319,48 +338,27 @@ export class DocStore extends EventTarget {
 
   addFill(layerId: string, fill: Omit<FillPatch, "id">): FillPatch {
     const created: FillPatch = { ...fill, id: makeId("fill") };
-    this.replaceLayer(layerId, (l) => ({ ...l, fills: [...l.fills, created] }));
+    this.editLayer(layerId, (l) => ({ ...l, fills: [...l.fills, created] }));
     return created;
   }
 
   updateFill(layerId: string, fillId: string, patch: Partial<FillPatch>): void {
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       fills: l.fills.map((f) => (f.id === fillId ? { ...f, ...patch } : f)),
     }));
   }
 
   removeFill(layerId: string, fillId: string): void {
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       fills: l.fills.filter((f) => f.id !== fillId),
     }));
   }
 
-  /**
-   * The fill covering a cell on a layer, if any.
-   *
-   * A `rect` fill exists only on a project whose grid does not snap, and
-   * there a cell *is* a world pixel — so its coordinates are the point to
-   * test the rectangle against, with no projection in between.
-   */
-  fillAt(layerId: string, cell: Cell): FillPatch | undefined {
-    return this.layer(layerId)?.fills.find((f) => {
-      if (f.rect) {
-        return (
-          cell.cx >= f.rect.x &&
-          cell.cx <= f.rect.x + f.rect.width &&
-          cell.cy >= f.rect.y &&
-          cell.cy <= f.rect.y + f.rect.height
-        );
-      }
-      return f.cells.some((c) => c.cx === cell.cx && c.cy === cell.cy);
-    });
-  }
-
   addPlacement(layerId: string, placement: Omit<Placement, "id">): Placement {
     const created: Placement = { ...placement, id: makeId("place") };
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       placements: [...l.placements, created],
     }));
@@ -372,7 +370,7 @@ export class DocStore extends EventTarget {
     placementId: string,
     patch: Partial<Placement>,
   ): void {
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       placements: l.placements.map((p) =>
         p.id === placementId ? { ...p, ...patch } : p,
@@ -475,7 +473,7 @@ export class DocStore extends EventTarget {
   }
 
   removePlacement(layerId: string, placementId: string): void {
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       placements: l.placements.filter((p) => p.id !== placementId),
     }));
@@ -553,7 +551,7 @@ export class DocStore extends EventTarget {
 
   /** Replace a layer's strokes wholesale — how the drawing layer writes. */
   replaceStrokes(layerId: string, strokes: Stroke[]): void {
-    this.replaceLayer(layerId, (l) => ({ ...l, strokes }));
+    this.editLayer(layerId, (l) => ({ ...l, strokes }));
   }
 
   // ── points ────────────────────────────────────────────────────────────────
@@ -572,12 +570,12 @@ export class DocStore extends EventTarget {
       name: name?.trim() || nextPointName(this.layers),
       cell,
     };
-    this.replaceLayer(layerId, (l) => ({ ...l, points: [...l.points, created] }));
+    this.editLayer(layerId, (l) => ({ ...l, points: [...l.points, created] }));
     return created;
   }
 
   updatePoint(layerId: string, pointId: string, patch: Partial<MapPoint>): void {
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       points: l.points.map((p) => (p.id === pointId ? { ...p, ...patch } : p)),
     }));
@@ -623,19 +621,19 @@ export class DocStore extends EventTarget {
 
   addZone(layerId: string, zone: Omit<Zone, "id">): Zone {
     const created: Zone = { ...zone, id: makeId("zone") };
-    this.replaceLayer(layerId, (l) => ({ ...l, zones: [...l.zones, created] }));
+    this.editLayer(layerId, (l) => ({ ...l, zones: [...l.zones, created] }));
     return created;
   }
 
   updateZone(layerId: string, zoneId: string, patch: Partial<Zone>): void {
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       zones: l.zones.map((z) => (z.id === zoneId ? { ...z, ...patch } : z)),
     }));
   }
 
   removeZone(layerId: string, zoneId: string): void {
-    this.replaceLayer(layerId, (l) => ({
+    this.editLayer(layerId, (l) => ({
       ...l,
       zones: l.zones.filter((z) => z.id !== zoneId),
     }));

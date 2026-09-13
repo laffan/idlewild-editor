@@ -12,7 +12,7 @@
 
 import { h } from "../lib/dom";
 import { strokesBox } from "../drawing";
-import { count } from "./layers-panel";
+import { count } from "./layer-items";
 import { unionRect } from "../game/instance";
 import type { DocStore } from "../lib/doc-store";
 import { describeRange, type Grid } from "../lib/grid";
@@ -58,6 +58,16 @@ export interface PanelActions {
   onExportSelection: () => void;
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
+  /**
+   * The pattern layer waiting for a drawn shape, if Add Shape — draw asked
+   * for one, and the button that hands the ink over.
+   *
+   * Only offered once something has asked: "Convert to pattern shape" beside
+   * a sketch on a project with no pattern layer would be a button with
+   * nowhere to put its answer.
+   */
+  patternShapeTarget: () => string | null;
+  onStrokesToPatternShape: () => void;
   /** Get rid of a whole document layer — the shell asks before it does. */
   onDeleteLayer: (layerId: string) => void;
   onRenamePoint: (layerId: string, pointId: string, name: string) => void;
@@ -303,6 +313,15 @@ export function renderStrokes(
         text: "Convert to boundary",
         onClick: () => actions.onStrokesToZone(),
       }),
+      actions.patternShapeTarget()
+        ? h("button", {
+            class: "panel-btn",
+            text: `Convert to pattern shape — ${
+              store.layer(actions.patternShapeTarget() ?? "")?.name ?? "pattern"
+            }`,
+            onClick: () => actions.onStrokesToPatternShape(),
+          })
+        : null,
       h("button", {
         class: "panel-btn",
         text: "Delete strokes",

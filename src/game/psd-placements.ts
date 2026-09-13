@@ -15,6 +15,7 @@ import type { Grid } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
 import { defaultCollider, placementsBox, unitOfKey } from "../lib/collider";
 import {
+  hasRootAnchor,
   parseManifest,
   placeableLayers,
   placedPosition,
@@ -49,6 +50,8 @@ export interface PsdHost {
    */
   reselect(): void;
   refresh(): void;
+  /** Every PSD this scene places has loaded — see `WorldSceneConfig`. */
+  onPsdsLoaded?(): void;
 }
 
 export class PsdPlacements {
@@ -364,6 +367,26 @@ export class PsdPlacements {
     return (this.host.scene as unknown as Record<string, PsdToPhaser | undefined>).P2P;
   }
 
+  /**
+   * Whether a loaded PSD has the anchor mark at the root of its stack.
+   *
+   * The rule an object layer enforces, answered from the plugin's own copy of
+   * the manifest rather than from a field cached on the placement. A cache
+   * would have to be kept in step with the file through a re-import, a
+   * rewritten layer stack and a rename — three edits that can each take the
+   * mark away — and a stale "anchored" is exactly the reassurance this is
+   * here to withhold.
+   *
+   * A key that has not loaded answers **true**: the panel greys a row to say
+   * a file is wrong, and saying so about a file nobody has read yet would put
+   * the warning on every row for the first second of every session.
+   */
+  anchored(key: string): boolean {
+    const data = this.plugin()?.getData(key);
+    if (!data) return true;
+    return hasRootAnchor((data.original as { layers?: unknown })?.layers);
+  }
+
   private load(key: string): Promise<void> {
     return loadPsd(this.host.scene, this.plugin(), key, this.host.assetBase);
   }
@@ -476,6 +499,10 @@ export class PsdPlacements {
       }
     });
     this.host.refresh();
+    // And the panels, which ask the plugin rather than the document whether a
+    // file carries its anchor mark. Nothing in the document moved here, so
+    // the change event they normally listen to never fires.
+    this.host.onPsdsLoaded?.();
   }
 
   /**

@@ -281,6 +281,111 @@ export interface Stroke {
   createdAt: number;
 }
 
+/**
+ * What a layer is *for*, which decides what putting a PSD on it means.
+ *
+ * An **object** layer is what a layer has always been: things stand where
+ * they were put, one placement per top-level layer of the file, and the
+ * canvas selects, drags and resizes them. Everything else in this editor was
+ * written against that reading, so it is the default and the absent value.
+ *
+ * A **pattern** layer holds a *palette* rather than a scene. The placements
+ * on it are the elements the pattern is made of; where they are drawn is
+ * worked out from `pattern` for as far as the camera can see, which is why
+ * nothing on one can be picked on the canvas — there is no one object under
+ * the pointer to name.
+ *
+ * A **background** layer is the backdrop: colours and gradients that follow
+ * the camera rather than sitting anywhere, and PSDs painted as scenery. Both
+ * are reached from the sidebars, for the same reason — a backdrop is
+ * everywhere the camera is, so there is nothing on it to aim at.
+ *
+ * See `lib/layer-kinds.ts` for everything that reads this.
+ */
+export type LayerKind = "object" | "pattern" | "background";
+
+/**
+ * How a pattern layer scatters its elements.
+ *
+ * Random is the default and the interesting one: grass, rocks, trees — things
+ * whose arrangement should read as unconsidered. Grid is the same machinery
+ * with the randomness taken out of the position, for a tiled floor or a
+ * regular field of columns.
+ */
+export type PatternType = "random" | "grid";
+
+/**
+ * An area a pattern is confined to.
+ *
+ * Two shapes because there are two ways to say "here": a run of grid spaces,
+ * from the long-press selection every other part of this editor asks space
+ * with, and a polygon, from the pencil. Both answer the same question —
+ * *is this space inside?* — so they are one record with two fields rather
+ * than two kinds a reader has to switch on.
+ */
+export interface PatternShape {
+  id: string;
+  name: string;
+  /** Grid spaces, from the selection tool. */
+  cells?: Cell[];
+  /** A world-pixel polygon, closed implicitly, from the pencil. */
+  points?: Point[];
+}
+
+/**
+ * What a pattern layer does with what is placed on it.
+ *
+ * The pattern is **infinite and deterministic**: there is no world bound in
+ * this editor to fill, so what is stored is a rule and the canvas works out
+ * what falls inside it. `repeat` is what makes that possible — the rule is
+ * evaluated one repeat tile at a time and seeded by the tile's own
+ * coordinates, so the same space answers the same way whatever route the
+ * camera took to get there, and the exported game can regenerate it without
+ * being shipped a list.
+ *
+ * `shapes` is the exception to infinite. An empty list means everywhere,
+ * which is the default; a shape in it confines the pattern to the spaces
+ * that shape covers.
+ */
+export interface PatternSpec {
+  type: PatternType;
+  /** How many elements land in each repeat tile. */
+  density: number;
+  /** The repeat tile, in grid spaces. */
+  repeat: { cols: number; rows: number };
+  /**
+   * What the arrangement is generated from.
+   *
+   * Kept in the document rather than derived from the layer id, so that
+   * duplicating a scene gives the copy the pattern it was showing rather
+   * than a different one — and so that a pattern somebody likes survives a
+   * rename.
+   */
+  seed: number;
+  shapes: PatternShape[];
+}
+
+/**
+ * A backdrop on a background layer: a colour or a gradient.
+ *
+ * Both are camera-locked and have no extent — a backdrop is wherever the
+ * camera is, so there is nothing to position and nothing to size. That is
+ * also why an **image** background is not one of these: a picture painted in
+ * Photoshop is a thing of a certain size standing in a certain place, which
+ * is what a `Placement` already is, and the exported game already loads,
+ * places, scales and stacks one. Adding an image background makes a PSD and
+ * places it on this layer; what makes it a background is the layer it is on.
+ */
+export interface Background {
+  id: string;
+  name: string;
+  kind: "color" | "gradient";
+  /** Set when kind is "color". */
+  color?: string;
+  /** Set when kind is "gradient": two stops and the direction between them. */
+  gradient?: { from: string; to: string; angle: number };
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -296,6 +401,23 @@ export interface Layer {
   points: MapPoint[];
   zones: Zone[];
   strokes: Stroke[];
+  /**
+   * What this layer is for. Absent on every layer written before there was
+   * more than one kind, and absent means **object** — which is what a layer
+   * has always been. Read through `layerKind` rather than directly.
+   */
+  kind?: LayerKind;
+  /**
+   * How this layer scatters what is placed on it. Only meaningful on a
+   * pattern layer, and absent until one is made — `patternSpec` fills in the
+   * defaults, which differ by `PatternType`.
+   */
+  pattern?: PatternSpec;
+  /**
+   * The colours and gradients behind everything, back-most last. Only
+   * meaningful on a background layer, and absent until one is added.
+   */
+  backgrounds?: Background[];
 }
 
 /**
@@ -476,6 +598,14 @@ export type Selection =
   | { kind: "placements"; layerId: string; ids: string[] }
   | { kind: "point"; layerId: string; pointId: string }
   | { kind: "zone"; layerId: string; zoneId: string }
+  /**
+   * A colour or a gradient on a background layer.
+   *
+   * Only ever selected from the sidebar. A backdrop is camera-locked and
+   * covers the whole view, so there is nothing on the canvas a click could
+   * mean *it* rather than whatever is standing in front of it.
+   */
+  | { kind: "background"; layerId: string; backgroundId: string }
   | { kind: "strokes"; layerId: string; ids: string[] };
 
 /**

@@ -1,5 +1,5 @@
 /**
- * Getting rid of a document layer.
+ * Getting rid of things: a document layer, and whatever is selected.
  *
  * The left panel could add a layer and reorder, rename, lock and hide one,
  * and there was no way at all to remove one — so the inspector grew a Delete
@@ -17,9 +17,55 @@
 
 import { confirmSheet } from "../lib/sheet";
 import type { DocStore } from "../lib/doc-store";
-import type { Layer } from "../lib/types";
-import { count } from "./layers-panel";
+import { removeBackground } from "../lib/layer-kinds";
+import type { Layer, Selection } from "../lib/types";
+import { count } from "./layer-items";
 import * as log from "../lib/log";
+
+/** What deleting a selection needs from the shell around it. */
+export interface DeleteDeps {
+  store: DocStore;
+  /** How much of a placed PSD goes is the scene's call — see below. */
+  removeSelectedPlacement: () => void;
+  removeStrokes: (ids: readonly string[]) => void;
+  clearSelection: () => void;
+}
+
+/**
+ * Delete removes whatever is selected — the same thing the inspector's last
+ * button does.
+ *
+ * Here rather than in the shell because it is a switch over every kind of
+ * selection there is and it grows by one arm every time a new kind arrives;
+ * the shell's half is which scene is asking and what to do afterwards.
+ */
+export function deleteSelected(selection: Selection, deps: DeleteDeps): void {
+  const { store } = deps;
+  if (selection.kind === "fill") {
+    store.removeFill(selection.layerId, selection.fillId);
+  } else if (selection.kind === "placement") {
+    // The scene decides how much of a placed PSD goes: the whole thing, or
+    // the one layer of it that has been opened up.
+    deps.removeSelectedPlacement();
+    return;
+  } else if (selection.kind === "placements") {
+    // Every image the marquee caught, whole. A unit opened up for layer
+    // adjustment is the one case where part of a PSD can go, and a marquee
+    // is never that.
+    for (const id of selection.ids) store.removePlacement(selection.layerId, id);
+  } else if (selection.kind === "point") {
+    store.removePoint(selection.layerId, selection.pointId);
+  } else if (selection.kind === "zone") {
+    store.removeZone(selection.layerId, selection.zoneId);
+  } else if (selection.kind === "background") {
+    removeBackground(store, selection.layerId, selection.backgroundId);
+  } else if (selection.kind === "strokes") {
+    deps.removeStrokes(selection.ids);
+  } else {
+    return;
+  }
+  deps.clearSelection();
+}
 
 /**
  * Ask, and delete if the answer is yes.
