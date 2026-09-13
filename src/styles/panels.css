@@ -529,3 +529,99 @@
   background: color-mix(in srgb, var(--color-accent) 20%, transparent);
   color: var(--color-accent-300);
 }
+
+/* ── the three kinds of layer ───────────────────────────────────────────────
+
+   A layer says what it is for before it says what it is called: object,
+   pattern or background. A glyph rather than a word — the three read apart at
+   a glance, the column is narrow, and the inspector says it in words. */
+.layer-kind {
+  flex: none;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-neutral-600);
+}
+.layer-row.active .layer-kind { color: var(--chrome-text); }
+.layer-row.kind-pattern .layer-kind,
+.layer-row.kind-background .layer-kind { color: var(--color-accent-300); }
+
+/* A row for something that is wrong rather than something that is there: a
+   PSD on an object layer with no anchor mark at the root of its stack. Greyed
+   rather than hidden or struck through — the file is placed and it draws, and
+   what the row is saying is that one thing about it is missing. */
+.layer-item.warned .layer-item-label { color: var(--color-neutral-600); }
+.layer-item-warning {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-accent-300);
+}
+
+/* New Background, at the foot of a background layer's own list. Nothing on
+   one can be put down by aiming at the canvas, so the button lives where the
+   thing it makes will be listed. */
+.layer-item.add {
+  justify-content: center;
+  padding-left: 52px;
+  color: var(--color-accent-300);
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* A standing fact that is a problem: the same note, in the accent, without a
+   button beside it. */
+.inspect-note.warning {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  text-transform: none;
+  letter-spacing: 0;
+  font: 500 12px var(--font-body);
+  line-height: 1.45;
+  color: var(--color-accent-300);
+}
+
+/* A pattern's numbers: a row of one or two fields with a label or a × between
+   them. Narrow on purpose — these are counts of spaces, not measurements. */
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+.field-row .inspect-key { flex: 1; }
+.field-num {
+  flex: none;
+  width: 72px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+.field-x { color: var(--color-neutral-600); font-size: 12px; }
+
+/* One shape in the list of what a pattern is confined to. */
+.shape-row { gap: 8px; }
+.row-btn {
+  flex: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-neutral-600);
+  font: 600 10px var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.row-btn:hover { color: var(--color-accent-300); }
+
+/* The inspector's segmented controls are the sheet's, at panel scale: the
+   column is 260px and the sheet's 15px/20px option would wrap after two. */
+.side-panel .seg { width: 100%; }
+.side-panel .seg-opt {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 8px;
+  font-size: 13px;
+  text-align: center;
+}

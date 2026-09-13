@@ -26,14 +26,11 @@ import { ToolRail } from "./tool-rail";
 import { exportSelectionPng } from "./export-selection";
 import { createShell } from "./shell";
 import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
-import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { openNewBackground, type BackgroundDeps } from "./background-actions";
 import { createPatternShapes } from "./pattern-actions";
-import {
-  applyFillColour,
-  convertFillToPsd,
-  generatePsdForRegion,
-} from "./fill-actions";
+import { layerKind } from "../lib/layer-kinds";
+import { applyFillColour, generatePsdForRegion } from "./fill-actions";
+import { createConversions } from "./conversions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
@@ -175,8 +172,8 @@ export async function mountEditor(
     onRenamePsd: (key, name) => void psdFile.rename(key, name),
     onToggleCollider: (key, blocking) => collider.setBlocking(key, blocking),
     onEditCollider: () => collider.open(),
-    onStrokesToPsd: () => void strokesToPsd(),
-    onStrokesToZone: () => strokesToZone(),
+    onStrokesToPsd: () => void convert.strokesToPsd(),
+    onStrokesToZone: () => convert.strokesToZone(),
     isAnchored: (key) => handle?.scene.psdAnchored(key) ?? true,
     // Add Shape, both ways round — `pattern-actions.ts`. Neither makes the
     // shape itself: one asks for a patch of grid and the other for an
@@ -186,8 +183,8 @@ export async function mountEditor(
     onStrokesToPatternShape: () => shapes.fromStrokes(),
     onAddShapeFromSelection: (layerId) => shapes.askFromSelection(layerId),
     onAddShapeByDrawing: (layerId) => shapes.askByDrawing(layerId),
-    onFillToPsd: () => void fillToPsd(),
-    onRemoveReference: (key) => void removeReference(key),
+    onFillToPsd: () => void convert.fillToPsd(),
+    onRemoveReference: (key) => void convert.removeReference(key),
     // Renaming a layer changes the path a placement reads, so the rename map
     // travels with the manifest — see reconcilePlacements.
     // Every button in the PSD section, wired in psd-actions.ts beside the
@@ -241,6 +238,17 @@ export async function mountEditor(
     scene: () => handle?.scene ?? null,
     inspector,
     onPsdChanged: psdChanged,
+  });
+
+  // The four ways something on the canvas becomes something else — a sketch
+  // to a PSD or a boundary, a fill to a PSD, a copy to a file of its own.
+  const convert = createConversions({
+    projectId: meta.id,
+    store,
+    grid,
+    scene: () => handle?.scene ?? null,
+    drawing: () => drawing,
+    file: psdFile,
   });
 
   // And the list of the file's layers, which is where all of those buttons
@@ -455,6 +463,14 @@ export async function mountEditor(
       },
       onDetachCopy: (layerId, placementId, key) =>
         void psdFile.detach(layerId, placementId, key),
+      // The panels ask the plugin whether a file carries its anchor mark, and
+      // the answer changes the moment the manifest arrives. Nothing about the
+      // document moves when it does, so without this every row would keep
+      // showing what was true before anything had been read.
+      onPsdsLoaded: () => {
+        layers.render();
+        inspector.render();
+      },
       onExtrudeChange: () => extrude.sync(),
       onColliderChange: () => collider.sync(),
       onPenChange: () => pen.sync(),
@@ -516,6 +532,10 @@ export async function mountEditor(
     // panel learns that the canvas has opened a PSD up.
     inspector.setAdjusting(handle?.scene.adjustingInstance ?? null);
     actions.update(selection, handle?.scene.selectionScreenAnchor() ?? null);
+    // Pattern Shape is the one button on that bar that is not about turning
+    // space into content, and it only means anything with a pattern layer to
+    // confine — so it comes and goes with the active layer's kind.
+    actions.setPatternLayer(layerKind(store.layer(activeLayerId)) === "pattern");
 
     if (selection.kind === "layer") {
       setActiveLayer(selection.layerId);
@@ -566,42 +586,6 @@ export async function mountEditor(
     );
     layers.render();
   }
-
-  /** Hand a stroke selection to a layer as a placed PSD. */
-  async function strokesToPsd(): Promise<void> {
-    const selection = handle?.scene.getSelection();
-    if (selection?.kind !== "strokes" || !drawing || !handle) return;
-    await convertStrokesToPsd(meta.id, store, grid, drawing, handle.scene, selection);
-  }
-
-  /** Hand a filled run of grid spaces to its layer as a placed PSD. */
-  async function fillToPsd(): Promise<void> {
-    const selection = handle?.scene.getSelection();
-    if (selection?.kind !== "fill" || !handle) return;
-    await convertFillToPsd(meta.id, store, grid, handle.scene, selection);
-  }
-
-  /**
-   * Give a referencing placement its own copy of the PSD.
-   *
-   * The selected placement is the one that moves off the shared file, so
-   * whichever of the two you were looking at is the one that becomes
-   * independent — and everything else pointing at the original stays put.
-   */
-  async function removeReference(key: string): Promise<void> {
-    const selection = handle?.scene.getSelection();
-    if (selection?.kind !== "placement") return;
-    await psdFile.detach(selection.layerId, selection.placementId, key);
-  }
-
-  /** Hand a stroke selection to a layer as a boundary zone. */
-  function strokesToZone(): void {
-    const selection = handle?.scene.getSelection();
-    if (selection?.kind !== "strokes" || !drawing) return;
-    convertStrokesToZone(store, drawing, selection);
-    handle?.scene.setSelection({ kind: "none" });
-  }
-
 
   /**
    * Draw, Code or Play.

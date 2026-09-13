@@ -177,7 +177,13 @@ export class WorldScene extends Phaser.Scene {
       scene: this,
       store: this.store,
       defaultZoom: () => this.config.defaultZoom(),
-      onInvalidate: () => this.gridRenderer.invalidate(),
+      onInvalidate: () => {
+        this.gridRenderer.invalidate();
+        // A pattern shape's outline is stroked at a width divided by the
+        // zoom, like the lattice, so a zoom that leaves the same spaces on
+        // screen still has to redraw it.
+        this.patterns.invalidate();
+      },
       onScaled: () => {
         // Selection chrome is sized against the zoom, so it has to be redrawn.
         this.overlay.render(

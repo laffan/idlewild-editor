@@ -322,6 +322,19 @@ struct Layer {
     points: Vec<MapPoint>,
     #[serde(default)]
     zones: Vec<Zone>,
+    /// What this layer is for — "object", "pattern" or "background". Absent
+    /// on every layer written before there was more than one kind, and absent
+    /// means object, which is what a layer has always been.
+    #[serde(default)]
+    kind: Option<String>,
+    /// A pattern layer's rule. The placements on such a layer are the palette
+    /// it scatters rather than things standing anywhere, so the scene reads
+    /// this and generates rather than placing them where they sit.
+    #[serde(default)]
+    pattern: Option<Value>,
+    /// A background layer's backdrops: colours and gradients, camera-locked.
+    #[serde(default)]
+    backgrounds: Vec<Value>,
 }
 
 impl Layer {
@@ -354,10 +367,19 @@ impl Layer {
 
         json!({
             "visible": self.visible,
+            // Absent means object, and the config says so outright rather
+            // than leaving every reader of it to know that.
+            "kind": self.kind.clone().unwrap_or_else(|| "object".into()),
             "fills": self.fills.iter().map(Fill::to_config).collect::<Vec<_>>(),
             "placements": placements,
             "points": self.points.iter().map(MapPoint::to_config).collect::<Vec<_>>(),
             "zones": self.zones.iter().map(Zone::to_config).collect::<Vec<_>>(),
+            // Carried through as the editor wrote them. Both are opaque to
+            // Rust — a pattern is a rule the scene's own `pattern.js` runs,
+            // and a backdrop is two colours and an angle — so passing them
+            // through is the whole of what this file has to do with them.
+            "pattern": self.pattern,
+            "backgrounds": self.backgrounds,
         })
     }
 }

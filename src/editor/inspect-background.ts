@@ -136,7 +136,8 @@ function gradientControls(
         { class: "seg" },
         ...ANGLES.map(({ angle, label }) =>
           h("button", {
-            class: angle === held.angle ? "seg-btn on" : "seg-btn",
+            class: "seg-opt",
+            "aria-pressed": String(angle === held.angle),
             text: label,
             title: `${angle}°`,
             onClick: () => write({ angle }),

@@ -189,3 +189,8 @@
 }
 /* One number, so a box the width of one. */
 .sheet-row-input { width: 104px; flex: none; }
+
+/* How many tiles an image background should be: two numbers and a × between
+   them, on the sheet's own row grid. */
+.tile-pair { display: flex; align-items: center; gap: 10px; }
+.tile-field { width: 96px; }

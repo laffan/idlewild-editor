@@ -70,7 +70,8 @@ export function patternSection(
         { class: "seg" },
         ...TYPES.map(({ type, label }) =>
           h("button", {
-            class: type === spec.type ? "seg-btn on" : "seg-btn",
+            class: "seg-opt",
+            "aria-pressed": String(type === spec.type),
             text: label,
             onClick: () => setPatternType(store, layer.id, type),
           }),

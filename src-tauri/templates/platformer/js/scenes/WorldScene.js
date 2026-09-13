@@ -51,7 +51,9 @@ export class WorldScene extends Phaser.Scene {
   create() {
     this.solids = solidsFromDocument(this.grid, config.layers ?? []);
     this.applyCamera();
+    this.paintBackgrounds();
     this.placeDocument();
+    this.placePatterns();
     // idlewild:if character
     this.spawnCharacter();
     // idlewild:end if
@@ -61,6 +63,13 @@ export class WorldScene extends Phaser.Scene {
     // Nothing to step in a project that scaffolded no character, and nothing
     // to step before `create` has run.
     if (this.character) this.character.step(delta);
+    // idlewild:begin patternUpdate
+    // Both of these follow the camera rather than being placed once: a
+    // backdrop is wherever you are looking, and a pattern is a rule evaluated
+    // over the spaces in view. Cheap when the scene has neither.
+    this.drawBackdrops();
+    this.syncPatterns();
+    // idlewild:end patternUpdate
   }
 
   /**
@@ -84,6 +93,9 @@ export class WorldScene extends Phaser.Scene {
     layers.forEach((layer, index) => {
       const depth = layers.length - index;
       if (layer.visible === false) return;
+      // A pattern layer's placements are the palette it scatters rather than
+      // things standing anywhere — `placePatterns` generates from them.
+      if (layer.kind === "pattern") return;
 
       for (const fill of layer.fills ?? []) this.paintFill(fill, depth);
       // Back to front, once for the whole layer. Seen from the side nothing
@@ -102,6 +114,122 @@ export class WorldScene extends Phaser.Scene {
     });
   }
   // idlewild:end placeDocument
+
+  /**
+   * Colours and gradients behind everything, following the camera.
+   *
+   * A backdrop has no extent. It is not a very large rectangle somebody has
+   * to remember to make larger — it is wherever the camera is looking, which
+   * on a world with no edge is the only reading that never shows its own.
+   * So what is drawn is the camera's own world view, every frame it moves.
+   *
+   * Phaser's graphics take one colour per corner, so an angled gradient is
+   * each corner sampled off the gradient's own axis. Zero degrees is top to
+   * bottom, which is what a sky is.
+   */
+  // idlewild:begin paintBackgrounds
+  paintBackgrounds() {
+    const layers = config.layers ?? [];
+    this.backdrops = [];
+    layers.forEach((layer, index) => {
+      if (layer.kind !== "background" || layer.visible === false) return;
+      const depth = (layers.length - index) * 1000 - 1;
+      const g = this.add.graphics().setDepth(depth);
+      this.backdrops.push({ g, backgrounds: [...(layer.backgrounds ?? [])].reverse() });
+    });
+    this.drawBackdrops();
+  }
+
+  drawBackdrops() {
+    if (!this.backdrops || this.backdrops.length === 0) return;
+    const view = this.cameras.main.worldView;
+    for (const { g, backgrounds } of this.backdrops) {
+      g.clear();
+      for (const background of backgrounds) {
+        if (background.kind === "gradient" && background.gradient) {
+          const { from, to, angle } = background.gradient;
+          const c = gradientCorners(from, to, angle ?? 0);
+          g.fillGradientStyle(c[0], c[1], c[2], c[3], 1);
+        } else {
+          g.fillStyle(colorOf(background.color ?? "#2b3b4a"), 1);
+        }
+        g.fillRect(view.x, view.y, view.width, view.height);
+      }
+    }
+  }
+  // idlewild:end paintBackgrounds
+
+  /**
+   * A pattern layer, placed.
+   *
+   * The placements on such a layer are the *palette* the pattern is made of
+   * rather than things standing anywhere, so `placeDocument` skips them and
+   * this generates instead: the rule in `layer.pattern`, run over the spaces
+   * the camera can see, one repeat tile at a time — see `shared/pattern.js`.
+   *
+   * Copies are made as they come into view and destroyed as they leave, keyed
+   * by the tile they belong to, so panning back over ground you have already
+   * crossed re-uses what is there. The same four numbers give the same
+   * arrangement every time, which is why nothing has to be stored.
+   */
+  // idlewild:begin placePatterns
+  placePatterns() {
+    this.patternLive = new Map();
+    this.patternLayers = (config.layers ?? [])
+      .map((layer, index) => ({ layer, index }))
+      .filter(({ layer }) => layer.kind === "pattern" && layer.visible !== false)
+      .map(({ layer, index }) => ({
+        id: `pattern-${index}`,
+        depth: ((config.layers ?? []).length - index) * 1000,
+        spec: layer.pattern ?? { type: "random", density: 8, repeat: { cols: 20, rows: 20 }, seed: 1, shapes: [] },
+        elements: patternElements(layer, this.grid),
+      }));
+    this.syncPatterns();
+  }
+
+  syncPatterns() {
+    if (!this.patternLayers || this.patternLayers.length === 0) return;
+    const range = this.visibleCells();
+    const seen = new Set();
+    for (const layer of this.patternLayers) {
+      if (layer.elements.length === 0) continue;
+      for (const made of patternInstances(layer.spec, layer.elements, range)) {
+        const key = `${layer.id}:${made.id}`;
+        seen.add(key);
+        if (this.patternLive.has(key)) continue;
+        const object = this.P2P.place(this, made.element.psdKey, made.element.path);
+        if (!object || !object.setPosition) continue;
+        const world = this.grid.cellToWorld(made.cell.cx, made.cell.cy);
+        object.setPosition(world.x + made.element.offsetX, world.y + made.element.offsetY);
+        if (object.setScale) object.setScale(made.element.scaleX, made.element.scaleY);
+        object.setDepth(layer.depth);
+        this.patternLive.set(key, object);
+      }
+    }
+    for (const [key, object] of this.patternLive) {
+      if (seen.has(key)) continue;
+      object.destroy(true);
+      this.patternLive.delete(key);
+    }
+  }
+
+  /** The inclusive range of spaces the camera can see, with a little over. */
+  visibleCells() {
+    const view = this.cameras.main.worldView;
+    const corners = [
+      this.grid.worldToCell(view.x, view.y),
+      this.grid.worldToCell(view.x + view.width, view.y),
+      this.grid.worldToCell(view.x, view.y + view.height),
+      this.grid.worldToCell(view.x + view.width, view.y + view.height),
+    ];
+    const xs = corners.map((c) => c.cx);
+    const ys = corners.map((c) => c.cy);
+    return {
+      from: { cx: Math.min(...xs) - 2, cy: Math.min(...ys) - 2 },
+      to: { cx: Math.max(...xs) + 2, cy: Math.max(...ys) + 2 },
+    };
+  }
+  // idlewild:end placePatterns
 
   // idlewild:begin paintFill
   paintFill(fill, depth) {
@@ -292,3 +420,200 @@ function pointsToVectors(flat) {
   return out;
 }
 // idlewild:end pointsToVectors
+
+/**
+ * The four corner colours a gradient at this angle comes out as.
+ *
+ * Phaser's graphics interpolate between one colour per corner, which is a
+ * gradient at any angle if — and only if — each corner is the colour the
+ * gradient's own axis has there. So each corner is projected onto the axis
+ * and the two stops mixed at the fraction that comes back.
+ *
+ * Shared with the editor's own `background-render.ts`. Keep the two in step.
+ */
+// idlewild:begin gradientCorners
+function gradientCorners(from, to, angle) {
+  const radians = ((angle - 90) * Math.PI) / 180;
+  const dx = Math.cos(radians);
+  const dy = Math.sin(radians);
+  const box = [
+    [-0.5, -0.5],
+    [0.5, -0.5],
+    [-0.5, 0.5],
+    [0.5, 0.5],
+  ];
+  const dots = box.map(([x, y]) => x * dx + y * dy);
+  const low = Math.min(...dots);
+  const span = Math.max(...dots) - low || 1;
+  const a = colorOf(from);
+  const b = colorOf(to);
+  return dots.map((dot) => mixColor(a, b, (dot - low) / span));
+}
+
+function mixColor(a, b, t) {
+  const at = Math.max(0, Math.min(1, t));
+  const channel = (shift) => {
+    const from = (a >> shift) & 0xff;
+    const to = (b >> shift) & 0xff;
+    return Math.round(from + (to - from) * at) & 0xff;
+  };
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
+function colorOf(hex) {
+  return Phaser.Display.Color.HexStringToColor(hex ?? "#2b3b4a").color;
+}
+// idlewild:end gradientCorners
+
+/**
+ * Where a pattern layer's elements land.
+ *
+ * A pattern layer stores a rule rather than a list, because the world it
+ * covers has no edge: the editor recomputes it from the camera over exactly
+ * the spaces the viewport can see, and this is the same arithmetic so the
+ * game can do it too. Nothing here holds state. It is asked *what falls in
+ * this repeat tile*, one tile at a time, and the tile's own coordinates are
+ * part of the seed — which is what makes the same space answer the same way
+ * whatever route the camera took to get there, and what lets four numbers in
+ * `game.config.json` stand in for ten thousand positions.
+ *
+ * Shared with the editor's own `src/lib/pattern.ts`. **Keep the two in step**
+ * — the same rule the editor drew has to come out of the game, or Play shows
+ * a different world from the one you built.
+ *
+ * It is here rather than in `js/shared/` for the reason `drawOrder` and
+ * `applyDepth` are: these are lines the editor goes on owning, and a marked
+ * block is how it offers them to a project that was made before they existed.
+ * An import at the top of this file is outside every block, so a helper in
+ * another file could never reach one.
+ */
+// idlewild:begin patternRule
+function patternElements(layer, grid) {
+  return (layer.placements ?? []).map((placement) => {
+    const anchor = grid.cellToWorld(placement.anchor.cx, placement.anchor.cy);
+    const naturalWidth = placement.naturalWidth || placement.width || 1;
+    const naturalHeight = placement.naturalHeight || placement.height || 1;
+    return {
+      psdKey: placement.psdKey,
+      path: placement.layerPath,
+      scaleX: placement.width / naturalWidth,
+      scaleY: placement.height / naturalHeight,
+      offsetX: placement.x - anchor.x,
+      offsetY: placement.y - anchor.y,
+    };
+  });
+}
+
+/**
+ * Every copy that falls inside a range of grid spaces.
+ *
+ * Whole repeat tiles are generated and their contents filtered, rather than
+ * the range being generated directly: a tile is the unit the rule is defined
+ * over, and generating half of one would give a different answer at the edge
+ * of the view from the one the middle of the view gives a moment later.
+ *
+ * `limit` is a ceiling and not a detail — a density typed one digit too long
+ * is thousands of sprites, and the difference between a slow frame and a game
+ * that has stopped is whether anything said no.
+ */
+function patternInstances(spec, elements, range, limit = 1200) {
+  if (!elements.length) return [];
+
+  const cols = Math.max(1, Math.round(spec.repeat?.cols ?? 20));
+  const rows = Math.max(1, Math.round(spec.repeat?.rows ?? 20));
+  const lowX = Math.min(range.from.cx, range.to.cx);
+  const lowY = Math.min(range.from.cy, range.to.cy);
+  const highX = Math.max(range.from.cx, range.to.cx);
+  const highY = Math.max(range.from.cy, range.to.cy);
+
+  const out = [];
+  for (let ty = Math.floor(lowY / rows); ty <= Math.floor(highY / rows); ty++) {
+    for (let tx = Math.floor(lowX / cols); tx <= Math.floor(highX / cols); tx++) {
+      for (const made of patternTile(spec, elements, tx, ty)) {
+        const { cx, cy } = made.cell;
+        if (cx < lowX || cx > highX || cy < lowY || cy > highY) continue;
+        if (!insideShapes(spec.shapes ?? [], made.cell)) continue;
+        out.push(made);
+        if (out.length >= limit) return out;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * What one repeat tile holds.
+ *
+ * **Random** puts `density` elements at spaces drawn from the tile's own
+ * hash. Two can land on the same space, and that is deliberate: rejecting
+ * collisions would make the count depend on the order they were drawn in.
+ *
+ * **Grid** lays the same count out on the tightest square lattice that holds
+ * it. The positions stop being random; which element stands at each of them
+ * does not.
+ */
+function patternTile(spec, elements, tileX, tileY) {
+  const cols = Math.max(1, Math.round(spec.repeat?.cols ?? 20));
+  const rows = Math.max(1, Math.round(spec.repeat?.rows ?? 20));
+  const count = Math.max(1, Math.round(spec.density ?? 8));
+  const seed = (spec.seed ?? 1) >>> 0;
+  const originX = tileX * cols;
+  const originY = tileY * rows;
+
+  const side = Math.ceil(Math.sqrt(count));
+  const down = Math.ceil(count / side);
+
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    let cx;
+    let cy;
+    if (spec.type === "grid") {
+      cx = originX + Math.floor(((i % side) + 0.5) * (cols / side));
+      cy = originY + Math.floor((Math.floor(i / side) + 0.5) * (rows / down));
+    } else {
+      cx = originX + (patternHash(seed, tileX, tileY, i, 1) % cols);
+      cy = originY + (patternHash(seed, tileX, tileY, i, 2) % rows);
+    }
+    out.push({
+      id: `${tileX}:${tileY}:${i}`,
+      element: elements[patternHash(seed, tileX, tileY, i, 3) % elements.length],
+      cell: { cx, cy },
+    });
+  }
+  return out;
+}
+
+/**
+ * Whether a space is inside the pattern's shapes.
+ *
+ * An empty list is everywhere, which is the default and what makes a pattern
+ * layer infinite. A shape is stored as the spaces it covers — one drawn with
+ * the pencil is baked down to them in the editor — so this is a set
+ * membership rather than a polygon walk per element per frame.
+ */
+function insideShapes(shapes, cell) {
+  if (!shapes.length) return true;
+  return shapes.some((shape) =>
+    (shape.cells ?? []).some((c) => c.cx === cell.cx && c.cy === cell.cy),
+  );
+}
+
+/**
+ * A 32-bit hash of a tile, an index and a channel.
+ *
+ * A pure function of what it is given rather than a seeded generator object:
+ * the editor has to produce the same numbers from the same inputs, and a
+ * stateful generator would have to be stepped in the same order by both.
+ */
+function patternHash(seed, tileX, tileY, index, channel) {
+  let h = (seed ^ 0x9e3779b9) >>> 0;
+  for (const value of [tileX, tileY, index, channel]) {
+    h = (h ^ (value >>> 0)) >>> 0;
+    h = Math.imul(h, 0x85ebca6b) >>> 0;
+    h = (h ^ (h >>> 13)) >>> 0;
+    h = Math.imul(h, 0xc2b2ae35) >>> 0;
+    h = (h ^ (h >>> 16)) >>> 0;
+  }
+  return h >>> 0;
+}
+// idlewild:end patternRule

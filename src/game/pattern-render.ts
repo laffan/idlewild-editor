@@ -30,7 +30,7 @@ import {
   type CellRange,
   type PatternElement,
 } from "../lib/pattern";
-import type { Layer, Placement } from "../lib/types";
+import type { Layer, Placement, Point } from "../lib/types";
 import type { PlacedObject } from "./doc-renderer";
 import * as log from "../lib/log";
 
@@ -48,6 +48,11 @@ const DEPTH_STRIDE = 1000;
  */
 const MAX_ON_SCREEN = 1200;
 
+/** The accent, which is what every mark the editor makes is drawn in. */
+const SHAPE_COLOR = 0xec3013;
+/** One screen pixel, before the camera's zoom is divided out of it. */
+const HAIRLINE = 1;
+
 interface Live {
   object: PlacedObject;
   /** What it is a copy of, so a palette change can be told from a pan. */
@@ -58,6 +63,14 @@ export class PatternRender {
   private readonly scene: Phaser.Scene;
   private readonly store: DocStore;
   private readonly grid: Grid;
+  /**
+   * The shapes a pattern is confined to, outlined.
+   *
+   * Chrome about the document rather than part of it, like a selection's
+   * outline: it says where the rule is allowed to apply, and it is stroked at
+   * a width divided by the zoom so it reads the same at 1x and at 4x.
+   */
+  private readonly shapes: Phaser.GameObjects.Graphics;
   /** Keyed by layer and instance — see `PatternInstance.id`. */
   private readonly live = new Map<string, Live>();
   private lastRange = "";
@@ -67,6 +80,10 @@ export class PatternRender {
     this.scene = scene;
     this.store = store;
     this.grid = grid;
+    this.shapes = scene.add.graphics();
+    // Over the pattern it confines and under the selection overlay, which is
+    // where every other outline the editor draws about the document sits.
+    this.shapes.setDepth(890_000);
   }
 
   /**
@@ -91,6 +108,7 @@ export class PatternRender {
     ].join(",");
     if (signature === this.lastRange) return;
     this.lastRange = signature;
+    this.drawShapes();
 
     const seen = new Set<string>();
     const layers = this.store.layers;
@@ -156,7 +174,37 @@ export class PatternRender {
   clear(): void {
     for (const held of this.live.values()) destroy(held.object);
     this.live.clear();
+    this.shapes.clear();
     this.lastRange = "";
+  }
+
+  /**
+   * Outline every pattern shape in the open scene.
+   *
+   * Cell by cell rather than as one union outline: the spaces *are* the
+   * shape — a drawn one is baked down to them when it is made — and the
+   * divisions say which spaces, which is the thing somebody adjusting a
+   * boundary wants to see. A shape that was drawn keeps its own line on top,
+   * so what it was is still legible under what it became.
+   */
+  private drawShapes(): void {
+    const g = this.shapes;
+    g.clear();
+    const hair = HAIRLINE / this.scene.cameras.main.zoom;
+
+    for (const layer of this.store.layers) {
+      if (layerKind(layer) !== "pattern" || !layer.visible) continue;
+      for (const shape of patternSpec(layer).shapes) {
+        g.lineStyle(hair, SHAPE_COLOR, 0.5);
+        for (const cell of shape.cells ?? []) {
+          outline(g, this.grid.cellPolygon(cell));
+        }
+        if (shape.points && shape.points.length > 2) {
+          g.lineStyle(hair * 2, SHAPE_COLOR, 0.9);
+          outline(g, shape.points);
+        }
+      }
+    }
   }
 
   private make(element: PatternElement): PlacedObject | null {
@@ -221,4 +269,13 @@ function place(
 
 function destroy(object: PlacedObject): void {
   object.destroy(true);
+}
+
+function outline(g: Phaser.GameObjects.Graphics, points: readonly Point[]): void {
+  if (points.length < 2) return;
+  g.beginPath();
+  g.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) g.lineTo(points[i].x, points[i].y);
+  g.closePath();
+  g.strokePath();
 }

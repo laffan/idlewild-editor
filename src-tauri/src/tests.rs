@@ -16,6 +16,7 @@
 //! character controller New Game can leave out.
 
 mod archive;
+mod backgrounds;
 mod config;
 mod marks;
 mod options;

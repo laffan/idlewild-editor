@@ -109,6 +109,26 @@ export function copyLayer(layer: Layer, points = new Map<string, string>()): Lay
   return {
     ...layer,
     id: makeId("layer"),
+    // A pattern's rule and a background layer's backdrops are copied by value
+    // with ids of their own, for the reason everything else here is: the
+    // inspector names a shape and a backdrop by id, and two scenes sharing
+    // one would be a row that edits something in the other scene.
+    ...(layer.pattern
+      ? {
+          pattern: {
+            ...layer.pattern,
+            shapes: layer.pattern.shapes.map((shape) => ({
+              ...shape,
+              id: makeId("shape"),
+            })),
+          },
+        }
+      : {}),
+    ...(layer.backgrounds
+      ? {
+          backgrounds: layer.backgrounds.map((bg) => ({ ...bg, id: makeId("bg") })),
+        }
+      : {}),
     fills: layer.fills.map((fill) => ({ ...fill, id: makeId("fill") })),
     placements: copyPlacements(layer.placements),
     // The map is what lets the duplicate scene keep its own start point: the

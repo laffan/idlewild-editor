@@ -20,6 +20,7 @@
  */
 
 import { fillShape, pointsBounds, type Grid } from "../lib/grid";
+import { layerKind } from "../lib/layer-kinds";
 import { strokesBox } from "../drawing";
 import type { Cell, Layer, Point, Rect } from "../lib/types";
 
@@ -60,6 +61,11 @@ export function contentBounds(
     for (const fill of layer.fills) {
       box = union(box, fillShape(grid, fill)?.bounds ?? null);
     }
+    // A pattern layer's placements are its palette rather than its contents,
+    // and the pattern made of them reaches everywhere — so neither is content
+    // the map should be framing. Counting the palette would pull the frame
+    // towards a space nothing is standing on.
+    if (layerKind(layer) === "pattern") continue;
     for (const placement of layer.placements) box = union(box, placement);
     for (const zone of layer.zones) {
       if (zone.points.length) box = union(box, pointsBounds(zone.points));

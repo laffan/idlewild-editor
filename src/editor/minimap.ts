@@ -24,6 +24,7 @@
 import { h } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
 import { fillShape, type Grid } from "../lib/grid";
+import { layerKind } from "../lib/layer-kinds";
 import { STRIDE, type Viewport } from "../drawing";
 import type { FillPatch, Rect, Stroke, Zone } from "../lib/types";
 import { createResizer, type Resizer } from "./resizer";
@@ -283,6 +284,13 @@ export class Minimap {
       const layer = layers[i];
       if (!layer.visible) continue;
       for (const fill of layer.fills) this.paintFill(fill);
+      // A pattern layer's placements are the palette it scatters rather than
+      // things standing anywhere — see `game/pattern-render.ts` — so drawing
+      // them here would put a heap of elements on the anchor space that is on
+      // the canvas nowhere. The pattern itself has no edges to frame: it goes
+      // on as far as anyone cares to look, so there is nothing about it a map
+      // of where your work *is* could usefully say.
+      if (layerKind(layer) === "pattern") continue;
       for (const placement of layer.placements) {
         this.paintPlaced(placement, px);
       }

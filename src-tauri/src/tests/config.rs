@@ -403,3 +403,109 @@ fn the_span_reaches_a_point_put_down_a_long_way_out() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// The three kinds of layer reach the game, and absent still means object.
+///
+/// The exported scene reads `layer.kind` to decide what a layer's placements
+/// *are*: things standing somewhere on an object layer, the palette a rule
+/// scatters on a pattern one. A missing field there would make a pattern
+/// layer draw one of every element in a heap on its anchor space, which is
+/// the failure this exists to catch. The pattern's rule and a background
+/// layer's backdrops ride through opaque — Rust has no opinion on either.
+#[test]
+fn every_kind_of_layer_reaches_the_config() {
+    let meta = store::create_project(
+        "Kinds",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        store::write_doc(
+            &meta.id,
+            &serde_json::json!({
+                "version": 2,
+                "projection": "orthogonal",
+                "genre": "topdown",
+                "gridSize": 32,
+                "activeSceneId": "scene-main",
+                "scenes": [{
+                    "id": "scene-main",
+                    "name": "Main",
+                    "layers": [
+                        {
+                            "id": "l-pattern", "name": "Pattern 1", "visible": true,
+                            "kind": "pattern",
+                            "fills": [], "zones": [], "strokes": [], "points": [],
+                            "placements": [{
+                                "id": "p1", "psdKey": "grass", "layerPath": "S | grass",
+                                "x": 0.0, "y": 0.0, "width": 32.0, "height": 32.0,
+                                "anchor": { "cx": 0, "cy": 0 }
+                            }],
+                            "pattern": {
+                                "type": "grid", "density": 4,
+                                "repeat": { "cols": 10, "rows": 10 },
+                                "seed": 7,
+                                "shapes": [{
+                                    "id": "s1", "name": "Shape 1",
+                                    "cells": [{ "cx": 1, "cy": 1 }]
+                                }]
+                            }
+                        },
+                        {
+                            "id": "l-back", "name": "Background 1", "visible": true,
+                            "kind": "background",
+                            "fills": [], "placements": [], "zones": [], "strokes": [],
+                            "points": [],
+                            "backgrounds": [{
+                                "id": "b1", "name": "Sky", "kind": "gradient",
+                                "gradient": { "from": "#6ea8d8", "to": "#dfe9f2", "angle": 0 }
+                            }]
+                        },
+                        {
+                            "id": "l-old", "name": "Terrain", "visible": true,
+                            "fills": [], "placements": [], "zones": [], "strokes": [],
+                            "points": []
+                        }
+                    ]
+                }]
+            })
+            .to_string(),
+        )
+        .expect("document should save");
+
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&meta.id, "js/game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+        let layers = config["layers"].as_array().expect("layers should be a list");
+        assert_eq!(layers.len(), 3);
+
+        assert_eq!(layers[0]["kind"], "pattern");
+        assert_eq!(layers[0]["pattern"]["type"], "grid");
+        assert_eq!(layers[0]["pattern"]["seed"], 7);
+        assert_eq!(layers[0]["pattern"]["repeat"]["cols"], 10);
+        // The spaces, which is what the shape actually confines the rule to —
+        // an outline alone is nothing the game could test a space against.
+        assert_eq!(layers[0]["pattern"]["shapes"][0]["cells"][0]["cx"], 1);
+        // The palette still travels: the game needs the elements to scatter.
+        assert_eq!(layers[0]["placements"].as_array().map(Vec::len), Some(1));
+
+        assert_eq!(layers[1]["kind"], "background");
+        assert_eq!(layers[1]["backgrounds"][0]["kind"], "gradient");
+        assert_eq!(layers[1]["backgrounds"][0]["gradient"]["from"], "#6ea8d8");
+
+        // A layer written before there was more than one kind, which is what
+        // every layer in every project made until now is.
+        assert_eq!(layers[2]["kind"], "object");
+        assert_eq!(layers[2]["backgrounds"].as_array().map(Vec::len), Some(0));
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
