@@ -1,12 +1,20 @@
 /**
  * Home screen: the project list. A card per project showing its current
- * state as a thumbnail; long-press for rename and delete; Open and New Game
- * top right.
+ * state as a thumbnail; long-press for rename and delete; Select, Open and New
+ * Game top right.
  *
  * Open reads a `.idlewild` file — the archive Publish's *Export project*
  * writes — back in as a project of its own. It lands in the list like any
  * other, with a fresh id, because an id is a fact about this install's store
  * rather than about the project.
+ *
+ * **Select** is a mode of the grid rather than a modifier on a press. There is
+ * no ⌘-click on an iPad and no rubber band over a grid of cards, so the honest
+ * shape is a switch: while it is on, a tap picks a card instead of opening it,
+ * the long-press menu stands down, and the row that normally says how to reach
+ * that menu carries Duplicate and Delete instead. What those two do is
+ * `home-select.ts`; the mode itself is here, because it is a fact about how this
+ * screen reads a press.
  */
 
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -17,6 +25,11 @@ import { isMobile } from "../lib/platform";
 import { confirmSheet, openSheet } from "../lib/sheet";
 import type { ProjectMeta } from "../lib/types";
 import * as log from "../lib/log";
+import {
+  deleteProjects,
+  describeCount,
+  duplicateProjects,
+} from "./home-select";
 import { openNewGame } from "./new-game";
 
 export interface HomeCallbacks {
@@ -29,25 +42,98 @@ export function renderHome(
 ): void {
   const count = h("div", { class: "home-count m" });
   const grid = h("div", { class: "project-grid" });
+
+  // What the row above the grid says. Off, it is how to reach a card's own
+  // menu; on, it is what the cards you have picked can be done to — the same
+  // strip of screen either way, so turning the mode on does not move the grid
+  // under the finger that turned it on.
+  const hint = h("div", {
+    class: "home-hint m",
+    text: "Long-press a card to rename or delete",
+  });
+  const tally = h("div", { class: "home-hint m" });
+  const actions = h("div", { class: "home-actions hidden" });
+
   const body = h(
     "div",
     { class: "home-body scroll" },
-    h("div", {
-      class: "home-hint m",
-      text: "Long-press a card to rename or delete",
-    }),
+    h("div", { class: "home-hint-row" }, hint, actions),
     grid,
   );
+
+  /** Which projects are picked, and what is listed, so All has a set to take. */
+  const picked = new Set<string>();
+  let listed: ProjectMeta[] = [];
+  let selecting = false;
+
+  const selectButton = h(
+    "button",
+    {
+      class: "btn btn-ghost push-right",
+      "aria-pressed": "false",
+      title: "Pick several projects to duplicate or delete",
+      onClick: () => setSelecting(!selecting),
+    },
+    icon(ICONS.select, 17),
+    h("span", { text: "Select" }),
+  ) as HTMLButtonElement;
 
   const openButton = h(
     "button",
     {
-      class: "btn btn-ghost push-right",
+      class: "btn btn-ghost",
       title: "Open a .idlewild project file",
       onClick: () => void importProject(),
     },
     icon(ICONS.folder, 17),
     h("span", { text: "Open" }),
+  );
+
+  const duplicateButton = h(
+    "button",
+    {
+      class: "btn btn-ghost",
+      onClick: () => void runDuplicate(),
+    },
+    icon(ICONS.copy, 16),
+    h("span", { text: "Duplicate" }),
+  ) as HTMLButtonElement;
+
+  const deleteButton = h(
+    "button",
+    {
+      class: "btn btn-ghost danger",
+      onClick: () => void runDelete(),
+    },
+    icon(ICONS.trash, 16),
+    h("span", { text: "Delete" }),
+  ) as HTMLButtonElement;
+
+  actions.append(
+    h("button", {
+      class: "btn btn-ghost",
+      text: "All",
+      onClick: () => {
+        for (const meta of listed) picked.add(meta.id);
+        refreshSelection();
+      },
+    }),
+    h("button", {
+      class: "btn btn-ghost",
+      text: "None",
+      onClick: () => {
+        picked.clear();
+        refreshSelection();
+      },
+    }),
+    tally,
+    duplicateButton,
+    deleteButton,
+    h("button", {
+      class: "btn btn-ghost",
+      text: "Done",
+      onClick: () => setSelecting(false),
+    }),
   );
 
   const newButton = h(
@@ -96,12 +182,73 @@ export function renderHome(
         { class: "home-bar" },
         h("div", { class: "home-brand", text: "IDLEWILD" }),
         count,
+        selectButton,
         openButton,
         newButton,
       ),
       body,
     ),
   );
+
+  /**
+   * Turn the mode on or off.
+   *
+   * Leaving it drops what was picked: a selection held over an absence of any
+   * way to see it is a selection that acts on the next press somebody makes.
+   * Entering it with nothing listed is refused rather than shown empty.
+   */
+  function setSelecting(on: boolean): void {
+    selecting = on && listed.length > 0;
+    picked.clear();
+    selectButton.setAttribute("aria-pressed", String(selecting));
+    actions.classList.toggle("hidden", !selecting);
+    hint.classList.toggle("hidden", selecting);
+    grid.classList.toggle("selecting", selecting);
+    refreshSelection();
+  }
+
+  /** The tally, the two buttons' reach, and every card's own mark. */
+  function refreshSelection(): void {
+    tally.textContent = selecting
+      ? picked.size === 0
+        ? "Nothing selected"
+        : `${describeCount(picked.size)} selected`
+      : "";
+    duplicateButton.disabled = picked.size === 0;
+    deleteButton.disabled = picked.size === 0;
+    for (const card of grid.querySelectorAll<HTMLElement>(".project-card")) {
+      const id = card.dataset.project ?? "";
+      const on = selecting && picked.has(id);
+      card.classList.toggle("picked", on);
+      // Only while it is a toggle. A card that opens a project is a button
+      // with a destination, and `aria-pressed` on one of those describes a
+      // state it has not got.
+      if (selecting) card.setAttribute("aria-pressed", String(on));
+      else card.removeAttribute("aria-pressed");
+    }
+  }
+
+  async function runDuplicate(): Promise<void> {
+    const ids = [...picked];
+    if (ids.length === 0) return;
+    await duplicateProjects(ids);
+    // Cleared rather than carried: the copies are what is new on the screen,
+    // and leaving the originals lit invites a second Duplicate nobody meant.
+    picked.clear();
+    await reload();
+  }
+
+  async function runDelete(): Promise<void> {
+    const ids = [...picked];
+    if (ids.length === 0) return;
+    const names = listed.filter((m) => picked.has(m.id)).map((m) => m.name);
+    const gone = await deleteProjects(ids, names);
+    // Declined leaves the selection exactly as it was — the question was about
+    // these projects, and answering no is not a reason to lose them.
+    if (gone === null) return;
+    picked.clear();
+    await reload();
+  }
 
   /**
    * Take a `.idlewild` file into the store, and open what came out.
@@ -139,36 +286,73 @@ export function renderHome(
       log.error("Could not read the project list:", err);
     }
 
-    count.textContent = `${list.length} ${list.length === 1 ? "project" : "projects"}`;
+    listed = list;
+    count.textContent = describeCount(list.length);
     clear(grid);
 
+    // A project that has gone is not selected any more, however it went — a
+    // bulk delete, or the card menu while the mode was off.
+    for (const id of [...picked]) {
+      if (!list.some((meta) => meta.id === id)) picked.delete(id);
+    }
+    selectButton.disabled = list.length === 0;
+
     if (list.length === 0) {
+      if (selecting) setSelecting(false);
       grid.appendChild(
         h("div", {
           class: "home-empty",
           text: "No projects yet. Start one with New Game.",
         }),
       );
+      refreshSelection();
       return;
     }
 
     for (const meta of list) {
-      grid.appendChild(projectCard(meta, callbacks, reload));
+      grid.appendChild(
+        projectCard(meta, reload, {
+          onOpen: () => {
+            // The mode decides what a tap means, and it is read here rather
+            // than wired in: the cards are rebuilt on every reload, and a
+            // handler that captured the mode would be a card built in one mode
+            // and pressed in another.
+            if (!selecting) return callbacks.onOpenProject(meta);
+            if (picked.has(meta.id)) picked.delete(meta.id);
+            else picked.add(meta.id);
+            refreshSelection();
+          },
+          // The card's own menu is the single-project path; while the mode is
+          // on, a long press is a press that has gone on a bit.
+          onMenu: () => selecting,
+        }),
+      );
     }
+    refreshSelection();
   }
 
   void reload();
 }
 
+/** How a card behaves, which depends on whether the grid is selecting. */
+interface CardBehaviour {
+  onOpen: () => void;
+  /** Whether to swallow the long press rather than open the card's menu. */
+  onMenu: () => boolean;
+}
+
 function projectCard(
   meta: ProjectMeta,
-  callbacks: HomeCallbacks,
   reload: () => Promise<void>,
+  behaviour: CardBehaviour,
 ): HTMLElement {
   const thumb = h(
     "div",
     { class: "project-thumb" },
     h("span", { class: "project-thumb-empty m", text: "No preview yet" }),
+    // The tick a picked card carries, drawn whether or not it is picked so the
+    // thumbnail does not reflow when one is. The stylesheet shows it.
+    h("span", { class: "project-tick" }, icon(ICONS.check, 15, "#fff")),
   );
 
   // Thumbnails are written by the editor from the live canvas, so a project
@@ -186,7 +370,8 @@ function projectCard(
     "button",
     {
       class: "project-card",
-      onClick: () => callbacks.onOpenProject(meta),
+      dataset: { project: meta.id },
+      onClick: () => behaviour.onOpen(),
     },
     thumb,
     h(
@@ -203,6 +388,7 @@ function projectCard(
   );
 
   onLongPress(card, (event) => {
+    if (behaviour.onMenu()) return;
     openCardMenu(event, meta, reload);
   });
 

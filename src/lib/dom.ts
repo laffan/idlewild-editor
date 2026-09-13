@@ -105,6 +105,8 @@ export const ICONS = {
   chevronUp: "m6 15 6-6 6 6",
   chevronDown: "m6 9 6 6 6-6",
   close: ["M18 6 6 18", "M6 6l12 12"],
+  /* A tick, for the card a Select has picked. */
+  check: "m5 13 4 4 10-10",
   eye: [
     "M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z",
     "M12 9.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Z",

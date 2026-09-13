@@ -44,8 +44,39 @@
 .home-hint {
   font-size: 11px;
   color: var(--color-neutral-600);
+}
+
+/* The row above the grid. It carries the hint when the grid is a list of
+   projects and the bulk actions when it is a list of choices — the same strip
+   either way, so turning Select on does not move the cards under the finger
+   that turned it on. It keeps its height with `min-height` rather than letting
+   the taller of the two decide, for the same reason. */
+.home-hint-row {
+  display: flex;
+  align-items: center;
+  min-height: var(--hit);
   margin-bottom: 22px;
 }
+.home-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.home-actions .btn { min-height: 38px; padding: 0 14px; font-size: 14px; }
+/* The tally sits between the two halves: what is picked, then what can be done
+   to it. */
+.home-actions .home-hint { margin: 0 6px 0 4px; }
+.home-actions .btn.danger { color: var(--color-accent-700); }
+.home-actions .btn.danger:hover { background: var(--color-accent-100); }
+/* A button with nothing picked to act on. Dimmed rather than hidden: it is
+   about to be useful again, and a row that changes shape as you pick the first
+   card is a row that moves under you. */
+.home-actions .btn[disabled] {
+  color: var(--color-neutral-400);
+  border-color: var(--color-neutral-200);
+}
+.home-actions .btn[disabled]:hover { background: transparent; }
 
 .project-grid {
   display: grid;
@@ -87,6 +118,48 @@
   font-size: 10px;
   color: var(--color-neutral-600);
 }
+
+/* ── Select ─────────────────────────────────────────────────────────────────
+
+   While the grid is selecting, a card is a choice rather than a door. The tick
+   is built on every card and shown only on a picked one, so the thumbnail does
+   not reflow as one is picked — the same bargain the disabled buttons above
+   strike. */
+.project-tick {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 26px;
+  height: 26px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent);
+}
+.project-thumb { position: relative; }
+/* An empty box on every card while the mode is on, so it is clear the whole
+   grid is asking rather than only the cards already picked. */
+.project-grid.selecting .project-tick {
+  display: flex;
+  background: color-mix(in srgb, var(--color-neutral-100) 82%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-neutral-500);
+  color: transparent;
+}
+.project-grid.selecting .project-card.picked .project-tick {
+  background: var(--color-accent);
+  box-shadow: none;
+  color: #fff;
+}
+.project-grid.selecting .project-card.picked .project-thumb {
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+/* The name says which too, because a tick in the corner of a thumbnail is easy
+   to miss on a grid this size. */
+.project-grid.selecting .project-card.picked .project-name {
+  color: var(--color-accent-700);
+}
+/* The cursor says what a press does now. */
+.project-grid.selecting .project-card { cursor: pointer; }
 
 .project-info { padding: 14px 2px 0; }
 .project-name { font: 600 17px/1.25 var(--font-heading); }
@@ -140,6 +213,32 @@
 .btn-ghost:hover { border-color: var(--color-neutral-400); }
 
 .push-right { margin-left: auto; }
+
+/* Select, while it is on. The accent as an outline rather than as a field: the
+   primary is New Game's, and two filled buttons in one bar would be two
+   answers to "what is the main thing here". Scoped to the bar, because `.btn`
+   is every sheet's button too and a pressed state is this one's alone. */
+.home-bar .btn[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+  background: var(--color-accent-100);
+}
+.home-bar .btn[aria-pressed="true"]:hover { background: var(--color-accent-200); }
+/* Select on a screen with no projects on it. */
+.home-bar .btn[disabled] {
+  color: var(--color-neutral-400);
+  border-color: var(--color-neutral-200);
+}
+.home-bar .btn[disabled]:hover { background: transparent; }
+
+/* And a sheet's primary with nothing to do — Export with nothing ticked. The
+   accent is a field here rather than an outline, so it goes quiet as a field. */
+.btn-primary[disabled],
+.btn-primary[disabled]:hover {
+  background: var(--color-neutral-300);
+  border-color: var(--color-neutral-300);
+  color: var(--color-neutral-600);
+}
 
 /* Long-press menu on a project card. */
 .ctx-menu {
