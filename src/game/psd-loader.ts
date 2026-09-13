@@ -4,13 +4,14 @@
  * The scene owns what to place and where; this owns the plugin's loading
  * contract, which has enough sharp edges to be worth keeping in one place:
  * the completion signal is the plugin's own event rather than the loader's,
- * and a key that has already been loaded has to be evicted from three
- * separate caches before it can be loaded again.
+ * every texture is namespaced on the PSD's key, and a key that has already
+ * been loaded has to be evicted from three separate caches before it can be
+ * loaded again.
  */
 
 import Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
-import { textureNeeds } from "../lib/manifest";
+import { maskKey, scopeKeys, textureNeeds } from "../lib/manifest";
 import * as log from "../lib/log";
 
 /** How long to wait on psd-to-phaser before placing anyway. */
@@ -26,7 +27,31 @@ const LOAD_TIMEOUT_MS = 15_000;
 const SETTLE_GRACE_MS = 60;
 
 /**
+ * The key the plugin's multi-PSD path parks a manifest in Phaser's JSON cache
+ * under, which is *not* the PSD's own key.
+ *
+ * It matters twice. A load has to watch for the failure of `<key>_temp_json`
+ * rather than of `<key>`, and — the trap — Phaser's loader silently drops a
+ * `load.json` whose key is already in the cache, so a second load of the same
+ * file would never fire its completion handler and the reload would hang for
+ * ever. `evictPsd` clears it.
+ */
+function manifestKey(key: string): string {
+  return `${key}_temp_json`;
+}
+
+/**
  * Ask psd-to-phaser to load a key, resolving when its textures are in.
+ *
+ * **Through `loadMultiple`, with one config in it.** The plugin has two
+ * loading paths and they name textures differently: `load` keys a sprite on
+ * `layer.name` alone, so two PSDs with a same-named layer share one texture,
+ * and `loadMultiple` keys it `<psdKey>_<name>`. The shared-name case is not
+ * hypothetical — `New layer` names its rows `layer-1` upward *within a file*,
+ * so two files that each have one collide, and the collision is silent in the
+ * worst way: Phaser's loader declines a key it already holds, the first file's
+ * artwork answers for the second, and nothing anywhere says so. `place` reads
+ * the same `isMultiplePsd` flag this path sets, so both halves agree.
  *
  * The signal is the plugin's own `psdLoadComplete`, not the Phaser loader's
  * COMPLETE: P2P loads `data.json` first and only queues the sprites once it
@@ -43,7 +68,7 @@ const SETTLE_GRACE_MS = 60;
  * and the plugin still has not spoken, everything that was going to load has,
  * and `reportMissing` says which sprites did not make it.
  */
-export function loadPsd(
+export async function loadPsd(
   scene: Phaser.Scene,
   p2p: PsdToPhaser | undefined,
   key: string,
@@ -51,13 +76,15 @@ export function loadPsd(
 ): Promise<void> {
   if (!p2p) {
     log.error("psd-to-phaser is not registered on this scene");
-    return Promise.resolve();
+    return;
   }
-  if (p2p.getData(key)) return Promise.resolve();
+  if (p2p.getData(key)) return;
 
-  return new Promise((resolve) => {
+  const base = `${assetBase}/assets/${key}`;
+  await new Promise<void>((resolve) => {
     let settled = false;
     let graceTimer = 0;
+    const json = manifestKey(key);
 
     const finish = () => {
       if (settled) return;
@@ -67,7 +94,6 @@ export function loadPsd(
       scene.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
       window.clearTimeout(timer);
       window.clearTimeout(graceTimer);
-      reportMissing(scene, p2p, key);
       resolve();
     };
 
@@ -76,14 +102,14 @@ export function loadPsd(
      *
      * Usually not fatal — one sprite that 404s should not cut short the
      * others, and the loader going idle settles the wait either way. The
-     * exception is `data.json`, which the plugin queues under the PSD's own
-     * key: without it there is no manifest, nothing further will ever be
-     * asked for, and the idle check below cannot tell that apart from a
+     * exception is `data.json`, which the plugin queues under the manifest
+     * key above: without it there is no manifest, nothing further will ever
+     * be asked for, and the idle check below cannot tell that apart from a
      * manifest still in flight. So that one ends the wait where it stands.
      */
     const onError = (file: Phaser.Loader.File) => {
       log.error(`Could not load ${file.key} for ${key}: ${file.url}`);
-      if (file.key !== key || p2p.getData(key)) return;
+      if (file.key !== json || p2p.getData(key)) return;
       // The manifest is the one file worth chasing: without it the PSD
       // places empty, and Phaser reports a request that never left, a 404
       // and a body it could not parse as the same bare event.
@@ -116,9 +142,71 @@ export function loadPsd(
     scene.events.once("psdLoadComplete", finish);
     scene.load.on(Phaser.Loader.Events.COMPLETE, onLoaderIdle);
     scene.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onError);
-    // P2P starts the loader itself when it is not already running.
-    p2p.load.load(scene, key, `${assetBase}/assets/${key}`);
+    // At the origin, deliberately: the offset is applied to every layer's
+    // coordinates inside the plugin's copy of the manifest, and this editor
+    // positions placements itself from the document.
+    p2p.load.loadMultiple(scene, [{ key, path: base, position: { x: 0, y: 0 } }]);
   });
+
+  await loadMasks(scene, p2p, key, base);
+  reportMissing(scene, p2p, key);
+}
+
+/**
+ * The one thing `loadMultiple` does not fetch: a layer's mask.
+ *
+ * The plugin's multi-PSD loader queues sprites and tiles and skips masks
+ * altogether, while `place` goes on looking for `<name>_mask` and warns when
+ * it is not there — so a masked layer would arrive unmasked. The single-file
+ * loader does fetch them, which is the behaviour being preserved here rather
+ * than traded away for the namespacing above.
+ *
+ * The key stays unscoped because that is the key `place` reads. See `maskKey`.
+ */
+async function loadMasks(
+  scene: Phaser.Scene,
+  p2p: PsdToPhaser,
+  key: string,
+  base: string,
+): Promise<void> {
+  const wanted = masksOf(p2p, key).filter(
+    (mask) => !scene.textures.exists(maskKey(mask.name)),
+  );
+  if (wanted.length === 0) return;
+
+  for (const mask of wanted) {
+    scene.load.image(maskKey(mask.name), `${base}/${mask.path}`);
+  }
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      scene.load.off(Phaser.Loader.Events.COMPLETE, finish);
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, LOAD_TIMEOUT_MS);
+    scene.load.on(Phaser.Loader.Events.COMPLETE, finish);
+    if (!scene.load.isLoading()) scene.load.start();
+  });
+}
+
+/** Every masked layer in a loaded PSD, by name and by where its mask is. */
+function masksOf(
+  p2p: PsdToPhaser | undefined,
+  key: string,
+): Array<{ name: string; path: string }> {
+  const out: Array<{ name: string; path: string }> = [];
+  walk(originalLayers(p2p, key), (node) => {
+    const path = node.maskPath;
+    const name = node.name;
+    if (typeof path === "string" && path && typeof name === "string" && name) {
+      out.push({ name, path });
+    }
+  });
+  return out;
 }
 
 /**
@@ -181,10 +269,10 @@ function reportMissing(
   p2p: PsdToPhaser,
   key: string,
 ): void {
-  const original = (p2p.getData(key) as { original?: unknown } | undefined)
-    ?.original;
-  const missing = textureNeeds((original as { layers?: unknown })?.layers)
-    .filter((need) => !need.keys.every((k) => scene.textures.exists(k)))
+  const missing = textureNeeds(originalLayers(p2p, key))
+    .filter((need) =>
+      !scopeKeys(key, need.keys).every((k) => scene.textures.exists(k)),
+    )
     .map((need) => need.name);
   if (missing.length === 0) return;
   log.warn(
@@ -197,29 +285,26 @@ function reportMissing(
  * Forget everything cached under a PSD key, so the next load fetches the file
  * on disk rather than answering from memory.
  *
- * Three caches hold a loaded PSD and all three have to go, or a re-import
- * quietly shows the old artwork: psd-to-phaser's parsed manifest, Phaser's
- * JSON cache entry for `data.json`, and every texture the plugin built. The
- * plugin exposes no `removeData`, so its entry is overwritten with nothing —
- * `loadPsd`'s `getData` check is what reads it back.
+ * Four caches hold a loaded PSD and all four have to go, or a re-import
+ * quietly shows the old artwork — or, worse, hangs: psd-to-phaser's parsed
+ * manifest, Phaser's JSON cache entry for `data.json`, every texture the
+ * plugin built, and every mask. The plugin exposes no `removeData`, so its
+ * entry is overwritten with nothing — `loadPsd`'s `getData` check is what
+ * reads it back.
  *
- * **Textures are keyed on the layer's own name, not on the PSD's.** The
- * plugin's `loadSprite` calls `scene.load.image(layer.name, url)`, so a PSD
- * key of `tower` holding `S | roof` produces a texture called `roof` and
- * nothing called `tower_roof`. Sweeping for `<psdKey>_*` therefore missed
- * every sprite whose layer was not named after the file — and a missed
- * texture is not a cosmetic problem: Phaser's loader *silently drops* a file
- * whose key already exists (`LoaderPlugin.addFile` → `keyExists`), the plugin
- * waits for a `filecomplete` that will never fire, its own asset count never
- * reaches its total, and `psdLoadComplete` is never emitted. The whole reload
- * hangs and the artwork disappears. That is why the names are read out of the
- * plugin's parsed data here rather than guessed from a convention.
+ * **The textures are namespaced on the PSD's key**, because every load goes
+ * through `loadMultiple` — so a sweep for `<key>_*` is exact rather than a
+ * guess, and there is no longer any question of a file's eviction reaching
+ * another file's artwork. That used to be the hard part here: the plugin's
+ * single-file loader keys a sprite on `layer.name`, so the names had to be
+ * read out of the parsed manifest and then filtered against every *other*
+ * loaded PSD's names, and a name still in use elsewhere was left stale rather
+ * than blanked.
  *
- * `keep` is the other half of the same problem from the other end. Two PSDs
- * with a same-named layer share one texture — a known gap the plugin can only
- * fix with `loadMultiple` — so a name another loaded PSD is still using is
- * left alone. Better a stale texture on this file than a blank one on a file
- * nobody touched.
+ * Masks are the exception, and they are why the manifest is still read. The
+ * plugin looks one up as `<name>_mask` on both paths, so a mask cannot be
+ * namespaced — which means it can still be shared, and a shared one has to
+ * survive this eviction. `keep` is the names another loaded PSD is using.
  */
 export function evictPsd(
   scene: Phaser.Scene,
@@ -227,49 +312,50 @@ export function evictPsd(
   key: string,
   otherKeys: readonly string[] = [],
 ): void {
-  const mine = new Set(layerNames(p2p, key));
+  const masks = new Set(layerNames(p2p, key).map(maskKey));
   for (const other of otherKeys) {
     if (other === key) continue;
-    for (const name of layerNames(p2p, other)) mine.delete(name);
+    for (const name of layerNames(p2p, other)) masks.delete(maskKey(name));
   }
 
   type PsdData = Parameters<PsdToPhaser["setData"]>[1];
   p2p?.setData(key, undefined as unknown as PsdData);
   scene.cache.json.remove(key);
+  // Phaser drops a `load.json` whose key it already holds, without an event,
+  // so a stale entry here is a reload that never completes.
+  scene.cache.json.remove(manifestKey(key));
 
+  const prefix = `${key}_`;
   for (const textureKey of scene.textures.getTextureKeys()) {
-    if (owns(textureKey, key) || [...mine].some((n) => owns(textureKey, n))) {
+    if (textureKey.startsWith(prefix) || masks.has(textureKey)) {
       scene.textures.remove(textureKey);
     }
   }
 }
 
-/**
- * Whether a texture key was built from `name`.
- *
- * The plugin's three shapes: a sprite or atlas takes the name itself, a mask
- * takes `<name>_mask`, and a tile takes `<name>_tile_<col>_<row>`. The bare
- * `<name>_` prefix is kept for the `loadMultiple` path, which namespaces on
- * the PSD key instead.
- */
-function owns(textureKey: string, name: string): boolean {
-  return textureKey === name || textureKey.startsWith(`${name}_`);
-}
-
 /** Every layer name in a loaded PSD, nested groups included. */
 function layerNames(p2p: PsdToPhaser | undefined, key: string): string[] {
-  const original = (p2p?.getData(key) as { original?: unknown } | undefined)
-    ?.original;
   const names: string[] = [];
-  walkNames((original as { layers?: unknown })?.layers, names);
+  walk(originalLayers(p2p, key), (node) => {
+    if (typeof node.name === "string" && node.name) names.push(node.name);
+  });
   return names;
 }
 
-function walkNames(layers: unknown, out: string[]): void {
+/** The plugin's own copy of a PSD's manifest layers. */
+function originalLayers(p2p: PsdToPhaser | undefined, key: string): unknown {
+  const original = (p2p?.getData(key) as { original?: unknown } | undefined)
+    ?.original;
+  return (original as { layers?: unknown })?.layers;
+}
+
+type ManifestNode = Record<string, unknown> & { children?: unknown };
+
+function walk(layers: unknown, visit: (node: ManifestNode) => void): void {
   if (!Array.isArray(layers)) return;
   for (const layer of layers) {
-    const node = layer as { name?: unknown; children?: unknown };
-    if (typeof node.name === "string" && node.name) out.push(node.name);
-    walkNames(node.children, out);
+    const node = layer as ManifestNode;
+    visit(node);
+    walk(node.children, visit);
   }
 }

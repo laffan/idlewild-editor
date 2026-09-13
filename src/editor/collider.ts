@@ -27,7 +27,7 @@ import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import * as log from "../lib/log";
 import type { Cell, Collider } from "../lib/types";
-import { instanceMembers, instanceOf } from "../game/instance";
+import { unitMembers, unitOf } from "../game/unit";
 import type { WorldScene } from "../game/world-scene";
 import { ColliderBar } from "./collider-bar";
 
@@ -98,8 +98,8 @@ export function createColliderUi(options: ColliderUiOptions): ColliderUi {
       ?.placements.find((p) => p.id === selection.placementId);
     if (!placement) return;
 
-    const instance = instanceOf(placement);
-    const members = instanceMembers(
+    const instance = unitOf(placement);
+    const members = unitMembers(
       options.store.layers,
       selection.layerId,
       instance,

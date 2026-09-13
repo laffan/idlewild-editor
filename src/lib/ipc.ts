@@ -477,8 +477,8 @@ export const psd = {
   reimport: (id: string, key: string, sourcePath: string) =>
     invoke<ImportResult>("reimport_psd", { id, key, sourcePath }),
   /**
-   * Copy a PSD to a key of its own and process it — what breaks a reference,
-   * so one of two placements sharing a file can be changed alone.
+   * Copy a PSD to a key of its own and process it — what **Make Unique** does,
+   * so one of several objects sharing a file can be changed alone.
    */
   duplicate: (id: string, key: string) =>
     invoke<ImportResult>("duplicate_psd", { id, key }),

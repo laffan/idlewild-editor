@@ -180,19 +180,57 @@ export function isExtrusionPart(key: string, name: string): boolean {
 }
 
 /**
- * What psd-to-phaser keys a layer's texture on: the layer's own name.
+ * The layer a path names, which is what a texture is keyed *on*.
  *
  * A path is slash-joined, so a layer inside a group is `G | town/S | roof`
- * and its texture is under the last segment. Read off the plugin's own
- * `place`, which warns with exactly this key when it cannot find one — and
- * that warning, or the null frame that follows it, is what asking the wrong
- * question costs. Here rather than beside the loader because it is a fact
- * about a manifest path, and because everything in this file is readable
- * without a Phaser to import.
+ * and the name is the last segment. Here rather than beside the loader
+ * because it is a fact about a manifest path, and because everything in this
+ * file is readable without a Phaser to import.
  */
-export function textureKey(layerPath: string): string {
+export function layerName(layerPath: string): string {
   const at = layerPath.lastIndexOf("/");
   return at < 0 ? layerPath : layerPath.slice(at + 1);
+}
+
+/**
+ * What psd-to-phaser keys a texture on: the **PSD's** key, then the layer's
+ * name.
+ *
+ * The plugin has two namings and the one it uses is a fact about how the file
+ * was loaded. `load` keys a sprite on `layer.name` alone, so two PSDs with a
+ * same-named layer share one texture — a `S | layer-1` added to a pattern
+ * layer's file showed up as the artwork of the `S | layer-1` in an object
+ * layer's, because the second load was silently dropped and the first
+ * texture answered for both. `loadMultiple` keys it `<psdKey>_<name>` and
+ * `place` reads the same `isMultiplePsd` flag back, so the two halves agree.
+ * Every load this editor makes goes through that path — see
+ * `game/psd-loader.ts` — so this is *the* key, not one of two.
+ *
+ * Masks are the one exception and they stay unscoped: the plugin applies one
+ * by looking for `<name>_mask` whichever way the file was loaded. See
+ * `maskKey`.
+ */
+export function textureKey(psdKey: string, layerPath: string): string {
+  return `${psdKey}_${layerName(layerPath)}`;
+}
+
+/** The same, over a list of names a `TextureNeed` already worked out. */
+export function scopeKeys(psdKey: string, keys: readonly string[]): string[] {
+  return keys.map((key) => `${psdKey}_${key}`);
+}
+
+/**
+ * A layer's mask texture, which is **not** scoped to the PSD.
+ *
+ * `place` looks for `<name>_mask` on both of the plugin's loading paths, so
+ * scoping it here would be a texture nothing asks for. Two files with a
+ * same-named masked layer therefore still share a mask — the collision the
+ * scoping above closes for artwork, left open for masks because the plugin
+ * gives no way to close it. Masks are rare, and a shared mask is a wrong
+ * shape rather than a missing picture.
+ */
+export function maskKey(name: string): string {
+  return `${name}_mask`;
 }
 
 /**

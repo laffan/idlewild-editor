@@ -537,9 +537,9 @@ export class DocStore extends EventTarget {
   /**
    * Carry the record with the file, when the file is renamed or copied.
    *
-   * A copy is a file of its own from here on — that is what breaking a
-   * reference means — so it takes the collider the original had and the two
-   * part company from then on.
+   * A copy is a file of its own from here on — that is what Make Unique means —
+   * so it takes the collider the original had and the two part company from
+   * then on.
    */
   copyCollider(from: string, to: string, keepOriginal = true): void {
     const held = this.state.colliders?.[from];

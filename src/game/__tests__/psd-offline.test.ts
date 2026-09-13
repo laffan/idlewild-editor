@@ -44,10 +44,16 @@ let settle: () => void = () => undefined;
 let settleWith: (err: Error) => void = () => undefined;
 vi.mock("../psd-loader", () => ({
   evictPsd: (
-    scene: { textures: { remove: (k: string) => void } },
+    scene: {
+      textures: { remove: (k: string) => void; getTextureKeys: () => string[] };
+    },
     _p: unknown,
     key: string,
-  ) => scene.textures.remove(key),
+  ) => {
+    for (const texture of scene.textures.getTextureKeys()) {
+      if (texture.startsWith(`${key}_`)) scene.textures.remove(texture);
+    }
+  },
   loadPsd: () =>
     new Promise<void>((resolve, reject) => {
       settle = resolve;
@@ -81,7 +87,10 @@ function placement(psdKey: string): Placement {
  */
 function setUp(keys: string[]) {
   const data = new Map<string, unknown>(keys.map((k) => [k, { original: { layers: [] } }]));
-  const textures = new Set(keys);
+  // `<psdKey>_<layerName>`, which is what `loadMultiple` loads a texture
+  // under and what `place` looks one up by. The placements below give every
+  // layer the file's own name, so each key's own texture is `k_k`.
+  const textures = new Set(keys.map((k) => `${k}_${k}`));
 
   const scene = {
     textures: {
@@ -165,16 +174,33 @@ describe("whether a file may be placed from", () => {
    */
   it("says no while the manifest is in and the texture is not", () => {
     const { psds, textures } = setUp(["tower"]);
-    textures.delete("tower");
+    textures.delete("tower_tower");
     expect(psds.canPlace("tower", "tower")).toBe(false);
   });
 
   /** A layer inside a group: the texture is keyed on the leaf, not the path. */
   it("asks about the layer's own name rather than its path", () => {
     const { psds, textures } = setUp(["tower"]);
-    textures.add("S | roof");
+    textures.add("tower_S | roof");
     expect(psds.canPlace("tower", "G | town/S | roof")).toBe(true);
     expect(psds.canPlace("tower", "G | town/S | missing")).toBe(false);
+  });
+
+  /**
+   * And it asks under *this* file's name, which is the collision.
+   *
+   * `New layer` names its rows `layer-1` upward within a file, so two files
+   * that each have one used to answer the same question with the same texture:
+   * the second load was silently dropped by Phaser, the first file's artwork
+   * answered for both, and the object layer's PSD showed the pattern layer's
+   * `S | layer 1`. Every load goes through `loadMultiple` now, so the key
+   * carries the file — and the gate has to ask the same way round.
+   */
+  it("does not take another file's same-named layer as this one's", () => {
+    const { psds, textures } = setUp(["pattern", "object"]);
+    textures.add("pattern_S | layer 1");
+    expect(psds.canPlace("pattern", "S | layer 1")).toBe(true);
+    expect(psds.canPlace("object", "S | layer 1")).toBe(false);
   });
 });
 
@@ -193,9 +219,10 @@ describe("while a file is being rewritten", () => {
     expect(psds.canPlace("tower", "tower")).toBe(false);
     expect(psds.canPlace("keep", "keep")).toBe(false);
 
-    // What the load brings back, once it lands.
+    // What the load brings back, once it lands. A rename carries the layer
+    // named after the file, so the texture is renamed at both ends.
     data.set("keep", { original: { layers: [] } });
-    textures.add("keep");
+    textures.add("keep_keep");
     settle();
     await renaming;
     expect(psds.canPlace("keep", "keep")).toBe(true);
@@ -219,7 +246,7 @@ describe("while a file is being rewritten", () => {
     expect(psds.canPlace("tower", "tower")).toBe(false);
 
     data.set("tower", { original: { layers: [] } });
-    textures.add("tower");
+    textures.add("tower_tower");
     settleWith(new Error("the asset server is not answering"));
     await expect(renaming).rejects.toThrow();
     expect(psds.canPlace("tower", "tower")).toBe(true);
@@ -254,12 +281,12 @@ describe("a layer that is not a sprite", () => {
   it("is ready when its slices are in, not when its own name is", () => {
     const { psds, data, textures } = setUp(["backdrop"]);
     data.set("backdrop", backdrop);
-    textures.delete("backdrop");
+    textures.delete("backdrop_backdrop");
     expect(psds.canPlace("backdrop", "Background")).toBe(false);
 
-    textures.add("Background_tile_0_0");
+    textures.add("backdrop_Background_tile_0_0");
     expect(psds.canPlace("backdrop", "Background")).toBe(false);
-    textures.add("Background_tile_1_0");
+    textures.add("backdrop_Background_tile_1_0");
     expect(psds.canPlace("backdrop", "Background")).toBe(true);
   });
 
@@ -267,7 +294,7 @@ describe("a layer that is not a sprite", () => {
   it("is not made ready by a texture named after the layer", () => {
     const { psds, data, textures } = setUp(["backdrop"]);
     data.set("backdrop", backdrop);
-    textures.add("Background");
+    textures.add("backdrop_Background");
     expect(psds.canPlace("backdrop", "Background")).toBe(false);
   });
 
@@ -275,9 +302,9 @@ describe("a layer that is not a sprite", () => {
   it("does not wait for the row the artist paints into", () => {
     const { psds, data, textures } = setUp(["backdrop"]);
     data.set("backdrop", backdrop);
-    textures.add("Background_tile_0_0");
-    textures.add("Background_tile_1_0");
-    expect(textures.has("background")).toBe(false);
+    textures.add("backdrop_Background_tile_0_0");
+    textures.add("backdrop_Background_tile_1_0");
+    expect(textures.has("backdrop_background")).toBe(false);
     expect(psds.canPlace("backdrop", "Background")).toBe(true);
   });
 });

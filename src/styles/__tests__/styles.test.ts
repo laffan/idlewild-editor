@@ -171,6 +171,34 @@ describe("code mode", () => {
 });
 
 /**
+ * A named inspector section folds away, and the two rules that make the fold
+ * a fold rather than a class nobody reads are here rather than in code — the
+ * pass in `editor/inspect-collapse.ts` only adds `collapsed` and lets the
+ * stylesheet decide what that means.
+ */
+describe("the inspector's folded sections", () => {
+  it("hides everything but the heading", () => {
+    const folded = ruleIn(
+      panelsCss,
+      ".inspect-section.collapsed > *:not(.inspect-section-fold)",
+    );
+    expect(folded.display).toBe("none");
+  });
+
+  it("gives the heading a caret that turns when it is shut", () => {
+    // Two borders on a square turned 45°: down is open, and a quarter turn
+    // anticlockwise is shut. No asset, and nothing to line up.
+    expect(ruleIn(panelsCss, ".inspect-section-fold::after").transform).toBe(
+      "rotate(45deg)",
+    );
+    expect(
+      ruleIn(panelsCss, ".inspect-section.collapsed > .inspect-section-fold::after")
+        .transform,
+    ).toBe("rotate(-45deg)");
+  });
+});
+
+/**
  * The minimap is driven by a drag, and two of its rules are what make that
  * drag reach it at all. Without `touch-action: none` the iPad takes the
  * gesture as a scroll of the sidebar and the camera never moves — the same
@@ -191,5 +219,18 @@ describe("the minimap's stylesheet", () => {
     expect(frame.position).toBe("absolute");
     // Under the pointer it would swallow the press that moves the camera.
     expect(frame["pointer-events"]).toBe("none");
+  });
+
+  /**
+   * And it is Draw's alone. The map frames the camera the canvas is looking
+   * through, and in Code and Play the canvas is behind a running game — so
+   * the frame would be drawn around a camera nobody is looking through. Play
+   * takes the whole sidebar down anyway; Code is the one that keeps it, which
+   * is why the rule has to name both.
+   */
+  it("is down in the two modes that run the game over the canvas", () => {
+    expect(rule(".editor.code-mode .minimap").display).toBe("none");
+    const body = withoutComments(css);
+    expect(body).toContain(".editor.play-mode .minimap");
   });
 });

@@ -453,8 +453,8 @@ export interface Extrusion {
  *
  * Keyed by PSD key rather than carried on a placement, for the reason an
  * extrusion is: the shape is a fact about the *file*. A tree that blocks the
- * one space it stands on blocks it wherever it is put, and the two copies of
- * a referenced PSD are two views of the same thing.
+ * one space it stands on blocks it wherever it is put, and two instances of one
+ * PSD are two views of the same thing.
  *
  * The spaces are **offsets from the space the artwork is anchored to**, so a
  * placement that has been dragged carries its collider with it without

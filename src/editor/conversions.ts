@@ -28,7 +28,7 @@ export interface ConversionDeps {
   grid: Grid;
   scene: () => WorldScene | null;
   drawing: () => DrawingLayer | null;
-  /** The round trip out to Photoshop and back, which owns detaching a copy. */
+  /** The round trip out to Photoshop and back, which owns making one unique. */
   file: PsdFileActions;
 }
 
@@ -36,8 +36,11 @@ export interface Conversions {
   strokesToPsd: () => Promise<void>;
   strokesToZone: () => void;
   fillToPsd: () => Promise<void>;
-  /** Give a referencing placement its own copy of the PSD behind `key`. */
-  removeReference: (key: string) => Promise<void>;
+  /**
+   * Give this placed PSD a copy of the file behind `key`, so editing it stops
+   * changing the other instances of it — **Make Unique**.
+   */
+  makeUnique: (key: string) => Promise<void>;
 }
 
 export function createConversions(deps: ConversionDeps): Conversions {
@@ -76,11 +79,17 @@ export function createConversions(deps: ConversionDeps): Conversions {
     },
 
     /**
-     * The *selected* placement is the one that moves off the shared file, so
-     * whichever of the two you were looking at is the one that becomes
-     * independent — and everything else pointing at the original stays put.
+     * The *selected* object is the one that moves off the shared file, so
+     * whichever instance you were looking at is the one that becomes its own —
+     * and every other instance goes on reading the original.
+     *
+     * `detach` works on the whole unit the selected placement belongs to, not
+     * on that one placement: a PSD with a wall and a roof in it stands on the
+     * grid as two placements, and moving one of them to the copy left the other
+     * reading the original — which is what made Make Unique look like it had
+     * done nothing.
      */
-    async removeReference(key) {
+    async makeUnique(key) {
       const selection = selectionOf();
       if (selection.kind !== "placement") return;
       await deps.file.detach(selection.layerId, selection.placementId, key);

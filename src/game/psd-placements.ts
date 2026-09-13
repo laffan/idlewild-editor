@@ -17,6 +17,7 @@ import { defaultCollider, placementsBox, unitOfKey } from "../lib/collider";
 import {
   hasRootAnchor,
   parseManifest,
+  scopeKeys,
   textureKey,
   textureNeeds,
   placeableLayers,
@@ -27,7 +28,8 @@ import {
 import type { Cell, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { DocRenderer } from "./doc-renderer";
-import { instanceOf } from "./instance";
+import { unitMembers, unitOf } from "./unit";
+import { migrateLayerPath, repairDocument } from "./psd-migrate";
 import { evictPsd, loadPsd } from "./psd-loader";
 import { reconcilePlacements } from "./reconcile";
 
@@ -142,6 +144,11 @@ export class PsdPlacements {
    * `textureNeeds`. A path the manifest does not know falls back to the leaf
    * name, which is the only thing that can be said about it.
    *
+   * The names are then scoped to this PSD's key, because that is what the
+   * plugin loads them under — see `textureKey`. Asking the unscoped question
+   * was the same class of mistake as the two above: it answered *yes* about a
+   * layer whose name another file happened to share.
+   *
    * Handed to the pattern renderer as well, because the question is the same
    * one and the answer must not be able to differ.
    */
@@ -154,8 +161,8 @@ export class PsdPlacements {
     const needs = textureNeeds(data.original?.layers, layerPath);
     const keys =
       needs.length > 0
-        ? needs.flatMap((need) => need.keys)
-        : [textureKey(layerPath)];
+        ? scopeKeys(psdKey, needs.flatMap((need) => need.keys))
+        : [textureKey(psdKey, layerPath)];
     return keys.every((key) => this.host.scene.textures.exists(key));
   }
 
@@ -412,57 +419,84 @@ export class PsdPlacements {
   }
 
   /**
-   * Point one placement at a different PSD and redraw it.
+   * Point one placed PSD at a different file and redraw it.
    *
-   * What breaking a reference does: the copy is byte-identical, so the
-   * layer path and the geometry carry over untouched and only the key
-   * changes. Everything else still reading the original is left alone,
-   * which is the whole point of doing it per placement.
+   * What **Make Unique** does. The copy is byte-identical, so the layer paths
+   * and the geometry carry over untouched and only the key changes; every other
+   * instance goes on reading the original, which is the whole point of doing it
+   * per object rather than per file.
    */
   async repoint(
     selection: Extract<Selection, { kind: "placement" }>,
     key: string,
     manifestJson: string,
   ): Promise<void> {
-    const placement = this.host.store
+    const selected = this.host.store
       .layer(selection.layerId)
       ?.placements.find((p) => p.id === selection.placementId);
-    if (!placement) return;
+    if (!selected) return;
+
+    // **The whole unit**, not the placement that happens to be selected. A PSD
+    // with a wall and a roof in it stands on the grid as two placements, and
+    // moving one of them to the copy left the other reading the original: Make
+    // Unique reported success, the file on disk really was a second file, and
+    // editing either one went on changing both pictures. Which of the two rows
+    // you had selected decided which half came loose.
+    const members = unitMembers(
+      this.host.store.layers,
+      selection.layerId,
+      unitOf(selected),
+    );
 
     const manifest = parseManifest(manifestJson);
-    const entry =
-      manifest.all.find((l) => l.path === placement.layerPath) ??
-      placeableLayers(manifest)[0];
-    if (!entry) {
-      log.warn(`${key}.psd has nothing matching ${placement.layerPath}`);
-      return;
+    const fallback = placeableLayers(manifest)[0];
+    const moves: Array<{ placement: Placement; path: string }> = [];
+    for (const placement of members) {
+      const entry =
+        manifest.all.find((l) => l.path === placement.layerPath) ?? fallback;
+      if (!entry) {
+        log.warn(`${key}.psd has nothing matching ${placement.layerPath}`);
+        continue;
+      }
+      moves.push({ placement, path: entry.path });
     }
+    if (moves.length === 0) return;
 
-    // The placement is about to point somewhere else, and on a pattern layer
-    // that placement is a palette entry — so both files' copies are stale.
-    const was = placement.psdKey;
-    this.host.docRenderer.detachOne(placement.id);
-    this.host.store.updatePlacement(selection.layerId, selection.placementId, {
-      psdKey: key,
-      layerPath: entry.path,
-    });
+    // The placements are about to point somewhere else, and on a pattern layer
+    // a placement is a palette entry — so both files' copies are stale.
+    const was = selected.psdKey;
+    for (const { placement, path } of moves) {
+      this.host.docRenderer.detachOne(placement.id);
+      this.host.store.updatePlacement(selection.layerId, placement.id, {
+        psdKey: key,
+        layerPath: path,
+      });
+    }
 
     await this.offline([was, key], async () => {
       await this.load(key);
-      const updated = this.host.store
-        .layer(selection.layerId)
-        ?.placements.find((p) => p.id === selection.placementId);
-      if (updated) this.placeOne(selection.layerId, updated);
+      const layer = this.host.store.layer(selection.layerId);
+      for (const { placement } of moves) {
+        const updated = layer?.placements.find((p) => p.id === placement.id);
+        if (updated) this.placeOne(selection.layerId, updated);
+      }
     });
     this.host.docRenderer.render();
+    // The copy is a file of its own now, so what it blocks is its own record
+    // rather than a second reader of the original's.
+    this.syncCollider(key);
+    // The inspector reads the key off the document, and the document says
+    // something different about the same placement id.
+    this.host.reselect();
   }
 
   /**
    * Every other PSD the document has placed.
    *
-   * `evictPsd` needs it because textures are keyed on layer *names*, which
-   * two files can share — so a name still in use elsewhere must survive this
-   * file being dropped.
+   * `evictPsd` needs it because a **mask** is keyed on the layer's name alone,
+   * whichever way the file was loaded — so a masked layer whose name another
+   * loaded file shares must survive this file being dropped. The artwork is
+   * namespaced on the key and needs no such care.
    */
   private otherPsdKeys(key: string): string[] {
     const keys = new Set<string>();
@@ -551,7 +585,7 @@ export class PsdPlacements {
         // a fresh Phaser object for the same record, and the one it replaces
         // is only cleaned up because `attach` now destroys it — which is a
         // safety net rather than a plan.
-        if (instanceOf(placement) !== instance) continue;
+        if (unitOf(placement) !== instance) continue;
         if (this.host.docRenderer.has(placement.id)) continue;
         this.placeOne(layer.id, placement);
       }
@@ -562,75 +596,15 @@ export class PsdPlacements {
   /**
    * Bring a document written by an earlier build up to date, on open.
    *
-   * **Units.** Placements made before instances existed get one each. They
-   * were made the way `placePsd` still makes them — one call per PSD, one
-   * placement per layer, all on the same document layer — so grouping by
-   * layer and key reconstructs what was placed together. An option-drag copy
-   * of a multi-layer PSD joins its original's unit, which is the one case
-   * this guesses wrong; a double-tap and a drag separates them, and the
-   * alternative is every layer of every old project moving on its own.
-   *
-   * **Stacking.** Placements made before the PSD's own layer order was
-   * recorded get it from the order they are in, which was the manifest's.
-   *
-   * **Colliders.** Every placed key that has no record gets the same default
-   * a fresh import would: an extrusion blocks the spaces it stands on, and
-   * anything else blocks the spaces its artwork covers. Done on open rather
-   * than lazily, because a collider that appeared the first time something
-   * asked for it would make a project play differently depending on what had
-   * been looked at.
+   * The work is `psd-migrate.ts`; what is here is the one thing it needs from
+   * this class — a default collider for a key that has none — and the promise
+   * that none of it is an undo step. An undo stack whose first entry is
+   * "un-repair the document you just opened" is worse than no undo.
    */
   migrate(): void {
-    // Not the user's edit, so not a step. An undo stack whose first entry is
-    // "un-repair the document you just opened" is worse than no undo.
-    this.host.store.history.silence(() => this.repair());
-  }
-
-  private repair(): void {
-    for (const layer of this.host.store.layers) {
-      const assigned = new Map<string, string>();
-      for (const placement of layer.placements) {
-        if (placement.instance) continue;
-        let instance = assigned.get(placement.psdKey);
-        if (!instance) {
-          instance = makeId("psd");
-          assigned.set(placement.psdKey, instance);
-        }
-        this.host.store.updatePlacement(layer.id, placement.id, { instance });
-      }
-    }
-
-    // A document written before stacking was recorded has its placements in
-    // the order they were made, which was the manifest's: top-first. So the
-    // first of a unit was its top layer, and counting down from there is the
-    // stack it should have had all along.
-    for (const layer of this.host.store.layers) {
-      const units = new Map<string, Placement[]>();
-      for (const placement of layer.placements) {
-        const unit = units.get(instanceOf(placement));
-        if (unit) unit.push(placement);
-        else units.set(instanceOf(placement), [placement]);
-      }
-      for (const unit of units.values()) {
-        if (unit.every((p) => p.order !== undefined)) continue;
-        unit.forEach((placement, index) => {
-          this.host.store.updatePlacement(layer.id, placement.id, {
-            order: unit.length - 1 - index,
-          });
-        });
-      }
-    }
-
-    // Every scene's keys, not the open scene's: a PSD standing in a scene
-    // nobody has looked at this session is still in the export, and a
-    // collider nothing ever wrote is a file that blocks nothing there.
-    const keys = new Set<string>();
-    for (const layer of this.host.store.allLayers) {
-      for (const placement of layer.placements) keys.add(placement.psdKey);
-    }
-    for (const key of keys) {
-      if (!this.host.store.collider(key)) this.syncCollider(key);
-    }
+    this.host.store.history.silence(() =>
+      repairDocument(this.host.store, (key) => this.syncCollider(key)),
+    );
   }
 
   /** On open, bring back every placement the document already holds. */
@@ -650,7 +624,15 @@ export class PsdPlacements {
     this.host.store.history.silence(() => {
       for (const layer of this.host.store.layers) {
         for (const placement of layer.placements) {
-          this.placeOne(layer.id, this.migrateLayerPath(layer.id, placement));
+          this.placeOne(
+            layer.id,
+            migrateLayerPath(
+              this.host.store,
+              this.plugin()?.getData(placement.psdKey),
+              layer.id,
+              placement,
+            ),
+          );
         }
       }
     });
@@ -659,29 +641,5 @@ export class PsdPlacements {
     // file carries its anchor mark. Nothing in the document moved here, so
     // the change event they normally listen to never fires.
     this.host.onPsdsLoaded?.();
-  }
-
-  /**
-   * Rewrite the placeholder path early builds wrote.
-   *
-   * Those saved `layerPath: "root"`, which psd-to-phaser resolves by looking
-   * for a layer of that name and never finds — the placement came back as an
-   * empty group. Repoint it at the PSD's first real top-level layer.
-   */
-  private migrateLayerPath(layerId: string, placement: Placement): Placement {
-    if (placement.layerPath !== "root") return placement;
-
-    const data = this.plugin()?.getData(placement.psdKey);
-    const layers = (data?.original as { layers?: Array<{ name?: string }> })
-      ?.layers;
-    const name = layers?.[0]?.name;
-    if (!name) {
-      log.warn(`${placement.psdKey} has no top-level layer to place`);
-      return placement;
-    }
-
-    log.info(`Repointed ${placement.psdKey} from "root" to "${name}"`);
-    this.host.store.updatePlacement(layerId, placement.id, { layerPath: name });
-    return { ...placement, layerPath: name };
   }
 }

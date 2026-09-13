@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  instanceMembers,
-  instanceOf,
+  unitMembers,
+  unitOf,
   placementRect,
   scaleWithin,
   unionRect,
-} from "../instance";
+} from "../unit";
 import type { Layer, Placement } from "../../lib/types";
 
 function placement(over: Partial<Placement> = {}): Placement {
@@ -38,30 +38,30 @@ function layer(placements: Placement[]): Layer {
   };
 }
 
-describe("instanceOf", () => {
+describe("unitOf", () => {
   it("reads the shared id when there is one", () => {
-    expect(instanceOf(placement({ instance: "psd-1" }))).toBe("psd-1");
+    expect(unitOf(placement({ instance: "psd-1" }))).toBe("psd-1");
   });
 
   it("falls back to the placement's own id, making it a unit of one", () => {
     // Documents written before instances existed have none, and a placement
     // that is alone must still be draggable rather than inert.
-    expect(instanceOf(placement({ id: "p9" }))).toBe("p9");
+    expect(unitOf(placement({ id: "p9" }))).toBe("p9");
   });
 });
 
-describe("instanceMembers", () => {
+describe("unitMembers", () => {
   const tower = placement({ id: "a", instance: "psd-1" });
   const roof = placement({ id: "b", instance: "psd-1", layerPath: "roof" });
   const other = placement({ id: "c", instance: "psd-2" });
 
   it("collects every placement sharing the instance", () => {
-    const members = instanceMembers([layer([tower, roof, other])], "l1", "psd-1");
+    const members = unitMembers([layer([tower, roof, other])], "l1", "psd-1");
     expect(members.map((p) => p.id)).toEqual(["a", "b"]);
   });
 
   it("is empty for a layer that is not there", () => {
-    expect(instanceMembers([layer([tower])], "nope", "psd-1")).toEqual([]);
+    expect(unitMembers([layer([tower])], "nope", "psd-1")).toEqual([]);
   });
 });
 

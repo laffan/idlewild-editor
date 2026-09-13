@@ -103,37 +103,21 @@ export function patternSection(
     ),
   );
 
-  const numbers = h("div", { class: "inspect-section" });
-  numbers.append(
+  // Density and the repeat boundary are two sections rather than two headings
+  // inside one: a section is the unit the panel folds away, and a heading that
+  // is not a section's own is a heading that closes its neighbours with it.
+  const density = h(
+    "div",
+    { class: "inspect-section" },
     h("div", { class: "inspect-section-title m", text: "Density" }),
     numberRow("Per tile", spec.density, 1, 200, (n) =>
       setPatternDensity(store, layer.id, n),
     ),
-    h("div", { class: "inspect-section-title m", text: "Repeat boundary" }),
-    h(
-      "div",
-      { class: "field-row" },
-      numberField(spec.repeat.cols, 1, 500, (n) =>
-        setPatternRepeat(store, layer.id, n, spec.repeat.rows),
-      ),
-      h("span", { class: "field-x", text: "×" }),
-      numberField(spec.repeat.rows, 1, 500, (n) =>
-        setPatternRepeat(store, layer.id, spec.repeat.cols, n),
-      ),
-    ),
-    h("div", {
-      class: "field-hint",
-      text:
-        `Spaces. ${PATTERN_DEFAULTS[spec.type].repeat.cols} × ` +
-        `${PATTERN_DEFAULTS[spec.type].repeat.rows} is the default for a ` +
-        `${spec.type} pattern — the arrangement repeats every one of these, ` +
-        "which is what makes it infinite.",
-    }),
   );
   // Only for a scatter: a grid pattern has no randomness to re-roll, so the
   // button would do nothing and say it did something.
   if (spec.type === "random") {
-    numbers.appendChild(
+    density.appendChild(
       h("button", {
         class: "panel-btn",
         text: "Shuffle",
@@ -141,7 +125,34 @@ export function patternSection(
       }),
     );
   }
-  out.push(numbers);
+  out.push(density);
+
+  out.push(
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Repeat boundary" }),
+      h(
+        "div",
+        { class: "field-row" },
+        numberField(spec.repeat.cols, 1, 500, (n) =>
+          setPatternRepeat(store, layer.id, n, spec.repeat.rows),
+        ),
+        h("span", { class: "field-x", text: "×" }),
+        numberField(spec.repeat.rows, 1, 500, (n) =>
+          setPatternRepeat(store, layer.id, spec.repeat.cols, n),
+        ),
+      ),
+      h("div", {
+        class: "field-hint",
+        text:
+          `Spaces. ${PATTERN_DEFAULTS[spec.type].repeat.cols} × ` +
+          `${PATTERN_DEFAULTS[spec.type].repeat.rows} is the default for a ` +
+          `${spec.type} pattern — the arrangement repeats every one of these, ` +
+          "which is what makes it infinite.",
+      }),
+    ),
+  );
 
   out.push(shapesSection(store, layer, actions));
   return out;

@@ -13,7 +13,7 @@
 import { h } from "../lib/dom";
 import { strokesBox } from "../drawing";
 import { count } from "./layer-items";
-import { unionRect } from "../game/instance";
+import { unionRect } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
 import { describeRange, type Grid } from "../lib/grid";
 import type { FillPatch, Selection } from "../lib/types";

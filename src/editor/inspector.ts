@@ -9,14 +9,15 @@
 
 import { clear, h } from "../lib/dom";
 import type { DrawingTool, StrokeStyle } from "../drawing";
+import { makeSectionsCollapsible } from "./inspect-collapse";
 import { brushPanel } from "./inspect-brush";
 import { renderBackground } from "./inspect-background";
-import {
-  patternSection,
-  renderPatternLayer,
-  type PatternActions,
-} from "./inspect-pattern";
+import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
 import { layerKind } from "../lib/layer-kinds";
+import {
+  renderPlacement,
+  type PlacementActions,
+} from "./inspect-placement";
 import {
   renderLayer,
   renderPlacements,
@@ -27,35 +28,19 @@ import {
   type PanelActions,
   type PanelSurface,
 } from "./inspect-panels";
-import {
-  colliderPanel,
-  colliderSection,
-  fillColliderSection,
-} from "./inspect-collider";
-import { scaleOf, sizeControls } from "./inspect-transform";
+import { fillColliderSection } from "./inspect-collider";
 import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
-import { instanceMembers, instanceOf } from "../game/instance";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import { describeFill, type FillPatch, type Placement, type Selection } from "../lib/types";
+import { describeFill, type FillPatch, type Selection } from "../lib/types";
 
-export interface InspectorCallbacks extends PatternActions, PanelActions {
-  /**
-   * Whether a PSD carries its anchor mark at the root of its stack — the rule
-   * object layers enforce. Asked of the scene rather than read off the
-   * document, for the reason `PsdPlacements.anchored` gives.
-   */
-  isAnchored: (psdKey: string) => boolean;
+export interface InspectorCallbacks
+  extends PatternActions,
+    PanelActions,
+    PlacementActions {
   onFillColor: (color: string) => void;
   onToggleWalkable: (walkable: boolean) => void;
-  /** Switch a placed PSD's collider on or off, without changing its shape. */
-  onToggleCollider: (key: string, blocking: boolean) => void;
-  /** Open the selected PSD's collider up to be drawn on the grid. */
-  onEditCollider: () => void;
-  /** Rename the file behind a placement. `name` is the stem, without ".psd". */
-  onRenamePsd: (key: string, name: string) => void;
-  onDeleteSelection: () => void;
   /**
    * Get rid of a whole document layer, and everything drawn on it.
    *
@@ -78,8 +63,6 @@ export interface InspectorCallbacks extends PatternActions, PanelActions {
   onStrokesToZone: () => void;
   /** Hand a filled run of grid spaces on as a placed PSD. */
   onFillToPsd: () => void;
-  /** Give a referencing placement its own copy of the PSD. */
-  onRemoveReference: (key: string) => void;
   /**
    * The selected PSD's own layer stack, as an editor that loads itself. Built
    * by the shell rather than here, because it needs the project id and a way
@@ -251,6 +234,10 @@ export class Inspector {
         renderStrokes(this.surface(), this.store, this.callbacks, this.selection);
         break;
     }
+    // Applied to the finished panel rather than threaded through the seven
+    // files that make sections — see `inspect-collapse.ts`. It reads which are
+    // folded from the heading each one already carries.
+    makeSectionsCollapsible(this.body);
     this.restoreName(editing);
   }
 
@@ -507,159 +494,26 @@ export class Inspector {
     });
   }
 
+  /**
+   * A placed PSD — the longest of these panels, in `inspect-placement.ts`.
+   *
+   * What is handed over is the state this class owns: which unit is opened up,
+   * and the file's own layer list, which is made once and kept until the
+   * selection moves to a different file because it holds half-typed names and a
+   * pending reorder.
+   */
   private renderPlacement(layerId: string, placementId: string): void {
-    const placement = this.store
-      .layer(layerId)
-      ?.placements.find((p) => p.id === placementId);
-    if (!placement) return this.renderEmpty();
-
-    // On a pattern layer the file *is* the pattern's palette, and the only
-    // thing there is to say about a palette is what the rule does with it. So
-    // the pattern's own controls come first, over the file's facts rather
-    // than instead of them: renaming it, sending it out to Photoshop and
-    // resizing it all still mean what they mean anywhere else, and resizing
-    // it here resizes every copy of it in the pattern.
-    const layer = this.store.layer(layerId);
-    if (layer && layerKind(layer) === "pattern") {
-      this.body.append(...patternSection(this.store, layer, this.callbacks));
-    }
-
-    // The title is the file's name, and the file's name is worth changing:
-    // an import arrives called `pasted-m2k9f1` and stays that way through
-    // every list that mentions it until someone can rename it here.
-    this.editableHead("Image", placement.psdKey, ".psd", (next) =>
-      this.callbacks.onRenamePsd(placement.psdKey, next),
-    );
-
-    // A copy of this placement — what an option-drag makes. Say so before
-    // anything else: the consequence is that editing the PSD edits all of
-    // them. Sibling *layers* of one file share the key too, but they are not
-    // copies of each other and giving one its own duplicate of the whole PSD
-    // would be nonsense, so the path has to match as well.
-    // The rule an object layer enforces, said where the file is described.
-    // Not a refusal: the artwork is placed and it draws. What it cannot do is
-    // come home from Photoshop lined up on the same space, because there is
-    // no mark in the file for it to line up on.
-    if (
-      layer &&
-      layerKind(layer) === "object" &&
-      !this.callbacks.isAnchored(placement.psdKey)
-    ) {
-      this.body.appendChild(
-        h(
-          "div",
-          { class: "inspect-note warning" },
-          h("span", {
-            text:
-              "No anchor · this PSD has no P | anchor at the root of its " +
-              "stack, so an edit to it will not come back on this space",
-          }),
-        ),
-      );
-    }
-
-    const sharing = this.copiesOf(placement);
-    if (sharing > 1) {
-      this.body.appendChild(
-        h(
-          "div",
-          { class: "inspect-note" },
-          h("span", { text: `Reference · ${sharing} copies of this layer` }),
-          h("button", {
-            class: "panel-btn",
-            text: "Remove Reference",
-            onClick: () => this.callbacks.onRemoveReference(placement.psdKey),
-          }),
-        ),
-      );
-    }
-
-    // Whether the canvas is treating this as one thing or as its layers. The
-    // switch between them used to be a note of its own up here, a long way
-    // from the list of layers it is about; it is a button over that list now,
-    // and what is left here is the sentence saying which state the canvas is
-    // in. Only worth saying for a PSD with more than one placed layer — a
-    // single-layer file is a unit of one either way.
-    const members = instanceMembers(
-      this.store.layers,
+    renderPlacement(
+      this.surface(),
+      {
+        store: this.store,
+        grid: this.grid,
+        actions: this.callbacks,
+        adjusting: this.adjusting,
+        psdLayers: (key) => this.psdLayerSection(key),
+      },
       layerId,
-      instanceOf(placement),
-    );
-    const open = this.adjusting === instanceOf(placement);
-    if (members.length > 1) {
-      this.body.appendChild(
-        h(
-          "div",
-          { class: open ? "inspect-note adjusting" : "inspect-note quiet" },
-          h("span", {
-            text: open
-              ? `Adjusting layers · ${members.length} in this PSD`
-              : `${members.length} layers · moves as one`,
-          }),
-        ),
-      );
-    }
-
-    this.section("Info");
-    this.row("Layer path", placement.layerPath);
-    this.row("Position", `${Math.round(placement.x)}, ${Math.round(placement.y)}`);
-    this.row("Anchor cell", `${placement.anchor.cx}, ${placement.anchor.cy}`);
-
-    // What the file stops, straight after what it is: a collider is a fact
-    // about the thing standing on the grid, and the way into the mode that
-    // draws it should be where someone goes looking for it rather than below
-    // the file's own layer stack.
-    this.body.appendChild(
-      colliderSection({
-        psdKey: placement.psdKey,
-        panel: colliderPanel(
-          this.grid,
-          this.store.allLayers,
-          this.store.colliders,
-          placement.psdKey,
-          this.store.extrusion(placement.psdKey),
-        ),
-        onToggle: (key, blocking) => this.callbacks.onToggleCollider(key, blocking),
-        onEdit: () => this.callbacks.onEditCollider(),
-      }),
-    );
-
-    // Size is the one property you change rather than read, so it sits with
-    // the controls that change it rather than among the facts above.
-    const transform = this.section("Transform");
-    transform.appendChild(
-      sizeControls(placement, (patch) => {
-        this.store.updatePlacement(layerId, placementId, patch);
-      }),
-    );
-    this.current = transform;
-    // Documents written before resizing existed carry no natural size, and
-    // for those the displayed size is the source size.
-    const source = {
-      w: placement.naturalWidth || placement.width,
-      h: placement.naturalHeight || placement.height,
-    };
-    this.row("Source", `${Math.round(source.w)} × ${Math.round(source.h)} px`);
-    this.row("Scale", `${Math.round(scaleOf(placement) * 100)}%`);
-
-    // The stack inside the file, and — over it — every button that is about
-    // the file rather than about this placement of it: open it up on the
-    // canvas, send it out to Photoshop, bring the edits back. They were in
-    // three different places in this panel, with the list they are all about
-    // in between; they are one row directly above it now. See
-    // psd-layer-actions.ts.
-    this.body.appendChild(this.psdLayerSection(placement.psdKey));
-    this.psdLayers?.setAdjust({ members: members.length, adjusting: open });
-
-    // What is left down here is about the placement rather than the file.
-    this.section();
-    this.current.append(
-      h("button", {
-        class: "panel-btn",
-        text:
-          members.length > 1 && !open ? "Remove PSD from layer" : "Remove from layer",
-        onClick: () => this.callbacks.onDeleteSelection(),
-      }),
+      placementId,
     );
   }
 
@@ -667,32 +521,11 @@ export class Inspector {
    * The layer list for one PSD, made once and kept until the selection moves
    * to a different file.
    */
-  private psdLayerSection(key: string): HTMLElement {
+  private psdLayerSection(key: string): PsdLayerEditor {
     if (this.psdLayers?.key !== key) {
       this.psdLayers?.destroy();
       this.psdLayers = this.callbacks.createPsdLayers(key);
     }
-    return this.psdLayers.root;
+    return this.psdLayers;
   }
-
-  /**
-   * How many placements in the whole project draw this same PSD layer.
-   *
-   * Every scene, not the open one: the number is there to warn that editing
-   * this file edits something else, and one that stopped counting at the edge
-   * of the canvas would warn about the wrong half.
-   */
-  private copiesOf(placement: Placement): number {
-    let n = 0;
-    for (const { placement: other } of this.store.everyPlacement()) {
-      if (
-        other.psdKey === placement.psdKey &&
-        other.layerPath === placement.layerPath
-      ) {
-        n++;
-      }
-    }
-    return n;
-  }
-
 }

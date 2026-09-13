@@ -14,7 +14,7 @@ import type { DocStore } from "../lib/doc-store";
 import { translateShape } from "../lib/extrude";
 import type { Grid } from "../lib/grid";
 import * as log from "../lib/log";
-import { instanceOf } from "../game/instance";
+import { unitOf } from "../game/unit";
 import type { WorldScene } from "../game/world-scene";
 import { ExtrudeBar } from "./extrude-bar";
 import { applyExtrusion } from "./extrude-actions";
@@ -153,7 +153,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
     options.useSelectTool();
     scene.modes.resumeExtrude(shape, {
       key: placement.psdKey,
-      instance: instanceOf(placement),
+      instance: unitOf(placement),
       layerId: selection.layerId,
     });
     sync();

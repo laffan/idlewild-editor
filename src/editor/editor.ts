@@ -191,7 +191,7 @@ export async function mountEditor(
     onFinishDrawnShape: (layerId) => shapes.fromLayerStrokes(layerId),
     onCancelShape: () => shapes.cancel(),
     onFillToPsd: () => void convert.fillToPsd(),
-    onRemoveReference: (key) => void convert.removeReference(key),
+    onMakeUnique: (key) => void convert.makeUnique(key),
     // Renaming a layer changes the path a placement reads, so the rename map
     // travels with the manifest — see reconcilePlacements.
     // Every button in the PSD section, wired in psd-actions.ts beside the
@@ -537,7 +537,7 @@ export async function mountEditor(
     inspector.setSelection(selection);
     // Fired for a change of mode as well as of selection, which is how the
     // panel learns that the canvas has opened a PSD up.
-    inspector.setAdjusting(handle?.scene.adjustingInstance ?? null);
+    inspector.setAdjusting(handle?.scene.adjustingUnit ?? null);
     actions.update(selection, handle?.scene.selectionScreenAnchor() ?? null);
     // Pattern Shape is the one button on that bar that is not about turning
     // space into content, and it only means anything with a pattern layer to

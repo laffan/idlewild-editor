@@ -9,10 +9,19 @@ import { Grid, fillShape } from "../lib/grid";
 import type { Selection } from "../lib/types";
 import { CORNERS, cornerPoint, HANDLE_SCREEN_PX, placementBox } from "./resize";
 import { strokesBox } from "../drawing";
-import { instanceMembers, instanceOf, unionRect } from "./instance";
+import { isInstance } from "./instances";
+import { unitMembers, unitOf, unionRect } from "./unit";
 
 const ACCENT = 0xec3013;
 const OVERLAY_DEPTH = 1_000_000;
+
+/**
+ * How long a dash and a gap are, in screen pixels, on an instance's outline.
+ *
+ * Screen rather than world, like every other width here: a dash measured on the
+ * grid would be a hairline pattern at 1× and a row of bricks at 4×.
+ */
+const DASH = 6;
 
 export class SelectionOverlay {
   private readonly graphics: Phaser.GameObjects.Graphics;
@@ -73,10 +82,10 @@ export class SelectionOverlay {
         // What the gesture will act on: the whole placed PSD, or the one
         // layer of it that has been opened up. Outlining anything else would
         // promise a drag the canvas is not about to make.
-        const open = adjusting === instanceOf(placement);
+        const open = adjusting === unitOf(placement);
         const members = open
           ? [placement]
-          : instanceMembers(store.layers, selection.layerId, instanceOf(placement));
+          : unitMembers(store.layers, selection.layerId, unitOf(placement));
         const box = unionRect(members) ?? placementBox(placement);
 
         // The cell the image is anchored to. It is what a grid resize will
@@ -92,18 +101,29 @@ export class SelectionOverlay {
         // of a PSD with nothing to judge it by is a layer dragged blind.
         if (open) {
           g.lineStyle(1 * scale, ACCENT, 0.35);
-          for (const other of instanceMembers(
+          for (const other of unitMembers(
             store.layers,
             selection.layerId,
-            instanceOf(placement),
+            unitOf(placement),
           )) {
             if (other.id === placement.id) continue;
             g.strokeRect(other.x, other.y, other.width, other.height);
           }
         }
 
+        // **A dashed box for an instance**, solid for an object that has its
+        // file to itself. One of several placed PSDs on the same file is a
+        // different kind of thing to have selected — an edit to the artwork
+        // reaches every one of them — and the canvas should say so before the
+        // inspector has to. A different *kind* of line rather than a different
+        // colour, because the accent is the only one this design has, and
+        // because dashed already reads as "shared with something else".
         g.lineStyle(2 * scale, ACCENT, 1);
-        g.strokeRect(box.x, box.y, box.width, box.height);
+        if (isInstance(store.allLayers, placement)) {
+          dashedRect(g, box, DASH * scale);
+        } else {
+          g.strokeRect(box.x, box.y, box.width, box.height);
+        }
 
         // The four resize handles of image edit mode.
         const size = HANDLE_SCREEN_PX * scale;
@@ -189,6 +209,44 @@ export class SelectionOverlay {
         break;
     }
   }
+}
+
+/**
+ * A rectangle drawn as a run of dashes.
+ *
+ * Phaser's Graphics has no dash pattern, so the four sides are walked a
+ * `dash`-long stroke and a `dash`-long gap at a time. Started at the top-left
+ * and taken corner by corner, so each corner is the start of a dash and the box
+ * reads as a box rather than as four lines that nearly meet.
+ */
+function dashedRect(
+  g: Phaser.GameObjects.Graphics,
+  box: { x: number; y: number; width: number; height: number },
+  dash: number,
+): void {
+  const corners = [
+    { x: box.x, y: box.y },
+    { x: box.x + box.width, y: box.y },
+    { x: box.x + box.width, y: box.y + box.height },
+    { x: box.x, y: box.y + box.height },
+  ];
+  g.beginPath();
+  for (let i = 0; i < corners.length; i++) {
+    const from = corners[i];
+    const to = corners[(i + 1) % corners.length];
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length <= 0) continue;
+    const stepX = ((to.x - from.x) / length) * dash;
+    const stepY = ((to.y - from.y) / length) * dash;
+    // A side shorter than one dash is drawn whole: a gap in it would be most
+    // of the side, which looks like nothing rather than like a dash.
+    for (let at = 0; at < length; at += dash * 2) {
+      const end = Math.min(at + dash, length);
+      g.moveTo(from.x + (stepX * at) / dash, from.y + (stepY * at) / dash);
+      g.lineTo(from.x + (stepX * end) / dash, from.y + (stepY * end) / dash);
+    }
+  }
+  g.strokePath();
 }
 
 function polygon(

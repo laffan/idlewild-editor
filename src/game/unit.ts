@@ -5,19 +5,33 @@
  * psd-to-phaser hands back and what the inspector needs to talk about. But a
  * file with three layers in it is still *one thing someone dropped on the
  * grid*, and dragging a roof off its tower is almost never what was meant. So
- * the placements one `placePsd` call produces share an `instance`, and the
- * canvas works on the instance by default.
+ * the placements one `placePsd` call produces share a **unit**, and the canvas
+ * works on the unit by default.
  *
- * `instance` is optional on disk, because documents written before this
- * existed have none. `instanceOf` reads a placement's own id in that case,
- * which makes such a placement a unit of one — and the scene migrates whole
- * documents on load, so that fallback is a floor rather than the usual path.
+ * **A unit is not an instance**, and the two are worth keeping apart the way
+ * the two senses of "layer" are. A unit is the layers of *one* placed PSD: how
+ * many rectangles move when you drag. An **instance** is one of several placed
+ * PSDs reading the *same file*: how many things on the grid an edit to that
+ * file would change. One file can stand on the grid as three units of three
+ * layers each; every one of those units is an instance of the file, and every
+ * placement belongs to exactly one unit. See `instances.ts`.
+ *
+ * The unit's id is stored on a placement as `instance`, which is the older
+ * name and stays on disk: renaming a field that every document in every
+ * project carries, and that the exported game reads, to say the same thing a
+ * different way is not a trade worth making. Every reader of it comes through
+ * `unitOf`.
+ *
+ * It is optional there, because documents written before units existed have
+ * none. `unitOf` reads a placement's own id in that case, which makes such a
+ * placement a unit of one — and the scene migrates whole documents on load, so
+ * that fallback is a floor rather than the usual path.
  */
 
 import type { Layer, Placement, Rect } from "../lib/types";
 
 /** The unit a placement belongs to. */
-export function instanceOf(placement: Placement): string {
+export function unitOf(placement: Placement): string {
   return placement.instance ?? placement.id;
 }
 
@@ -36,17 +50,17 @@ export function placementRect(placement: Placement): Rect {
  *
  * A unit never spans document layers: the placements are made together on one
  * layer, and the only thing that moves one afterwards is the layer panel's
- * drag, which moves a single placement and so takes it out of its unit — see
- * `detachFromInstance`.
+ * drag, which carries a single placement to another layer and so takes it out
+ * of the unit it was in.
  */
-export function instanceMembers(
+export function unitMembers(
   layers: readonly Layer[],
   layerId: string,
-  instance: string,
+  unit: string,
 ): Placement[] {
   const layer = layers.find((l) => l.id === layerId);
   if (!layer) return [];
-  return layer.placements.filter((p) => instanceOf(p) === instance);
+  return layer.placements.filter((p) => unitOf(p) === unit);
 }
 
 /** The box around a unit. */

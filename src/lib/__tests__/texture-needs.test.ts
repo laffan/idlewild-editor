@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { textureNeeds } from "../manifest";
+import { layerName, maskKey, scopeKeys, textureKey, textureNeeds } from "../manifest";
 
 const BACKDROP = [
   { name: "anchor", category: "point", x: 0, y: 0, width: 12, height: 12 },
@@ -122,5 +122,44 @@ describe("what one layer of a manifest is waiting on", () => {
   it("says nothing about a path this manifest has never heard of", () => {
     expect(textureNeeds(TOWN, "G | town/S | nobody")).toEqual([]);
     expect(textureNeeds(TOWN, "elsewhere")).toEqual([]);
+  });
+});
+
+/**
+ * And what those names are keyed *under*, which is a fact about how the file
+ * was loaded rather than about the manifest.
+ *
+ * Every load this editor makes goes through `loadMultiple`, which namespaces
+ * a texture on the PSD's key. Before that two PSDs with a same-named layer
+ * shared one — a `S | layer 1` in a pattern layer's file and a `S | layer 1`
+ * in an object layer's were the same key, Phaser dropped the second load
+ * silently, and the first file's artwork answered for both.
+ */
+describe("what a texture is keyed under", () => {
+  it("carries the PSD's key, so two files cannot collide", () => {
+    expect(textureKey("pattern", "S | layer 1")).toBe("pattern_S | layer 1");
+    expect(textureKey("object", "S | layer 1")).toBe("object_S | layer 1");
+  });
+
+  it("keys a layer inside a group on its leaf, not its path", () => {
+    expect(layerName("G | town/S | roof")).toBe("S | roof");
+    expect(textureKey("tower", "G | town/S | roof")).toBe("tower_S | roof");
+  });
+
+  it("scopes a whole tileset's slices at once", () => {
+    const tiles = textureNeeds(BACKDROP, "Background")[0];
+    expect(scopeKeys("backdrop", tiles.keys)).toEqual([
+      "backdrop_Background_tile_0_0",
+      "backdrop_Background_tile_1_0",
+    ]);
+  });
+
+  /**
+   * The exception, and it is the plugin's rather than a choice: `place` looks
+   * a mask up as `<name>_mask` whichever way the file was loaded, so scoping
+   * one here would be a texture nothing ever asks for.
+   */
+  it("leaves a mask unscoped, because that is what place() asks for", () => {
+    expect(maskKey("S | wall")).toBe("S | wall_mask");
   });
 });

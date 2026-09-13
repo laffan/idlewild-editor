@@ -390,6 +390,46 @@
   color: var(--chrome-dim);
   margin-bottom: 12px;
 }
+
+/* A named section folds away, and its heading is the control that folds it.
+
+   Which sections are closed is state of the *panel* rather than of the
+   document, so it is per-install and shared by name: close Collider once and
+   it stays closed for the next PSD you select, which is the reason to close
+   it. See editor/inspect-collapse.ts, which applies this to the panel after it
+   is built rather than threading it through the seven files that make
+   sections.
+
+   The caret is two borders on a square turned 45°, so there is no asset and
+   nothing to line up: pointing down is open, and a quarter turn anticlockwise
+   is shut. */
+.inspect-section-fold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* A 10px label is a small thing to hit; the row is the whole target. */
+  min-height: 14px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.inspect-section-fold::after {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+.inspect-section-fold:hover { color: var(--chrome-text); }
+.inspect-section.collapsed > .inspect-section-fold::after {
+  transform: rotate(-45deg);
+}
+/* Closed, the heading is all there is, so the room under it goes as well. */
+.inspect-section.collapsed { padding-top: 13px; padding-bottom: 13px; }
+.inspect-section.collapsed > .inspect-section-fold { margin-bottom: 0; }
+.inspect-section.collapsed > *:not(.inspect-section-fold) { display: none; }
 /* Rows carry their own side padding for the panels that put them straight in
    the body; inside a section that padding is the section's. */
 .inspect-section .inspect-row { padding: 0; }
@@ -528,6 +568,17 @@
 .inspect-note.adjusting {
   background: color-mix(in srgb, var(--color-accent) 20%, transparent);
   color: var(--color-accent-300);
+}
+
+/* One of several objects sharing a PSD: an *instance*. The canvas says the same
+   thing by outlining it with a dashed box rather than a solid one, and this note
+   is the half that can say what follows from it — that an edit to the artwork
+   reaches every one of them, and that Make Unique is the way out. Marked with a
+   dashed left edge, so the panel and the canvas are making the same gesture. */
+.inspect-note.instance {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  border-left: 2px dashed var(--color-accent);
+  padding-left: 14px;
 }
 
 /* ── the three kinds of layer ───────────────────────────────────────────────

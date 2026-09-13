@@ -122,14 +122,25 @@ function gradientControls(
     onChange: (hex) => write({ to: hex }),
   });
 
+  // Three sections rather than three headings inside one: a section is the
+  // unit the panel folds away, and a heading that is not a section's own is a
+  // heading that closes its neighbours with it.
   return [
     h(
       "div",
       { class: "inspect-section" },
       h("div", { class: "inspect-section-title m", text: "From" }),
       from.root,
+    ),
+    h(
+      "div",
+      { class: "inspect-section" },
       h("div", { class: "inspect-section-title m", text: "To" }),
       to.root,
+    ),
+    h(
+      "div",
+      { class: "inspect-section" },
       h("div", { class: "inspect-section-title m", text: "Direction" }),
       h(
         "div",

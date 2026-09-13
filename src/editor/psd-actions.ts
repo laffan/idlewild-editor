@@ -290,7 +290,7 @@ export function createPsdFileActions(
       changed();
       log.info(`${key}.psd → ${copy.key}.psd — this placement is now its own`);
     } catch (err) {
-      log.error(`Could not break the reference to ${key}:`, err);
+      log.error(`Could not make this copy of ${key} unique:`, err);
     }
   }
 
@@ -341,7 +341,7 @@ export function createPsdLayersFactory(
       onToggleAdjust: () => {
         const open = scene();
         if (!open) return;
-        if (open.adjustingInstance) open.stopAdjusting();
+        if (open.adjustingUnit) open.stopAdjusting();
         else open.startAdjusting();
       },
       onPen: (layer) => options.onPen(key, layer),

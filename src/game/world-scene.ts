@@ -27,7 +27,7 @@ import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
 import { fillRegion } from "./fill-region";
-import { instanceMembers, instanceOf } from "./instance";
+import { unitMembers, unitOf } from "./unit";
 import type { Viewport } from "../drawing";
 
 export interface WorldSceneConfig {
@@ -55,8 +55,9 @@ export interface WorldSceneConfig {
    */
   onViewport?: (view: Viewport) => void;
   /**
-   * An option-shift drag has just made a copy that should not reference the
-   * original's PSD. The editor owns the duplication because it owns the IPC.
+   * An option-shift drag has just made a copy that should not be an instance of
+   * the original — it wants a PSD of its own. The editor owns the duplication
+   * because it owns the IPC.
    */
   onDetachCopy?: (layerId: string, placementId: string, key: string) => void;
   /** Extrude mode has started, finished, or changed what it is holding. */
@@ -153,7 +154,7 @@ export class WorldScene extends Phaser.Scene {
       zoom: () => this.cameras.main.zoom,
       getSelection: () => this.selection,
       setSelection: (selection) => this.setSelection(selection),
-      adjustingInstance: () => this.adjusting,
+      adjustingUnit: () => this.adjusting,
       render: (layerId, placement) => this.psds.placeOne(layerId, placement),
       detachCopy: (layerId, placementId, key) =>
         this.config.onDetachCopy?.(layerId, placementId, key),
@@ -435,11 +436,11 @@ export class WorldScene extends Phaser.Scene {
     const placement = this.store
       .layer(selection.layerId)
       ?.placements.find((p) => p.id === selection.placementId);
-    return !!placement && instanceOf(placement) === this.adjusting;
+    return !!placement && unitOf(placement) === this.adjusting;
   }
 
   /** Which unit is open for layer-by-layer editing, if any. */
-  get adjustingInstance(): string | null {
+  get adjustingUnit(): string | null {
     return this.adjusting;
   }
 
@@ -461,7 +462,7 @@ export class WorldScene extends Phaser.Scene {
     const hit = this.docRenderer.pick(world.x, world.y);
     if (!hit) return;
 
-    const instance = instanceOf(hit.placement);
+    const instance = unitOf(hit.placement);
     this.adjusting = this.adjusting === instance ? null : instance;
     log.info(
       this.adjusting
@@ -480,7 +481,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.selection.kind !== "placement") return;
     const placement = this.selectedPlacement();
     if (!placement) return;
-    this.adjusting = instanceOf(placement);
+    this.adjusting = unitOf(placement);
     this.refresh();
     this.config.onSelectionChange(this.selection);
   }
@@ -499,12 +500,12 @@ export class WorldScene extends Phaser.Scene {
     if (!placement) return;
 
     const doomed =
-      this.adjusting === instanceOf(placement)
+      this.adjusting === unitOf(placement)
         ? [placement]
-        : instanceMembers(
+        : unitMembers(
             this.store.layers,
             this.selection.layerId,
-            instanceOf(placement),
+            unitOf(placement),
           );
     for (const member of doomed) {
       this.store.removePlacement(this.selection.layerId, member.id);

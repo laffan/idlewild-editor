@@ -39,7 +39,7 @@ import { psd, toBase64 } from "../lib/ipc";
 import * as log from "../lib/log";
 import { canvasBox, parseManifest } from "../lib/manifest";
 import { layerKind } from "../lib/layer-kinds";
-import { instanceOf } from "../game/instance";
+import { unitOf } from "../game/unit";
 import type { Bounds } from "../drawing/types";
 import type { Stroke } from "../lib/types";
 import type { PsdLayerInfo } from "../lib/ipc";
@@ -293,7 +293,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
     // `sync` is what pushes it and what clears it.
     revealing =
       layerKind(options.store.layer(selection.layerId)) === "pattern"
-        ? instanceOf(placement)
+        ? unitOf(placement)
         : null;
     session = {
       key,

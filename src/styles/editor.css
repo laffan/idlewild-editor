@@ -506,6 +506,21 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 .editor.code-mode .tool-name,
 .editor.code-mode .selection-actions { display: none; }
 
+/* And the minimap, which is the same argument one step further out.
+
+   It is a map of where you are standing on the canvas, and in Code and Play
+   the canvas is behind a running game: the frame it draws would be framing a
+   camera nobody is looking through. Play hides the whole sidebar anyway, so
+   the rule that earns its keep is Code's — where the left sidebar stays, to
+   switch scene and adjust the document while the game runs. Both are written
+   out so the pair cannot drift.
+
+   `display: none` also stops the paint: the body has no box to fit anything
+   into, `Minimap.paint` returns on that, and the ResizeObserver brings it
+   back the moment there is one again. */
+.editor.play-mode .minimap,
+.editor.code-mode .minimap { display: none; }
+
 /* What Play runs: the project's own game, in a frame over the canvas.
 
    A frame rather than objects added to the editor's scene, because the thing

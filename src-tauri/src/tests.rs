@@ -9,15 +9,17 @@
 //! create projects in and `swatch`. `marks` is the orienting marks an import
 //! writes and psd-to-json reports back. `rewrite` is what a *second* write to
 //! the same file has to keep. `painting` is the two writes pen mode makes —
-//! a layer added to a file, and ink laid into one. `scaffolds` is what a *project* is made of —
-//! the starter document, the runnable game each template selection writes,
-//! what an export carries, and the tree the code modal edits. `options` is the
-//! per-project settings — pixel-perfect rendering, the default zoom, and the
-//! character controller New Game can leave out.
+//! a layer added to a file, and ink laid into one. `scaffolds` is what a
+//! *project* is made of — the starter document, the runnable game each
+//! template selection writes, and the tree the code modal edits; `exports` is
+//! what leaving with one takes. `options` is the per-project settings —
+//! pixel-perfect rendering, the default zoom, and the character controller New
+//! Game can leave out.
 
 mod archive;
 mod backgrounds;
 mod config;
+mod exports;
 mod marks;
 mod options;
 mod painting;

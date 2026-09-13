@@ -15,7 +15,7 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { instanceMembers, instanceOf, unionRect } from "./instance";
+import { unitMembers, unitOf, unionRect } from "./unit";
 import { pickPlacement } from "./picking";
 
 const ACCENT = 0xec3013;
@@ -75,7 +75,7 @@ export class DropTargets {
       ?.placements.find((p) => p.id === target.placementId);
     if (!placement) return;
     const box = unionRect(
-      instanceMembers(this.store.layers, target.layerId, instanceOf(placement)),
+      unitMembers(this.store.layers, target.layerId, unitOf(placement)),
     );
     if (!box) return;
 

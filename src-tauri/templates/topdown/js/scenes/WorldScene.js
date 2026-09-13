@@ -39,13 +39,50 @@ export class WorldScene extends Phaser.Scene {
     super("World");
   }
 
+  /**
+   * The grid, and every PSD the document places.
+   *
+   * Through `loadMultiple` rather than `load`, even for a single file: it is
+   * the only one of the plugin's two loading paths that keys a texture
+   * `<psdKey>_<layerName>` rather than on the layer's name alone. On the other
+   * path two PSDs with a same-named layer — two files each holding a
+   * `S | layer 1`, which is what New layer names its rows — share one texture:
+   * Phaser silently declines a key it already holds, so one file's artwork is
+   * drawn for the other's. `place` reads back the same flag this sets, so both
+   * halves agree about the name.
+   *
+   * What it costs is the sequencing. `loadMultiple` parses each `data.json`
+   * and queues its images from a promise callback, and that callback lands one
+   * microtask *after* Phaser has decided the pass is finished and called
+   * `create` — so the document cannot be placed from `create`. It is placed
+   * from the plugin's own completion signal instead, and `placeDocument` does
+   * nothing until that has arrived. A pattern layer needs no such care: it
+   * places what the camera can see every frame and retries what it could not.
+   */
   // idlewild:begin preload
   preload() {
     this.grid = createGrid(config.projection, config.grid);
     this.nav = this.grid.snaps ? this.grid : createGrid("orthogonal", config.grid);
-    for (const key of config.psdKeys ?? []) {
-      this.P2P.load.load(this, key, `assets/${key}`);
-    }
+    const psds = (config.psdKeys ?? []).map((key) => ({
+      key,
+      path: `assets/${key}`,
+      position: { x: 0, y: 0 },
+    }));
+    // Nothing to wait for: the document places from `create`, as it always has.
+    this.psdsReady = psds.length === 0;
+    if (this.psdsReady) return;
+
+    let timer = 0;
+    const ready = () => {
+      if (this.psdsReady) return;
+      clearTimeout(timer);
+      this.psdsReady = true;
+      this.placeDocument();
+    };
+    this.events.once("psdLoadComplete", ready);
+    // An asset that never arrives must not mean a document that never places.
+    timer = setTimeout(ready, 15000);
+    this.P2P.load.loadMultiple(this, psds);
   }
   // idlewild:end preload
 
@@ -96,6 +133,10 @@ export class WorldScene extends Phaser.Scene {
 
   // idlewild:begin placeDocument
   placeDocument() {
+    // Every PSD has to be loaded before anything is placed from one, and they
+    // are not in yet when `create` runs — see `preload`, which calls this
+    // again once they are.
+    if (!this.psdsReady) return;
     // Layers are stored top-first; Phaser depth counts upward, so the last
     // layer in the list is the furthest back.
     const layers = config.layers ?? [];

@@ -30,11 +30,11 @@ import type {
 import type { DragModifiers } from "./camera-rig";
 import { pointInPolygon, pointReach } from "./picking";
 import {
-  instanceMembers,
-  instanceOf,
+  unitMembers,
+  unitOf,
   scaleWithin,
   unionRect,
-} from "./instance";
+} from "./unit";
 import {
   boxToPlacement,
   handleAt,
@@ -112,14 +112,15 @@ export interface DragHost {
    *
    * Null — the usual state — means a PSD drags and resizes as one thing.
    */
-  adjustingInstance(): string | null;
+  adjustingUnit(): string | null;
   /** Draw a placement the controller has just added to the document. */
   render(layerId: string, placement: Placement): void;
   /**
-   * Give a just-copied placement its own PSD, breaking the reference the
-   * copy would otherwise be. Fire-and-forget: copying the file and running
-   * it through psd-to-json takes long enough that the drag must not wait,
-   * and the placement is patched by id when it lands.
+   * Give a just-copied PSD a file of its own, so the copy is not an instance of
+   * the original — **Make Unique**, asked for as the copy is made.
+   * Fire-and-forget: copying the file and running it through psd-to-json takes
+   * long enough that the drag must not wait, and the unit is repointed by id
+   * when it lands.
    */
   detachCopy(layerId: string, placementId: string, key: string): void;
   /** Brackets the gesture, so the panels can hold their re-renders. */
@@ -156,9 +157,9 @@ export class DragController {
    * the thing under the finger is the new one — which is what makes the
    * gesture read as "pull one out of this".
    *
-   * Option and shift together makes that copy independent: it gets its own
-   * PSD rather than referencing the original's, which is the same thing the
-   * inspector's `Remove Reference` does, asked for up front.
+   * Option and shift together makes that copy independent: it gets a PSD of
+   * its own rather than being an instance of the original's, which is the same
+   * thing the inspector's `Make Unique` does, asked for up front.
    */
   begin(
     screenX: number,
@@ -323,13 +324,13 @@ export class DragController {
     // What the gesture is about: the whole placed PSD, or the one layer of it
     // a double-tap opened up. Everything below works on the group either way,
     // which is what keeps the two cases from drifting apart.
-    const adjusting = this.host.adjustingInstance() === instanceOf(placement);
+    const adjusting = this.host.adjustingUnit() === unitOf(placement);
     const group = adjusting
       ? [placement]
-      : instanceMembers(
+      : unitMembers(
           this.host.store.layers,
           layer.id,
-          instanceOf(placement),
+          unitOf(placement),
         );
     return this.beginGroup(layer.id, group, world, grabCell, modifiers, true);
   }
@@ -400,10 +401,10 @@ export class DragController {
     }
 
     // A copied placement keeps the same `psdKey`, so both read the same file:
-    // the copy is a *reference*, and editing the PSD edits both. The
-    // inspector says so, and offers to break it — or shift asks for it broken
-    // straight away, which is the same thing without the round trip. Copying
-    // a whole PSD copies every layer of it, into a unit of its own.
+    // the two are *instances* of it, and editing the PSD edits both. The
+    // inspector says so, and offers Make Unique — or shift asks for it up
+    // front, which is the same thing without the round trip. Copying a whole
+    // PSD copies every layer of it, into a unit of its own.
     const dragged = modifiers.alt ? this.copyGroup(layerId, group, placement) : group;
     if (modifiers.alt && modifiers.shift) {
       this.host.detachCopy(layerId, dragged[0].id, dragged[0].psdKey);
@@ -566,12 +567,12 @@ export class DragController {
    *
    * The same `psdKey`, deliberately: the PSD is already loaded and its
    * textures are already in, so the copy costs one `place()` call per layer
-   * and no disk at all. What it costs instead is a shared file, which is what
-   * `Remove Reference` in the inspector exists to undo.
+   * and no disk at all. What it costs instead is a shared file — the two are
+   * instances of it — which is what `Make Unique` in the inspector undoes.
    *
-   * The copy gets an instance of its own, so it is a second *thing* rather
-   * than more layers of the first — otherwise pulling a copy out of a PSD
-   * would drag the original along with it ever after.
+   * The copy gets a **unit** of its own, so it is a second *thing* rather than
+   * more layers of the first — otherwise pulling a copy out of a PSD would drag
+   * the original along with it ever after.
    */
   private copyGroup(
     layerId: string,

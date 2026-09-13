@@ -14,7 +14,7 @@ import { Grid, fillShape } from "../lib/grid";
 import { fillAt } from "../lib/doc-shape";
 import { layerKind } from "../lib/layer-kinds";
 import { ordersByHand } from "../lib/units";
-import { instanceOf } from "./instance";
+import { unitOf } from "./unit";
 import {
   applyHidden,
   applyTransform,
@@ -203,7 +203,7 @@ export class DocRenderer {
    */
   draws(layer: Layer, placement: Placement): boolean {
     if (layerKind(layer) !== "pattern") return true;
-    return instanceOf(placement) === this.revealed;
+    return unitOf(placement) === this.revealed;
   }
 
   /**
@@ -385,7 +385,7 @@ export class DocRenderer {
         view.object.setVisible(
           layer.visible &&
             !off.whole &&
-            instanceOf(placement) !== this.hidden,
+            unitOf(placement) !== this.hidden,
         );
         // After `setVisible`, never instead of it: the plugin forwards one
         // answer to every child, so showing the group shows all of it again.
@@ -649,9 +649,9 @@ export function drawOrder(
 ): Placement[] {
   const units = new Map<string, Placement[]>();
   for (const placement of placements) {
-    const unit = units.get(instanceOf(placement));
+    const unit = units.get(unitOf(placement));
     if (unit) unit.push(placement);
-    else units.set(instanceOf(placement), [placement]);
+    else units.set(unitOf(placement), [placement]);
   }
 
   const sorted = [...units.values()];
