@@ -12,10 +12,10 @@
  * a thing you could be half in — the panel open behind a mode that did not know
  * about it. It is a section now, left to right in the order you work.
  *
- * Publish and Project Options stay in the hamburger's menu. They are
- * destinations rather than modes — you come back from them to where you were —
- * and folding them in leaves the header carrying the project, undo and redo,
- * and the mode it is in.
+ * Publish, Export Assets and Project Options stay in the hamburger's menu. They
+ * are destinations rather than modes — you come back from them to where you
+ * were — and folding them in leaves the header carrying the project, undo and
+ * redo, and the mode it is in.
  *
  * Undo and redo sit next to that toggle rather than in the menu because they
  * are the two buttons an iPad needs most: ⌘Z wants a keyboard, and the device
@@ -36,6 +36,8 @@ export interface HeaderCallbacks {
   /** Import whatever image is on the clipboard, into the middle of the view. */
   onPasteImage: () => void;
   onPublish: () => void;
+  /** Some of the project's PSDs, on their own — assets, sources, or both. */
+  onExportAssets: () => void;
   onOptions: () => void;
 }
 
@@ -173,6 +175,15 @@ export class EditorHeader {
           onSelect: callbacks.onPasteImage,
         },
         { label: "Publish", glyph: ICONS.publish, onSelect: callbacks.onPublish },
+        // Beside Publish rather than inside it: Publish's two exits are both
+        // "hand somebody a program", and this is the one that hands back the
+        // artwork — the sprite sheets to take into another engine, or the PSDs
+        // themselves so a file drawn on an iPad opens on a desktop.
+        {
+          label: "Export Assets",
+          glyph: ICONS.image,
+          onSelect: callbacks.onExportAssets,
+        },
         {
           label: "Project Options",
           glyph: ICONS.sliders,

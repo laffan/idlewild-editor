@@ -3,11 +3,12 @@
 //! Split from `scaffolds` for the 700-line rule and along its own seam: those
 //! tests are about what creating a project *writes*, these about what leaving
 //! with one *takes* — the document in the shape the game reads, the spaces
-//! every placed PSD blocks, and a document too broken to read at all. They
-//! share the store they create projects in and nothing else.
+//! every placed PSD blocks, a document too broken to read at all, and the
+//! artwork on its own. They share the store they create projects in and nothing
+//! else.
 
 use crate::project::{GameOptions, Genre, Projection};
-use crate::{psd_pipeline, publish, store};
+use crate::{export_assets, psd_pipeline, psd_write, publish, store};
 
 /// The bug this pins: an export shipped the game tree and the processed
 /// assets but left `game.config.json` as the empty one the scaffold wrote, so
@@ -234,4 +235,216 @@ fn count_in_zip(bytes: &[u8], name: &str) -> usize {
         return 0;
     };
     archive.file_names().filter(|n| *n == name).count()
+}
+
+/// **Export Assets** is the third exit, and the only one that hands back
+/// artwork rather than a program.
+///
+/// Three things have to be true of it and none of them is true of the other two
+/// exits. It takes a *list* — the files nobody asked for stay out. It answers
+/// the "assets, sources, or both" question separately from that list, because
+/// the sprite sheets go into another engine and the PSDs go into Photoshop and
+/// wanting one is not wanting the other. And the paths inside are the store's
+/// own — `psd/<key>.psd` and `assets/<key>/…` — so there is one layout to learn
+/// rather than a second invented for the zip.
+#[test]
+fn export_assets_takes_the_files_and_the_halves_it_was_asked_for() {
+    let meta = store::create_project(
+        "Assets",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
+        for key in ["tower", "tree"] {
+            let bytes = psd_write::psd_from_rgba_marked(
+                key,
+                4,
+                4,
+                super::swatch(4, 4, [10, 20, 30, 255]),
+                None,
+            )
+            .expect("a PSD should be written");
+            std::fs::write(psd_dir.join(format!("{key}.psd")), &bytes).expect("save");
+            psd_pipeline::process(
+                &meta.id,
+                key,
+                &psd_pipeline::ProcessOptions::default(),
+                |_| {},
+            )
+            .expect("psd-to-json should process it");
+        }
+
+        // Both halves of one file, and nothing about the other.
+        let both = export_assets::build_zip(
+            &meta.id,
+            &["tower".to_string()],
+            export_assets::Wanted {
+                assets: true,
+                psds: true,
+            },
+        )
+        .expect("both halves should export");
+        let names = names_in_zip(&both);
+        assert!(
+            names.iter().any(|n| n == "assets/psd/tower.psd"),
+            "no source PSD in {names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n == "assets/assets/tower/data.json"),
+            "no processed manifest in {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.contains("tree")),
+            "a file nobody asked for came along: {names:?}"
+        );
+
+        // The sources on their own: what opens in Photoshop, and nothing a
+        // runtime would read.
+        let sources = export_assets::build_zip(
+            &meta.id,
+            &["tower".to_string(), "tree".to_string()],
+            export_assets::Wanted {
+                assets: false,
+                psds: true,
+            },
+        )
+        .expect("the sources should export");
+        let names = names_in_zip(&sources);
+        assert_eq!(
+            names,
+            vec!["assets/psd/tower.psd", "assets/psd/tree.psd"],
+            "sources only should be exactly the two files"
+        );
+
+        // And the generated half on its own: what another engine can read, with
+        // no source file in it at all.
+        let generated = export_assets::build_zip(
+            &meta.id,
+            &["tree".to_string()],
+            export_assets::Wanted {
+                assets: true,
+                psds: false,
+            },
+        )
+        .expect("the assets should export");
+        let names = names_in_zip(&generated);
+        assert!(
+            names.iter().all(|n| n.starts_with("assets/assets/tree/")),
+            "assets only should carry nothing else: {names:?}"
+        );
+        assert!(!names.is_empty(), "assets only came out empty");
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// A zip nobody can use is a zip that should not have been written.
+///
+/// Both refusals are sentences rather than empty archives: an export somebody
+/// has to open to discover was empty is worse than one that did not happen.
+#[test]
+fn export_assets_refuses_an_archive_with_nothing_in_it() {
+    let meta = store::create_project(
+        "Empty",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let none = export_assets::Wanted {
+            assets: false,
+            psds: false,
+        };
+        let err = export_assets::build_zip(&meta.id, &["tower".to_string()], none)
+            .expect_err("neither half is not a choice");
+        assert!(err.contains("Choose"), "unhelpful refusal: {err}");
+
+        let both = export_assets::Wanted {
+            assets: true,
+            psds: true,
+        };
+        let err = export_assets::build_zip(&meta.id, &[], both)
+            .expect_err("no files is not a choice either");
+        assert!(err.contains("Nothing selected"), "unhelpful refusal: {err}");
+
+        // A key the project has not got is skipped, not failed on — but an
+        // archive that comes out empty because of it says so.
+        let err = export_assets::build_zip(&meta.id, &["nobody".to_string()], both)
+            .expect_err("an empty result should be refused");
+        assert!(err.contains("nothing to export"), "unhelpful refusal: {err}");
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// Every PSD in a project, which is what the picker opens with.
+#[test]
+fn export_assets_lists_what_is_on_disk_rather_than_what_is_placed() {
+    let meta = store::create_project(
+        "Listing",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        assert!(
+            export_assets::list(&meta.id).expect("list").is_empty(),
+            "a fresh project has no PSDs"
+        );
+
+        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
+        let bytes =
+            psd_write::psd_from_rgba_marked("hut", 4, 4, super::swatch(4, 4, [1, 2, 3, 255]), None)
+                .expect("a PSD should be written");
+        std::fs::write(psd_dir.join("hut.psd"), &bytes).expect("save");
+        // Not a PSD, so not in the list.
+        std::fs::write(psd_dir.join("notes.txt"), b"ignore me").expect("save");
+
+        let listed = export_assets::list(&meta.id).expect("list");
+        assert_eq!(listed.len(), 1, "only the PSD should be listed: {listed:?}");
+        assert_eq!(listed[0].key, "hut");
+        assert!(listed[0].bytes > 0);
+        // Written but never processed, so there is nothing generated to export
+        // and the row has to say so rather than promising assets it has not got.
+        assert!(!listed[0].has_assets);
+
+        psd_pipeline::process(
+            &meta.id,
+            "hut",
+            &psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("psd-to-json should process it");
+        assert!(export_assets::list(&meta.id).expect("list")[0].has_assets);
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// The entry names in a zip, sorted — a zip's own order is the writer's.
+fn names_in_zip(bytes: &[u8]) -> Vec<String> {
+    let archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("zip should read");
+    let mut names: Vec<String> = archive.file_names().map(str::to_string).collect();
+    names.sort();
+    names
 }

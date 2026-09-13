@@ -3,6 +3,7 @@
 
 mod archive;
 mod clipboard;
+mod export_assets;
 mod file_server;
 mod game_config;
 mod game_files;
@@ -563,30 +564,12 @@ fn read_asset_data_url(id: String, relative: String) -> Result<String, String> {
 }
 
 // ── export & publish ────────────────────────────────────────────────────────
-
-/// Zip the project and return it as base64 for the frontend to save or share.
-/// **Export site**: a zip you can serve.
-///
-/// Written straight to the path the save dialog gave, like the project
-/// export beside it — an archive carrying every processed asset has no
-/// business crossing the IPC boundary as base64 first.
-#[tauri::command]
-fn publish_site(id: String, path: String) -> Result<(), String> {
-    publish::write_zip(&id, &psd_write::source_path(&path))
-}
-
-/// **Export project**: the project itself, as a `.idlewild` file — source
-/// PSDs included, so it can be opened somewhere else and carried on with.
-#[tauri::command]
-fn export_project(id: String, path: String) -> Result<(), String> {
-    archive::export(&id, &psd_write::source_path(&path))
-}
-
-/// Read a `.idlewild` file back in, as a new project.
-#[tauri::command]
-fn import_project(path: String) -> Result<ProjectMeta, String> {
-    archive::import(&psd_write::source_path(&path))
-}
+//
+// The three exits live with the code that builds them — `publish::publish_site`,
+// `archive::export_project` and `export_assets::export_assets_zip`, the way
+// `game_files`'s commands do. What is left here is `save_bytes`, which belongs to
+// none of them: it writes whatever the frontend has produced, and the only thing
+// it knows about is the save dialog's idea of a path.
 
 /// Write bytes the frontend produced to a path the user picked.
 ///
@@ -681,9 +664,11 @@ pub fn run() {
             psd_thumbnail,
             psd_preview,
             read_asset_data_url,
-            publish_site,
-            export_project,
-            import_project,
+            publish::publish_site,
+            export_assets::export_assets_zip,
+            export_assets::list_project_psds,
+            archive::export_project,
+            archive::import_project,
             save_bytes,
         ])
         .run(tauri::generate_context!())

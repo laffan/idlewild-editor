@@ -94,6 +94,22 @@ pub struct ArchivedProject {
     pub options: GameOptions,
 }
 
+/// **Export project**: the project itself, as a `.idlewild` file — source PSDs
+/// included, so it can be opened somewhere else and carried on with.
+///
+/// The save dialog hands back a `file://` URL on iPadOS rather than a path,
+/// which is what `source_path` is for.
+#[tauri::command]
+pub fn export_project(id: String, path: String) -> Result<(), String> {
+    export(&id, &crate::psd_write::source_path(&path))
+}
+
+/// Read a `.idlewild` file back in, as a new project.
+#[tauri::command]
+pub fn import_project(path: String) -> Result<ProjectMeta, String> {
+    import(&crate::psd_write::source_path(&path))
+}
+
 /// Write a project to `dest` as a `.idlewild` file.
 ///
 /// Streamed to the path rather than handed back as bytes: a project carries

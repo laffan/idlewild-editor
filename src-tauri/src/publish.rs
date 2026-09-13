@@ -18,6 +18,17 @@ use std::io::Write;
 use std::path::Path;
 use zip::write::SimpleFileOptions;
 
+/// **Export site**: a zip you can serve.
+///
+/// Written straight to the path the save dialog gave, like the two exports
+/// beside it — an archive carrying every processed asset has no business
+/// crossing the IPC boundary as base64 first. The dialog hands back a `file://`
+/// URL on iPadOS rather than a path, which is what `source_path` is for.
+#[tauri::command]
+pub fn publish_site(id: String, path: String) -> Result<(), String> {
+    write_zip(&id, &crate::psd_write::source_path(&path))
+}
+
 /// Build the zip and write it where the user asked for it.
 ///
 /// The bytes are built in memory first because the archive writer wants a

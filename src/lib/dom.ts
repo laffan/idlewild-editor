@@ -156,6 +156,9 @@ export const ICONS = {
   /* A flag, for the point a scene starts play on. */
   flag: ["M6 21V4", "M6 4h11l-2.5 4L17 12H6"],
   file: "M6 3h8l4 4v14H6V3Z",
+  /* A picture: a frame with a horizon and a sun in it. Export Assets, which is
+     the one exit that hands back artwork rather than a program. */
+  image: ["M4 5h16v14H4z", "m4 16 5-5 4 4 3-3 4 4", "M9 9.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"],
   folder: "M3 6h6l2 3h10v11H3V6Z",
   trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 14h10l1-14"],
   rename: "M4 20l4-1 10-10-3-3L5 16l-1 4Z",

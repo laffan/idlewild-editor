@@ -509,6 +509,14 @@ export const psd = {
     invoke<string>("read_asset_data_url", { id, relative }),
 };
 
+/** One of a project's PSDs, as the Export Assets picker lists it. */
+export interface PsdSummary {
+  key: string;
+  bytes: number;
+  /** Whether the pipeline has run over it, so there is output to export. */
+  hasAssets: boolean;
+}
+
 export const publish = {
   /**
    * A zip you can serve: the game, its assets and both runtimes.
@@ -521,6 +529,21 @@ export const publish = {
   /** The project itself, as `.idlewild` — source PSDs included. */
   project: (id: string, path: string) =>
     invoke<void>("export_project", { id, path }),
+  /**
+   * Some of a project's PSDs on their own: the pipeline's output, the source
+   * files, or both. The third exit, and the only one that hands back artwork
+   * rather than a program.
+   */
+  assets: (
+    id: string,
+    path: string,
+    keys: readonly string[],
+    assets: boolean,
+    psds: boolean,
+  ) =>
+    invoke<void>("export_assets_zip", { id, path, keys, assets, psds }),
+  /** Every PSD in the project, for the picker Export Assets opens with. */
+  listPsds: (id: string) => invoke<PsdSummary[]>("list_project_psds", { id }),
   saveBytes: (path: string, dataBase64: string) =>
     invoke<void>("save_bytes", { path, dataBase64 }),
 };

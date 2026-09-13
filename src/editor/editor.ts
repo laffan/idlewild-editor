@@ -35,6 +35,7 @@ import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { confirmDeleteLayer, deleteSelected } from "./layer-actions";
+import { openExportAssets } from "./export-assets";
 import { openAddImage, openExportSelection, openPublish } from "./sheets";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
@@ -350,6 +351,7 @@ export async function mountEditor(
       onMode: (next) => setMode(next),
       onPasteImage: () => intake.paste(),
       onPublish: () => openPublish(meta.id, meta.name),
+      onExportAssets: () => openExportAssets(meta.id, meta.name),
       onOptions: () => render.open(store.layers.length),
     },
   );

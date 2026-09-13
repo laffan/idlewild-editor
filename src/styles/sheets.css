@@ -193,6 +193,47 @@
 /* One number, so a box the width of one. */
 .sheet-row-input { width: 104px; flex: none; }
 
+/* ── Export Assets ──────────────────────────────────────────────────────────
+
+   A row per PSD, each a checkbox and a name. The list is the tall part of the
+   sheet and the only part that can grow without bound, so it scrolls and the
+   two rows bracketing it do not: what to export, and the buttons, stay put
+   while the files move under them. */
+.psd-picker {
+  max-height: 46vh;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--chrome-rule);
+}
+.psd-pick {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 48px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--chrome-rule);
+  cursor: pointer;
+}
+.psd-pick:last-child { border-bottom: 0; }
+.psd-pick:hover { background: var(--chrome-rule); }
+/* The filename, which is the thing being chosen, so it takes the room and the
+   size beside it gives way. */
+.psd-pick-name {
+  flex: 1;
+  min-width: 0;
+  font: 500 14px var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* All / None and the tally, on the row above the list. */
+.picker-actions { display: flex; align-items: center; gap: 10px; }
+.picker-actions .sheet-row-key { width: auto; margin-left: auto; }
+/* The segmented control and the sentence saying what the chosen one means.
+   Under it rather than beside it: the sentence is a paragraph and the control
+   is three words, and a row holding both would wrap badly on a phone-width
+   sheet. */
+.seg-stack { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
 /* How many tiles an image background should be: two numbers and a × between
    them, on the sheet's own row grid. */
 .tile-pair { display: flex; align-items: center; gap: 10px; }
