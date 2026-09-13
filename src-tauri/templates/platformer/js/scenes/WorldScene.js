@@ -96,6 +96,7 @@ export class WorldScene extends Phaser.Scene {
           object.setPosition(placement.x, placement.y);
           applyScale(object, placement);
           applyDepth(object, depth * 1000 + step);
+          applyHidden(object, placement);
         }
       });
     });
@@ -240,6 +241,40 @@ function applyScale(object, placement) {
   object.setScale(placement.width / naturalWidth, placement.height / naturalHeight);
 }
 // idlewild:end applyScale
+
+/**
+ * Turn off what the PSD says is turned off.
+ *
+ * A hidden layer is still **placed**: the asset is exported, the object is
+ * made, and `this.P2P.get(...)` finds it — so turning it on is a line of your
+ * own code. It simply starts invisible, the way the editor draws it.
+ *
+ * `hiddenParts` is the same answer one level down. A group is placed whole,
+ * so a hidden layer inside one cannot be left out of the document; what is
+ * named here are the pieces to turn off once the plugin has made them.
+ *
+ * Shared with the editor's own `applyHidden`, in `src/game/placed-parts.ts`.
+ * Keep the two in step.
+ */
+// idlewild:begin applyHidden
+function applyHidden(object, placement) {
+  if (placement.hidden) {
+    if (object.setVisible) object.setVisible(false);
+    return;
+  }
+  const names = placement.hiddenParts;
+  if (!names || names.length === 0) return;
+  hideNamed(object, names);
+}
+
+function hideNamed(object, names) {
+  const children = object.getChildren ? object.getChildren() : [];
+  for (const child of children) {
+    if (child.setVisible && names.includes(child.name)) child.setVisible(false);
+    hideNamed(child, names);
+  }
+}
+// idlewild:end applyHidden
 
 /**
  * The flat point lists `grid.js` returns, as Phaser's graphics want them.

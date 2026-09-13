@@ -28,7 +28,7 @@ import type {
   Zone,
 } from "../lib/types";
 import type { DragModifiers } from "./camera-rig";
-import { pointInPolygon, pointReach } from "./doc-renderer";
+import { pointInPolygon, pointReach } from "./picking";
 import {
   instanceMembers,
   instanceOf,

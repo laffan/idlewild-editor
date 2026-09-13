@@ -95,7 +95,9 @@ fn built(doc: &Psd, source: &[Row], node: &Node<'_>) -> Result<Option<Built>, St
         // group because nothing offers to add a group, and it carries either
         // the ink it was created with or the single transparent pixel `add`
         // describes.
-        return Ok(Some(Built::Layer(raster(name, blank_or(doc, node)?))));
+        return Ok(Some(Built::Layer(
+            raster(name, blank_or(doc, node)?).visible(node.edit.visible.unwrap_or(true)),
+        )));
     };
     let row = source
         .get(index)
@@ -104,9 +106,11 @@ fn built(doc: &Psd, source: &[Row], node: &Node<'_>) -> Result<Option<Built>, St
     match row.item {
         Item::Group(id) => {
             let group = &doc.groups()[&id];
+            // Visibility is the one property an edit may change; the rest
+            // come off the file, because nothing offers a way to say them.
             let mut out = GroupBuilder::new(name)
                 .opacity(group.opacity())
-                .visible(group.visible())
+                .visible(node.edit.visible.unwrap_or(group.visible()))
                 .blend_mode(group.blend_mode());
             for child in node.children.iter().rev() {
                 match built(doc, source, child)? {
@@ -141,7 +145,7 @@ fn built(doc: &Psd, source: &[Row], node: &Node<'_>) -> Result<Option<Built>, St
             Ok(Some(Built::Layer(
                 raster(name, patch)
                     .opacity(layer.opacity())
-                    .visible(layer.visible())
+                    .visible(node.edit.visible.unwrap_or(layer.visible()))
                     .blend_mode(layer.blend_mode()),
             )))
         }

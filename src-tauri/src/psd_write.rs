@@ -159,7 +159,9 @@ pub fn psd_from_parts_marked(
 ) -> Result<Vec<u8>, String> {
     let layout = psd_marks::layout(width, height, marks);
     let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
-    builder.add_group(parts_group(name, width, height, parts, &layout)?);
+    // Nothing to carry over: this is the file being written for the first
+    // time, and everything in it starts lit.
+    builder.add_group(parts_group(name, width, height, parts, &layout, None)?);
     for layer in psd_marks::layers(&layout, marks) {
         builder.add_layer(layer);
     }
@@ -168,19 +170,27 @@ pub fn psd_from_parts_marked(
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
 }
 
-/// The generated group, artwork parts and all.
+/// The generated group: the extrusion's artwork, parts and all.
+///
+/// `was` is the file being rewritten, when there is one. A second Apply
+/// regenerates these layers from the solid and a fresh `LayerBuilder` starts
+/// lit, so without it turning the lines of a block-out off and then pulling
+/// the shape again would quietly switch them back on. Everything else about
+/// a part is regenerated on purpose; its eye is the user's.
 fn parts_group(
     key: &str,
     width: u32,
     height: u32,
     parts: &[Part],
     layout: &psd_marks::Layout,
+    was: Option<&Psd>,
 ) -> Result<GroupBuilder, String> {
     if parts.is_empty() {
         return Err("A generated group needs at least one layer".to_string());
     }
+    let lit = |name: &str| was.map_or(true, |doc| shown_in(doc, name));
     let expected = (width as usize) * (height as usize) * 4;
-    let mut group = GroupBuilder::new(format!("G | {key}"));
+    let mut group = GroupBuilder::new(format!("G | {key}")).visible(lit(&format!("G | {key}")));
     // The parts arrive top-first, as Photoshop's panel lists them, and
     // `add_layer` stacks bottom-up.
     for part in parts.iter().rev() {
@@ -191,13 +201,31 @@ fn parts_group(
                 part.rgba.len()
             ));
         }
+        let named = format!("S | {}", part.name);
         group = group.add_layer(
-            LayerBuilder::new(format!("S | {}", part.name))
+            LayerBuilder::new(&named)
                 .rgba(width, height, part.rgba.clone())
-                .at(layout.art_left, layout.art_top),
+                .at(layout.art_left, layout.art_top)
+                .visible(lit(&named)),
         );
     }
     Ok(group)
+}
+
+/// Whether a layer or group of this name is currently turned on in a file.
+///
+/// By name, because that is the only handle a regenerated layer has on the
+/// one it replaces — the same way the marks and an extrusion's parts are
+/// found on every re-parse. A name that is not in the file is new, and new
+/// layers are lit.
+fn shown_in(doc: &Psd, name: &str) -> bool {
+    if let Some(layer) = doc.layers().iter().find(|l| l.name() == name) {
+        return layer.visible();
+    }
+    doc.groups()
+        .values()
+        .find(|group| group.name() == name)
+        .map_or(true, |group| group.visible())
 }
 
 /// Rewrite the layers this editor generates, leaving every other layer alone.
@@ -257,7 +285,7 @@ pub fn rewrite_parts_marked(
         key,
     };
 
-    let mut group = Some(parts_group(key, width, height, parts, &layout)?);
+    let mut group = Some(parts_group(key, width, height, parts, &layout, Some(&doc))?);
     let mut anchor = Some(psd_marks::anchor_layer(&layout));
     let mut zone = psd_marks::zone_layer(&layout, marks);
 

@@ -73,6 +73,16 @@ export interface PsdLayerEditorCallbacks {
   onToggleAdjust: () => void;
   /** Draw into one sprite layer of this file — see `penable`. */
   onPen: (layer: PsdLayerInfo) => void;
+  /**
+   * Show this file's layers on the canvas the way the list has them staged,
+   * or stop and let the document answer again.
+   *
+   * The eye is staged with everything else — one rewrite and one re-parse for
+   * a handful of clicks — and a staged edit you cannot see is one nobody can
+   * judge. `names` are what psd-to-json calls the layers, a hidden group's
+   * contents included; an empty list means the file itself is the answer.
+   */
+  onPreviewVisibility: (names: string[]) => void;
   /** What the two round-trip buttons are called on this platform. */
   openLabel: string;
   refreshLabel: string;
@@ -172,6 +182,9 @@ export class PsdLayerEditor {
 
   destroy(): void {
     this.endDrag(false);
+    // A preview belongs to the panel showing it. Leaving one behind would
+    // leave a layer turned off on a canvas with nothing left to say why.
+    this.callbacks.onPreviewVisibility([]);
   }
 
   /**
@@ -266,6 +279,13 @@ export class PsdLayerEditor {
           held.name = name;
           this.updateFoot();
         },
+        onVisible: (held, visible) => {
+          held.visible = visible;
+          // The canvas first: this is the half of the edit that is free, and
+          // the whole reason the other half can wait for Apply.
+          this.pushPreview();
+          this.render();
+        },
         onGripDown: (event) => this.beginDrag(event),
         onGripKey: (event, held) => this.onGripKey(event, held),
         onPen: (layer) => this.callbacks.onPen(layer),
@@ -343,6 +363,7 @@ export class PsdLayerEditor {
           text: "Revert",
           onClick: () => {
             this.rows = stack.layers.map(asRow);
+            this.pushPreview();
             this.render();
           },
         }),
@@ -350,11 +371,41 @@ export class PsdLayerEditor {
     );
   }
 
-  /** Whether anything has been moved or retyped since the last read. */
+  /** Whether anything has been moved, retyped or turned off since the read. */
   private get dirty(): boolean {
     return this.rows.some(
-      (row, i) => row.source.index !== i || row.name.trim() !== row.source.name,
+      (row, i) =>
+        row.source.index !== i ||
+        row.name.trim() !== row.source.name ||
+        row.visible !== row.source.visible,
     );
+  }
+
+  /**
+   * Show the canvas what this list has staged, or hand it back to the file.
+   *
+   * The names are *effective*: a layer inside a group that has been turned
+   * off is turned off too, which is the reading psd-to-json leaves to
+   * whoever consumes it — and `hiddenBy` already walks a flat list of depths
+   * for exactly this shape of question, for folding.
+   *
+   * Nothing staged means nothing to preview, and the renderer goes back to
+   * reading the document. The names are the ones the file *currently* holds,
+   * because what is on the canvas was made from the file as it currently is.
+   */
+  private pushPreview(): void {
+    if (!this.rows.some((row) => row.visible !== row.source.visible)) {
+      this.callbacks.onPreviewVisibility([]);
+      return;
+    }
+    const inside = hiddenBy(this.rows, (row) => !row.visible);
+    const names: string[] = [];
+    this.rows.forEach((row, at) => {
+      if (row.visible && !inside[at]) return;
+      const name = manifestName(row.source.name);
+      if (name) names.push(name);
+    });
+    this.callbacks.onPreviewVisibility(names);
   }
 
   // ── writing ───────────────────────────────────────────────────────────────
@@ -366,6 +417,7 @@ export class PsdLayerEditor {
       index: row.source.index,
       name: row.name.trim(),
       depth: row.depth,
+      visible: row.visible,
     }));
     if (edits.some((edit) => edit.name === "")) {
       log.warn("Every layer needs a name.");
@@ -378,6 +430,9 @@ export class PsdLayerEditor {
     try {
       const manifest = await psd.writeLayers(this.projectId, this.key, edits);
       log.info(`Rewrote ${this.key}.psd — ${edits.length} layers`);
+      // The file says it now, so the canvas stops being told and reads the
+      // document again — which the re-parse below is about to refresh.
+      this.callbacks.onPreviewVisibility([]);
       this.callbacks.onWritten(manifest, this.renames());
       this.busy = false;
       // A folded group that has just been renamed is still folded, so the

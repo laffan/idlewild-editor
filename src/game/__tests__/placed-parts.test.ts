@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { applyTransform, partsOf, type Placed } from "../placed-parts";
+import {
+  applyHidden,
+  applyTransform,
+  partsOf,
+  type Placed,
+} from "../placed-parts";
 import type { Placement } from "../../lib/types";
 
 /**
@@ -170,5 +175,64 @@ describe("applyTransform", () => {
     };
     applyTransform(empty as unknown as Placed, [], placement({ x: 3, y: 4 }));
     expect(moved).toEqual([3, 4]);
+  });
+});
+
+/**
+ * A named sprite, which is what the plugin actually leaves: `setName(name)`
+ * off the manifest entry. The name is the only handle there is on which
+ * piece of a placed group is which.
+ */
+function namedSprite(name: string, x = 0, y = 0) {
+  return {
+    ...sprite(x, y),
+    name,
+    visible: true,
+    setVisible(v: boolean) {
+      this.visible = v;
+      return this;
+    },
+  };
+}
+
+describe("turning off the pieces a PSD says are hidden", () => {
+  it("hides the ones it names and leaves the rest alone", () => {
+    const lines = namedSprite("lines-abc");
+    const shading = namedSprite("shading-abc");
+    const shape = namedSprite("shape-abc");
+    const parts = partsOf(group(lines, shading, shape));
+
+    applyHidden(parts, ["lines-abc"]);
+
+    expect(lines.visible).toBe(false);
+    expect(shading.visible).toBe(true);
+    expect(shape.visible).toBe(true);
+  });
+
+  it("does nothing at all when there is nothing hidden", () => {
+    const shape = namedSprite("shape-abc");
+    const parts = partsOf(group(shape));
+    applyHidden(parts, undefined);
+    applyHidden(parts, []);
+    expect(shape.visible).toBe(true);
+  });
+
+  it("reaches a piece inside a group inside the placement", () => {
+    // psd-to-json marks every layer under a hidden folder as hidden in its
+    // own right, so the names reach the leaves even though the folder itself
+    // is not a piece — only the things that draw are.
+    const inner = namedSprite("sketch");
+    const outer = namedSprite("hall");
+    const parts = partsOf(group(outer, group(inner) as never));
+
+    applyHidden(parts, ["sketch"]);
+
+    expect(inner.visible).toBe(false);
+    expect(outer.visible).toBe(true);
+  });
+
+  it("carries each piece's name off the object", () => {
+    const parts = partsOf(group(namedSprite("a"), namedSprite("b")));
+    expect(parts.map((part) => part.name)).toEqual(["a", "b"]);
   });
 });

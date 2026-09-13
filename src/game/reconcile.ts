@@ -14,6 +14,7 @@ import {
   anchorImpliedBy,
   anchorOffset,
   placeableLayers,
+  placedVisibility,
   positionFrom,
   stackOrder,
   type Manifest,
@@ -247,6 +248,7 @@ function adoptNewLayers(
       // the PSD still moves as one.
       instance: sibling.placement.instance,
       order: stack.get(entry.path) ?? 0,
+      ...placedVisibility(manifest, entry.path),
     });
     log.info(`${key}.psd gained "${entry.path}" — placed on the same layer`);
   }
@@ -309,6 +311,11 @@ function reviseExisting(
         naturalWidth: width,
         naturalHeight: height,
         order: stack.get(path) ?? placement.order ?? 0,
+        // Re-read from the file every time, and cleared when it says so:
+        // turning an eye back on in the inspector is a rewrite and a
+        // re-parse, and a flag left standing would be a layer that could
+        // never be shown again.
+        ...placedVisibility(manifest, path),
       });
     }
   }

@@ -432,3 +432,203 @@ fn a_grouped_file_round_trips_through_the_layer_list() {
     store::delete_project(&meta.id).ok();
     outcome.expect("the round trip should not panic");
 }
+
+/// Turning a layer's eye off, and what it takes to turn it back on.
+///
+/// Visibility is a fact about the *artwork*, so it goes into the PSD rather
+/// than into the document: Photoshop shows it, psd-to-json reports it, and
+/// every scene that places the file agrees about it without being told. This
+/// pins the whole chain — an edit says hide, the file comes back hidden, and
+/// the manifest the game reads says so too.
+///
+/// The middle write is the load-bearing one. An edit list that says nothing
+/// about visibility is every rewrite this editor has ever made — a reorder, a
+/// rename, an added layer — and it has to leave the eye exactly where it is,
+/// or renaming a layer would quietly switch hidden work back on.
+#[test]
+fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
+    use crate::project::{GameOptions, Genre, Projection};
+    use crate::psd_layers::{self, LayerEdit};
+    use crate::store;
+
+    let meta = store::create_project(
+        "Hiding",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let outcome = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            psd_write::psd_from_parts_marked("extrude-abc", 16, 16, &parts(16, 16), &square(16.0))
+                .expect("a group should be written");
+        std::fs::write(store::psd_dir(id).unwrap().join("extrude-abc.psd"), &bytes)
+            .expect("the file should save");
+
+        let list = psd_layers::read(id, "extrude-abc").expect("the list should read");
+        assert!(
+            list.layers.iter().all(|l| l.visible),
+            "a file this editor wrote starts with every eye on",
+        );
+
+        // Hide the group's lines, and the group holding the marks' artwork.
+        let hide = |name: &str| name == "S | lines-abc" || name == "Z | grid";
+        let edits: Vec<LayerEdit> = list
+            .layers
+            .iter()
+            .map(|row| LayerEdit {
+                index: Some(row.index),
+                name: row.name.clone(),
+                depth: row.depth,
+                visible: Some(!hide(&row.name)),
+                paint: None,
+            })
+            .collect();
+        let manifest =
+            psd_layers::write(id, "extrude-abc", &edits, |_| {}).expect("the rewrite should land");
+
+        let after = psd_layers::read(id, "extrude-abc").expect("the list should read again");
+        let eyes: Vec<(&str, bool)> = after
+            .layers
+            .iter()
+            .map(|l| (l.name.as_str(), l.visible))
+            .collect();
+        assert_eq!(
+            eyes,
+            vec![
+                ("P | anchor", true),
+                ("Z | grid", false),
+                ("G | extrude-abc", true),
+                ("S | lines-abc", false),
+                ("S | shading-abc", true),
+                ("S | shape-abc", true),
+            ]
+        );
+
+        // And psd-to-json says so, which is how the canvas and the game hear
+        // about it. Only the hidden ones carry the flag.
+        let parsed: serde_json::Value =
+            serde_json::from_str(&manifest).expect("the manifest should parse");
+        let hidden = hidden_names(&parsed);
+        assert!(hidden.contains(&"lines-abc".to_string()), "got {hidden:?}");
+        assert!(!hidden.contains(&"shading-abc".to_string()), "got {hidden:?}");
+
+        // A rewrite that says nothing about the eye leaves it where it is.
+        let quiet: Vec<LayerEdit> = after
+            .layers
+            .iter()
+            .map(|row| LayerEdit::keep(row.index, row.name.clone(), row.depth))
+            .collect();
+        psd_layers::write(id, "extrude-abc", &quiet, |_| {}).expect("the rewrite should land");
+        let again = psd_layers::read(id, "extrude-abc").expect("the list should read again");
+        assert_eq!(
+            again
+                .layers
+                .iter()
+                .filter(|l| !l.visible)
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Z | grid", "S | lines-abc"],
+        );
+
+        // And the way back on.
+        let show: Vec<LayerEdit> = again
+            .layers
+            .iter()
+            .map(|row| LayerEdit {
+                index: Some(row.index),
+                name: row.name.clone(),
+                depth: row.depth,
+                visible: Some(true),
+                paint: None,
+            })
+            .collect();
+        psd_layers::write(id, "extrude-abc", &show, |_| {}).expect("the rewrite should land");
+        let lit = psd_layers::read(id, "extrude-abc").expect("the list should read again");
+        assert!(lit.layers.iter().all(|l| l.visible));
+    });
+
+    store::delete_project(&meta.id).ok();
+    outcome.expect("the round trip should not panic");
+}
+
+/// The names psd-to-json marked hidden, anywhere in a manifest's tree.
+fn hidden_names(manifest: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    walk_hidden(manifest.get("layers"), &mut out);
+    out
+}
+
+fn walk_hidden(node: Option<&serde_json::Value>, out: &mut Vec<String>) {
+    let Some(serde_json::Value::Array(items)) = node else {
+        return;
+    };
+    for item in items {
+        if item.get("visible") == Some(&serde_json::Value::Bool(false)) {
+            if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
+                out.push(name.to_string());
+            }
+        }
+        walk_hidden(item.get("children"), out);
+    }
+}
+
+/// Pulling the shape again does not switch a part back on.
+///
+/// A second Apply regenerates an extrusion's group from the solid, and a
+/// fresh `LayerBuilder` starts lit — so turning the lines of a block-out off
+/// and then carrying the shape further out used to bring them back. The eye
+/// is the one thing about a generated part that is the user's.
+#[test]
+fn a_second_extrude_keeps_the_eye_it_was_left_with() {
+    use crate::psd_layers::{self, LayerEdit};
+
+    let first = psd_write::psd_from_parts_marked("extrude-abc", 16, 16, &parts(16, 16), &square(16.0))
+        .expect("a group should be written");
+    let doc = Psd::from_bytes(&first).expect("the file should parse");
+
+    // Turn the lines off, the way the inspector's eye column does.
+    let rows = psd_layers::rows(&doc);
+    let edits: Vec<LayerEdit> = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let name = psd_layers::name_of(&doc, row);
+            LayerEdit {
+                index: Some(index),
+                visible: Some(name != "S | lines-abc"),
+                name,
+                depth: row.depth,
+                paint: None,
+            }
+        })
+        .collect();
+    let hidden = crate::psd_rebuild::rebuild(&doc, &edits).expect("the rewrite should land");
+
+    // Now pull the shape again over that file.
+    let again = psd_write::rewrite_parts_marked(
+        &hidden,
+        "extrude-abc",
+        20,
+        20,
+        &parts(20, 20),
+        &square(20.0),
+    )
+    .expect("a second apply should land");
+
+    let after = Psd::from_bytes(&again).expect("the file should parse");
+    let eyes: Vec<(&str, bool)> = after
+        .layers()
+        .iter()
+        .map(|l| (l.name(), l.visible()))
+        .collect();
+    assert!(
+        eyes.contains(&("S | lines-abc", false)),
+        "the lines were turned off and should have stayed off: {eyes:?}",
+    );
+    assert!(eyes.contains(&("S | shading-abc", true)), "got {eyes:?}");
+    assert!(eyes.contains(&("S | shape-abc", true)), "got {eyes:?}");
+}

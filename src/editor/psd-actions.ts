@@ -319,6 +319,11 @@ export function createPsdLayersFactory(
         psdLayerOwner(layer, key, !!store.extrusion(key), options.onExtrude),
       onOpen: () => void file.open(key),
       onRefresh: () => void file.refresh(key),
+      // The eye column, before Apply has written anything: the canvas shows
+      // this file the way the list has it staged. The scene holds one such
+      // preview at a time, which is all the inspector can ask for.
+      onPreviewVisibility: (names) =>
+        scene()?.previewPsdVisibility(names.length ? key : null, names),
       onToggleAdjust: () => {
         const open = scene();
         if (!open) return;

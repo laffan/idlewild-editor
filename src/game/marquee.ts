@@ -24,7 +24,7 @@
 import type Phaser from "phaser";
 import type { Grid } from "../lib/grid";
 import type { Cell, Layer, Point, Rect, Selection } from "../lib/types";
-import { pickPlacementsIn } from "./doc-renderer";
+import { pickPlacementsIn } from "./picking";
 
 const ACCENT = 0xec3013;
 /** With the selection overlay, above everything the document renders. */

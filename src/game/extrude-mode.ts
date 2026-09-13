@@ -76,7 +76,7 @@ import {
   type VoxelSet,
 } from "../lib/extrude";
 import { UndoHistory } from "../lib/history";
-import { pointInPolygon } from "./doc-renderer";
+import { pointInPolygon } from "./picking";
 import { ExtrudeRender } from "./extrude-render";
 
 /** What the pointer does inside the mode. */

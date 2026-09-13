@@ -221,6 +221,18 @@ remaining pieces are wired to real slots rather than mocked.
   group's own second line — and a drag takes a group's contents with it,
   landing only among the things it already sits beside. A PSD with masks or
   clipping is listed read-only, because a rewrite would flatten them
+- **A layer's eye, down the right of that list.** A layer you turned off in
+  Photoshop stays off here — it used to be drawn anyway, which made hiding
+  something in the file no way of hiding it in the game — and the column
+  turns one off without opening Photoshop at all. Hidden is about *drawing*
+  rather than about existing: the asset is still exported, the object is
+  still made, and it simply starts turned off in the editor and in the game,
+  so your own code can turn it on. It is staged like a rename — the canvas
+  shows it the moment you click, and Apply writes it into the PSD, so one
+  rewrite covers a handful of clicks — and a group takes its contents with
+  it. A layer inside a group you have turned off keeps a lit eye of its own,
+  as it does in Photoshop: what decides whether it draws is the folder it is
+  in. Pulling an extruded shape again leaves the eyes where you left them
 - Everything that is about the *file* rather than about this placement of it
   is **one row directly over that list**: Adjust layers, which opens the PSD
   up on the canvas so a single layer can be moved, and the two halves of the

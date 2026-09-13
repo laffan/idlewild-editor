@@ -137,6 +137,16 @@ pub struct LayerEdit {
     /// Where it sits in the rebuilt tree. Zero is the top level.
     #[serde(default)]
     pub depth: usize,
+    /// Whether the layer's eye is on, or None to leave it as the file has it.
+    ///
+    /// A rewrite has always carried visibility across untouched, which is
+    /// what an edit list that says nothing about it still means. Saying
+    /// something is how the inspector's eye column reaches the file — and it
+    /// goes into the file rather than into the document because it is a fact
+    /// about the *artwork*: Photoshop shows it, psd-to-json reports it, and
+    /// every scene that places this PSD agrees about it for free.
+    #[serde(default)]
+    pub visible: Option<bool>,
     /// Ink to lay over whatever this row already holds. See `psd_paint`.
     #[serde(default)]
     pub paint: Option<Paint>,
@@ -149,6 +159,7 @@ impl LayerEdit {
             index: Some(index),
             name,
             depth,
+            visible: None,
             paint: None,
         }
     }
@@ -285,7 +296,7 @@ fn identity_edits(doc: &Psd) -> Vec<LayerEdit> {
         .collect()
 }
 
-fn name_of(doc: &Psd, row: &Row) -> String {
+pub(crate) fn name_of(doc: &Psd, row: &Row) -> String {
     match row.item {
         Item::Layer(at) => doc.layer_by_idx(at).name().to_string(),
         Item::Group(id) => doc.groups()[&id].name().to_string(),
@@ -321,6 +332,8 @@ pub fn add(project_id: &str, key: &str, emit_log: impl Fn(&str)) -> Result<Strin
         index: None,
         name: format!("S | {}", spare_name(&doc)),
         depth: 0,
+        // A row you asked for is a row you can see.
+        visible: Some(true),
         paint: None,
     }];
     edits.extend(identity_edits(&doc));

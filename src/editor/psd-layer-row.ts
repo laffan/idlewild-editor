@@ -28,11 +28,25 @@ export interface Row {
   source: PsdLayerInfo;
   name: string;
   depth: number;
+  /**
+   * Whether its eye is on, as this list is showing it.
+   *
+   * Photoshop's own eye, and the same one psd-to-json reads: a hidden layer
+   * is exported and placed and simply starts turned off, in the editor and in
+   * the game. Held here beside the name because it is staged the same way —
+   * the canvas shows it at once, the file hears about it on Apply.
+   */
+  visible: boolean;
 }
 
 /** A row as it comes off a read: where it is, at the depth the file has it. */
 export function asRow(source: PsdLayerInfo): Row {
-  return { source, name: source.name, depth: source.depth };
+  return {
+    source,
+    name: source.name,
+    depth: source.depth,
+    visible: source.visible,
+  };
 }
 
 /** Everything a row needs from the list it is part of. */
@@ -47,6 +61,8 @@ export interface RowContext {
   onFold: (row: Row) => void;
   /** A keystroke in the name field; the list decides what is dirty. */
   onRename: (row: Row, name: string) => void;
+  /** The eye, clicked. */
+  onVisible: (row: Row, visible: boolean) => void;
   onGripDown: (event: PointerEvent) => void;
   onGripKey: (event: KeyboardEvent, row: Row) => void;
   /** Draw into this layer. Only reached where `penable` says so. */
@@ -117,6 +133,11 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
           ctx.onPen(row.source),
         )
       : null,
+    // The eye, last on the row, in a column of its own — it is on every row
+    // rather than on the ones that lead somewhere, so it lines up down the
+    // list the way Photoshop's does. A file that cannot be rewritten cannot
+    // be told anything, so it shows the state without offering to change it.
+    eyeEl(row, ctx),
   );
 }
 
@@ -136,6 +157,32 @@ export function penable(
   owner: OwnedLayer | null,
 ): boolean {
   return !owner && !layer.isGroup && layer.category === "sprite";
+}
+
+/**
+ * The eye: whether the game draws this layer.
+ *
+ * Hiding is not a rename, so it is offered on rows whose *name* the app owns
+ * as well — the two marks, an extrusion's parts. Nothing downstream reads a
+ * mark's pixels, so turning one off changes only what Photoshop shows; an
+ * extrusion's parts are artwork like any other, and being able to drop the
+ * lines from a block-out is the reason to want this at all.
+ */
+function eyeEl(row: Row, ctx: RowContext): HTMLElement {
+  const shown = row.visible;
+  const label = shown ? `Hide "${row.source.name}"` : `Show "${row.source.name}"`;
+  return h(
+    "button",
+    {
+      class: shown ? "psd-layer-eye" : "psd-layer-eye off",
+      title: ctx.stack.writable ? label : "This file is read-only",
+      "aria-label": label,
+      "aria-pressed": String(!shown),
+      disabled: ctx.stack.writable ? null : "true",
+      onClick: () => ctx.onVisible(row, !shown),
+    },
+    icon(shown ? ICONS.eye : ICONS.eyeOff, 14),
+  );
 }
 
 /** One icon button on the right of a row. */

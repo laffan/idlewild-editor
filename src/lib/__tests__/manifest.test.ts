@@ -5,6 +5,7 @@ import {
   parseManifest,
   placeableLayers,
   placedPosition,
+  placedVisibility,
   stackOrder,
 } from "../manifest";
 
@@ -434,5 +435,127 @@ describe("categories the parser will answer to", () => {
       layers: [{ name: "grid", category: "zone", x: 0, y: 0, width: 64, height: 32 }],
     });
     expect(placeableLayers(parseManifest(bare))).toHaveLength(1);
+  });
+});
+
+/**
+ * A PSD with a layer turned off at the top level, a group turned off, and a
+ * lit layer inside that group — which is the case the reading turns on.
+ */
+const WITH_HIDDEN = JSON.stringify({
+  name: "town",
+  width: 128,
+  height: 128,
+  layers: [
+    { name: "roof", category: "sprite", x: 0, y: 0, width: 64, height: 32 },
+    {
+      name: "scaffolding",
+      category: "sprite",
+      x: 0,
+      y: 0,
+      width: 64,
+      height: 64,
+      visible: false,
+    },
+    {
+      name: "drafts",
+      category: "group",
+      x: 0,
+      y: 0,
+      width: 64,
+      height: 64,
+      visible: false,
+      children: [
+        // Its own eye is lit; Photoshop shows it that way too. What decides
+        // whether it draws is the folder it is in.
+        { name: "sketch", category: "sprite", x: 0, y: 0, width: 32, height: 32 },
+      ],
+    },
+    {
+      name: "town",
+      category: "group",
+      x: 0,
+      y: 0,
+      width: 96,
+      height: 96,
+      children: [
+        { name: "hall", category: "sprite", x: 0, y: 0, width: 32, height: 32 },
+        {
+          name: "spire",
+          category: "sprite",
+          x: 0,
+          y: 0,
+          width: 16,
+          height: 48,
+          visible: false,
+        },
+      ],
+    },
+  ],
+});
+
+describe("what the manifest says is turned off", () => {
+  const manifest = parseManifest(WITH_HIDDEN);
+  const named = (name: string) =>
+    manifest.all.find((layer) => layer.name === name);
+
+  it("takes a layer with nothing to say as visible", () => {
+    expect(named("roof")?.visible).toBe(true);
+  });
+
+  it("reads the flag psd-to-json writes", () => {
+    expect(named("scaffolding")?.visible).toBe(false);
+  });
+
+  it("carries a hidden group's answer down to its contents", () => {
+    // The child says nothing about itself, and is hidden all the same.
+    expect(named("drafts")?.visible).toBe(false);
+    expect(named("sketch")?.visible).toBe(false);
+  });
+
+  it("leaves a lit group's contents to speak for themselves", () => {
+    expect(named("town")?.visible).toBe(true);
+    expect(named("hall")?.visible).toBe(true);
+    expect(named("spire")?.visible).toBe(false);
+  });
+});
+
+describe("what a placement records about it", () => {
+  const manifest = parseManifest(WITH_HIDDEN);
+
+  it("says nothing at all about a layer that draws", () => {
+    // Undefined rather than false, so a document carries no field for the
+    // overwhelmingly common case.
+    expect(placedVisibility(manifest, "roof")).toEqual({
+      hidden: undefined,
+      hiddenParts: undefined,
+    });
+  });
+
+  it("marks a hidden top-level layer", () => {
+    expect(placedVisibility(manifest, "scaffolding").hidden).toBe(true);
+  });
+
+  it("names the pieces inside a placed group that are off", () => {
+    // The group is placed whole, so this is the only way to say it.
+    expect(placedVisibility(manifest, "town")).toEqual({
+      hidden: undefined,
+      hiddenParts: ["spire"],
+    });
+  });
+
+  it("marks a hidden group whole, and its contents with it", () => {
+    const drafts = placedVisibility(manifest, "drafts");
+    expect(drafts.hidden).toBe(true);
+    expect(drafts.hiddenParts).toEqual(["sketch"]);
+  });
+
+  it("clears what a layer turned back on used to say", () => {
+    // The fields are spread over a placement that may already carry last
+    // parse's answer, so "nothing hidden" has to overwrite rather than be
+    // left out — which is what an explicit undefined does.
+    const cleared = placedVisibility(parseManifest(CONVERTED_PNG), "build");
+    expect(Object.keys(cleared).sort()).toEqual(["hidden", "hiddenParts"]);
+    expect(cleared.hidden).toBeUndefined();
   });
 });

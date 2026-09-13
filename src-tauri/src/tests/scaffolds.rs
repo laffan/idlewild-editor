@@ -653,6 +653,7 @@ fn both_scenes_mark_the_same_blocks_and_close_every_one() {
                 "drawOrder",
                 "applyDepth",
                 "applyScale",
+                "applyHidden",
                 "pointsToVectors",
             ],
             "{genre:?} marks a different set of blocks",

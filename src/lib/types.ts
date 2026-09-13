@@ -170,6 +170,28 @@ export interface Placement {
    */
   instance?: string;
   /**
+   * Whether the PSD says this layer is turned off.
+   *
+   * A fact about the *file*, cached here for the reason `order` is: the
+   * document is what the game's config is generated from, and once a
+   * placement is in it nothing says what its manifest said. It is refreshed
+   * every time the file is placed or re-parsed, so the PSD stays the truth
+   * and this stays a copy of it.
+   *
+   * Hidden is about drawing rather than about existing: the asset is
+   * exported, the object is made, and it starts turned off — in the editor
+   * and in the game alike — so a project's own code can turn it on.
+   */
+  hidden?: boolean;
+  /**
+   * The layers *inside* this one that are turned off, by name.
+   *
+   * A group is placed whole, so a hidden child of one cannot be expressed by
+   * leaving a placement out: what is turned off is one object inside a
+   * placed group. Absent for the usual case of nothing hidden under it.
+   */
+  hiddenParts?: string[];
+  /**
    * How high this layer sat in its PSD's stack, counting up from the back.
    *
    * A PSD is a stack of layers and the order is the artwork: a roof over a

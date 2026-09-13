@@ -1140,10 +1140,11 @@ artwork, so the canvas is the union of the two.
 
 ## Editing a PSD's layer stack without leaving
 
-Two things about a PSD layer reach the game, and the inspector edits both:
-order is draw order, and the name carries the pipe convention, so renaming
-`S | tower` to `T | tower` is what turns a sprite into a tileset. Neither is
-worth a round trip out to Photoshop and back.
+Three things about a PSD layer reach the game, and the inspector edits all
+three: order is draw order, the name carries the pipe convention — so renaming
+`S | tower` to `T | tower` is what turns a sprite into a tileset — and the eye
+decides whether it is drawn at all. None of them is worth a round trip out to
+Photoshop and back.
 
 `src-tauri/src/psd_layers.rs` reads the stack and rewrites it,
 `src-tauri/src/psd_rebuild.rs` turns an edit list back into a file, and
@@ -1292,6 +1293,97 @@ and remove the placement, for a change of one character. So the editor hands
 `reloadPsd` a map of the paths that moved, old to new, and reconciliation
 resolves through it before looking the layer up. Retyping only the *prefix*
 produces no entry, because the exported name did not change.
+
+---
+
+## Layer visibility
+
+A layer turned off in Photoshop was drawn anyway. Visibility was *read* — the
+Rust side has had `PsdLayerInfo.visible` since the list existed, and a rebuild
+has always carried each layer's eye across — but it stopped there: psd-to-json
+never wrote it into the manifest, so nothing downstream could know.
+
+**The PSD is the truth, and everything else is a copy of it.** Not the
+document: a placement belongs to a *scene*, and a hidden layer is a fact about
+the artwork, so keeping it in the document would let two scenes placing one
+file disagree about what it looks like. Photoshop shows it, psd-to-json
+reports it, the editor and the game read it, and the eye column writes it back
+— one answer, four readers.
+
+**Hidden is about drawing, not about existing.** The asset is exported, the
+entry is in the manifest, the object is made, and it starts turned off. That
+is what makes it useful in a game — `this.P2P.get(...)` finds the thing and
+your own code turns it on — and it is why `psd_pipeline.rs` asks psd-to-json
+for `hiddenLayers: "include"`. Skipping would put the file and the document
+out of step: a layer the inspector still lists, with no asset behind it.
+
+### Four places it has to be carried
+
+- **psd-to-json writes `"visible": false`,** and only when false — beside
+  `alpha` and `blendMode`, which are likewise only written when they are not
+  the default. A missing flag reads as true, so no manifest written before
+  this means anything different than it did.
+- **A group carries only its own answer,** which is what Photoshop's panel
+  shows: a lit eye on a layer inside a folder that is switched off. Carrying
+  it down is the reader's job, and `lib/manifest.ts` does it once on the way
+  in — `ManifestLayer.visible` is the *effective* answer, so nothing
+  downstream has to walk back up a tree it no longer has.
+- **A placement caches it,** as it caches `order`, and for that reason: the
+  document is what the game's config is generated from, and once a placement
+  is in it nothing says what the manifest said. `hidden` is this layer's own
+  answer; `hiddenParts` names the layers *inside* it that are off, because a
+  group is placed **whole** and a hidden child of one cannot be expressed by
+  leaving a placement out. Both are refreshed on every place and every
+  re-parse, and both clear when the file says so — `placedVisibility` returns
+  explicit `undefined`s rather than leaving keys out, because the patch is
+  spread over a placement that may still carry the last parse's answer.
+- **The canvas and the game turn pieces off by name,** which is the only
+  handle a placed object has on where it came from: psd-to-phaser calls
+  `setName(layer.name)` and nothing else. Two layers sharing a name inside one
+  file are therefore one answer — the manifest addresses layers by name too,
+  so that ambiguity is the file's rather than the reader's. It is applied
+  *after* the placement's own visibility, never instead of it: the plugin
+  forwards one `setVisible` to every child of a group, so showing the group
+  shows all of it again.
+
+### The eye is staged, and previewed
+
+Clicking it does not rewrite the file. A rewrite is a rebuild and a whole
+pipeline run — far too much to hang off a click, and the same reason a rename
+waits for Apply — so the eye joins the pending edit and one Apply covers a
+handful of clicks.
+
+A staged edit you cannot see is one nobody can judge, though, and the canvas
+can show it for free. So the panel hands the scene the manifest names it is
+showing as off, and `DocRenderer.previewVisibility` draws that instead of the
+document — for one key, which is all the inspector can have open. It is **the
+whole answer while it is set**, not an addition to the document's: a layer
+staged back *on* has to come back, and a preview that only added would never
+let it. Apply clears it, and so do Revert and leaving the panel, because a
+preview belongs to the panel showing it.
+
+### The eye a regenerated layer comes back with
+
+A second extrude Apply rebuilds the artwork group from the solid, and a fresh
+`LayerBuilder` starts lit — so turning the lines of a block-out off and then
+carrying the shape further out used to switch them back on. `parts_group`
+reads the eye off the file it is replacing, by name, the same way the marks
+and the parts themselves are found on every re-parse. Everything else about a
+generated part is regenerated on purpose; its eye is the user's.
+
+Every other rewrite was already safe, for one reason: an edit that says
+nothing about visibility leaves it alone. `LayerEdit.visible` is an
+`Option<bool>`, `None` means keep, and `LayerEdit::keep` — which a rename, a
+reorder, an added layer and pen mode's paint all go through — sends `None`.
+
+### What a merged group does instead
+
+An `S | name` group, a tileset and an atlas are composited into a single
+image, and compositing has always skipped hidden children the way Photoshop
+does. There is no separate asset there to export or to turn on later, so a
+hidden child of one is baked out rather than carried. That is psd-to-json's
+own behaviour and it is left alone; the flag is for layers that are placed
+separately.
 
 ---
 
@@ -2023,7 +2115,9 @@ together, and neither has been exercised on either platform yet.
 
 `cargo test --lib` covers the load-bearing path: RGBA → PSD → psd-to-json →
 manifest → zip, plus the path-traversal guards, the project scaffold, what an
-export's config carries, the shapes a file picker hands back, and the order a
+export's config carries, the whole of a layer's eye — an edit hides it, the
+file comes back hidden, the manifest says so, a rewrite that says nothing
+leaves it alone, and a second extrude Apply does not switch it back on — the shapes a file picker hands back, and the order a
 manifest lists a PSD's layers in — which the frontend mirrors and cannot check
 for itself. The project's options are next door in `tests/options.rs`: that an
 unticked character controller means no prefab and no `spawnCharacter` rather
@@ -2051,6 +2145,7 @@ running it on a device.
 `vitest` covers the pure halves — the grid projection, fill geometry,
 picking (a point's and both marquees'), what is drawn over what, resize
 geometry, what the minimap frames and that the camera is always inside it,
+what a manifest says is hidden and what a placement records about it,
 undo's three answers about a write and what a restored document is,
 what each canvas mode counts as one step of its own, whether a selection still
 names something, the unit arithmetic
@@ -3881,6 +3976,16 @@ console is a record of what happened rather than a document.
   not re-filtered with them, so ink drawn while it is on can still be smoothed
   as the canvas scales. The ink is baked at its own resolution; making it blocky
   is a question about the brush engine rather than about this setting.
+- A project made before the eye column keeps its own `placeDocument`, so its
+  game draws a hidden layer until that block is Reset — `applyHidden` is
+  offered as a block it has never had, but nothing can add the line that calls
+  it. The editor's own canvas hides it either way, which is the half that is
+  not template code.
+- Hiding a layer inside a **merged** group — an `S | name` over a group, a
+  tileset, an atlas — bakes it out of the composited image rather than
+  carrying it as a flag. That is psd-to-json's behaviour and the right one for
+  a single image, but it means "hidden is still exported and accessible" holds
+  only for layers that are placed separately.
 - A project's `game/` tree is never migrated, which is what makes it the user's
   — and what means the new layout, the camera block and the dropped grid reach a
   project made before them only as far as the offer to add a missing block goes.

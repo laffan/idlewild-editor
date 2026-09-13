@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { destroyPlaced, drawOrder } from "../../game/doc-renderer";
 import {
-  destroyPlaced,
-  drawOrder,
   pickPlacement,
   pickPlacementsIn,
   pickPoint,
   pickZone,
   pointInPolygon,
-} from "../../game/doc-renderer";
+} from "../../game/picking";
 import { Grid } from "../grid";
 import { isSelected, layerItems } from "../../editor/layer-items";
 import type { Layer, MapPoint, Placement, Zone } from "../types";

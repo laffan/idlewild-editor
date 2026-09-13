@@ -142,6 +142,13 @@ pub(crate) fn process_held(
         },
         jpg_quality: options.jpg_quality.unwrap_or(85),
         ignore_layers: options.ignore_layers.clone().unwrap_or_default(),
+        // A hidden layer is still the project's: it is exported, it is in the
+        // manifest marked `visible: false`, and the editor and the game both
+        // place it and leave it turned off. Skipping would put the file and
+        // the document out of step — a layer the inspector still lists, with
+        // no asset behind it — which is the one thing this editor must not do
+        // with somebody's artwork. See `psd_layers::write`.
+        hidden_layers: psd_to_json::config::HiddenLayers::Include,
         metadata_only: options.metadata_only.unwrap_or(false),
     };
 

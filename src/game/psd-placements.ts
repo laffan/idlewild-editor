@@ -18,6 +18,7 @@ import {
   parseManifest,
   placeableLayers,
   placedPosition,
+  placedVisibility,
   stackOrder,
 } from "../lib/manifest";
 import type { Cell, Placement, Selection } from "../lib/types";
@@ -150,6 +151,8 @@ export class PsdPlacements {
           anchor: at,
           instance,
           order: stack.get(entry.path) ?? 0,
+          // What the file says is turned off, here and inside it.
+          ...placedVisibility(manifest, entry.path),
         });
         this.placeOne(layer.id, placement);
         last = placement;

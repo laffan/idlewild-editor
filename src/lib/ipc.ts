@@ -140,6 +140,11 @@ export interface PsdLayerEdit {
   index: number;
   name: string;
   depth: number;
+  /**
+   * Whether the layer's eye is on. Left out to keep whatever the file has,
+   * which is what every rewrite made before the eye column existed means.
+   */
+  visible?: boolean;
 }
 
 /**

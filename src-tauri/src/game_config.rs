@@ -391,6 +391,9 @@ impl Fill {
 /// renderer works it out. Sending the ratio instead would hide where it comes
 /// from in a file whose whole job is to be readable.
 ///
+/// `hidden` and `hiddenParts` are what the PSD says is turned off, carried so
+/// that the game draws what the editor draws.
+///
 /// `order` and `instance` are what make a multi-layer PSD draw the right way
 /// up. `order` is how high the layer sat in its file's stack, counting from
 /// the back; `instance` is the unit the placements of one PSD share, so a
@@ -420,6 +423,17 @@ struct Placement {
     natural_height: Option<f64>,
     #[serde(default)]
     order: Option<i64>,
+    /// Whether the PSD says this layer is turned off.
+    ///
+    /// The game places it either way — the asset is exported and the object
+    /// is made, so the project's own code can turn it on — it simply starts
+    /// invisible. `hidden_parts` names the layers *inside* a placed group
+    /// that are off on their own, which a group placed whole cannot say any
+    /// other way. See `src/lib/manifest.ts`.
+    #[serde(default)]
+    hidden: Option<bool>,
+    #[serde(default)]
+    hidden_parts: Option<Vec<String>>,
     /// Which placed unit this belongs to. Absent on a document written before
     /// units existed, where a placement is a unit of one and its own id says
     /// so — the same fallback `game/instance.ts` makes.
@@ -450,6 +464,8 @@ impl Placement {
             "naturalWidth": self.natural_width,
             "naturalHeight": self.natural_height,
             "order": self.order,
+            "hidden": self.hidden,
+            "hiddenParts": self.hidden_parts,
             "instance": self.instance,
             "anchor": self.anchor,
             "collider": collider,

@@ -10,20 +10,32 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { convexOverlapsRect, Grid, fillShape } from "../lib/grid";
+import { Grid, fillShape } from "../lib/grid";
 import { instanceOf } from "./instance";
-import { applyTransform, partsOf, type PlacedPart } from "./placed-parts";
+import {
+  applyHidden,
+  applyTransform,
+  partsOf,
+  type PlacedPart,
+} from "./placed-parts";
 import type {
   Cell,
   FillPatch,
   Layer,
-  MapPoint,
   Placement,
   Point,
-  Rect,
   Selection,
   Zone,
 } from "../lib/types";
+// What is under a point, and what a box caught — see `picking.ts`.
+import {
+  pickPlacement,
+  pickPoint,
+  pickZone,
+  type PickResult,
+  type PointPickResult,
+  type ZonePickResult,
+} from "./picking";
 import * as log from "../lib/log";
 
 const DEPTH_STRIDE = 1000;
@@ -41,24 +53,6 @@ const POINT_COLOR = 0xec3013;
  */
 const POINT_HALO = 0xf3f2f2;
 
-/** What a hit-test returns: the document record, not the rendered object. */
-export interface PickResult {
-  layerId: string;
-  placement: Placement;
-}
-
-/** The same, for a boundary. */
-export interface ZonePickResult {
-  layerId: string;
-  zone: Zone;
-}
-
-/** And for a named place. */
-export interface PointPickResult {
-  layerId: string;
-  point: MapPoint;
-}
-
 /**
  * How big a point's marker is, against the grid.
  *
@@ -67,26 +61,6 @@ export interface PointPickResult {
  * it should grow and shrink with the space it stands on.
  */
 const POINT_RADIUS = 0.22;
-/**
- * And how far from the middle of one a tap still counts, in the same units.
- *
- * Half a tile's height, which on a 64 px grid is sixteen world pixels: a
- * finger's worth without being a whole space, so a point never swallows the
- * tap meant for the ground it is standing on.
- */
-const POINT_REACH = 0.5;
-
-/**
- * How near a point a finger has to land to mean it, in world pixels.
- *
- * Shared with the drag controller, which asks the same question of the same
- * marker: picking one up has to have the same reach as picking it, or a point
- * can be selected in a place where it cannot then be moved.
- */
-export function pointReach(grid: Grid): number {
-  return grid.tileHeight * POINT_REACH;
-}
-
 /**
  * What `P2P.place()` hands back.
  *
@@ -133,6 +107,21 @@ export class DocRenderer {
    * the placement is untouched, and a cancelled session leaves no trace.
    */
   private hidden: string | null = null;
+  /**
+   * A PSD's layers as a panel is *showing* them, before the file has been
+   * rewritten to say so.
+   *
+   * The inspector's eye column stages its edits — one rewrite and one
+   * re-parse for a handful of clicks, as a rename does — and a staged edit
+   * you cannot see is a staged edit nobody can judge. So the panel says what
+   * it is showing and this draws that instead, by manifest name; it is the
+   * whole answer for that key while it is set, because the panel holds the
+   * whole stack. One key at a time: the inspector shows one file's layers.
+   *
+   * Like `hidden` above, it is about what is on screen this second rather
+   * than about the project, and Apply replaces it with the document's own.
+   */
+  private preview: { key: string; names: Set<string> } | null = null;
 
   constructor(scene: Phaser.Scene, store: DocStore, grid: Grid) {
     this.store = store;
@@ -140,6 +129,18 @@ export class DocRenderer {
     this.fillGraphics = scene.add.graphics();
     this.zoneGraphics = scene.add.graphics();
     this.pointGraphics = scene.add.graphics();
+  }
+
+  /**
+   * Show one PSD's layers the way a panel has them staged, or stop.
+   *
+   * `names` are manifest names — what psd-to-phaser called the objects it
+   * made — and it is every layer of that file the panel is showing as turned
+   * off, its groups' contents included.
+   */
+  previewVisibility(key: string | null, names: readonly string[] = []): void {
+    this.preview = key ? { key, names: new Set(names) } : null;
+    this.syncPlacements();
   }
 
   /** Keep one placed unit off the canvas while something else has it. */
@@ -279,9 +280,18 @@ export class DocRenderer {
         // does to a group. See `placed-parts.ts`.
         applyTransform(view.object, view.parts, placement);
         applyDepth(view.object, base + step);
+        // What the PSD says is turned off — staged in the inspector, or as
+        // the file already has it. A placement whose own layer is off goes
+        // dark whole; otherwise the pieces inside it that are off do.
+        const off = this.turnedOff(placement);
         view.object.setVisible(
-          layer.visible && instanceOf(placement) !== this.hidden,
+          layer.visible &&
+            !off.whole &&
+            instanceOf(placement) !== this.hidden,
         );
+        // After `setVisible`, never instead of it: the plugin forwards one
+        // answer to every child, so showing the group shows all of it again.
+        applyHidden(view.parts, off.parts);
       });
     });
 
@@ -290,6 +300,28 @@ export class DocRenderer {
       destroyPlaced(view.object);
       this.placements.delete(id);
     }
+  }
+
+  /**
+   * What is turned off about one placement: the whole thing, or pieces of it.
+   *
+   * A panel previewing this file answers for all of it — that is the point of
+   * a preview — and otherwise the document does, from what the manifest said
+   * at the last parse.
+   */
+  private turnedOff(placement: Placement): {
+    whole: boolean;
+    parts: readonly string[] | undefined;
+  } {
+    const preview =
+      this.preview?.key === placement.psdKey ? this.preview.names : null;
+    if (!preview) {
+      return { whole: !!placement.hidden, parts: placement.hiddenParts };
+    }
+    // A placement points at a layer by path; what the objects carry is the
+    // last step of it, which is the name psd-to-phaser gave them.
+    const leaf = placement.layerPath.split("/").pop() ?? placement.layerPath;
+    return { whole: preview.has(leaf), parts: [...preview] };
   }
 
   /**
@@ -465,86 +497,6 @@ export function hexToNumber(hex: string): number {
 }
 
 /**
- * Find the front-most boundary under a world point.
- *
- * The same rules as `pickPlacement` — the document rather than the rendered
- * graphics, top-first layers, the last zone on a layer drawing over the ones
- * before it, locked and hidden layers inert — with the box test replaced by a
- * polygon test, because a boundary is a shape rather than a rectangle and
- * selecting one by its bounding box would catch the empty corners of every
- * L-shaped wall in the project.
- */
-export function pickZone(
-  layers: readonly Layer[],
-  worldX: number,
-  worldY: number,
-): ZonePickResult | undefined {
-  for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
-    for (let i = layer.zones.length - 1; i >= 0; i--) {
-      const zone = layer.zones[i];
-      if (pointInPolygon({ x: worldX, y: worldY }, zone.points)) {
-        return { layerId: layer.id, zone };
-      }
-    }
-  }
-  return undefined;
-}
-
-/**
- * The nearest named place within reach of a world point.
- *
- * Nearest rather than front-most, which is what every other picker here
- * answers: two markers close together are two dots a finger lands between,
- * and the one under the middle of the finger is the one meant. Locked and
- * hidden layers are inert, the same rule the others follow.
- */
-export function pickPoint(
-  grid: Grid,
-  layers: readonly Layer[],
-  worldX: number,
-  worldY: number,
-): PointPickResult | undefined {
-  let best: PointPickResult | undefined;
-  let nearest = pointReach(grid);
-  for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
-    for (const point of layer.points) {
-      const at = grid.cellCentre(point.cell);
-      const distance = Math.hypot(at.x - worldX, at.y - worldY);
-      if (distance > nearest) continue;
-      nearest = distance;
-      best = { layerId: layer.id, point };
-    }
-  }
-  return best;
-}
-
-/**
- * Even-odd containment. Shared with play mode's navigation, which asks the
- * same question of the same polygons from the other end.
- */
-export function pointInPolygon(
-  point: { x: number; y: number },
-  polygon: readonly { x: number; y: number }[],
-): boolean {
-  if (polygon.length < 3) return false;
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const a = polygon[i];
-    const b = polygon[j];
-    const straddles = a.y > point.y !== b.y > point.y;
-    if (
-      straddles &&
-      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
-    ) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
-
-/**
  * Everything on one document layer, back to front.
  *
  * Two orderings, one inside the other.
@@ -590,78 +542,4 @@ export function drawOrder(
 export function layerDepth(layers: readonly Layer[], layerId: string): number {
   const index = layers.findIndex((l) => l.id === layerId);
   return index < 0 ? 0 : (layers.length - index) * DEPTH_STRIDE;
-}
-
-/**
- * Find the front-most placement under a world point.
- *
- * This reads the document rather than the rendered Phaser objects: a
- * placement whose texture failed to load still has bounds, and has to stay
- * selectable so it can be inspected or removed.
- *
- * Layers are stored top-first and, within a layer, a later placement draws
- * over an earlier one — so the front-most candidate is the earliest layer's
- * final placement. Locked and hidden layers are inert to the pointer, the
- * same rule Hush applies to its own pick paths.
- */
-/**
- * Every placement a box caught, on the front-most layer that has any.
- *
- * One layer's worth, because that is what a drag can move together — and the
- * layer is chosen by the same front-most-wins rule a tap follows, so a
- * marquee over a stack of layers picks the one you would have hit by tapping
- * rather than the one that happens to be active.
- *
- * A placement counts when the marquee *overlaps* it, not when it contains it:
- * dragging a box that swallows everything whole is the fiddly half of every
- * marquee, and nothing here is small enough to catch by accident.
- *
- * The marquee arrives as its own outline rather than as a rectangle, because
- * under an isometric template it is a diamond and the box around that diamond
- * is very much bigger than what was dragged — a marquee in one corner of the
- * screen would otherwise pick up images in another.
- */
-export function pickPlacementsIn(
-  layers: readonly Layer[],
-  outline: readonly Point[],
-): { layerId: string; ids: string[] } | null {
-  for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
-    const ids = layer.placements
-      .filter((p) => convexOverlapsRect(outline, placementRect(p)))
-      .map((p) => p.id);
-    if (ids.length > 0) return { layerId: layer.id, ids };
-  }
-  return null;
-}
-
-function placementRect(placement: Placement): Rect {
-  return {
-    x: placement.x,
-    y: placement.y,
-    width: placement.width,
-    height: placement.height,
-  };
-}
-
-export function pickPlacement(
-  layers: readonly Layer[],
-  worldX: number,
-  worldY: number,
-): PickResult | undefined {
-  for (const layer of layers) {
-    if (layer.locked || !layer.visible) continue;
-    for (let i = layer.placements.length - 1; i >= 0; i--) {
-      const placement = layer.placements[i];
-      if (
-        worldX >= placement.x &&
-        worldX <= placement.x + placement.width &&
-        worldY >= placement.y &&
-        worldY <= placement.y + placement.height
-      ) {
-        return { layerId: layer.id, placement };
-      }
-    }
-  }
-  return undefined;
 }

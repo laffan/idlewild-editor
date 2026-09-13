@@ -57,6 +57,20 @@ export interface ManifestLayer {
   path: string;
   name: string;
   category: LayerCategory;
+  /**
+   * Whether this layer is drawn, with its groups taken into account.
+   *
+   * psd-to-json writes `visible: false` on a layer whose eye is off in
+   * Photoshop, and a group carries only its *own* answer — a layer inside a
+   * switched-off folder has a lit eye there and says nothing here. Carrying
+   * that down is the reader's job, so what this field holds is the effective
+   * answer: false if this layer is hidden **or** anything holding it is.
+   *
+   * Hidden is about drawing rather than about existing. The asset is
+   * exported and the layer is placed; it simply starts turned off, here and
+   * in the game, so a project's own code can turn it on.
+   */
+  visible: boolean;
   /** Position within the PSD canvas, top-left origin — sprites are placed
    *  with `setOrigin(0, 0)`. */
   x: number;
@@ -86,7 +100,7 @@ export function parseManifest(json: string): Manifest {
   const layers = Array.isArray(raw.layers) ? raw.layers : [];
 
   const all: ManifestLayer[] = [];
-  const top = layers.map((layer) => walk(layer, "", all));
+  const top = layers.map((layer) => walk(layer, "", all, true));
 
   return {
     name: String(raw.name ?? "untitled"),
@@ -189,6 +203,7 @@ function walk(
   raw: unknown,
   prefix: string,
   all: ManifestLayer[],
+  shown = true,
 ): ManifestLayer {
   const node = (raw ?? {}) as Record<string, unknown>;
   const name = String(node.name ?? "");
@@ -198,6 +213,9 @@ function walk(
     path,
     name,
     category: toCategory(node.category, node.type),
+    // Absent means visible, which is what every manifest written before
+    // psd-to-json read the flag says about every layer in it.
+    visible: shown && node.visible !== false,
     x: Number(node.x ?? 0),
     y: Number(node.y ?? 0),
     width: Number(node.width ?? 0),
@@ -214,7 +232,7 @@ function walk(
     let maxX = -Infinity;
     let maxY = -Infinity;
     for (const child of children) {
-      const parsed = walk(child, path, all);
+      const parsed = walk(child, path, all, layer.visible);
       minX = Math.min(minX, parsed.x);
       minY = Math.min(minY, parsed.y);
       maxX = Math.max(maxX, parsed.x + parsed.width);
@@ -343,6 +361,53 @@ export function placeableLayers(manifest: Manifest): ManifestLayer[] {
       !isMarkLayer(l.name),
   );
   return placeable.length > 0 ? placeable : manifest.top;
+}
+
+/**
+ * The layers inside a placed one that are hidden on their own.
+ *
+ * A group is placed **whole** — one placement, one call to `place()` — so a
+ * hidden child inside it cannot be expressed by leaving a placement out. What
+ * comes back is the names of the pieces to turn off once the plugin has made
+ * them, which is how the canvas and the game both do it.
+ *
+ * Names rather than paths because a placed object carries the name
+ * psd-to-phaser gave it and nothing else. Two layers with the same name
+ * inside one file are therefore one answer; the manifest addresses layers by
+ * name too, so that ambiguity is the file's rather than this reader's.
+ *
+ * Empty for a layer with nothing hidden under it, which is almost every
+ * layer — so a placement usually carries no list at all.
+ */
+export function hiddenPartNames(
+  manifest: Manifest,
+  path: string,
+): string[] {
+  const inside = `${path}/`;
+  const names = manifest.all
+    .filter((layer) => layer.path.startsWith(inside) && !layer.visible)
+    .map((layer) => layer.name);
+  return [...new Set(names)];
+}
+
+/**
+ * What a placement of one layer should record about what is turned off.
+ *
+ * Both fields come back **undefined** rather than absent when there is
+ * nothing hidden, because this is spread over a placement that may already
+ * carry the answer from last time: a layer turned back on has to clear the
+ * flag, and a key left out of the patch would leave the old one standing.
+ */
+export function placedVisibility(
+  manifest: Manifest,
+  path: string,
+): { hidden: boolean | undefined; hiddenParts: string[] | undefined } {
+  const entry = manifest.all.find((layer) => layer.path === path);
+  const parts = hiddenPartNames(manifest, path);
+  return {
+    hidden: entry && !entry.visible ? true : undefined,
+    hiddenParts: parts.length > 0 ? parts : undefined,
+  };
 }
 
 /**

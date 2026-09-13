@@ -33,8 +33,11 @@ import type { Placement } from "../lib/types";
 export interface Placed {
   x?: number;
   y?: number;
+  /** What psd-to-phaser named it: the layer's name in the PSD. */
+  name?: string;
   setPosition(x: number, y: number): unknown;
   setScale(x: number, y: number): unknown;
+  setVisible?: (visible: boolean) => unknown;
   /** Present on a Phaser Group, which is what `place()` returns. */
   getChildren?: () => unknown[];
 }
@@ -42,6 +45,14 @@ export interface Placed {
 /** One piece of a placed PSD, and where it stands inside it. */
 export interface PlacedPart {
   object: Placed;
+  /**
+   * The layer it was made from, as psd-to-phaser named it.
+   *
+   * The only handle there is on which piece is which: a placed object carries
+   * the layer's name and nothing else about where it came from. It is what
+   * turning one layer of a placed group off is done by — see `applyHidden`.
+   */
+  name: string;
   /** Its offset from the placed box's top-left, in the PSD's own pixels. */
   dx: number;
   dy: number;
@@ -71,9 +82,34 @@ export function partsOf(object: Placed): PlacedPart[] {
 
   return found.map((piece, index) => ({
     object: piece,
+    name: typeof piece.name === "string" ? piece.name : "",
     dx: xs[index] - left,
     dy: ys[index] - top,
   }));
+}
+
+/**
+ * Turn off the pieces the PSD says are hidden.
+ *
+ * Run *after* the placement's own visibility, never instead of it: the
+ * plugin grafts `setVisible` onto the Group and forwards it to every child,
+ * so showing the placement shows all of it again and the pieces have to be
+ * put back down afterwards.
+ *
+ * A group inside the placed group is not a piece — only the things that draw
+ * are — but its children are, and psd-to-json marks every layer under a
+ * hidden folder as hidden in its own right, so turning them off one at a time
+ * comes to the same picture.
+ */
+export function applyHidden(
+  parts: readonly PlacedPart[],
+  hidden: readonly string[] | undefined,
+): void {
+  if (!hidden || hidden.length === 0) return;
+  const off = new Set(hidden);
+  for (const part of parts) {
+    if (off.has(part.name)) part.object.setVisible?.(false);
+  }
 }
 
 /**

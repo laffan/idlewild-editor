@@ -16,7 +16,7 @@
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { instanceMembers, instanceOf, unionRect } from "./instance";
-import { pickPlacement } from "./doc-renderer";
+import { pickPlacement } from "./picking";
 
 const ACCENT = 0xec3013;
 /** Above the selection overlay, which is what it is drawn over. */

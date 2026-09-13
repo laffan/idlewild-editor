@@ -84,6 +84,8 @@ interface PsdRow {
   height: number;
   /** Zero at the top level, one inside a group — as Rust reports it. */
   depth?: number;
+  /** Photoshop's eye. Absent means on, as it does in a real file. */
+  visible?: boolean;
 }
 
 const PSD_LAYERS: PsdRow[] = [
@@ -123,7 +125,7 @@ function generatedStack(key: string): PsdRow[] {
 function layerInfo(row: PsdRow, index: number) {
   const category = categoryOf(row.name);
   return {
-    index, name: row.name, visible: true, opacity: 255,
+    index, name: row.name, visible: row.visible !== false, opacity: 255,
     width: row.width, height: row.height, x: row.x, y: row.y,
     category, isGroup: category === "group", depth: row.depth ?? 0,
   };
@@ -153,12 +155,39 @@ function countOpaque(base64: string): number {
 function psdManifest(key = "tower", stack = PSD_LAYERS): string {
   return JSON.stringify({
     name: key, width: 128, height: 192,
-    layers: stack.filter((l) => categoryOf(l.name) !== "ignored").map((l) => ({
-      name: l.name.split("|")[1].trim(),
-      category: categoryOf(l.name),
-      x: l.x, y: l.y, width: l.width, height: l.height,
-    })),
+    layers: nestManifest(stack.filter((l) => categoryOf(l.name) !== "ignored")),
   });
+}
+
+/**
+ * The flat stack as psd-to-json reports it: a tree, with a group's contents
+ * under it in `children`.
+ *
+ * Flat here was a lie the fixture could tell for as long as nothing read down
+ * a group — psd-to-json has always nested — and it is the difference between
+ * exercising what a placed group says about its own layers and not.
+ */
+function nestManifest(rows: PsdRow[]): any[] {
+  const top: any[] = [];
+  const open: any[][] = [top];
+  for (const row of rows) {
+    const depth = row.depth ?? 0;
+    const entry: any = {
+      name: row.name.split("|")[1].trim(),
+      category: categoryOf(row.name),
+      x: row.x, y: row.y, width: row.width, height: row.height,
+      // Written only when the eye is off, as psd-to-json writes it — and a
+      // group says only whether *it* is hidden, never its contents.
+      ...(row.visible === false ? { visible: false } : {}),
+    };
+    open.length = Math.min(open.length, depth + 1);
+    open[depth].push(entry);
+    if (categoryOf(row.name) === "group") {
+      entry.children = [];
+      open[depth + 1] = entry.children;
+    }
+  }
+  return top;
 }
 
 /**
@@ -456,11 +485,13 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     case "write_psd_layers": {
       const key = String((args as any).key);
       const edits = (args as any).layers as Array<
-        { index: number; name: string; depth: number }
+        { index: number; name: string; depth: number; visible?: boolean }
       >;
       const stack = key === "tower" ? PSD_LAYERS : generatedStack(key);
       const next = edits.map((e) => ({
         ...stack[e.index], name: e.name, depth: e.depth,
+        // An edit that says nothing leaves the eye where it is, as Rust does.
+        visible: e.visible ?? stack[e.index]?.visible ?? true,
       }));
       stack.splice(0, stack.length, ...next);
       return psdManifest(key, stack);

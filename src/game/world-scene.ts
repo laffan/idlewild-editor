@@ -564,6 +564,16 @@ export class WorldScene extends Phaser.Scene {
     return this.psds.place(key, json, at, scale);
   }
 
+  /**
+   * Show one PSD's layers the way the inspector has them staged.
+   *
+   * Null takes the preview down and the document answers again. See
+   * `game/doc-renderer.ts`, which holds it.
+   */
+  previewPsdVisibility(key: string | null, names: readonly string[]): void {
+    this.docRenderer.previewVisibility(key, names);
+  }
+
   /** Swap in a re-imported PSD under the key it already had. */
   reloadPsd(
     key: string,
