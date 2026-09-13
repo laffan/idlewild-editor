@@ -44,6 +44,7 @@ import type { PsdLayerInfo } from "../lib/ipc";
 import type { WorldScene } from "../game/world-scene";
 import { PenBar } from "./pen-bar";
 import { PenRail, type PenTool } from "./pen-rail";
+import { watchPsdStages } from "./psd-progress";
 
 /**
  * How long the pen has to be held still inside a stroke before the rest of it
@@ -121,6 +122,16 @@ export function createPenUi(options: PenUiOptions): PenUi {
    * TypeError as `Could not draw into <key>.psd`, stack and all.
    */
   let writing = false;
+  /**
+   * The last thing the pipeline said, while it is saying anything.
+   *
+   * Progress rather than reassurance: the write is several seconds of real
+   * work in two halves — rebuilding the file, then parsing it back — and the
+   * pipeline already names each one as it starts it. Saying which is where it
+   * has got to; the bar's own line says that it is going at all.
+   */
+  let stage: string | null = null;
+  let unwatch: (() => void) | null = null;
 
   const bar = new PenBar({
     onApply: () => void apply(),
@@ -194,7 +205,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
       key: mode?.target?.key ?? "",
       layer: mode?.target?.name ?? "",
       summary: writing
-        ? "putting the ink in the file…"
+        ? (stage ?? "putting the ink in the file…")
         : strokes.length === 0
           ? "nothing drawn yet"
           : inside
@@ -287,6 +298,14 @@ export function createPenUi(options: PenUiOptions): PenUi {
     sync();
   }
 
+  /** The write is over, however it went: stop following the pipeline. */
+  function stopWatching(): void {
+    writing = false;
+    stage = null;
+    unwatch?.();
+    unwatch = null;
+  }
+
   /** Take a run of strokes off a layer, leaving everything else on it. */
   function discard(layerId: string, strokes: readonly Stroke[]): void {
     const gone = new Set(strokes.map((s) => s.id));
@@ -358,6 +377,13 @@ export function createPenUi(options: PenUiOptions): PenUi {
     }
 
     writing = true;
+    stage = null;
+    unwatch = watchPsdStages((said) => {
+      stage = said;
+      sync();
+    });
+    // Before the call, not after it: the bar has to be showing the wait by
+    // the time the wait starts.
     sync();
     try {
       // Where the ink sits in the file's own pixels. Rust trims whatever
@@ -398,13 +424,13 @@ export function createPenUi(options: PenUiOptions): PenUi {
       );
     } catch (err) {
       log.error(`Could not draw into ${target.key}.psd:`, err);
-      writing = false;
+      stopWatching();
       sync();
       return;
     }
 
     const from = held.from;
-    writing = false;
+    stopWatching();
     session = null;
     mode.stop();
     // Back to the panel this was entered from, with the drawing in the layer
@@ -418,6 +444,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
     sync,
     destroy: () => {
       options.store.removeEventListener("change", onDocChange);
+      stopWatching();
       session = null;
       options.scene()?.modes.pen.stop();
       options.host.classList.remove("penning");

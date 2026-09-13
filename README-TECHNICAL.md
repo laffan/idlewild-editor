@@ -3056,6 +3056,56 @@ checks both. The two are only in step for as long as nobody else has rewritten
 the file, and a paint against a stale index would put somebody's drawing into
 the wrong layer — the one failure here that would be completely silent.
 
+### Applying is not instant, and used to look like a crash
+
+Rebuilding the PSD and running psd-to-json over it takes several seconds on
+anything with layers in it, and the window did not repaint for any of them.
+Several seconds of a dead window reads as a crash rather than as a wait.
+
+That was not a missing spinner; a spinner would have sat perfectly still
+through it. **A synchronous Tauri command runs on the main thread.** Every
+command in this app was one, so the pipeline ran on the thread that drives the
+window, and nothing in the editor could draw until it returned. The twelve
+commands that write a PSD are `#[tauri::command(async)]` now, which runs the
+same synchronous body on the runtime's pool.
+
+What that gives up is an accident: the main thread was also what stopped two
+of them overlapping. So `psd_pipeline::exclusive` says it on purpose — one
+global lock, taken for a whole job rather than for the parse alone, because
+the half that matters is read-rebuild-write and a second job racing it writes
+over what the first read. It is coarse because a job is seconds of CPU over
+one file and a person drives one at a time; a poisoned lock is taken anyway,
+since a panic over one file says nothing about the next one.
+
+**A std `Mutex` is not reentrant, so every entry point comes in a pair.**
+`process`/`process_held`, `psd_layers::write`/`write_held`: the plain name
+takes the lock, the `_held` one is for a caller that already has it. Miss one
+and the thread waits for a lock it is holding, which is a hang rather than an
+error — renaming a PSD is the path that found it, because renaming the file
+and renaming the layer inside it that was named after it are one job with
+`write` in the middle of it. The suite caught it, four tests at once: the one
+that deadlocked, and every other test that then queued behind the lock it
+never let go of.
+
+The progress itself needed no new channel. `psd_pipeline` already names each
+stage as it starts it and emits it as `psd-log-line` for the console, and
+those lines now arrive *as they happen* rather than all at once when the
+window comes back. `editor/psd-progress.ts` follows them and the pen bar shows
+the latest, under a line that moves. One piece of parsing, and it is
+structural rather than a guess about wording: `process` emits the whole layer
+tree as a single multi-line event and every stage line as an event of its own,
+so a payload with a newline in it is the tree and belongs in the console
+rather than in a progress line.
+
+The line itself is indeterminate. The pipeline reports the stage it has
+reached, not how far through it is, and a bar filling at a rate nobody
+measured would be a guess dressed as a measurement — where the question being
+answered is only whether anything is happening at all.
+
+Still on the main thread: `open_psd`, publish and export, and the cheap
+commands. The first has to be; the other two are slow too and have not been
+looked at.
+
 ### Apply runs once
 
 The write is not quick — the file is rebuilt and the whole psd-to-json

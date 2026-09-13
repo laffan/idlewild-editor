@@ -73,9 +73,44 @@ pub fn read_manifest(project_id: &str, key: &str) -> Result<String, String> {
         .map_err(|e| format!("Cannot read manifest for {key}: {e}"))
 }
 
+/// One PSD job at a time, whichever thread asked for it.
+///
+/// These used to be serialised by accident: every Tauri command in this app
+/// was synchronous, and a synchronous command runs on the **main thread** —
+/// which is also why the whole app froze for the several seconds a rebuild
+/// and a parse take, and why a spinner would have sat perfectly still through
+/// it. The PSD commands are `#[tauri::command(async)]` now, so they run on
+/// the runtime's pool and the window keeps drawing; what that costs is the
+/// accident, so the guarantee is written down here instead.
+///
+/// Coarse on purpose. A job is seconds of CPU over one file, a person drives
+/// one at a time, and the failure it rules out — two rebuilds of the same
+/// document interleaving, so the second writes over what the first read —
+/// loses somebody's layer silently. Every entry point below takes it, and
+/// each of them calls `process_held` rather than `process` so it is taken
+/// once per job rather than twice per job and deadlocking on the second.
+static PIPELINE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+pub(crate) fn exclusive() -> std::sync::MutexGuard<'static, ()> {
+    // A panic in a job says nothing about the *next* job's file, and refusing
+    // to run another one ever again is a worse answer than carrying on.
+    PIPELINE.lock().unwrap_or_else(|held| held.into_inner())
+}
+
 /// Run psd-to-json over one PSD in a project, streaming progress to `emit_log`
 /// so the editor's terminal can show it as it happens.
 pub fn process(
+    project_id: &str,
+    key: &str,
+    options: &ProcessOptions,
+    emit_log: impl Fn(&str),
+) -> Result<String, String> {
+    let _job = exclusive();
+    process_held(project_id, key, options, emit_log)
+}
+
+/// The same, for a caller already holding the lock.
+pub(crate) fn process_held(
     project_id: &str,
     key: &str,
     options: &ProcessOptions,
@@ -127,6 +162,42 @@ pub fn process(
     read_manifest(project_id, key)
 }
 
+/// Rewrite the group this editor generated inside a PSD it already wrote,
+/// keeping every other layer in the file, and run the pipeline over the
+/// result — what a second extrude Apply does.
+///
+/// Here rather than in the command beside it because of the lock: this is the
+/// one whole job that reads a file, rebuilds it and writes it back, and the
+/// read and the write have to be inside the same one or a rebuild racing it
+/// writes over what this read. Its siblings are all in this file for the same
+/// reason.
+pub fn rewrite_group_and_process(
+    project_id: &str,
+    key: &str,
+    width: u32,
+    height: u32,
+    parts: &[crate::psd_write::Part],
+    marks: &AnchorMarks,
+    emit_log: impl Fn(&str),
+) -> Result<ImportResult, String> {
+    let _job = exclusive();
+    let path = psd_path(project_id, key)?;
+    let existing = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    let rebuilt =
+        crate::psd_write::rewrite_parts_marked(&existing, key, width, height, parts, marks)?;
+    std::fs::write(&path, rebuilt).map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
+
+    // The file's own size: carrying a shape further out grows the canvas.
+    let (width, height) = psd_dimensions(&path)?;
+    let manifest = process_held(project_id, key, &ProcessOptions::default(), emit_log)?;
+    Ok(ImportResult {
+        key: key.to_string(),
+        width,
+        height,
+        manifest,
+    })
+}
+
 /// Import an image or PSD from an OS path, convert if needed, and process it.
 pub fn import_and_process(
     project_id: &str,
@@ -135,6 +206,7 @@ pub fn import_and_process(
     marks: Option<&AnchorMarks>,
     emit_log: impl Fn(&str),
 ) -> Result<ImportResult, String> {
+    let _job = exclusive();
     let psd_dir = store::psd_dir(project_id)?;
     let dest = crate::psd_write::import_file_as_psd(source, &psd_dir, stem_override, marks)?;
     let key = dest
@@ -144,7 +216,7 @@ pub fn import_and_process(
         .to_string();
 
     let (width, height) = psd_dimensions(&dest)?;
-    let manifest = process(project_id, &key, &ProcessOptions::default(), emit_log)?;
+    let manifest = process_held(project_id, &key, &ProcessOptions::default(), emit_log)?;
 
     Ok(ImportResult {
         key,
@@ -166,6 +238,7 @@ pub fn reimport_and_process(
     source: &Path,
     emit_log: impl Fn(&str),
 ) -> Result<ImportResult, String> {
+    let _job = exclusive();
     let key = safe_key(key)?;
     if !psd_path(project_id, key)?.exists() {
         return Err(format!("No PSD named {key} in this project"));
@@ -179,7 +252,7 @@ pub fn reimport_and_process(
     // put there — or whatever they moved it to, which is the point.
     let dest = crate::psd_write::import_file_as_psd(source, &psd_dir, Some(key), None)?;
     let (width, height) = psd_dimensions(&dest)?;
-    let manifest = process(project_id, key, &ProcessOptions::default(), emit_log)?;
+    let manifest = process_held(project_id, key, &ProcessOptions::default(), emit_log)?;
 
     Ok(ImportResult {
         key: key.to_string(),
@@ -210,6 +283,7 @@ pub fn rename_and_process(
     to: &str,
     emit_log: impl Fn(&str),
 ) -> Result<ImportResult, String> {
+    let _job = exclusive();
     let key = safe_key(key)?;
     let to = safe_key(to)?;
     if key == to {
@@ -232,7 +306,7 @@ pub fn rename_and_process(
     }
 
     let (width, height) = psd_dimensions(&dest)?;
-    let mut manifest = process(project_id, to, &ProcessOptions::default(), &emit_log)?;
+    let mut manifest = process_held(project_id, to, &ProcessOptions::default(), &emit_log)?;
 
     // A converted image, a rasterised sketch and a generated PSD all name
     // their one sprite layer after the key. Renaming the file leaves that
@@ -264,6 +338,7 @@ pub fn duplicate_and_process(
     key: &str,
     emit_log: impl Fn(&str),
 ) -> Result<ImportResult, String> {
+    let _job = exclusive();
     let key = safe_key(key)?;
     let source = psd_path(project_id, key)?;
     if !source.exists() {
@@ -275,7 +350,7 @@ pub fn duplicate_and_process(
         .map_err(|e| format!("Cannot copy {key}.psd: {e}"))?;
 
     let (width, height) = psd_dimensions(&source)?;
-    let manifest = process(project_id, &copy, &ProcessOptions::default(), emit_log)?;
+    let manifest = process_held(project_id, &copy, &ProcessOptions::default(), emit_log)?;
     Ok(ImportResult {
         key: copy,
         width,

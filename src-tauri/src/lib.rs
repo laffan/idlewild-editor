@@ -203,14 +203,16 @@ fn write_thumbnail(id: String, png_base64: String) -> Result<(), String> {
 
 // ── PSD pipeline ────────────────────────────────────────────────────────────
 
-/// Stream psd-to-json's progress to the frontend terminal.
+/// The pipeline's commentary, as an event. It is what the console drawer
+/// shows and, since the PSD commands stopped running on the main thread, what
+/// the pen bar shows as progress — see `psd-progress.ts`.
 fn logger(app: &tauri::AppHandle) -> impl Fn(&str) + '_ {
     move |line: &str| {
         let _ = app.emit("psd-log-line", line.to_string());
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn import_image(
     app: tauri::AppHandle,
     id: String,
@@ -229,7 +231,7 @@ fn import_image(
 
 /// Import from bytes the frontend already holds — a clipboard paste, a photo
 /// picked on iPad, or a rasterised selection of drawn strokes.
-#[tauri::command]
+#[tauri::command(async)]
 fn import_image_bytes(
     app: tauri::AppHandle,
     id: String,
@@ -265,7 +267,7 @@ fn import_image_bytes(
 }
 
 /// Build a PSD directly from an RGBA buffer — the path drawn strokes take.
-#[tauri::command]
+#[tauri::command(async)]
 fn create_psd_from_rgba(
     app: tauri::AppHandle,
     id: String,
@@ -329,7 +331,7 @@ fn decode_parts(parts: Vec<PartPayload>) -> Result<Vec<psd_write::Part>, String>
 /// What an extrusion writes: a silhouette, its shading and the lines between
 /// its spaces, as three layers somebody can take apart. Parts arrive top-first,
 /// as Photoshop's panel lists them.
-#[tauri::command]
+#[tauri::command(async)]
 fn create_psd_group_from_rgba(
     app: tauri::AppHandle,
     id: String,
@@ -364,7 +366,7 @@ fn create_psd_group_from_rgba(
 /// nothing, which is right for an import and wrong for a second Apply: a layer
 /// painted over the greybox in Photoshop would not be preserved, it would
 /// simply not be there any more. See `psd_write::rewrite_parts_marked`.
-#[tauri::command]
+#[tauri::command(async)]
 fn rewrite_psd_group_from_rgba(
     app: tauri::AppHandle,
     id: String,
@@ -374,26 +376,18 @@ fn rewrite_psd_group_from_rgba(
     parts: Vec<PartPayload>,
     marks: AnchorMarks,
 ) -> Result<ImportResult, String> {
-    let parts = decode_parts(parts)?;
-    let path = psd_pipeline::psd_path(&id, &key)?;
-    let existing =
-        std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
-    let rebuilt =
-        psd_write::rewrite_parts_marked(&existing, &key, width, height, &parts, &marks)?;
-    std::fs::write(&path, rebuilt).map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
-
-    // And here too: carrying a shape further out grows the canvas again.
-    let (width, height) = psd_pipeline::psd_dimensions(&path)?;
-    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
-    Ok(ImportResult {
-        key,
+    psd_pipeline::rewrite_group_and_process(
+        &id,
+        &key,
         width,
         height,
-        manifest,
-    })
+        &decode_parts(parts)?,
+        &marks,
+        logger(&app),
+    )
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn reprocess_psd(
     app: tauri::AppHandle,
     id: String,
@@ -410,14 +404,14 @@ fn reprocess_psd(
 /// file, so editing it edits both; giving one of them its own copy is what
 /// lets it be changed alone. The bytes are copied rather than re-derived, so
 /// the copy starts identical — anchor mark and all.
-#[tauri::command]
+#[tauri::command(async)]
 fn duplicate_psd(app: tauri::AppHandle, id: String, key: String) -> Result<ImportResult, String> {
     psd_pipeline::duplicate_and_process(&id, &key, logger(&app))
 }
 
 /// Replace `<project>/psd/<key>.psd` with the file the user picked and run it
 /// through psd-to-json again, keeping the key so existing placements survive.
-#[tauri::command]
+#[tauri::command(async)]
 fn reimport_psd(
     app: tauri::AppHandle,
     id: String,
@@ -438,7 +432,7 @@ fn reimport_psd(
 /// put through the same sanitiser an import uses and the key that actually
 /// resulted comes back — the caller repoints its placements at that, not at
 /// what was typed.
-#[tauri::command]
+#[tauri::command(async)]
 fn rename_psd(
     app: tauri::AppHandle,
     id: String,
@@ -485,7 +479,7 @@ fn read_psd_layers(id: String, key: String) -> Result<psd_layers::PsdLayerList, 
 
 /// Rewrite that stack in the order and under the names the user gave it,
 /// then run the file back through psd-to-json. Returns the fresh manifest.
-#[tauri::command]
+#[tauri::command(async)]
 fn write_psd_layers(
     app: tauri::AppHandle,
     id: String,
@@ -500,7 +494,7 @@ fn write_psd_layers(
 /// Returns the fresh manifest, as every write that touches the file does:
 /// the layer arrives with a single transparent pixel in it, which is nothing
 /// to draw but is a real row to rename, reorder or draw into.
-#[tauri::command]
+#[tauri::command(async)]
 fn add_psd_layer(app: tauri::AppHandle, id: String, key: String) -> Result<String, String> {
     psd_layers::add(&id, &key, logger(&app))
 }
@@ -510,7 +504,7 @@ fn add_psd_layer(app: tauri::AppHandle, id: String, key: String) -> Result<Strin
 /// `index` and `name` together name the row, and both are checked: a paint
 /// against an index the file has since renumbered would put a drawing in the
 /// wrong layer, and nothing about the result would say so.
-#[tauri::command]
+#[tauri::command(async)]
 fn paint_psd_layer(
     app: tauri::AppHandle,
     id: String,

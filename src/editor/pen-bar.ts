@@ -46,10 +46,21 @@ export class PenBar {
   private readonly size: HTMLElement;
   private readonly cancel: HTMLButtonElement;
   private readonly apply: HTMLButtonElement;
+  /**
+   * The line along the bottom of the bar while a write is in flight.
+   *
+   * Indeterminate, because the pipeline reports the stage it has reached and
+   * not how far through it is, and a bar that filled up at a rate nobody
+   * measured would be a guess dressed as a measurement. What it is for is the
+   * other question — whether anything is happening at all — and for that,
+   * motion is the whole answer.
+   */
+  private readonly progress: HTMLElement;
 
   constructor(callbacks: PenBarCallbacks) {
     this.title = h("div", { class: "mode-title", text: "Pen Mode" });
     this.size = h("div", { class: "mode-size" });
+    this.progress = h("div", { class: "mode-progress", hidden: "true" });
     this.cancel = h("button", {
       text: "Cancel",
       onClick: callbacks.onCancel,
@@ -67,6 +78,7 @@ export class PenBar {
       h("div", { class: "mode-spacer" }),
       this.cancel,
       this.apply,
+      this.progress,
     );
   }
 
@@ -81,16 +93,22 @@ export class PenBar {
    * Both ways out go quiet while a write is in flight. Cancel as well as
    * Apply: the strokes it would throw away are the ones being written, and
    * the mode is only still up because the write can be refused.
+   *
+   * The layer's name steps aside while the write runs. What is in that slot
+   * then is the pipeline's own line, which names the layer itself — and the
+   * room is better spent on the half that is changing.
    */
   update(state: PenBarState): void {
     this.root.classList.toggle("hidden", !state.active);
     if (!state.active) return;
     this.title.textContent = `Pen Mode · ${state.key}.psd`;
-    this.size.textContent = state.layer
-      ? `${state.layer} · ${state.summary}`
-      : state.summary;
+    this.size.textContent =
+      state.layer && !state.busy
+        ? `${state.layer} · ${state.summary}`
+        : state.summary;
     this.apply.disabled = state.busy || !state.canApply;
     this.cancel.disabled = state.busy;
+    this.progress.hidden = !state.busy;
   }
 
   destroy(): void {

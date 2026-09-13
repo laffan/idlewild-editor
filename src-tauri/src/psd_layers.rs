@@ -228,6 +228,22 @@ pub fn write(
     edits: &[LayerEdit],
     emit_log: impl Fn(&str),
 ) -> Result<String, String> {
+    let _job = psd_pipeline::exclusive();
+    write_held(project_id, key, edits, emit_log)
+}
+
+/// The same, for a caller already holding the pipeline lock.
+///
+/// `rename_and_process` is that caller: renaming a file and renaming the
+/// layer inside it that was named after it are one job, so the lock is taken
+/// once around the pair. Taking it here as well is a thread waiting for a
+/// lock it is already holding, which is a hang rather than an error.
+pub(crate) fn write_held(
+    project_id: &str,
+    key: &str,
+    edits: &[LayerEdit],
+    emit_log: impl Fn(&str),
+) -> Result<String, String> {
     let path = psd_pipeline::psd_path(project_id, key)?;
     let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
     let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse {key}.psd: {e}"))?;
@@ -248,7 +264,7 @@ pub fn write(
         .map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
 
     emit_log(&format!("Rewrote psd/{key}.psd with {} rows", edits.len()));
-    psd_pipeline::process(
+    psd_pipeline::process_held(
         project_id,
         key,
         &psd_pipeline::ProcessOptions::default(),
@@ -293,6 +309,7 @@ fn name_of(doc: &Psd, row: &Row) -> String {
 /// appeared. The name is the first `layer-N` the file is not already using,
 /// so a second press does not collide with the first.
 pub fn add(project_id: &str, key: &str, emit_log: impl Fn(&str)) -> Result<String, String> {
+    let _job = psd_pipeline::exclusive();
     let path = psd_pipeline::psd_path(project_id, key)?;
     let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
     let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse {key}.psd: {e}"))?;
@@ -311,7 +328,7 @@ pub fn add(project_id: &str, key: &str, emit_log: impl Fn(&str)) -> Result<Strin
     std::fs::write(&path, rebuild(&doc, &edits)?)
         .map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
     emit_log(&format!("Added a layer to psd/{key}.psd"));
-    psd_pipeline::process(
+    psd_pipeline::process_held(
         project_id,
         key,
         &psd_pipeline::ProcessOptions::default(),
@@ -349,6 +366,7 @@ pub fn paint(
     ink: Paint,
     emit_log: impl Fn(&str),
 ) -> Result<String, String> {
+    let _job = psd_pipeline::exclusive();
     let path = psd_pipeline::psd_path(project_id, key)?;
     let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
     let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse {key}.psd: {e}"))?;
@@ -374,7 +392,7 @@ pub fn paint(
     std::fs::write(&path, rebuild(&doc, &edits)?)
         .map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
     emit_log(&format!("Painted \"{name}\" in psd/{key}.psd"));
-    psd_pipeline::process(
+    psd_pipeline::process_held(
         project_id,
         key,
         &psd_pipeline::ProcessOptions::default(),
@@ -498,6 +516,8 @@ pub(crate) fn unrebuildable_because(doc: &Psd) -> Option<String> {
 ///
 /// Returns whether anything was rewritten, so a caller can skip re-parsing a
 /// file it did not change.
+/// Only ever called from `psd_pipeline::rename_and_process`, which is holding
+/// the pipeline lock — hence `write_held`.
 pub fn rename_layers_named_after(
     project_id: &str,
     key: &str,
@@ -521,7 +541,7 @@ pub fn rename_layers_named_after(
         return Ok(false);
     }
 
-    write(project_id, key, &edits, emit_log)?;
+    write_held(project_id, key, &edits, emit_log)?;
     Ok(true)
 }
 

@@ -227,13 +227,18 @@ remaining pieces are wired to real slots rather than mocked.
   smoothing as anywhere else. Apply lays the ink into that layer at the
   file's own resolution and re-parses, so it arrives as artwork rather than
   as strokes over the top of it; Cancel throws the drawing away, and ⌘Z
-  brings it back if that was the wrong button. Applying takes a few seconds —
-  the file is rebuilt and re-parsed — and the bar says so and goes quiet while
-  it does, because pressing it twice used to put the same ink in twice.
-  The frame is the **document**,
+  brings it back if that was the wrong button. The frame is the **document**,
   not the artwork: everything this editor writes has a grid space of clear
   canvas around it, and the boundary somebody draws up against had better be
   the one Photoshop would show them
+- Applying is a few seconds of real work — the file is rebuilt and re-parsed —
+  and it now **says so while it happens**. The bar goes quiet, because pressing
+  Apply twice used to put the same ink in twice; a line moves along the bottom
+  of it; and beside that is what the pipeline is doing, in its own words. The
+  editor stays live throughout, which it did not: every PSD the editor writes
+  used to be written on the thread that draws the window, so the app went stiff
+  until it finished — and a spinner would have sat perfectly still through the
+  whole wait it was there to explain
 - **Hold the pen still inside a stroke** and the rest of it comes out
   straight — a second, and the line snaps to the one between where you
   started and where you are, and stays ruled until you lift. The next stroke
