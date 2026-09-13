@@ -2465,6 +2465,33 @@ copy is kept when the file it came from still *looks* the same, and after a
 re-import that is exactly the case — same key, same layer path, same size, and
 a texture that has gone. `dropKey` destroys.
 
+Nor is dropping enough on its own, which is the second half of the same bug.
+`dropKey` runs *before* the eviction and the load that replaces it, and this
+renderer is on the frame loop — so it went straight on to rebuild inside that
+window, against textures that were not there, and psd-to-phaser answered
+*Texture not found for sprite*. The empty sprites then stayed, because the
+next frame found copies whose file still looked the same and left them alone:
+the pattern was broken over exactly the ground that was in view when the file
+was rewritten, and came right the moment you panned somewhere that had to be
+built fresh. So nothing is made from a key the plugin has no data for — the
+same check `loadPsd` and `PsdPlacements` both make — and **a range with
+anything missing from it is not remembered**, so the next frame tries the
+whole thing again. That is what makes it self-healing rather than a handshake
+between two objects that have to be kept in step.
+
+**Pen mode is the one thing that draws a palette where it stands.** It frames
+the PSD's own canvas at the space the file is anchored to, and on a pattern
+layer nothing is ever drawn there — so it opened on an empty box, which was
+correct and useless. `DocRenderer.revealInstance` puts the prototype back for
+the length of a session, derived in `pen.ts`'s `sync` the way extrude derives
+its own suppression, so that however the mode ends the canvas goes back to
+what it was. Revealing by itself was not enough either: nothing had ever
+*placed* that unit, so there was no object to show. `DocRenderer.draws` is the
+one answer both the renderer's sweep and `PsdPlacements.placeOne` read — a
+sweep that destroys what a placement has just attached is a flash of a heap of
+elements on the anchor space, and a placement that never happens is a reveal
+with nothing in it — and `placeUnit` is what makes the objects.
+
 **Nothing on one is picked on the canvas.** `picking.ts` makes a pattern layer
 inert to the pointer, for the reason a locked one is but a different one:
 there is no single object under the pointer for a tap to *name*. The copies
@@ -2504,9 +2531,20 @@ the alternative is a shape list that silently stops confining anything.
 
 Both halves are two gestures rather than one control, so the request is held
 in `editor/pattern-actions.ts`: which layer asked, cleared the moment an
-answer arrives. That held request is also what decides whether the two
-*finishing* buttons appear at all — on a project with no pattern layer they
-would be buttons with nowhere to put their answer.
+answer arrives. That held request is also what decides whether the *finishing*
+controls appear at all — on a project with no pattern layer they would be
+buttons with nowhere to put their answer.
+
+The drawn half finishes on **everything drawn on the layer**, not on a lasso.
+Sweeping the ink is the right gesture for a sketch becoming a boundary, where
+a layer may hold several sketches and one of them is meant; it is the wrong
+one here, because somebody who has just pressed Add Shape and drawn one
+outline has already said which strokes they mean — and it put the only way to
+finish in a panel they had no reason to open. So Add Shape — draw leaves the
+layer selected, which keeps its own panel in front of the person now holding a
+pencil, and the Shapes section becomes Finish / Cancel until one of them is
+pressed. The lasso route still works through the sketch panel, for a layer
+that has other ink on it.
 
 ### A background layer is the backdrop
 
