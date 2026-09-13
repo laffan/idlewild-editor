@@ -38,6 +38,8 @@ import type { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
 import * as log from "../lib/log";
 import { canvasBox, parseManifest } from "../lib/manifest";
+import { layerKind } from "../lib/layer-kinds";
+import { instanceOf } from "../game/instance";
 import type { Bounds } from "../drawing/types";
 import type { Stroke } from "../lib/types";
 import type { PsdLayerInfo } from "../lib/ipc";
@@ -111,6 +113,14 @@ interface Session {
 export function createPenUi(options: PenUiOptions): PenUi {
   let session: Session | null = null;
   /**
+   * The placed unit the canvas has to show while this session is up.
+   *
+   * Only ever set on a pattern layer, where the file being drawn into is the
+   * palette a rule scatters and so is not drawn where the document holds it.
+   * Null everywhere else, because everywhere else it is already there.
+   */
+  let revealing: string | null = null;
+  /**
    * Whether Apply's write is still in flight.
    *
    * It is not quick: the file is rebuilt and the whole psd-to-json pipeline
@@ -168,9 +178,17 @@ export function createPenUi(options: PenUiOptions): PenUi {
   }
 
   function sync(): void {
-    const mode = options.scene()?.modes.pen;
+    const scene = options.scene();
+    const mode = scene?.modes.pen;
     const active = mode?.active ?? false;
     options.host.classList.toggle("penning", active);
+    // On a pattern layer the file being drawn into is the palette a rule
+    // scatters, so nothing is drawn on the space it is anchored to — and the
+    // frame is around exactly that space. Without this the mode opens on an
+    // empty box. Derived here rather than switched at the two ends of a
+    // session, the way extrude derives its own: however the mode ends, and
+    // whatever ended it, the canvas goes back to what it was.
+    scene?.revealInstance(active ? revealing : null);
     // Press and wait, and the rest of the stroke comes out straight. Set from
     // here rather than at the two ends of a session so it follows the mode
     // however it was left — including being stopped from outside, which play
@@ -187,6 +205,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
       // stays where it is — nobody asked for it to go — but the session is
       // over, so a later Apply cannot write strokes nobody is still framing.
       session = null;
+      revealing = null;
       bar.update({
         active,
         key: "",
@@ -267,6 +286,15 @@ export function createPenUi(options: PenUiOptions): PenUi {
       scale,
     );
     if (!started) return;
+    // A pattern layer draws its palette nowhere, and the frame is around the
+    // space that palette is anchored to — so a session on one is the single
+    // thing that has to put the file back on the canvas. Set once the mode
+    // has actually started, so a refusal above leaves the canvas alone;
+    // `sync` is what pushes it and what clears it.
+    revealing =
+      layerKind(options.store.layer(selection.layerId)) === "pattern"
+        ? instanceOf(placement)
+        : null;
     session = {
       key,
       inkLayerId,

@@ -180,9 +180,12 @@ export async function mountEditor(
     // outline, and the button that finishes the job is beside what was drawn
     // or selected.
     patternShapeTarget: () => shapes.target(),
+    shapeTarget: () => shapes.target(),
     onStrokesToPatternShape: () => shapes.fromStrokes(),
     onAddShapeFromSelection: (layerId) => shapes.askFromSelection(layerId),
     onAddShapeByDrawing: (layerId) => shapes.askByDrawing(layerId),
+    onFinishDrawnShape: (layerId) => shapes.fromLayerStrokes(layerId),
+    onCancelShape: () => shapes.cancel(),
     onFillToPsd: () => void convert.fillToPsd(),
     onRemoveReference: (key) => void convert.removeReference(key),
     // Renaming a layer changes the path a placement reads, so the rename map

@@ -36,7 +36,7 @@ interface Made {
   destroyed: boolean;
 }
 
-function fakeScene(made: Made[]) {
+function fakeScene(made: Made[], loaded: Set<string>) {
   const graphics = {
     clear: vi.fn(),
     setDepth: vi.fn(),
@@ -52,6 +52,9 @@ function fakeScene(made: Made[]) {
     add: { graphics: () => graphics },
     cameras: { main: { zoom: 1 } },
     P2P: {
+      // What `loadPsd` and `PsdPlacements` both ask before they place: a
+      // manifest that parsed is not a texture that arrived.
+      getData: (psdKey: string) => (loaded.has(psdKey) ? { original: {} } : undefined),
       place: (_scene: unknown, psdKey: string) => {
         const object: Made = { psdKey, destroyed: false };
         made.push(object);
@@ -102,7 +105,8 @@ function patternLayer(keys: string[]): Layer {
 
 function setup(keys: string[]) {
   const made: Made[] = [];
-  const scene = fakeScene(made);
+  const loaded = new Set(keys);
+  const scene = fakeScene(made, loaded);
   const doc: GameDoc = {
     version: 2,
     projection: "orthogonal",
@@ -116,7 +120,7 @@ function setup(keys: string[]) {
     store,
     new Grid("orthogonal", 32),
   );
-  return { made, render };
+  return { made, render, loaded };
 }
 
 const view = { from: { cx: 0, cy: 0 }, to: { cx: 7, cy: 7 } };
@@ -177,6 +181,47 @@ describe("a pattern layer's copies", () => {
     render.sync(view);
     expect(made.length).toBe(first * 2);
     expect(made.slice(first).every((m) => !m.destroyed)).toBe(true);
+  });
+
+  /**
+   * The second half of the same bug. `dropKey` runs *before* the eviction and
+   * the load that replaces it, and this renderer is on the frame loop — so
+   * without a guard it rebuilds inside that window, against textures that are
+   * not there, and psd-to-phaser makes sprites with nothing in them.
+   */
+  it("make nothing from a file the plugin has not loaded", () => {
+    const { made, render, loaded } = setup(["tree"]);
+    loaded.delete("tree");
+    render.sync(view);
+    expect(made).toEqual([]);
+  });
+
+  /**
+   * And the range must not be remembered as done, or the pattern would stay
+   * missing over exactly the ground that was in view when the file was
+   * rewritten — until somebody panned somewhere that had to be built fresh.
+   */
+  it("try the same range again once the file has arrived", () => {
+    const { made, render, loaded } = setup(["tree"]);
+    loaded.delete("tree");
+    render.sync(view);
+    expect(made).toEqual([]);
+
+    loaded.add("tree");
+    render.sync(view);
+    expect(made.length).toBeGreaterThan(0);
+    expect(made.every((m) => !m.destroyed)).toBe(true);
+  });
+
+  it("take down what is standing on a file that has gone", () => {
+    const { made, render, loaded } = setup(["tree"]);
+    render.sync(view);
+    expect(made.some((m) => !m.destroyed)).toBe(true);
+
+    loaded.delete("tree");
+    render.invalidate();
+    render.sync(view);
+    expect(made.every((m) => m.destroyed)).toBe(true);
   });
 
   it("all go when the scene does", () => {

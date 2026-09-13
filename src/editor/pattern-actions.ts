@@ -40,9 +40,14 @@ export interface PatternShapes {
   /** Ask for one from a grid selection, or by drawing it. */
   askFromSelection: (layerId: string) => void;
   askByDrawing: (layerId: string) => void;
-  /** Finish: take the selected patch of grid, or the lassoed outline. */
+  /** Stop waiting, leaving whatever has been drawn where it is. */
+  cancel: () => void;
+  /** Finish: take the selected patch of grid. */
   fromSelection: () => void;
+  /** Finish: take the lassoed outline — the strokes panel's button. */
   fromStrokes: () => void;
+  /** Finish: take everything drawn on the layer — the pattern panel's. */
+  fromLayerStrokes: (layerId: string) => void;
 }
 
 export function createPatternShapes(deps: PatternShapeDeps): PatternShapes {
@@ -60,7 +65,45 @@ export function createPatternShapes(deps: PatternShapeDeps): PatternShapes {
     askByDrawing(layerId) {
       target = layerId;
       deps.useTool("pencil");
-      log.info("Draw the outline, lasso it, then Convert to pattern shape.");
+      // The selection stays on the layer, which is what keeps its panel — and
+      // the Finish button that has just appeared in it — in front of the
+      // person now holding a pencil.
+      deps.setSelection({ kind: "layer", layerId });
+      log.info("Draw the outline, then Finish shape in the inspector.");
+    },
+
+    cancel() {
+      target = null;
+    },
+
+    /**
+     * Everything drawn on the layer, as the outline.
+     *
+     * The finishing half of Add Shape — draw, and it does not go through the
+     * lasso. Sweeping the ink is the right gesture for a sketch becoming a
+     * boundary, where a layer may hold several and one of them is meant; it
+     * is the wrong one here, because somebody who has just pressed Add Shape
+     * and drawn an outline has already said which strokes they mean. It also
+     * put the only way to finish in a panel they had no reason to open.
+     */
+    fromLayerStrokes(layerId) {
+      const drawing = deps.drawing();
+      const layer = deps.store.layer(layerId);
+      if (!drawing || !layer) return;
+      const ids = layer.strokes.map((stroke) => stroke.id);
+      if (ids.length === 0) {
+        log.warn("Nothing drawn yet — draw the outline first");
+        return;
+      }
+      target = null;
+      convertStrokesToPatternShape(
+        deps.store,
+        deps.grid,
+        drawing,
+        { kind: "strokes", layerId, ids },
+        layerId,
+      );
+      deps.setSelection({ kind: "layer", layerId });
     },
 
     /**

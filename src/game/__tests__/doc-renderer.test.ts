@@ -20,10 +20,15 @@ function graphics(): Phaser.GameObjects.Graphics {
 
 const scene = { add: { graphics } } as unknown as Phaser.Scene;
 
-/** A placed object that only remembers whether it was told to show. */
-function placed(): PlacedObject & { visible: boolean } {
+/**
+ * A placed object that remembers whether it was told to show, and whether it
+ * was taken down. Suppressing hides; a layer whose placements are not drawn
+ * at all destroys, so the two are different questions.
+ */
+function placed(): PlacedObject & { visible: boolean; destroyed: boolean } {
   return {
     visible: true,
+    destroyed: false,
     setPosition: () => undefined,
     setScale: () => undefined,
     setDepth: () => undefined,
@@ -31,7 +36,9 @@ function placed(): PlacedObject & { visible: boolean } {
       this.visible = v;
       return this;
     },
-    destroy: () => undefined,
+    destroy() {
+      this.destroyed = true;
+    },
   };
 }
 
@@ -87,6 +94,14 @@ function placement(id: string, instance: string): Placement {
 }
 
 function doc(...placements: Placement[]): StoredDoc {
+  return patternDoc(undefined, ...placements);
+}
+
+/** The same, with the one layer made a pattern layer when `kind` says so. */
+function patternDoc(
+  kind: "pattern" | undefined,
+  ...placements: Placement[]
+): StoredDoc {
   return {
     version: 1,
     projection: "isometric",
@@ -95,6 +110,7 @@ function doc(...placements: Placement[]): StoredDoc {
       {
         id: "l1",
         name: "Foreground",
+        kind,
         locked: false,
         visible: true,
         fills: [],
@@ -152,6 +168,81 @@ describe("suppressing a placed unit", () => {
     renderer.suppressInstance("unit-1");
     expect(store.layers[0].placements).toHaveLength(1);
     expect(store.layers[0].placements[0]).toEqual(one);
+  });
+});
+
+/**
+ * A pattern layer's placements are the palette a rule scatters rather than
+ * things standing anywhere, so nothing is drawn on the space a file is
+ * anchored to — and pen mode frames exactly that space. Without the reveal it
+ * opens on an empty box with nothing to draw over, which is what happened.
+ */
+describe("revealing a placed unit on a pattern layer", () => {
+  const one = () => placement("a", "unit-1");
+  const two = () => placement("b", "unit-1");
+  const other = () => placement("c", "unit-2");
+
+  /**
+   * The reveal is set *before* the objects are attached, which is the order
+   * the scene works in: revealing decides that a unit may be drawn, and
+   * `placeUnit` then makes it. The other way round the sweep would destroy
+   * what had just been attached.
+   */
+  function setUp(reveal: string | null) {
+    const a = one();
+    const b = two();
+    const c = other();
+    const store = new DocStore("p", patternDoc("pattern", a, b, c));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    renderer.revealInstance(reveal);
+    const objects = { a: placed(), b: placed(), c: placed() };
+    renderer.attach("l1", a, objects.a);
+    renderer.attach("l1", b, objects.b);
+    renderer.attach("l1", c, objects.c);
+    renderer.render();
+    return { renderer, store, objects, placements: { a, b, c } };
+  }
+
+  it("draws nothing on one until something asks", () => {
+    const { objects } = setUp(null);
+    expect(objects.a.destroyed).toBe(true);
+    expect(objects.c.destroyed).toBe(true);
+  });
+
+  it("draws the unit that was asked for, and only that one", () => {
+    const { objects } = setUp("unit-1");
+    expect(objects.a.destroyed).toBe(false);
+    expect(objects.b.destroyed).toBe(false);
+    expect(objects.c.destroyed).toBe(true);
+  });
+
+  it("takes it away again when the session ends", () => {
+    const { renderer, objects } = setUp("unit-1");
+    renderer.revealInstance(null);
+    expect(objects.a.destroyed).toBe(true);
+  });
+
+  /**
+   * The one answer both ends read. `PsdPlacements.placeOne` asks it before it
+   * makes anything, so that a sweep never destroys what a placement has just
+   * attached — and, more to the point, so a revealed unit is placed at all.
+   */
+  it("says which placements are drawn where the document holds them", () => {
+    const { renderer, store, placements } = setUp("unit-1");
+    const layer = store.layers[0];
+    expect(renderer.draws(layer, placements.a)).toBe(true);
+    expect(renderer.draws(layer, placements.c)).toBe(false);
+  });
+
+  it("leaves an object layer alone, which is every layer that was ever made", () => {
+    const a = one();
+    const store = new DocStore("p", doc(a));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    const object = placed();
+    renderer.attach("l1", a, object);
+    renderer.render();
+    expect(object.destroyed).toBe(false);
+    expect(renderer.draws(store.layers[0], a)).toBe(true);
   });
 });
 

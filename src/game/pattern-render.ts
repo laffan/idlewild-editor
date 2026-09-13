@@ -106,7 +106,23 @@ export class PatternRender {
     this.warned = false;
   }
 
-  /** Bring what is on screen in line with the rule. Cheap to call per frame. */
+  /**
+   * Bring what is on screen in line with the rule. Cheap to call per frame.
+   *
+   * A copy is only made from a file the plugin actually has. That check is
+   * not belt and braces: this runs on the frame loop, and a re-import spends
+   * several frames between evicting a key's textures and finishing the load
+   * that replaces them. Placing inside that window is where *Texture not
+   * found for sprite* comes from — and the sprite it makes is not retried,
+   * because the next frame finds a copy whose file still looks the same and
+   * leaves it alone. The pattern then stays broken over exactly the ground
+   * that was in view when the file was rewritten, and comes right the moment
+   * you pan somewhere that has to be built fresh.
+   *
+   * So a range with anything missing from it is not remembered, and the next
+   * frame tries the whole thing again. The rebuild is the same work a pan
+   * does, and the window is a few frames long.
+   */
   sync(range: CellRange): void {
     const signature = [
       range.from.cx,
@@ -115,12 +131,13 @@ export class PatternRender {
       range.to.cy,
     ].join(",");
     if (signature === this.lastRange) return;
-    this.lastRange = signature;
     this.drawShapes();
 
     const seen = new Set<string>();
     const layers = this.store.layers;
     let made = 0;
+    /** Whether everything this range asked for could be made. */
+    let whole = true;
 
     layers.forEach((layer, index) => {
       if (layerKind(layer) !== "pattern" || !layer.visible) return;
@@ -138,10 +155,17 @@ export class PatternRender {
       made += instances.length;
 
       for (const instance of instances) {
+        const { element } = instance;
+        // Its file is between an eviction and the load that replaces it. Not
+        // `seen`, so whatever is still standing there on a dead texture goes
+        // in the sweep below — which is the other half of why this is safe.
+        if (!this.loaded(element.psdKey)) {
+          whole = false;
+          continue;
+        }
         const key = `${layer.id}:${instance.id}`;
         seen.add(key);
         const world = this.grid.cellToWorld(instance.cell);
-        const { element } = instance;
         // A copy is identified by what it is and where — so a palette edited
         // under a pattern that has not moved is still rebuilt, and a pan over
         // ground you have already seen is not.
@@ -176,6 +200,27 @@ export class PatternRender {
       destroy(held.object);
       this.live.delete(key);
     }
+
+    // Remembered only if it is the whole answer. A range recorded half-built
+    // is a pattern with a hole in it that nothing will come back to.
+    this.lastRange = whole ? signature : "";
+  }
+
+  /**
+   * Whether the plugin has this file, which is not the same as the document
+   * naming it.
+   *
+   * The same question `loadPsd` asks before it starts, and `PsdPlacements`
+   * asks before it places: a manifest that parsed says the layers are
+   * placeable, not that the textures arrived.
+   */
+  private loaded(psdKey: string): boolean {
+    return Boolean(this.plugin()?.getData(psdKey));
+  }
+
+  private plugin(): PsdToPhaser | undefined {
+    return (this.scene as unknown as Record<string, PsdToPhaser | undefined>)
+      .P2P;
   }
 
   /**
@@ -243,8 +288,7 @@ export class PatternRender {
   }
 
   private make(element: PatternElement): PlacedObject | null {
-    const p2p = (this.scene as unknown as Record<string, PsdToPhaser | undefined>)
-      .P2P;
+    const p2p = this.plugin();
     if (!p2p) return null;
     try {
       const object = p2p.place(this.scene, element.psdKey, element.path);

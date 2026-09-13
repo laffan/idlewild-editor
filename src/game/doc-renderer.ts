@@ -110,6 +110,11 @@ export class DocRenderer {
    */
   private hidden: string | null = null;
   /**
+   * A placed unit on a pattern layer that is being worked on, and so has to
+   * be drawn where the document holds it — see `revealInstance`.
+   */
+  private revealed: string | null = null;
+  /**
    * A PSD's layers as a panel is *showing* them, before the file has been
    * rewritten to say so.
    *
@@ -150,6 +155,43 @@ export class DocRenderer {
     if (this.hidden === instance) return;
     this.hidden = instance;
     this.syncPlacements();
+  }
+
+  /**
+   * Draw one placed unit where the document holds it, on a layer that
+   * normally would not.
+   *
+   * The inverse of `suppressInstance`, and it exists for one case: a pattern
+   * layer's placements are the palette a rule scatters rather than things
+   * standing anywhere, so nothing is ever drawn on the space the file is
+   * anchored to. Pen mode frames exactly that space — the PSD's own canvas,
+   * where the file stands on the grid — so without this it opens on an empty
+   * box and there is nothing to draw over.
+   *
+   * Revealed rather than moved: what the frame is around is where the
+   * document says the file is, and the ink goes into the file at its own
+   * resolution either way. Showing the prototype there is simply agreeing
+   * with the frame.
+   */
+  revealInstance(instance: string | null): void {
+    if (this.revealed === instance) return;
+    this.revealed = instance;
+    this.syncPlacements();
+  }
+
+  /**
+   * Whether this placement is drawn where the document holds it.
+   *
+   * One answer, asked from both ends. This renderer asks it on every sweep,
+   * and `PsdPlacements.placeOne` asks it before making an object at all —
+   * because on a pattern layer the two have to agree: a sweep that destroys
+   * what a placement just made is a flash of a heap of elements on the anchor
+   * space, and a placement that never happens is a reveal with nothing to
+   * reveal. That second one is what made pen mode open on an empty box.
+   */
+  draws(layer: Layer, placement: Placement): boolean {
+    if (layerKind(layer) !== "pattern") return true;
+    return instanceOf(placement) === this.revealed;
   }
 
   /** Repaint everything the document describes. */
@@ -269,7 +311,11 @@ export class DocRenderer {
       // element in a heap on the anchor space, underneath the pattern made of
       // them — and `seen` deliberately leaves them out, so anything already
       // on the canvas from before the layer became a pattern is destroyed.
-      if (layerKind(layer) === "pattern") return;
+      //
+      // Unless one of them is being worked on. Pen mode frames the space the
+      // file is anchored to, so the prototype has to be there to draw over —
+      // see `revealInstance` and `draws`.
+      if (layerKind(layer) === "pattern" && !this.revealed) return;
 
       const base = (layers.length - index) * DEPTH_STRIDE;
       // Back to front, once for the whole layer: every placement then takes
@@ -278,6 +324,7 @@ export class DocRenderer {
       const order = drawOrder(layer.placements, isometric);
 
       order.forEach((placement, step) => {
+        if (!this.draws(layer, placement)) return;
         seen.add(placement.id);
         const view = this.placements.get(placement.id);
         if (!view) return;

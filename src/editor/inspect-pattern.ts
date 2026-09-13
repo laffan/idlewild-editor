@@ -12,7 +12,8 @@
  * how much of it, how big the repeat is, and where it is allowed to be.
  */
 
-import { h } from "../lib/dom";
+import { h, ICONS, icon } from "../lib/dom";
+import { count } from "./layer-items";
 import type { DocStore } from "../lib/doc-store";
 import {
   patternSpec,
@@ -36,8 +37,22 @@ export interface PatternActions {
    * by the button that appears over the selection — see `selection-actions.ts`.
    */
   onAddShapeFromSelection: (layerId: string) => void;
-  /** The other route: draw one, and hand the ink over — see `pen`/`lasso`. */
+  /** The other route: put the pencil up and wait for an outline. */
   onAddShapeByDrawing: (layerId: string) => void;
+  /**
+   * Take everything drawn on the layer as the outline, and stop waiting.
+   *
+   * The finishing half of the draw route. It used to be reachable only by
+   * switching to the lasso and sweeping the ink — the same gesture a sketch
+   * becomes a boundary through — which is right when a layer holds several
+   * sketches and wrong here: somebody who has just pressed Add Shape and
+   * drawn one outline has said which strokes they mean.
+   */
+  onFinishDrawnShape: (layerId: string) => void;
+  /** Stop waiting for an outline, leaving the ink where it is. */
+  onCancelShape: () => void;
+  /** The layer a shape has been asked for, if one has. */
+  shapeTarget: () => string | null;
 }
 
 const TYPES: readonly { type: PatternType; label: string }[] = [
@@ -145,10 +160,16 @@ function shapesSection(
   actions: PatternActions,
 ): HTMLElement {
   const spec = patternSpec(layer);
+  const waiting = actions.shapeTarget() === layer.id;
   const section = h(
     "div",
     { class: "inspect-section" },
-    h("div", { class: "inspect-section-title m", text: "Shapes" }),
+    h("div", {
+      class: "inspect-section-title m",
+      // Counted in the heading, because the list is the subject of this
+      // section rather than a footnote under the buttons.
+      text: spec.shapes.length ? `Shapes · ${spec.shapes.length}` : "Shapes",
+    }),
   );
 
   if (spec.shapes.length === 0) {
@@ -162,6 +183,35 @@ function shapesSection(
     for (const shape of spec.shapes) {
       section.appendChild(shapeRow(store, layer.id, shape));
     }
+  }
+
+  // While one has been asked for, the section is about finishing it rather
+  // than about asking again: two more Add buttons over a half-drawn outline
+  // are two ways to lose it.
+  if (waiting) {
+    const strokes = layer.strokes.length;
+    section.append(
+      h("div", {
+        class: "field-hint",
+        text: strokes
+          ? "Draw more if you need to, then finish."
+          : "Draw the outline on the canvas. It does not have to close.",
+      }),
+      h("button", {
+        class: strokes ? "panel-btn primary" : "panel-btn",
+        text: strokes
+          ? `Finish shape — ${count(strokes, "stroke")}`
+          : "Finish shape — nothing drawn",
+        disabled: strokes ? null : "true",
+        onClick: () => actions.onFinishDrawnShape(layer.id),
+      }),
+      h("button", {
+        class: "panel-btn",
+        text: "Cancel",
+        onClick: () => actions.onCancelShape(),
+      }),
+    );
+    return section;
   }
 
   section.append(
@@ -179,7 +229,7 @@ function shapesSection(
       class: "field-hint",
       text:
         "Select asks for a patch of grid — press and hold, then Pattern Shape. " +
-        "Draw takes a pencil outline: lasso it, then hand it over.",
+        "Draw puts the pencil up and takes the outline you draw.",
     }),
   );
   return section;
@@ -194,16 +244,18 @@ function shapeRow(
   return h(
     "div",
     { class: "inspect-row shape-row" },
+    // How it was made as well as how big it is: a drawn shape keeps its
+    // outline and a selected one does not, which is the difference between
+    // the two rows anybody would want to tell apart.
+    icon(shape.points ? ICONS.pencil : ICONS.select, 12),
     h("span", { class: "inspect-key m", text: shape.name }),
     h("span", {
       class: "inspect-value m",
-      // How it was made as well as how big it is: a drawn shape keeps its
-      // outline and a selected one does not, which is the difference between
-      // the two rows anybody would want to tell apart.
-      text: `${spaces} ${spaces === 1 ? "space" : "spaces"}${shape.points ? " · drawn" : ""}`,
+      text: count(spaces, "space"),
     }),
     h("button", {
       class: "row-btn",
+      "aria-label": `Remove ${shape.name}`,
       text: "Remove",
       onClick: () => removePatternShape(store, layerId, shape.id),
     }),

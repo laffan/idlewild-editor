@@ -26,7 +26,6 @@ import type { Cell, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { DocRenderer } from "./doc-renderer";
 import { instanceOf } from "./instance";
-import { layerKind } from "../lib/layer-kinds";
 import { evictPsd, loadPsd } from "./psd-loader";
 import { reconcilePlacements } from "./reconcile";
 
@@ -422,17 +421,39 @@ export class PsdPlacements {
    * drops every one it no longer finds — so this is a flash of a heap of
    * elements on the anchor space rather than a leak, and not drawing it at
    * all is simply saying what is true.
+   *
+   * `DocRenderer.draws` is the one place that decision is made, so that the
+   * two ends agree: a session that reveals a unit needs it *placed*, and
+   * refusing here unconditionally is what left pen mode framing an empty box.
    */
   placeOne(layerId: string, placement: Placement): void {
     const p2p = this.plugin();
     if (!p2p) return;
-    if (layerKind(this.host.store.layer(layerId)) === "pattern") return;
+    const layer = this.host.store.layer(layerId);
+    if (layer && !this.host.docRenderer.draws(layer, placement)) return;
     try {
       const object = p2p.place(this.host.scene, placement.psdKey, placement.layerPath);
       this.host.docRenderer.attach(layerId, placement, object);
     } catch (err) {
       log.error(`Could not place ${placement.psdKey}:`, err);
     }
+  }
+
+  /**
+   * Draw every placement of one unit, wherever in the open scene it lives.
+   *
+   * What revealing a unit on a pattern layer needs: the reveal says it may be
+   * drawn, and this is what makes the objects, because on that layer nothing
+   * ever has. `placeOne` still asks `draws`, so a unit that is not the
+   * revealed one is refused here as everywhere else.
+   */
+  placeUnit(instance: string): void {
+    for (const layer of this.host.store.layers) {
+      for (const placement of layer.placements) {
+        if (instanceOf(placement) === instance) this.placeOne(layer.id, placement);
+      }
+    }
+    this.host.docRenderer.render();
   }
 
   /**

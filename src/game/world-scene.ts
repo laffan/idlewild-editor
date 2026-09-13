@@ -321,10 +321,6 @@ export class WorldScene extends Phaser.Scene {
     this.cam.centreOn(worldX, worldY);
   }
 
-  centreOnOrigin(): void {
-    this.cam.centreOnOrigin();
-  }
-
   /** Repaint from the document. Cheap: everything here is retained state. */
   refresh(): void {
     this.docRenderer.render();
@@ -549,12 +545,24 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
-   * Keep one placed PSD off the canvas while extrude mode has its solid open.
+   * Which placed unit the canvas is treating specially while a mode has it.
    *
-   * The document is untouched, so Cancel is a matter of clearing this again.
+   * `suppress` keeps one off the canvas — extrude's, because a solid being
+   * carried on with stands on exactly the ground its own flat artwork covers.
+   * `reveal` is the inverse and is pen mode's: on a pattern layer a placement
+   * is the palette a rule scatters and is drawn nowhere, and pen mode frames
+   * exactly the space it is anchored to. Both leave the document untouched,
+   * so ending a mode is a matter of clearing them again.
    */
   suppressInstance(instance: string | null): void {
     this.docRenderer.suppressInstance(instance);
+  }
+
+  revealInstance(instance: string | null): void {
+    this.docRenderer.revealInstance(instance);
+    // Revealing decides that it *may* be drawn; something still has to make
+    // it, and on a pattern layer nothing ever has.
+    if (instance) this.psds.placeUnit(instance);
   }
 
   /** Outline what a drop would replace, or clear the outline. */
@@ -629,12 +637,7 @@ export class WorldScene extends Phaser.Scene {
     return this.psds.rename(from, to);
   }
 
-  /**
-   * Whether a PSD carries the anchor mark at the root of its stack.
-   *
-   * The rule an object layer enforces, asked by the panels rather than by
-   * anything on the canvas — see `PsdPlacements.anchored`.
-   */
+  /** The rule an object layer enforces — see `PsdPlacements.anchored`. */
   psdAnchored(key: string): boolean {
     return this.psds.anchored(key);
   }
