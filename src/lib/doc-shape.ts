@@ -147,10 +147,11 @@ export function copyLayer(layer: Layer, points = new Map<string, string>()): Lay
 /**
  * Placements, with their units kept together.
  *
- * The placements one PSD arrived as share an `instance`, and that is what
+ * The placements one PSD arrived as share a unit — stored on each of them as
+ * `instance`, which is the older name; see `game/unit.ts` — and that is what
  * makes them drag as one thing. Minting a fresh id per placement without
- * remapping the instance would leave a copy whose parts each think they
- * belong to the original's unit.
+ * remapping the unit would leave a copy whose parts each think they belong to
+ * the original's.
  */
 function copyPlacements(placements: readonly Placement[]): Placement[] {
   const units = new Map<string, string>();

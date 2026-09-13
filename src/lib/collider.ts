@@ -282,7 +282,7 @@ export function resolveCollider(
  * The box a unit of placements covers, which is what an unextruded PSD's
  * default collider is derived from.
  *
- * Kept here rather than reaching for `game/instance.ts` so that the default
+ * Kept here rather than reaching for `game/unit.ts` so that the default
  * can be worked out anywhere the document is — including the migration,
  * which runs before anything is on the canvas.
  */

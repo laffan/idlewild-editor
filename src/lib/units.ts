@@ -2,7 +2,7 @@
  * Placed PSDs as *units*, and the order they draw in within a layer.
  *
  * Placing a PSD makes one placement per placeable layer in the file, and they
- * share an `instance` — on the canvas they are one thing, dragged and resized
+ * share a unit — on the canvas they are one thing, dragged and resized
  * together. So almost nothing outside the renderer wants the placements: it
  * wants the units, in the order they are drawn, and `layer.placements` is
  * that order flattened.
@@ -18,7 +18,7 @@ import { layerKind } from "./layer-kinds";
 import type { Layer, Placement } from "./types";
 
 /** The unit a placement belongs to. Absent on documents written before units
- *  existed, where a placement is a unit of one — `game/instance.ts` mints the
+ *  existed, where a placement is a unit of one — `game/unit.ts` mints the
  *  real ones on open. */
 export function unitKey(placement: Placement): string {
   return placement.instance ?? placement.id;

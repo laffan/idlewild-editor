@@ -96,7 +96,7 @@ export class Inspector {
    * Apply causes.
    */
   private psdLayers: PsdLayerEditor | null = null;
-  /** The placed PSD opened up into its layers, if any — see `game/instance.ts`. */
+  /** The placed PSD opened up into its layers, if any — see `game/unit.ts`. */
   private adjusting: string | null = null;
 
   constructor(store: DocStore, grid: Grid, callbacks: InspectorCallbacks) {

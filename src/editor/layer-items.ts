@@ -11,7 +11,7 @@
  * and nobody else's. Placing a PSD makes one placement per placeable layer in
  * the file, so listing placements put a file's insides in the panel that is
  * about the canvas: three rows under Foreground for one tower somebody
- * dropped there. So the rows here are **units** — see `game/instance.ts` —
+ * dropped there. So the rows here are **units** — see `game/unit.ts` —
  * which is also what the canvas selects, drags and deletes.
  */
 
