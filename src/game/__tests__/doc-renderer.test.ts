@@ -247,6 +247,55 @@ describe("revealing a placed unit on a pattern layer", () => {
 });
 
 /**
+ * This renderer updates what it is handed; something else makes the objects.
+ * That was fine while every placement was drawn from the moment it was made,
+ * and stopped being fine the moment a layer could refuse to draw its
+ * placements at all — carry a PSD off a pattern layer onto an object one and
+ * the document says draw it with nothing on the canvas answering to it, which
+ * is a selection outline around an empty box.
+ */
+describe("a placement the document draws and the canvas has none of", () => {
+  it("is asked for", () => {
+    const a = placement("a", "unit-1");
+    const store = new DocStore("p", doc(a));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    const asked: string[] = [];
+    renderer.setPlacer((layerId, p) => asked.push(`${layerId}:${p.id}`));
+    renderer.render();
+    expect(asked).toEqual(["l1:a"]);
+  });
+
+  it("is not asked for twice, because attaching one runs the sweep again", () => {
+    const a = placement("a", "unit-1");
+    const b = placement("b", "unit-2");
+    const store = new DocStore("p", doc(a, b));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    const asked: string[] = [];
+    renderer.setPlacer((layerId, p) => {
+      asked.push(p.id);
+      // What `PsdPlacements.placeOne` does, and what used to recurse through
+      // the rest of the list from inside the first one.
+      renderer.attach(layerId, p, placed());
+    });
+    renderer.render();
+    expect(asked).toEqual(["a", "b"]);
+  });
+
+  it("is not asked for on a layer that does not draw it", () => {
+    const a = placement("a", "unit-1");
+    const store = new DocStore("p", patternDoc("pattern", a));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    const asked: string[] = [];
+    renderer.setPlacer((_layerId, p) => asked.push(p.id));
+    renderer.render();
+    expect(asked).toEqual([]);
+
+    renderer.revealInstance("unit-1");
+    expect(asked).toEqual(["a"]);
+  });
+});
+
+/**
  * The bug this exists for: an extrusion's three parts came back in the wrong
  * order on the canvas while the PSD itself was right.
  *

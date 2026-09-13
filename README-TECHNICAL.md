@@ -2473,11 +2473,26 @@ window, against textures that were not there, and psd-to-phaser answered
 next frame found copies whose file still looked the same and left them alone:
 the pattern was broken over exactly the ground that was in view when the file
 was rewritten, and came right the moment you panned somewhere that had to be
-built fresh. So nothing is made from a key the plugin has no data for — the
-same check `loadPsd` and `PsdPlacements` both make — and **a range with
-anything missing from it is not remembered**, so the next frame tries the
-whole thing again. That is what makes it self-healing rather than a handshake
-between two objects that have to be kept in step.
+built fresh.
+
+**Three questions, and the first two are not the same.** `getData(key)` says
+the *manifest* parsed, and psd-to-phaser records that the moment `data.json`
+lands — several frames before any image does. The **texture** is what its own
+`place` looks for, keyed on the manifest layer's own name, and missing it is
+what prints that warning. Asking only the first was the whole of the second
+round of this bug: adding a layer to a file placed on a pattern layer printed
+it once per copy on screen, and a rename made every copy vanish. And `held` is
+the third, because there is an instant before an eviction where both of the
+others say yes and the textures are about to go — a copy made there is a
+sprite on a texture that is about to be destroyed, which is the null-frame
+throw all over again. So the edits that rewrite a file bracket themselves:
+`releaseKey` on the way in, `restoreKey` in a `finally` on the way out,
+because a key left held is a key nothing would ever draw again.
+
+Beside all that, **a range with anything missing from it is not remembered**,
+so the next frame tries the whole thing again. That is what makes the window
+self-healing rather than a handshake between two objects that have to be kept
+in step.
 
 **Pen mode is the one thing that draws a palette where it stands.** It frames
 the PSD's own canvas at the space the file is anchored to, and on a pattern
@@ -2491,6 +2506,18 @@ one answer both the renderer's sweep and `PsdPlacements.placeOne` read — a
 sweep that destroys what a placement has just attached is a flash of a heap of
 elements on the anchor space, and a placement that never happens is a reveal
 with nothing in it — and `placeUnit` is what makes the objects.
+
+**And a layer that can refuse to draw its placements needs the other
+direction too.** This renderer *updates* what it has been handed; something
+else makes the objects, because making one is an ask of psd-to-phaser and
+`doc-renderer.ts` knows nothing about loading. That was fine while every
+placement was drawn from the moment it was made. Carry a PSD off a pattern
+layer onto an object one and the document says draw it, nothing on the canvas
+answers to it, and what you get is a selection outline around an empty box.
+`setPlacer` is the way back: the sweep collects the placements it draws and
+has nothing for, and asks — after the sweep, and behind a flag, because
+`attach` runs the sweep again for each one and the first would otherwise
+recurse through the rest of the list.
 
 **Nothing on one is picked on the canvas.** `picking.ts` makes a pattern layer
 inert to the pointer, for the reason a locked one is but a different one:
@@ -2608,6 +2635,35 @@ Keep the two copies in step. The same rule the editor drew has to come out of
 the game, or Play shows a different world from the one you built —
 `lib/__tests__/pattern.test.ts` pins the contract both depend on rather than a
 screenshot of the numbers.
+
+### The order placed files draw in, and who chooses it
+
+Within a document layer, the order is `lib/units.ts`. A placed PSD is a
+**unit** — one placement per placeable layer in the file, sharing an
+`instance` — and `layer.placements` is the units flattened, so the list the
+panel shows and the order the canvas draws in are the same fact.
+
+Dragging a row by its grip used to mean one thing: carry this file to another
+layer. It now means two, decided by where the finger ends up — over a
+different layer it is still a carry, and that layer lights up; over its own it
+is a **reorder**, and the row travels through the DOM as it goes, the way a
+layer row does. One gesture, because that is how it reads: a layer row takes a
+position in a list, and a file takes a layer *or* a position. `reorderUnit`
+moves every placement of the unit as a block and leaves `order` — what is on
+top *inside* the file — alone, because that is the file's business.
+
+**An isometric scene does not get a say, and the panel says so by listing
+differently.** `drawOrder` sorts units on screen Y there, so a thing standing
+nearer the viewer draws in front of one behind it — that is not a default a
+manual order should override, it is what makes the projection read as a space
+at all. So `unitsInDrawOrder` sorts the *list* the same way, and the grip
+carries without reordering: a list in document order under a canvas that
+ignored it would be a row that stayed where you put it while nothing moved.
+The sort is stable, so two units on the same row keep the document's order.
+
+Flat projections take the document's order straight through — to the canvas
+through `drawOrder`, and to the exported game through `game.config.json`,
+which carries `placements` in exactly that order.
 
 ### Two senses of "layer", and why the panels must not mix them
 

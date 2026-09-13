@@ -159,6 +159,10 @@ export async function mountEditor(
     grid,
     scene: () => handle?.scene ?? null,
     onSelect: (selection) => handle?.scene.setSelection(selection),
+    focusLayer: (layerId) => {
+      setActiveLayer(layerId);
+      layers.render();
+    },
   };
 
   const inspector = new Inspector(store, grid, {

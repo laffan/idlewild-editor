@@ -196,7 +196,13 @@ remaining pieces are wired to real slots rather than mocked.
 - Layers, under the scene they belong to: drag by the grip to reorder, rename,
   lock, hide, with live counts and an expandable list of what is on each one —
   selecting there selects on the canvas, and a placed PSD listed under a layer
-  has a grip of its own that carries it to whichever layer you let go over.
+  has a grip of its own. Where you let go decides what it meant: over a
+  different layer it is carried there, over its own it is **moved in the order
+  that layer draws in**, on the canvas and in the game alike. An isometric
+  scene is the exception and says so by listing differently — it sorts what it
+  draws on screen Y, so a thing standing nearer you draws in front of one
+  behind it, and the list is sorted to match rather than showing an order the
+  canvas would ignore.
   The two senses of the word stay apart: a layer here is Phaser's — draw order
   over anything at all — so a placed PSD is **one row** however many layers are
   inside the file, and the stack inside it belongs to the inspector. Select a

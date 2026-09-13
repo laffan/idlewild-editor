@@ -51,9 +51,12 @@ function fakeScene(made: Made[], loaded: Set<string>) {
   return {
     add: { graphics: () => graphics },
     cameras: { main: { zoom: 1 } },
+    // Keyed on the manifest layer's name, which in these fixtures is the PSD
+    // key — the check psd-to-phaser's own `place` makes before it warns.
+    textures: { exists: (key: string) => loaded.has(key) },
     P2P: {
-      // What `loadPsd` and `PsdPlacements` both ask before they place: a
-      // manifest that parsed is not a texture that arrived.
+      // Set as soon as `data.json` parses, which is several frames before any
+      // image lands. Believing it was the bug; both have to be true.
       getData: (psdKey: string) => (loaded.has(psdKey) ? { original: {} } : undefined),
       place: (_scene: unknown, psdKey: string) => {
         const object: Made = { psdKey, destroyed: false };
@@ -173,11 +176,12 @@ describe("a pattern layer's copies", () => {
    * moved. The range is all `sync` compares, so without clearing it the
    * pattern would simply be gone until somebody panned.
    */
-  it("come back on the next frame after being dropped", () => {
+  it("come back on the next frame after the file is restored", () => {
     const { made, render } = setup(["tree"]);
     render.sync(view);
     const first = made.length;
     render.dropKey("tree");
+    render.restoreKey("tree");
     render.sync(view);
     expect(made.length).toBe(first * 2);
     expect(made.slice(first).every((m) => !m.destroyed)).toBe(true);
@@ -189,6 +193,20 @@ describe("a pattern layer's copies", () => {
    * without a guard it rebuilds inside that window, against textures that are
    * not there, and psd-to-phaser makes sprites with nothing in them.
    */
+  it("make nothing while a file is being rewritten, even once it is back", () => {
+    const { made, render } = setup(["tree"]);
+    render.dropKey("tree");
+    render.sync(view);
+    // The texture is there and the manifest parsed — but the eviction has not
+    // happened yet, so anything made now is on a texture about to be
+    // destroyed. Only the other end of `dropKey` clears it.
+    expect(made).toEqual([]);
+
+    render.restoreKey("tree");
+    render.sync(view);
+    expect(made.length).toBeGreaterThan(0);
+  });
+
   it("make nothing from a file the plugin has not loaded", () => {
     const { made, render, loaded } = setup(["tree"]);
     loaded.delete("tree");

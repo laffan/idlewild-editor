@@ -237,6 +237,7 @@ export class WorldScene extends Phaser.Scene {
       refresh: () => this.refresh(),
       onPsdsLoaded: () => this.config.onPsdsLoaded?.(),
       releaseKey: (key) => sceneRef.patterns.dropKey(key),
+      restoreKey: (key) => sceneRef.patterns.restoreKey(key),
     });
 
     this.store.addEventListener("change", () => {
@@ -249,6 +250,8 @@ export class WorldScene extends Phaser.Scene {
     });
     // A different scene is not a changed document, it is a different canvas.
     this.store.addEventListener("scene", () => this.reloadScene());
+    // A placement the document draws and the canvas has none of — see there.
+    this.docRenderer.setPlacer((id, p) => this.psds.placeOne(id, p));
     this.psds.migrate();
     void this.psds.loadAll();
     this.refresh();

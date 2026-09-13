@@ -83,6 +83,18 @@ export class PatternRender {
   private readonly live = new Map<string, Live>();
   private lastRange = "";
   private warned = false;
+  /**
+   * Files being rewritten, which nothing may be made from until they are back.
+   *
+   * The `textures.exists` check below is not enough on its own, and the gap it
+   * misses is the dangerous one: between a file's objects being taken down and
+   * its textures being evicted, the old textures are still there under the
+   * same names. A copy made in that instant is a sprite on a texture that is
+   * about to be destroyed, which is the null-frame throw all over again. So
+   * the edits that rewrite a file say when they start and when they finish,
+   * and this is the set in between.
+   */
+  private readonly held = new Set<string>();
 
   constructor(scene: Phaser.Scene, store: DocStore, grid: Grid) {
     this.scene = scene;
@@ -109,15 +121,15 @@ export class PatternRender {
   /**
    * Bring what is on screen in line with the rule. Cheap to call per frame.
    *
-   * A copy is only made from a file the plugin actually has. That check is
-   * not belt and braces: this runs on the frame loop, and a re-import spends
-   * several frames between evicting a key's textures and finishing the load
-   * that replaces them. Placing inside that window is where *Texture not
-   * found for sprite* comes from — and the sprite it makes is not retried,
-   * because the next frame finds a copy whose file still looks the same and
-   * leaves it alone. The pattern then stays broken over exactly the ground
-   * that was in view when the file was rewritten, and comes right the moment
-   * you pan somewhere that has to be built fresh.
+   * A copy is only made from an element whose *texture* is in — see
+   * `ready`. That check is not belt and braces: this runs on the frame loop,
+   * and a re-import spends several frames between evicting a key's textures
+   * and finishing the load that replaces them. Placing inside that window is
+   * where *Texture not found for sprite* comes from — and the sprite it makes
+   * is not retried, because the next frame finds a copy whose file still
+   * looks the same and leaves it alone. The pattern then stays broken over
+   * exactly the ground that was in view when the file was rewritten, and
+   * comes right the moment you pan somewhere that has to be built fresh.
    *
    * So a range with anything missing from it is not remembered, and the next
    * frame tries the whole thing again. The rebuild is the same work a pan
@@ -159,7 +171,7 @@ export class PatternRender {
         // Its file is between an eviction and the load that replaces it. Not
         // `seen`, so whatever is still standing there on a dead texture goes
         // in the sweep below — which is the other half of why this is safe.
-        if (!this.loaded(element.psdKey)) {
+        if (!this.ready(element)) {
           whole = false;
           continue;
         }
@@ -207,15 +219,20 @@ export class PatternRender {
   }
 
   /**
-   * Whether the plugin has this file, which is not the same as the document
-   * naming it.
+   * Whether this element can be placed right now.
    *
-   * The same question `loadPsd` asks before it starts, and `PsdPlacements`
-   * asks before it places: a manifest that parsed says the layers are
-   * placeable, not that the textures arrived.
+   * Three questions, and the first two are not the same. `getData` says the
+   * manifest parsed, which psd-to-phaser records as soon as `data.json`
+   * lands — several frames before any image does; the *texture* is what its
+   * own `place` looks for, keyed on the manifest layer's name, and missing it
+   * is what prints *Texture not found for sprite*. Asking only the first was
+   * the whole of that bug. And `held` covers the instant before an eviction,
+   * where the answer to both is yes and the textures are about to go.
    */
-  private loaded(psdKey: string): boolean {
-    return Boolean(this.plugin()?.getData(psdKey));
+  private ready(element: PatternElement): boolean {
+    if (this.held.has(element.psdKey)) return false;
+    if (!this.plugin()?.getData(element.psdKey)) return false;
+    return this.scene.textures.exists(textureKey(element.path));
   }
 
   private plugin(): PsdToPhaser | undefined {
@@ -242,11 +259,23 @@ export class PatternRender {
    * frame from the rule, which costs nothing.
    */
   dropKey(psdKey: string): void {
+    this.held.add(psdKey);
     for (const [key, held] of this.live) {
       if (held.psdKey !== psdKey) continue;
       destroy(held.object);
       this.live.delete(key);
     }
+    this.lastRange = "";
+  }
+
+  /**
+   * The file is back: build from it again.
+   *
+   * The other end of `dropKey`, and it has to be called however the rewrite
+   * ended — a reload that threw leaves a key nothing would ever draw again.
+   */
+  restoreKey(psdKey: string): void {
+    if (!this.held.delete(psdKey)) return;
     this.lastRange = "";
   }
 
@@ -348,6 +377,18 @@ function place(
 
 function destroy(object: PlacedObject): void {
   object.destroy(true);
+}
+
+/**
+ * What psd-to-phaser keys a layer's texture on: the layer's own name.
+ *
+ * A manifest path is slash-joined, so a layer inside a group arrives here as
+ * `G | town/S | roof` and the texture is under the last segment. Read off the
+ * plugin's own `place`, which warns with exactly this when it cannot find it.
+ */
+function textureKey(path: string): string {
+  const at = path.lastIndexOf("/");
+  return at < 0 ? path : path.slice(at + 1);
 }
 
 function outline(g: Phaser.GameObjects.Graphics, points: readonly Point[]): void {

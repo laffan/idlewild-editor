@@ -23,6 +23,7 @@
 import { clear, h, ICONS, icon } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
 import { LAYER_KINDS, layerKind } from "../lib/layer-kinds";
+import { LayerDrags } from "./layer-drag";
 import { openMenu } from "../lib/menu";
 import type { Layer, Selection } from "../lib/types";
 import {
@@ -74,25 +75,6 @@ interface NameFocus {
   end: number;
 }
 
-/** A drag in flight: the group being moved and the pointer that owns it. */
-interface DragState {
-  layerId: string;
-  group: HTMLElement;
-  pointerId: number;
-  /** Undoes the window listeners this drag installed. */
-  release: () => void;
-}
-
-/** A placement being carried from one layer to another. */
-interface ItemDragState {
-  layerId: string;
-  placementIds: string[];
-  pointerId: number;
-  /** The layer the pointer is currently over, if any. */
-  target: string | null;
-  release: () => void;
-}
-
 export class LayersPanel {
   readonly root: HTMLElement;
   private readonly body: HTMLElement;
@@ -100,10 +82,13 @@ export class LayersPanel {
   private readonly store: DocStore;
   private readonly callbacks: LayersPanelCallbacks;
   private suspended = false;
-  private drag: DragState | null = null;
-  private itemDrag: ItemDragState | null = null;
+  /** The two drags on this list, and the one gesture that is both — see
+   *  `layer-drag.ts`. */
+  private readonly drags: LayerDrags;
   /** Layers whose contents are shown. Expansion is per-session UI state. */
   private readonly expanded = new Set<string>();
+  /** Whether placed files are listed — and reorderable — in document order. */
+  private readonly isometric: boolean;
 
   /**
    * `footer` is what sits under the list, along the bottom of the sidebar:
@@ -117,8 +102,16 @@ export class LayersPanel {
   ) {
     this.store = store;
     this.callbacks = callbacks;
+    this.isometric = store.projection === "isometric";
 
     this.body = h("div", { class: "panel-body scroll" });
+    this.drags = new LayerDrags({
+      body: this.body,
+      store,
+      render: () => this.render(),
+      expand: (layerId) => this.expanded.add(layerId),
+      select: (selection) => this.callbacks.onSelectItem(selection),
+    });
     this.scenes = new ScenesBar(store);
     this.root = h(
       "div",
@@ -152,8 +145,7 @@ export class LayersPanel {
     // A switch leaves the list showing another scene's layers, and the drag
     // or rename that was in flight is about a row that has gone.
     store.addEventListener("scene", () => {
-      this.drag = null;
-      this.itemDrag = null;
+      this.drags.forget();
       this.expanded.clear();
       this.render();
     });
@@ -177,7 +169,7 @@ export class LayersPanel {
   render(): void {
     // A drag in flight owns the DOM until it is released; rebuilding under
     // it would drop the element the pointer is holding.
-    if (this.drag || this.itemDrag) return;
+    if (this.drags.active) return;
 
     const active = this.callbacks.getActiveLayerId();
     const selection = this.callbacks.getSelection();
@@ -195,6 +187,7 @@ export class LayersPanel {
       const items = layerItems(layer, {
         startPointId: this.store.activeScene.startPointId,
         isAnchored: this.callbacks.isAnchored,
+        isometric: this.isometric,
       });
       if (items.length === 0 && layer.strokes.length === 0) {
         group.appendChild(
@@ -215,7 +208,19 @@ export class LayersPanel {
             isSelected(item, selection),
             (next) => this.callbacks.onSelectItem(next),
             draggable
-              ? (event) => this.beginItemDrag(event, layer.id, draggable)
+              ? (event) =>
+                  this.drags.beginItemDrag(
+                    event,
+                    layer.id,
+                    draggable,
+                    // No unit means carry only. An isometric scene sorts what
+                    // it draws on screen Y — a thing nearer the viewer draws
+                    // in front of one behind it, which is what makes the
+                    // projection read as a space — so the document's order is
+                    // not the answer there and a row that moved would be a
+                    // row the canvas ignored. The list is Y-sorted to match.
+                    this.isometric ? null : item.unit ?? null,
+                  )
               : undefined,
           ),
         );
@@ -259,11 +264,13 @@ export class LayersPanel {
           h("button", {
             class: "layer-item add",
             text: "New Background",
+            // Selecting the layer first would rebuild this panel and destroy
+            // the button under the pointer, and a menu measures the element it
+            // hangs from — a detached one reports a box of zeros, which is a
+            // menu in the top-left corner of the app. So the layer is made
+            // active from inside the menu instead, once something is chosen.
             onClick: (event: Event) => {
               event.stopPropagation();
-              // Make it the active layer first: what the menu writes lands on
-              // whatever is active, the way Fill and Add Image do.
-              this.callbacks.onSelectLayer(layer.id);
               this.callbacks.onNewBackground(
                 layer.id,
                 event.currentTarget as HTMLElement,
@@ -308,8 +315,7 @@ export class LayersPanel {
    * and with them the store they close over.
    */
   destroy(): void {
-    this.endDrag(false);
-    this.endItemDrag(null);
+    this.drags.destroy();
   }
 
   /**
@@ -342,206 +348,6 @@ export class LayersPanel {
     this.render();
   }
 
-  // ── reordering ────────────────────────────────────────────────────────────
-
-  /**
-   * Start a reorder.
-   *
-   * The rest of the gesture is followed on `window` rather than through
-   * `setPointerCapture` on the grip. Capture is released the moment the
-   * capturing element is taken out of the document, and moving the row
-   * through the list does exactly that — so the pointer-up that commits the
-   * drop was landing on whatever the finger happened to be over instead, and
-   * the drop was never written. Window listeners see the whole gesture
-   * whatever the DOM does underneath it.
-   */
-  private beginDrag(event: PointerEvent, layerId: string): void {
-    const group = (event.currentTarget as HTMLElement).closest(".layer-group");
-    if (!(group instanceof HTMLElement) || this.drag) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    const { pointerId } = event;
-    const onMove = (moved: PointerEvent) => {
-      if (moved.pointerId !== pointerId) return;
-      moved.preventDefault();
-      this.dragTo(moved.clientY);
-    };
-    const onUp = (ended: PointerEvent) => {
-      if (ended.pointerId === pointerId) this.endDrag(true);
-    };
-    const onCancel = (ended: PointerEvent) => {
-      if (ended.pointerId === pointerId) this.endDrag(false);
-    };
-
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onCancel);
-
-    group.classList.add("dragging");
-    this.body.classList.add("reordering");
-    this.drag = {
-      layerId,
-      group,
-      pointerId,
-      release: () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onCancel);
-      },
-    };
-  }
-
-  /**
-   * Move the dragged group past whichever neighbour the pointer has crossed.
-   *
-   * Reading the boxes after each insert is deliberate: the list has already
-   * reflowed, so the next comparison is made against where the rows now are
-   * rather than where they started.
-   */
-  private dragTo(y: number): void {
-    if (!this.drag) return;
-    const { group } = this.drag;
-
-    let before: HTMLElement | null = null;
-    for (const sibling of this.body.children) {
-      if (!(sibling instanceof HTMLElement) || sibling === group) continue;
-      const box = sibling.getBoundingClientRect();
-      if (y < box.top + box.height / 2) {
-        before = sibling;
-        break;
-      }
-    }
-    // Inserting a node before the one it already precedes is a real DOM move
-    // and a real reflow, so nothing happens unless the order actually changes.
-    if (before === group.nextElementSibling) return;
-    this.body.insertBefore(group, before);
-  }
-
-  // ── carrying a placement to another layer ─────────────────────────────────
-
-  /**
-   * Start moving a placed PSD onto a different layer.
-   *
-   * Followed on `window` for the reason the layer reorder is: the panel
-   * rebuilds on every document change, and pointer capture is released the
-   * moment the capturing element leaves the document.
-   *
-   * Unlike a reorder the rows do not move as the finger travels. There is one
-   * legal drop per layer rather than a position in a list, so the layer under
-   * the pointer is marked instead — the same choice the code modal's file
-   * tree makes, for the same reason.
-   */
-  private beginItemDrag(
-    event: PointerEvent,
-    layerId: string,
-    placementIds: string[],
-  ): void {
-    if (this.drag || this.itemDrag) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    const { pointerId } = event;
-    const onMove = (moved: PointerEvent) => {
-      if (moved.pointerId !== pointerId) return;
-      moved.preventDefault();
-      this.highlightLayer(this.layerAt(moved.clientY));
-    };
-    const onUp = (ended: PointerEvent) => {
-      if (ended.pointerId !== pointerId) return;
-      this.endItemDrag(this.layerAt(ended.clientY));
-    };
-    const onCancel = (ended: PointerEvent) => {
-      if (ended.pointerId === pointerId) this.endItemDrag(null);
-    };
-
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onCancel);
-
-    this.body.classList.add("carrying");
-    this.itemDrag = {
-      layerId,
-      placementIds,
-      pointerId,
-      target: null,
-      release: () => {
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onCancel);
-      },
-    };
-  }
-
-  /** Which layer's block of the panel a screen Y falls in. */
-  private layerAt(y: number): string | null {
-    for (const group of this.body.children) {
-      if (!(group instanceof HTMLElement)) continue;
-      const box = group.getBoundingClientRect();
-      if (y >= box.top && y <= box.bottom) return group.dataset.layerId ?? null;
-    }
-    return null;
-  }
-
-  private highlightLayer(layerId: string | null): void {
-    if (!this.itemDrag || this.itemDrag.target === layerId) return;
-    this.itemDrag.target = layerId;
-    for (const group of this.body.children) {
-      if (!(group instanceof HTMLElement)) continue;
-      // The layer it is already on is not a destination, so it is never lit.
-      group.classList.toggle(
-        "drop-into",
-        group.dataset.layerId === layerId && layerId !== this.itemDrag.layerId,
-      );
-    }
-  }
-
-  private endItemDrag(target: string | null): void {
-    const drag = this.itemDrag;
-    if (!drag) return;
-    this.itemDrag = null;
-
-    drag.release();
-    this.body.classList.remove("carrying");
-    for (const group of this.body.children) {
-      if (group instanceof HTMLElement) group.classList.remove("drop-into");
-    }
-
-    if (target && target !== drag.layerId) {
-      this.store.movePlacements(drag.layerId, drag.placementIds, target);
-      // Follow it: the row the finger let go of is now under a different
-      // layer, and leaving the selection pointing at the old one would show
-      // the inspector an image that is no longer there.
-      this.expanded.add(target);
-      this.callbacks.onSelectItem({
-        kind: "placement",
-        layerId: target,
-        placementId: drag.placementIds[0],
-      });
-    }
-    // A cancelled drop still has to put the list back the way it was: the
-    // store only re-renders when something actually changed.
-    this.render();
-  }
-
-  private endDrag(commit: boolean): void {
-    if (!this.drag) return;
-    const { layerId, group, release } = this.drag;
-    this.drag = null;
-
-    release();
-    group.classList.remove("dragging");
-    this.body.classList.remove("reordering");
-
-    const index = Array.prototype.indexOf.call(this.body.children, group);
-    if (commit && index >= 0) this.store.reorderLayer(layerId, index);
-    // `reorderLayer` re-renders through the store's change event when the
-    // order actually moved; a cancelled or no-op drag still needs the list
-    // put back the way the document has it.
-    this.render();
-  }
-
   /** The grip. Drag to reorder; the arrow keys do the same without a pointer. */
   private grip(layer: Layer): HTMLElement {
     return h(
@@ -550,7 +356,7 @@ export class LayersPanel {
         class: "layer-grip",
         title: "Drag to reorder",
         "aria-label": `Reorder ${layer.name}`,
-        onPointerDown: (event: PointerEvent) => this.beginDrag(event, layer.id),
+        onPointerDown: (event: PointerEvent) => this.drags.beginLayerDrag(event, layer.id),
         onClick: (event: Event) => event.stopPropagation(),
         onKeyDown: (event: KeyboardEvent) => {
           const delta =

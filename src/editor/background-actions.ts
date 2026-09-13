@@ -50,6 +50,15 @@ export interface BackgroundDeps {
   scene: () => WorldScene | null;
   /** Follow what was just made, so the inspector is describing it. */
   onSelect: (selection: Selection) => void;
+  /**
+   * Make this the layer new work lands on.
+   *
+   * Called from inside the menu rather than before it opens, because
+   * selecting a layer rebuilds the left panel — and the button the menu hangs
+   * from is in it. A menu measures its anchor, and a detached element reports
+   * a box of zeros, which is a menu in the corner of the app.
+   */
+  focusLayer: (layerId: string) => void;
 }
 
 /** The menu the New Background button opens. */
@@ -72,7 +81,10 @@ export function openNewBackground(
     {
       label: "Image…",
       glyph: ICONS.file,
-      onSelect: () => openBackgroundImage(deps),
+      onSelect: () => {
+        deps.focusLayer(layerId);
+        openBackgroundImage(deps);
+      },
     },
   ]);
 }
@@ -82,6 +94,7 @@ function make(
   layerId: string,
   kind: Background["kind"],
 ): void {
+  deps.focusLayer(layerId);
   const made = addBackground(deps.store, layerId, kind);
   deps.onSelect({ kind: "background", layerId, backgroundId: made.id });
   log.info(`${made.name} added to ${deps.store.layer(layerId)?.name ?? "the layer"}`);

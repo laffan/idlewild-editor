@@ -16,7 +16,7 @@
  */
 
 import { h, ICONS, icon } from "../lib/dom";
-import { instanceOf } from "../game/instance";
+import { unitKey, unitsInDrawOrder } from "../lib/units";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { LayerKind } from "../lib/types";
 import { describeFill, type Layer, type Placement, type Selection } from "../lib/types";
@@ -41,6 +41,11 @@ export interface LayerItem {
    */
   members?: string[];
   /**
+   * The placed unit this row is, when it is one. What a drag reorders by —
+   * the row carries it so the panel never has to work back from a placement.
+   */
+  unit?: string;
+  /**
    * What is wrong with this thing, in the fewest words that say it.
    *
    * One use so far: a PSD on an object layer with no `P | anchor` at the root
@@ -63,6 +68,16 @@ export interface LayerItemContext {
    * only want the list (a test, a count) mean.
    */
   isAnchored?: (psdKey: string) => boolean;
+  /**
+   * Whether the project is isometric, which decides what order the placed
+   * files are listed in.
+   *
+   * The list is in **draw order**, and on an isometric scene that is screen Y
+   * rather than the document's order — see `unitsInDrawOrder`. A list in
+   * document order there would be a list the canvas ignores, and the row you
+   * dragged would stay where you put it while nothing moved on screen.
+   */
+  isometric?: boolean;
 }
 
 /**
@@ -97,7 +112,7 @@ export function layerItems(
     });
   }
 
-  for (const unit of placedUnits(layer)) {
+  for (const unit of unitsInDrawOrder(layer.placements, context.isometric ?? false)) {
     const [first] = unit;
     // Only on an object layer. A pattern layer's placements are its palette
     // and a background layer's are scenery — neither is a thing standing on a
@@ -114,6 +129,7 @@ export function layerItems(
       detail: describeUnit(unit),
       path: ICONS.file,
       members: unit.map((p) => p.id),
+      unit: unitKey(first),
       ...(unanchored ? { warning: "No anchor" } : {}),
     });
   }
@@ -151,23 +167,6 @@ export function layerItems(
   }
 
   return items;
-}
-
-/**
- * A layer's placed PSDs, one entry per unit, in the order they draw.
- *
- * Grouped by `instance` and kept in first-seen order rather than sorted: the
- * list is about where things are in the layer, and the first member of a unit
- * is where that unit starts.
- */
-function placedUnits(layer: Layer): Placement[][] {
-  const units = new Map<string, Placement[]>();
-  for (const placement of layer.placements) {
-    const unit = units.get(instanceOf(placement));
-    if (unit) unit.push(placement);
-    else units.set(instanceOf(placement), [placement]);
-  }
-  return [...units.values()];
 }
 
 /**
@@ -213,6 +212,8 @@ export function renderLayerItem(
     "button",
     {
       class: classes.join(" "),
+      // What a reorder drags by, read back off the DOM as the finger passes.
+      dataset: item.unit ? { unit: item.unit } : undefined,
       onClick: (event: Event) => {
         event.stopPropagation();
         onSelect(item.selection);

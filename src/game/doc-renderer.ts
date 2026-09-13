@@ -115,6 +115,12 @@ export class DocRenderer {
    */
   private revealed: string | null = null;
   /**
+   * How to make an object for a placement that has none — see `setPlacer`.
+   */
+  private placer: ((layerId: string, placement: Placement) => void) | null = null;
+  /** Guard against the re-entry `attach` would otherwise cause. */
+  private placing = false;
+  /**
    * A PSD's layers as a panel is *showing* them, before the file has been
    * rewritten to say so.
    *
@@ -192,6 +198,25 @@ export class DocRenderer {
   draws(layer: Layer, placement: Placement): boolean {
     if (layerKind(layer) !== "pattern") return true;
     return instanceOf(placement) === this.revealed;
+  }
+
+  /**
+   * How to make an object for a placement that turns up without one.
+   *
+   * This renderer *updates* what it has been handed; something else makes the
+   * objects, because making one is an ask of psd-to-phaser and this file
+   * knows nothing about loading. That was fine while every placement was
+   * drawn from the moment it was made — and stopped being fine the moment a
+   * layer could refuse to draw its placements at all. Carry a PSD off a
+   * pattern layer onto an object one and the document says draw it, nothing
+   * on the canvas answers to it, and what you get is a selection outline
+   * around an empty box.
+   *
+   * Handed in rather than taken in the constructor: the thing that places is
+   * built after this is, and it needs this.
+   */
+  setPlacer(placer: (layerId: string, placement: Placement) => void): void {
+    this.placer = placer;
   }
 
   /** Repaint everything the document describes. */
@@ -301,6 +326,8 @@ export class DocRenderer {
    *  is gone. */
   private syncPlacements(): void {
     const seen = new Set<string>();
+    /** Drawn by the document, and with nothing on the canvas to draw. */
+    const missing: Array<{ layerId: string; placement: Placement }> = [];
     const layers = this.store.layers;
     const isometric = this.grid.projection === "isometric";
 
@@ -327,7 +354,10 @@ export class DocRenderer {
         if (!this.draws(layer, placement)) return;
         seen.add(placement.id);
         const view = this.placements.get(placement.id);
-        if (!view) return;
+        if (!view) {
+          missing.push({ layerId: layer.id, placement });
+          return;
+        }
         view.placement = placement;
         // A placement can be carried to another layer from the layer panel,
         // and the view is what any later lookup by id reads.
@@ -356,6 +386,18 @@ export class DocRenderer {
       if (seen.has(id)) continue;
       destroyPlaced(view.object);
       this.placements.delete(id);
+    }
+
+    // After the sweep, and guarded: `attach` runs this again for each one, so
+    // without the flag the first missing placement would recurse through the
+    // rest of the list. Nothing is left to do on the way back out — the sweep
+    // each `attach` ran is what positioned it.
+    if (missing.length === 0 || !this.placer || this.placing) return;
+    this.placing = true;
+    try {
+      for (const { layerId, placement } of missing) this.placer(layerId, placement);
+    } finally {
+      this.placing = false;
     }
   }
 
