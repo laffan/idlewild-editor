@@ -86,6 +86,30 @@ no way to tell whether any edit to it had worked. And the same game existed
 twice, once in TypeScript for the editor and once in JavaScript for the export,
 kept in step by hand. Both are gone with those files.
 
+## One game at a time, and why that is load-bearing
+
+`Phaser.Game.destroy` does not destroy anything. It sets `pendingDestroy` and
+the work happens on the next step of the game loop — so a caller that returns
+straight away has left a game running, and the next project opened overlaps
+it.
+
+That overlap is not cosmetic, because of what a plugin key is. `PluginCache`
+is a module-level singleton shared by every game on the page, and
+`PluginManager.install` refuses a key it already holds: it warns *Plugin key in
+use* to the browser console and returns null, the new game never gets its
+`PsdToPhaser`, and `addToScene` therefore never sets `scene.P2P`. Only the old
+game's `runDestroy` calls `destroyCustomPlugins` and frees the key.
+
+Leave a project and open another quickly enough and every import in the second
+one fails with *psd-to-phaser is not registered on this scene* — a project in
+which nothing can be imported, with nothing on screen to say why, and which
+comes right if you make a third one. So `GameHandle.destroy` waits for the
+`DESTROY` event before it resolves and `teardown` awaits it, which in practice
+is one frame. The wait is bounded: a shell that cannot leave a project is
+worse than one that leaves a frame early. And `bootGame` says so outright if
+the plugin did not install after all, because thirty failed imports is a poor
+way to learn it.
+
 ## Why there is still an HTTP server
 
 psd-to-phaser builds asset URLs by concatenating onto the base path it is
@@ -2475,19 +2499,27 @@ the pattern was broken over exactly the ground that was in view when the file
 was rewritten, and came right the moment you panned somewhere that had to be
 built fresh.
 
-**Three questions, and the first two are not the same.** `getData(key)` says
-the *manifest* parsed, and psd-to-phaser records that the moment `data.json`
-lands — several frames before any image does. The **texture** is what its own
-`place` looks for, keyed on the manifest layer's own name, and missing it is
-what prints that warning. Asking only the first was the whole of the second
-round of this bug: adding a layer to a file placed on a pattern layer printed
-it once per copy on screen, and a rename made every copy vanish. And `held` is
-the third, because there is an instant before an eviction where both of the
-others say yes and the textures are about to go — a copy made there is a
-sprite on a texture that is about to be destroyed, which is the null-frame
-throw all over again. So the edits that rewrite a file bracket themselves:
-`releaseKey` on the way in, `restoreKey` in a `finally` on the way out,
-because a key left held is a key nothing would ever draw again.
+**Three questions, and the first two are not the same** — `PsdPlacements.canPlace`
+is all three, and both renderers ask it rather than keeping opinions of their
+own. `getData(key)` says the *manifest* parsed, and psd-to-phaser records that
+the moment `data.json` lands, several frames before any image does. The
+**texture** is what its own `place` looks for, keyed on the manifest layer's
+own name — `textureKey` — and missing it is what prints that warning. Asking
+only the first was the whole of the second round of this bug: adding a layer to
+a file placed on a pattern layer printed it once per copy on screen, and a
+rename made every copy vanish. And **held** is the third, because there is an
+instant before an eviction where both of the others say yes and the textures
+are about to go.
+
+`PsdPlacements.offline` is what holds it. Every rewrite — a re-parse, a
+rename, a repoint — is the same four steps in the same order: take down what
+is standing on the file, evict its textures, load the new ones, place again.
+Doing that by hand at three call sites is how the fourth forgets, and the
+fourth did: the *document* renderer learned to ask for an object when the
+canvas lacks one (below), the rename's own rewrite fires a document change,
+and a change is a repaint. So the bracket is one method, it holds every key
+the edit touches — a rename holds both names — and the release is in a
+`finally`, because a key left held is a key nothing would ever draw again.
 
 Beside all that, **a range with anything missing from it is not remembered**,
 so the next frame tries the whole thing again. That is what makes the window
@@ -2518,6 +2550,12 @@ answers to it, and what you get is a selection outline around an empty box.
 has nothing for, and asks — after the sweep, and behind a flag, because
 `attach` runs the sweep again for each one and the first would otherwise
 recurse through the rest of the list.
+
+It also made this renderer a thing that creates objects, which it had never
+been, and that is what broke renaming a PSD: the rewrite fires a document
+change, a change is a repaint, and a repaint now asks for an object at exactly
+the moment the old textures have gone and the new ones have not arrived.
+`canPlace` is what it asks, so the window closes for both renderers at once.
 
 **Nothing on one is picked on the canvas.** `picking.ts` makes a pattern layer
 inert to the pointer, for the reason a locked one is but a different one:

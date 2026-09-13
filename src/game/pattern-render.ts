@@ -84,22 +84,25 @@ export class PatternRender {
   private lastRange = "";
   private warned = false;
   /**
-   * Files being rewritten, which nothing may be made from until they are back.
+   * Whether an object may be made from a file's layer right now.
    *
-   * The `textures.exists` check below is not enough on its own, and the gap it
-   * misses is the dangerous one: between a file's objects being taken down and
-   * its textures being evicted, the old textures are still there under the
-   * same names. A copy made in that instant is a sprite on a texture that is
-   * about to be destroyed, which is the null-frame throw all over again. So
-   * the edits that rewrite a file say when they start and when they finish,
-   * and this is the set in between.
+   * Asked rather than worked out here, and asked of `PsdPlacements`, which is
+   * the thing that loads: the manifest, the texture and whether a rewrite has
+   * the file off the canvas are one question with one answer, and two copies
+   * of it would eventually differ.
    */
-  private readonly held = new Set<string>();
+  private readonly canPlace: (psdKey: string, layerPath: string) => boolean;
 
-  constructor(scene: Phaser.Scene, store: DocStore, grid: Grid) {
+  constructor(
+    scene: Phaser.Scene,
+    store: DocStore,
+    grid: Grid,
+    canPlace: (psdKey: string, layerPath: string) => boolean,
+  ) {
     this.scene = scene;
     this.store = store;
     this.grid = grid;
+    this.canPlace = canPlace;
     this.shapes = scene.add.graphics();
     // Over the pattern it confines and under the selection overlay, which is
     // where every other outline the editor draws about the document sits.
@@ -171,7 +174,7 @@ export class PatternRender {
         // Its file is between an eviction and the load that replaces it. Not
         // `seen`, so whatever is still standing there on a dead texture goes
         // in the sweep below — which is the other half of why this is safe.
-        if (!this.ready(element)) {
+        if (!this.canPlace(element.psdKey, element.path)) {
           whole = false;
           continue;
         }
@@ -218,23 +221,6 @@ export class PatternRender {
     this.lastRange = whole ? signature : "";
   }
 
-  /**
-   * Whether this element can be placed right now.
-   *
-   * Three questions, and the first two are not the same. `getData` says the
-   * manifest parsed, which psd-to-phaser records as soon as `data.json`
-   * lands — several frames before any image does; the *texture* is what its
-   * own `place` looks for, keyed on the manifest layer's name, and missing it
-   * is what prints *Texture not found for sprite*. Asking only the first was
-   * the whole of that bug. And `held` covers the instant before an eviction,
-   * where the answer to both is yes and the textures are about to go.
-   */
-  private ready(element: PatternElement): boolean {
-    if (this.held.has(element.psdKey)) return false;
-    if (!this.plugin()?.getData(element.psdKey)) return false;
-    return this.scene.textures.exists(textureKey(element.path));
-  }
-
   private plugin(): PsdToPhaser | undefined {
     return (this.scene as unknown as Record<string, PsdToPhaser | undefined>)
       .P2P;
@@ -259,7 +245,6 @@ export class PatternRender {
    * frame from the rule, which costs nothing.
    */
   dropKey(psdKey: string): void {
-    this.held.add(psdKey);
     for (const [key, held] of this.live) {
       if (held.psdKey !== psdKey) continue;
       destroy(held.object);
@@ -274,8 +259,7 @@ export class PatternRender {
    * The other end of `dropKey`, and it has to be called however the rewrite
    * ended — a reload that threw leaves a key nothing would ever draw again.
    */
-  restoreKey(psdKey: string): void {
-    if (!this.held.delete(psdKey)) return;
+  restoreKey(_psdKey: string): void {
     this.lastRange = "";
   }
 
@@ -379,17 +363,6 @@ function destroy(object: PlacedObject): void {
   object.destroy(true);
 }
 
-/**
- * What psd-to-phaser keys a layer's texture on: the layer's own name.
- *
- * A manifest path is slash-joined, so a layer inside a group arrives here as
- * `G | town/S | roof` and the texture is under the last segment. Read off the
- * plugin's own `place`, which warns with exactly this when it cannot find it.
- */
-function textureKey(path: string): string {
-  const at = path.lastIndexOf("/");
-  return at < 0 ? path : path.slice(at + 1);
-}
 
 function outline(g: Phaser.GameObjects.Graphics, points: readonly Point[]): void {
   if (points.length < 2) return;

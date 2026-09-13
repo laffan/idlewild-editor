@@ -180,6 +180,22 @@ export function isExtrusionPart(key: string, name: string): boolean {
 }
 
 /**
+ * What psd-to-phaser keys a layer's texture on: the layer's own name.
+ *
+ * A path is slash-joined, so a layer inside a group is `G | town/S | roof`
+ * and its texture is under the last segment. Read off the plugin's own
+ * `place`, which warns with exactly this key when it cannot find one — and
+ * that warning, or the null frame that follows it, is what asking the wrong
+ * question costs. Here rather than beside the loader because it is a fact
+ * about a manifest path, and because everything in this file is readable
+ * without a Phaser to import.
+ */
+export function textureKey(layerPath: string): string {
+  const at = layerPath.lastIndexOf("/");
+  return at < 0 ? layerPath : layerPath.slice(at + 1);
+}
+
+/**
  * Whether a PSD carries the anchor mark at the **root** of its layer stack.
  *
  * Not the same question `manifest.anchor` answers. That one finds the mark

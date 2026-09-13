@@ -137,7 +137,11 @@ export class WorldScene extends Phaser.Scene {
 
     this.gridRenderer = new GridRenderer(this.add.graphics(), this.grid);
     this.backgrounds = new BackgroundRender(this, this.store);
-    this.patterns = new PatternRender(this, this.store, this.grid);
+    // The same gate `placeOne` asks, so the two can never disagree about
+    // whether a file is ready. Read lazily: `psds` is built further down.
+    this.patterns = new PatternRender(this, this.store, this.grid, (key, path) =>
+      this.psds.canPlace(key, path),
+    );
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
     this.drops = new DropTargets(this.add.graphics(), this.store);
@@ -604,29 +608,22 @@ export class WorldScene extends Phaser.Scene {
     if (next) this.setSelection(next);
   }
 
-  /**
-   * Register a processed PSD with psd-to-phaser and place it.
-   *
-   * The work is `game/psd-placements.ts`; these four are the scene's face on
-   * it, because a PSD is placed from the editor shell and from both of the
-   * drawing layer's conversions.
-   */
-  /** Place a processed PSD, and say whether anything landed. */
+  // ── the scene's face on a PSD ─────────────────────────────────────────────
+  //
+  // Delegation and nothing else. A PSD is placed from the editor shell and
+  // from both of the drawing layer's conversions, so the scene is where they
+  // all reach — but what each of these means is documented where it is done,
+  // in `psd-placements.ts` and `doc-renderer.ts`, and saying it twice is how
+  // the two copies come to disagree.
+
   placePsd(key: string, json: string, at: Cell, scale = 1): Promise<boolean> {
     return this.psds.place(key, json, at, scale);
   }
 
-  /**
-   * Show one PSD's layers the way the inspector has them staged.
-   *
-   * Null takes the preview down and the document answers again. See
-   * `game/doc-renderer.ts`, which holds it.
-   */
   previewPsdVisibility(key: string | null, names: readonly string[]): void {
     this.docRenderer.previewVisibility(key, names);
   }
 
-  /** Swap in a re-imported PSD under the key it already had. */
   reloadPsd(
     key: string,
     manifestJson: string,
@@ -635,17 +632,14 @@ export class WorldScene extends Phaser.Scene {
     return this.psds.reload(key, manifestJson, renames);
   }
 
-  /** Move every placement on one PSD key over to another. */
   renamePsd(from: string, to: string): Promise<void> {
     return this.psds.rename(from, to);
   }
 
-  /** The rule an object layer enforces — see `PsdPlacements.anchored`. */
   psdAnchored(key: string): boolean {
     return this.psds.anchored(key);
   }
 
-  /** Point one placement at a different PSD and redraw it. */
   repointPlacement(
     selection: Extract<Selection, { kind: "placement" }>,
     key: string,

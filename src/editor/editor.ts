@@ -681,7 +681,10 @@ export async function mountEditor(
     code.destroy();
     terminal.destroy();
     layout.destroy();
-    handle?.destroy();
+    // Awaited: a game that has only been *asked* to go is a game still
+    // holding psd-to-phaser's plugin key, and the next project opened would
+    // boot without it — see `GameHandle.destroy`.
+    await handle?.destroy();
     handle = null;
   }
 

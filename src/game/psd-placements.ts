@@ -17,6 +17,7 @@ import { defaultCollider, placementsBox, unitOfKey } from "../lib/collider";
 import {
   hasRootAnchor,
   parseManifest,
+  textureKey,
   placeableLayers,
   placedPosition,
   placedVisibility,
@@ -74,9 +75,72 @@ export interface PsdHost {
 
 export class PsdPlacements {
   private readonly host: PsdHost;
+  /**
+   * Files being rewritten, which nothing may be placed from until they are
+   * back — see `offline`.
+   */
+  private readonly held = new Set<string>();
 
   constructor(host: PsdHost) {
     this.host = host;
+  }
+
+  /**
+   * Take a file off the canvas, do something to it, and put it back.
+   *
+   * Every rewrite — a re-parse, a rename, a repoint — is the same four steps
+   * in the same order: take down what is standing on the file, evict its
+   * textures, load the new ones, place again. Doing that by hand at three
+   * call sites is how the fourth one forgets, and forgetting is not a blank
+   * sprite: a Phaser object whose texture has been removed under it throws
+   * `frame.source.resolution` of null inside the renderer, on every frame
+   * from then on, and the pass dies part-way through.
+   *
+   * The window matters as much as the order. `held` is what makes it a
+   * *window* rather than two moments: while a key is in it, nothing may make
+   * an object from that file — not the pattern renderer on its frame loop,
+   * and not the document renderer, which now asks for an object whenever the
+   * document draws a placement the canvas has none of. Both go through
+   * `canPlace`.
+   *
+   * `keys` is usually one. A rename holds both, because the copies on screen
+   * were made under the old name and the new one is about to be loaded.
+   */
+  private async offline(keys: readonly string[], work: () => Promise<void>): Promise<void> {
+    for (const key of keys) {
+      this.held.add(key);
+      this.host.docRenderer.detachKey(key);
+      this.host.releaseKey(key);
+    }
+    try {
+      await work();
+    } finally {
+      // However that went. A key left held is a key nothing draws again.
+      for (const key of keys) {
+        this.held.delete(key);
+        this.host.restoreKey(key);
+      }
+    }
+  }
+
+  /**
+   * Whether an object may be made from this file's layer, right now.
+   *
+   * Three questions, and the first two are not the same. `getData` says the
+   * *manifest* parsed, which psd-to-phaser records the moment `data.json`
+   * lands — several frames before any image does. The **texture** is what its
+   * own `place` looks for, keyed on the manifest layer's own name, and
+   * missing it is what prints *Texture not found for sprite*. And `held` is
+   * the third: an instant before an eviction both the others say yes and the
+   * textures are about to go.
+   *
+   * Handed to the pattern renderer as well, because the question is the same
+   * one and the answer must not be able to differ.
+   */
+  canPlace(psdKey: string, layerPath: string): boolean {
+    if (this.held.has(psdKey)) return false;
+    if (!this.plugin()?.getData(psdKey)) return false;
+    return this.host.scene.textures.exists(textureKey(layerPath));
   }
 
   /**
@@ -251,20 +315,15 @@ export class PsdPlacements {
       renames,
     );
 
-    this.host.docRenderer.detachKey(key);
-    this.host.releaseKey(key);
-    evictPsd(this.host.scene, this.plugin(), key, this.otherPsdKeys(key));
-    try {
+    await this.offline([key], async () => {
+      evictPsd(this.host.scene, this.plugin(), key, this.otherPsdKeys(key));
       await this.load(key);
       for (const layer of this.host.store.layers) {
         for (const placement of layer.placements) {
           if (placement.psdKey === key) this.placeOne(layer.id, placement);
         }
       }
-    } finally {
-      // However that went. A key left held is a key nothing draws again.
-      this.host.restoreKey(key);
-    }
+    });
 
     // The artwork has just changed shape, and a default collider is a
     // statement about the artwork — so it follows the file rather than
@@ -286,50 +345,48 @@ export class PsdPlacements {
     // And here, for the same reason: the file has moved, so a placement
     // restored to the old key points at nothing.
     this.host.store.history.clear();
-    this.host.docRenderer.detachKey(from);
-    // Both names: the copies were made under the old key and the new one is
-    // about to be loaded, and a pattern layer's palette follows the rename.
-    this.host.releaseKey(from);
-    this.host.releaseKey(to);
-    evictPsd(this.host.scene, this.plugin(), from, this.otherPsdKeys(from));
 
-    // Across every scene, not just the one on screen: a file is one file for
-    // the project, and a placement in another scene left pointing at a key
-    // that has gone can never render.
-    this.host.store.updatePlacementsEverywhere((placement) => {
-      if (placement.psdKey !== from) return null;
-      // The layer inside the file is renamed with it when it was named after
-      // it — every converted image, sketch and generated PSD is — and a
-      // placement points at its layer by that name, so it follows. A layer
-      // someone named in Photoshop is left alone at both ends.
-      return placement.layerPath === from
-        ? { psdKey: to, layerPath: to }
-        : { psdKey: to };
-    });
+    // Both names, for the whole of it. The copies on screen were made under
+    // the old one and the new one is about to be loaded — and the rewrite
+    // below fires a document change, which is a repaint, which is the
+    // renderer asking for an object for every placement it now draws and has
+    // none of. Inside this bracket it is told no.
+    await this.offline([from, to], async () => {
+      evictPsd(this.host.scene, this.plugin(), from, this.otherPsdKeys(from));
 
-    // Only the open scene's are on the canvas to be redrawn; the rest are
-    // placed from the document when their scene is next opened.
-    const moved: Array<{ layerId: string; placement: Placement }> = [];
-    for (const layer of this.host.store.layers) {
-      for (const placement of layer.placements) {
-        if (placement.psdKey === to) moved.push({ layerId: layer.id, placement });
+      // Across every scene, not just the one on screen: a file is one file
+      // for the project, and a placement in another scene left pointing at a
+      // key that has gone can never render.
+      this.host.store.updatePlacementsEverywhere((placement) => {
+        if (placement.psdKey !== from) return null;
+        // The layer inside the file is renamed with it when it was named
+        // after it — every converted image, sketch and generated PSD is —
+        // and a placement points at its layer by that name, so it follows. A
+        // layer someone named in Photoshop is left alone at both ends.
+        return placement.layerPath === from
+          ? { psdKey: to, layerPath: to }
+          : { psdKey: to };
+      });
+
+      // Only the open scene's are on the canvas to be redrawn; the rest are
+      // placed from the document when their scene is next opened.
+      const moved: Array<{ layerId: string; placement: Placement }> = [];
+      for (const layer of this.host.store.layers) {
+        for (const placement of layer.placements) {
+          if (placement.psdKey === to) moved.push({ layerId: layer.id, placement });
+        }
       }
-    }
 
-    // The solid an extrusion was rasterised from is keyed by the file, so it
-    // moves with the file rather than being left pointing at a name that has
-    // gone.
-    this.host.store.copyExtrusion(from, to, false);
-    // And what it blocks, which is keyed by the file for the same reason.
-    this.host.store.copyCollider(from, to, false);
+      // The solid an extrusion was rasterised from is keyed by the file, so
+      // it moves with the file rather than being left pointing at a name that
+      // has gone.
+      this.host.store.copyExtrusion(from, to, false);
+      // And what it blocks, which is keyed by the file for the same reason.
+      this.host.store.copyCollider(from, to, false);
 
-    try {
       await this.load(to);
       for (const { layerId, placement } of moved) this.placeOne(layerId, placement);
-    } finally {
-      this.host.restoreKey(from);
-      this.host.restoreKey(to);
-    }
+    });
     this.host.docRenderer.render();
 
     // The selection still names a placement id, which has not changed — but
@@ -365,27 +422,22 @@ export class PsdPlacements {
       return;
     }
 
-    this.host.docRenderer.detachOne(placement.id);
     // The placement is about to point somewhere else, and on a pattern layer
     // that placement is a palette entry — so both files' copies are stale.
     const was = placement.psdKey;
-    this.host.releaseKey(was);
-    this.host.releaseKey(key);
+    this.host.docRenderer.detachOne(placement.id);
     this.host.store.updatePlacement(selection.layerId, selection.placementId, {
       psdKey: key,
       layerPath: entry.path,
     });
 
-    try {
+    await this.offline([was, key], async () => {
       await this.load(key);
       const updated = this.host.store
         .layer(selection.layerId)
         ?.placements.find((p) => p.id === selection.placementId);
       if (updated) this.placeOne(selection.layerId, updated);
-    } finally {
-      this.host.restoreKey(was);
-      this.host.restoreKey(key);
-    }
+    });
     this.host.docRenderer.render();
   }
 
@@ -454,12 +506,12 @@ export class PsdPlacements {
     if (!p2p) return;
     const layer = this.host.store.layer(layerId);
     if (layer && !this.host.docRenderer.draws(layer, placement)) return;
-    // And nothing is asked of the plugin for a file it has not got. The
-    // renderer asks for anything the document draws and the canvas lacks, and
-    // on open that is every placement in the scene, several of them before
-    // their own file has finished loading — `loadAll` places those itself
-    // once it has them.
-    if (!p2p.getData(placement.psdKey)) return;
+    // And nothing is asked of the plugin that it cannot answer. The renderer
+    // asks for anything the document draws and the canvas lacks, and on open
+    // that is every placement in the scene, several of them before their own
+    // file has finished loading — `loadAll` places those itself once it has
+    // them, and a rewrite in flight places its own on the way out.
+    if (!this.canPlace(placement.psdKey, placement.layerPath)) return;
     try {
       const object = p2p.place(this.host.scene, placement.psdKey, placement.layerPath);
       this.host.docRenderer.attach(layerId, placement, object);

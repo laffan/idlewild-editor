@@ -36,7 +36,7 @@ interface Made {
   destroyed: boolean;
 }
 
-function fakeScene(made: Made[], loaded: Set<string>) {
+function fakeScene(made: Made[]) {
   const graphics = {
     clear: vi.fn(),
     setDepth: vi.fn(),
@@ -51,13 +51,7 @@ function fakeScene(made: Made[], loaded: Set<string>) {
   return {
     add: { graphics: () => graphics },
     cameras: { main: { zoom: 1 } },
-    // Keyed on the manifest layer's name, which in these fixtures is the PSD
-    // key — the check psd-to-phaser's own `place` makes before it warns.
-    textures: { exists: (key: string) => loaded.has(key) },
     P2P: {
-      // Set as soon as `data.json` parses, which is several frames before any
-      // image lands. Believing it was the bug; both have to be true.
-      getData: (psdKey: string) => (loaded.has(psdKey) ? { original: {} } : undefined),
       place: (_scene: unknown, psdKey: string) => {
         const object: Made = { psdKey, destroyed: false };
         made.push(object);
@@ -108,8 +102,11 @@ function patternLayer(keys: string[]): Layer {
 
 function setup(keys: string[]) {
   const made: Made[] = [];
-  const loaded = new Set(keys);
-  const scene = fakeScene(made, loaded);
+  // What `PsdPlacements.canPlace` answers: the manifest is in, the texture is
+  // in, and no rewrite has the file off the canvas. Stubbed as one set,
+  // because to this renderer it is one question.
+  const ready = new Set(keys);
+  const scene = fakeScene(made);
   const doc: GameDoc = {
     version: 2,
     projection: "orthogonal",
@@ -122,8 +119,9 @@ function setup(keys: string[]) {
     scene as unknown as ConstructorParameters<typeof PatternRender>[0],
     store,
     new Grid("orthogonal", 32),
+    (psdKey) => ready.has(psdKey),
   );
-  return { made, render, loaded };
+  return { made, render, ready };
 }
 
 const view = { from: { cx: 0, cy: 0 }, to: { cx: 7, cy: 7 } };
@@ -193,23 +191,15 @@ describe("a pattern layer's copies", () => {
    * without a guard it rebuilds inside that window, against textures that are
    * not there, and psd-to-phaser makes sprites with nothing in them.
    */
-  it("make nothing while a file is being rewritten, even once it is back", () => {
-    const { made, render } = setup(["tree"]);
-    render.dropKey("tree");
-    render.sync(view);
-    // The texture is there and the manifest parsed — but the eviction has not
-    // happened yet, so anything made now is on a texture about to be
-    // destroyed. Only the other end of `dropKey` clears it.
-    expect(made).toEqual([]);
-
-    render.restoreKey("tree");
-    render.sync(view);
-    expect(made.length).toBeGreaterThan(0);
-  });
-
-  it("make nothing from a file the plugin has not loaded", () => {
-    const { made, render, loaded } = setup(["tree"]);
-    loaded.delete("tree");
+  /**
+   * The gate is `PsdPlacements.canPlace` — one answer for the manifest, the
+   * texture and whether a rewrite has the file off the canvas. Asking only
+   * the first of those was a bug twice over: sprites with no texture on an
+   * add-layer, and every copy vanishing on a rename.
+   */
+  it("make nothing from a file that is not ready to be placed from", () => {
+    const { made, render, ready } = setup(["tree"]);
+    ready.delete("tree");
     render.sync(view);
     expect(made).toEqual([]);
   });
@@ -220,23 +210,23 @@ describe("a pattern layer's copies", () => {
    * rewritten — until somebody panned somewhere that had to be built fresh.
    */
   it("try the same range again once the file has arrived", () => {
-    const { made, render, loaded } = setup(["tree"]);
-    loaded.delete("tree");
+    const { made, render, ready } = setup(["tree"]);
+    ready.delete("tree");
     render.sync(view);
     expect(made).toEqual([]);
 
-    loaded.add("tree");
+    ready.add("tree");
     render.sync(view);
     expect(made.length).toBeGreaterThan(0);
     expect(made.every((m) => !m.destroyed)).toBe(true);
   });
 
   it("take down what is standing on a file that has gone", () => {
-    const { made, render, loaded } = setup(["tree"]);
+    const { made, render, ready } = setup(["tree"]);
     render.sync(view);
     expect(made.some((m) => !m.destroyed)).toBe(true);
 
-    loaded.delete("tree");
+    ready.delete("tree");
     render.invalidate();
     render.sync(view);
     expect(made.every((m) => m.destroyed)).toBe(true);
