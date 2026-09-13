@@ -16,34 +16,151 @@
 //! and what publishes cannot drift.
 
 use std::path::{Component, Path, PathBuf};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::mpsc::Receiver;
+use std::sync::Arc;
+use std::time::Duration;
 
-/// Bind a loopback port and serve the store on it until the process ends.
+/// The port the store is being served on, which is not fixed for the life of
+/// the app — see `serve_forever`.
+///
+/// Shared rather than copied out once, so `get_server_port` answers with where
+/// the server is *now*. A base URL the frontend built earlier is a string it
+/// is holding; asking again is how a page opened after a rebuild gets the
+/// right one.
+#[derive(Clone)]
+pub struct Port(Arc<AtomicU16>);
+
+impl Port {
+    pub fn get(&self) -> u16 {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    fn set(&self, port: u16) {
+        self.0.store(port, Ordering::Relaxed);
+    }
+}
+
+/// Where the asset server is answering, so the frontend can build P2P base
+/// URLs. Asked for rather than handed out once, because the answer can
+/// change — see `serve_forever`.
+#[tauri::command]
+pub fn get_server_port(port: tauri::State<'_, Port>) -> u16 {
+    port.get()
+}
+
+/// How long to wait between attempts to get a listener back.
+const REBIND_PAUSE: Duration = Duration::from_millis(250);
+
+/// How many of those attempts hold out for the port we already had.
+///
+/// Ten seconds. Nothing else is likely to have taken a loopback port the
+/// kernel handed us while the app was asleep, and keeping it is what makes a
+/// rebuild invisible: every base URL the frontend is holding goes on working,
+/// where a new port would need every one of them to be rebuilt. Past that,
+/// any free port beats no server at all.
+const HOLD_THE_PORT_FOR: u32 = 40;
+
+/// Bind a loopback port and serve the store on it for the life of the app.
 ///
 /// Port **0** rather than a port chosen in advance: the kernel hands back one
 /// that is free at the moment it is bound, where picking first and binding
 /// second leaves a gap for something else to take it — and asking a picker
 /// meant that on a machine where a UDP bind is refused, the app could not
 /// start at all over a TCP port that was perfectly free.
-pub fn start() -> Result<(u16, Receiver<()>), String> {
-    let server = tiny_http::Server::http(("127.0.0.1", 0))
-        .map_err(|e| format!("Cannot start the asset server: {e}"))?;
-    let port = server
-        .server_addr()
-        .to_ip()
-        .ok_or("The asset server bound something that is not an IP port")?
-        .port();
+///
+/// `notify` puts a line in the editor's console. It is only used when the
+/// listener has had to be rebuilt, which is a thing worth saying out loud.
+pub fn start(
+    notify: impl Fn(&str) + Send + 'static,
+) -> Result<(Port, Receiver<()>), String> {
+    let server = bind(0).map_err(|e| format!("Cannot start the asset server: {e}"))?;
+    let port = Port(Arc::new(AtomicU16::new(
+        port_of(&server).ok_or("The asset server bound something that is not an IP port")?,
+    )));
 
     let (ready_tx, ready_rx) = std::sync::mpsc::channel();
-
+    let held = port.clone();
     std::thread::spawn(move || {
         let _ = ready_tx.send(());
-        for request in server.incoming_requests() {
-            let _ = respond(request);
-        }
+        serve_forever(server, held, notify);
     });
 
     Ok((port, ready_rx))
+}
+
+/// Serve, and get a listener back whenever the one we have goes.
+///
+/// The editor reads the project store over HTTP and by no other route, so a
+/// listener that has gone is a project where every image is an empty
+/// selection box. It does go, on an iPad: the system closes an app's sockets
+/// while it is suspended, and tiny_http answers a failed `accept` by pushing
+/// the error into its queue and ending its accept thread — which ends
+/// `incoming_requests` here. The app itself is untouched, so the pipeline goes
+/// on writing `data.json` files nobody can fetch, the port the frontend was
+/// told about goes on being reported, and every project opened afterwards is
+/// dead too. Nothing short of relaunching brought it back.
+///
+/// So the loop below outlives any one listener. It asks for the same port
+/// first, because a rebuild that keeps the port is a rebuild nothing else has
+/// to know about.
+fn serve_forever(
+    first: tiny_http::Server,
+    port: Port,
+    notify: impl Fn(&str) + Send + 'static,
+) {
+    let mut listening = first;
+    loop {
+        for request in listening.incoming_requests() {
+            let _ = respond(request);
+        }
+        let was = port.get();
+        listening = reclaim(&port, HOLD_THE_PORT_FOR, &notify);
+        let now = port.get();
+        if now == was {
+            notify("The asset server stopped listening and was restarted");
+        } else {
+            notify(&format!(
+                "The asset server stopped listening and was restarted on port {now} \
+                 — reopen the project to load its images",
+            ));
+        }
+    }
+}
+
+/// A listener again: the port we had if it comes back, any free port if it
+/// does not.
+///
+/// Never gives up. There is no useful editor without this, and the case it
+/// exists for — an app coming back from being suspended — resolves the moment
+/// the process is running again.
+pub(crate) fn reclaim(port: &Port, hold: u32, notify: &dyn Fn(&str)) -> tiny_http::Server {
+    let mut tries: u32 = 0;
+    loop {
+        let wanted = if tries < hold { port.get() } else { 0 };
+        match bind(wanted) {
+            Ok(server) => {
+                if let Some(bound) = port_of(&server) {
+                    port.set(bound);
+                    return server;
+                }
+            }
+            Err(e) if tries == hold => {
+                notify(&format!("The asset server cannot bind a port — {e}"));
+            }
+            Err(_) => {}
+        }
+        tries = tries.saturating_add(1);
+        std::thread::sleep(REBIND_PAUSE);
+    }
+}
+
+fn bind(port: u16) -> Result<tiny_http::Server, Box<dyn std::error::Error + Send + Sync>> {
+    tiny_http::Server::http(("127.0.0.1", port))
+}
+
+pub(crate) fn port_of(server: &tiny_http::Server) -> Option<u16> {
+    Some(server.server_addr().to_ip()?.port())
 }
 
 /// The script `?idlewild=console` asks to have injected — see

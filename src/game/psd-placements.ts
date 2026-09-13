@@ -101,6 +101,19 @@ export class PsdPlacements {
 
     const world = this.host.grid.cellToWorld(at);
     await this.load(key);
+    // The manifest parsed, and that is not the same as the file having
+    // arrived: psd-to-phaser reads the store over HTTP and nothing else, so
+    // a listener that has gone leaves every layer here placeable on paper and
+    // nothing on the canvas. Placing anyway is what let a sketch conversion
+    // report success, take the ink away, and leave the space empty — see
+    // `editor/stroke-actions.ts`, which is counting on this answer.
+    if (!this.plugin()?.getData(key)) {
+      log.warn(
+        `${key}.psd was written but could not be loaded — nothing placed. ` +
+          "Its assets did not arrive; see the errors above.",
+      );
+      return false;
+    }
 
     // One drop is one undo step. A PSD with a background, a building and a
     // roof writes four times — one placement per layer, then the collider —

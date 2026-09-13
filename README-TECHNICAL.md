@@ -137,6 +137,41 @@ that second request able to report a status at all: without it a cross-origin
 `fetch` of a missing file rejects as an opaque network error, which looks
 exactly like a server that is not there.
 
+### The listener outlives itself
+
+On an iPad it *is* sometimes not there. iOS closes an app's sockets while it
+is suspended, so the listener bound at launch is gone by the time somebody
+comes back to what they were drawing. tiny_http answers the failed `accept`
+by pushing the error into its queue and ending its accept thread, which ends
+`incoming_requests`, which used to end the one thread serving the store —
+for good.
+
+Nothing else noticed. The app was fine, so the pipeline went on parsing PSDs
+and writing `data.json` files that could not be fetched, `get_server_port`
+went on reporting the port it had been given at boot, and every project
+opened afterwards was dead too. From inside the editor it read as the editor
+eating artwork: a rename, a re-import, a new layer, a pen stroke, a sketch
+conversion — each one wrote correctly and then showed nothing, and the ink a
+conversion consumed was gone with it. A session's console has the whole shape
+of it: *Asset server ready at http://127.0.0.1:51477/…* at the top, and an
+hour of app-switching later, *The asset server at http://127.0.0.1:51477/…
+is not answering this page*, same port.
+
+So `serve_forever` outlives any one listener: when `incoming_requests` ends,
+it binds again and carries on. It asks for **the same port** for the first
+ten seconds, because a rebuild that keeps the port is one nothing else has to
+know about — every base URL the frontend is holding is a string with that
+port in it. Only if the port has genuinely been taken does it accept another,
+and then `Port` is the shared handle that makes `get_server_port` answer with
+where the server is *now*, so the next project opened builds a base that
+works. Either way the console says the listener was rebuilt.
+
+The other half is refusing to pretend. `PsdPlacements.place` checks that the
+plugin really has the file before it places anything from it: a parsed
+manifest says the layers are placeable, not that the assets arrived, and a
+conversion that consumes something to make the call — a sketch, which takes
+the ink away — is counting on the difference.
+
 ---
 
 ## Data model

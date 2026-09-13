@@ -26,14 +26,6 @@ use psd_write::AnchorMarks;
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
-/// The port the asset server bound to, so the frontend can build P2P base URLs.
-struct ServerPort(u16);
-
-#[tauri::command]
-fn get_server_port(state: tauri::State<'_, ServerPort>) -> u16 {
-    state.0
-}
-
 /// Which platform the shell is running on, so the frontend can pick between
 /// handing a file to a desktop editor and handing it to a share sheet.
 #[tauri::command]
@@ -637,14 +629,18 @@ pub fn run() {
             // Block until the listener thread is up: the frontend asks for the
             // port during boot, and a port that is not yet accepting would
             // fail the first PSD load.
-            let (port, ready) = file_server::start()
+            let console = app.handle().clone();
+            let notice = move |line: &str| {
+                let _ = console.emit("psd-log-line", line.to_string());
+            };
+            let (port, ready) = file_server::start(notice)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
             let _ = ready.recv();
-            app.manage(ServerPort(port));
+            app.manage(port);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_server_port,
+            file_server::get_server_port,
             platform,
             list_projects,
             create_project,

@@ -67,8 +67,9 @@ fn get(port: u16, path: &str) -> Answer {
 
 #[test]
 fn the_asset_server_serves_a_project_and_nothing_above_it() {
-    let (port, ready) = file_server::start().expect("the server should bind");
+    let (port, ready) = file_server::start(|_| {}).expect("the server should bind");
     ready.recv().expect("the listener thread should start");
+    let port = port.get();
 
     let meta = store::create_project(
         "Server",
@@ -145,8 +146,9 @@ fn the_asset_server_serves_a_project_and_nothing_above_it() {
 /// be a blank frame and the reason would be one line in a console.
 #[test]
 fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
-    let (port, ready) = file_server::start().expect("the server should bind");
+    let (port, ready) = file_server::start(|_| {}).expect("the server should bind");
     ready.recv().expect("the listener thread should start");
+    let port = port.get();
 
     let meta = store::create_project(
         "Played",
@@ -225,4 +227,45 @@ fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
     if let Err(payload) = result {
         std::panic::resume_unwind(payload);
     }
+}
+
+/// A listener that has gone is not the end of the asset server.
+///
+/// The failure this pins, from a session on an iPad: the console said
+/// `Asset server ready at http://127.0.0.1:51477/…` at boot and, an hour and
+/// several app-suspends later, `The asset server at http://127.0.0.1:51477/…
+/// is not answering this page` — same port, and every project opened after
+/// that was dead too. iOS closes an app's sockets while it is suspended;
+/// tiny_http answers the failed `accept` by ending its accept thread, which
+/// ended the serving loop, and nothing ever bound a port again. The pipeline
+/// went on writing `data.json` files that could not be fetched, so every
+/// import, re-import and pen stroke looked like it had eaten the artwork.
+///
+/// `reclaim` is what outlives a listener now. Asking it for a port that is
+/// free hands the same port back, which is what makes a rebuild invisible:
+/// the base URLs the frontend is already holding go on working.
+#[test]
+fn the_asset_server_takes_its_own_port_back() {
+    let (port, ready) = file_server::start(|_| {}).expect("the server should bind");
+    ready.recv().expect("the listener thread should start");
+    let was = port.get();
+
+    // The port is in use by the server that just bound it, so a rebuild that
+    // insisted on it would never come back. Hold out for nothing and it takes
+    // a free one instead, and says so through the handle everything asks.
+    let taken = file_server::reclaim(&port, 0, &|_| {});
+    assert_ne!(port.get(), was, "an occupied port is not worth waiting for");
+    assert_eq!(
+        port.get(),
+        file_server::port_of(&taken).expect("a bound port"),
+        "the handle should name the port that was actually bound",
+    );
+
+    // And with the port free, holding out for it gets it back — the case that
+    // matters, because every base URL already handed out names it.
+    let free = port.get();
+    drop(taken);
+    let back = file_server::reclaim(&port, 40, &|_| {});
+    assert_eq!(port.get(), free, "the port we had should be the port we get");
+    drop(back);
 }
