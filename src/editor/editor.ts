@@ -69,6 +69,23 @@ export async function mountEditor(
   const render = createRenderSettings(meta, () => handle, () => {
     if (gameFrame.isRunning) gameFrame.reload();
   });
+
+  /**
+   * A PSD on disk is not what it was: restart the game if one is running.
+   *
+   * The same promise saving a code file makes — what is in front of you is
+   * what is on disk — for the other half of a project. In Code the game runs
+   * beside the canvas, and it holds the textures it loaded when it started;
+   * ink applied in pen mode, a layer renamed or turned off, a re-parse, a
+   * file replaced by a drop all leave it drawing the version before. The
+   * canvas re-places from the new manifest either way, so without this the
+   * two halves of the same window disagree about the same file.
+   *
+   * Cheap when nothing is running, which is every one of these in Draw.
+   */
+  function psdChanged(): void {
+    if (gameFrame.isRunning) gameFrame.reload();
+  }
   // The console's level chip is a link when the line came from a file the
   // code modal can open. `code` is built further down, once there is a shell
   // to put it in; this only runs when something is clicked.
@@ -181,6 +198,7 @@ export async function mountEditor(
     store,
     scene: () => handle?.scene ?? null,
     inspector,
+    onPsdChanged: psdChanged,
   });
 
   // And the list of the file's layers, which is where all of those buttons
@@ -246,6 +264,7 @@ export async function mountEditor(
     onPsdWritten: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
+      psdChanged();
     },
   });
   const { extrude, collider, pen } = modes;
@@ -352,6 +371,7 @@ export async function mountEditor(
     onPsdReplaced: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
+      psdChanged();
     },
   });
 

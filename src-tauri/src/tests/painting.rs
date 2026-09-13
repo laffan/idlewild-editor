@@ -201,3 +201,107 @@ fn a_layer_can_be_added_and_then_drawn_into() {
         std::panic::resume_unwind(payload);
     }
 }
+/// Applying in pen mode re-parses the file, and the assets on disk say so.
+///
+/// The half nobody can see from the editor. Ink goes into the PSD, the
+/// pipeline runs over it, and what the game loads is the sprite that run
+/// wrote — so if this stopped happening, the canvas would show the drawing
+/// (it re-places from the manifest it is handed) and a game started
+/// afterwards would not, which is the kind of disagreement that reads as the
+/// drawing having been lost.
+///
+/// It is the New layer route on purpose: that layer goes in as a single
+/// transparent pixel, so the sprite on disk before and after are a 1 × 1
+/// nothing and the drawing — two files that cannot be mistaken for each
+/// other, which is the whole proof that the paint reached the pipeline rather
+/// than only the file.
+#[test]
+fn applying_ink_re_parses_and_writes_the_sprite() {
+    use crate::project::{GameOptions, Genre, Projection};
+    use crate::psd_layers;
+    use crate::store;
+
+    let meta = store::create_project(
+        "Painting",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let outcome = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            crate::psd_write::psd_from_rgba_marked("probe", 8, 8, vec![255u8; 8 * 8 * 4], None)
+                .expect("a psd should be written");
+        std::fs::write(store::psd_dir(id).unwrap().join("probe.psd"), &bytes).unwrap();
+        crate::psd_pipeline::process(
+            id,
+            "probe",
+            &crate::psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("the first parse should land");
+
+        let sprites = store::assets_dir(id).unwrap().join("probe").join("sprites");
+        assert!(sprites.join("probe.png").exists(), "the artwork it started with");
+
+        // New layer, then ink into it — pen mode's own route.
+        psd_layers::add(id, "probe", |_| {}).expect("a layer should be added");
+        let list = psd_layers::read(id, "probe").expect("the list should read");
+        let row = list
+            .layers
+            .iter()
+            .find(|l| l.name.starts_with("S | layer-"))
+            .expect("the new row")
+            .clone();
+        assert_eq!((row.width, row.height), (1, 1), "it starts as one clear pixel");
+        // A clear pixel is still exported — it is a layer like any other, and
+        // this is the file the paint has to replace.
+        let before = std::fs::read(sprites.join("layer-1.png"))
+            .expect("even one clear pixel is a sprite");
+
+        let manifest = psd_layers::paint(
+            id,
+            "probe",
+            row.index,
+            &row.name,
+            crate::psd_paint::Paint {
+                x: 1,
+                y: 1,
+                width: 4,
+                height: 4,
+                rgba_base64: {
+                    use base64::Engine;
+                    base64::engine::general_purpose::STANDARD.encode(vec![255u8; 4 * 4 * 4])
+                },
+            },
+            |_| {},
+        )
+        .expect("the paint should land");
+
+        // The pipeline ran: the sprite on disk is the drawing rather than the
+        // clear pixel it replaced, and the manifest the editor is handed back
+        // describes it at the ink's own size.
+        let after = std::fs::read(sprites.join("layer-1.png"))
+            .expect("the sprite should still be there");
+        assert_ne!(
+            before, after,
+            "painting re-parses, so the asset the game loads is rewritten",
+        );
+        let parsed: serde_json::Value =
+            serde_json::from_str(&manifest).expect("the manifest should parse");
+        let entry = parsed["layers"]
+            .as_array()
+            .expect("layers")
+            .iter()
+            .find(|l| l["name"] == "layer-1")
+            .expect("the painted layer is in the manifest");
+        assert_eq!(entry["width"], 4);
+        assert_eq!(entry["height"], 4);
+    });
+
+    store::delete_project(&meta.id).ok();
+    outcome.expect("the paint should not panic");
+}

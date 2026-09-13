@@ -3589,6 +3589,22 @@ restarts against the file just written, which is the only way to see whether
 the change worked. Entering play mode flushes the document first and waits for
 it, because the document's save is what rewrites the config the game reads.
 
+**A rewritten PSD restarts it too**, for the same reason and it used to not.
+Code keeps both sidebars, so a file can be changed while its game runs beside
+it: ink applied in pen mode, a layer renamed or turned off, a re-parse, a file
+replaced by a drop. Every one of those re-places the canvas from the new
+manifest and left the game holding the textures it loaded at start — the two
+halves of one window showing two versions of one file. `psdChanged` in
+`editor.ts` is the one line the paths that rewrite a PSD now share, and it is
+a no-op in Draw, where nothing is running.
+
+The pipeline itself was never the gap: `psd_layers::paint` rebuilds the file
+and runs psd-to-json over it inside the same lock, so the sprite the game
+loads is written before Apply returns. A test pins that end to end, because
+it is invisible from the editor — the canvas re-places from the manifest it
+is handed either way, so a paint that stopped re-parsing would look right up
+until the moment somebody pressed Play.
+
 ### What went with it
 
 `game/play-controller.ts`, `game/play-platformer.ts`, `game/platformer.ts`,

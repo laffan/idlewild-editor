@@ -323,6 +323,10 @@ remaining pieces are wired to real slots rather than mocked.
   the same document from the side: every non-walkable fill, blocking boundary
   and placed PSD's collider is the ground it stands on rather than an obstacle
   to route around
+- **A file you change while the game is running restarts it**, the way saving
+  code does: ink applied in pen mode, a layer renamed or turned off, a
+  re-parse, a PSD replaced by a drop. Code runs the game beside the canvas,
+  and it was holding the artwork it loaded when it started
 - `js/game.config.json` — the document in the shape the project's code reads
   it — is rewritten on every save, so the file the code modal opens describes
   the canvas beside it and the game you play is the game you built

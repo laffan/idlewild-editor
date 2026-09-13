@@ -176,6 +176,15 @@ export interface PsdFileActionsOptions {
   store: DocStore;
   scene: () => WorldScene | null;
   inspector: Inspector;
+  /**
+   * A PSD on disk is not what it was.
+   *
+   * The canvas re-places from the new manifest by itself; what this is for is
+   * everything else that is holding a copy — chiefly a game running in Code,
+   * which loaded its textures when it started. Optional, so a caller with no
+   * game to restart can leave it out.
+   */
+  onPsdChanged?: () => void;
 }
 
 export interface PsdFileActions {
@@ -199,6 +208,7 @@ export function createPsdFileActions(
   options: PsdFileActionsOptions,
 ): PsdFileActions {
   const { projectId, os, store, scene, inspector } = options;
+  const changed = options.onPsdChanged ?? (() => {});
 
   async function open(key: string): Promise<void> {
     try {
@@ -217,6 +227,7 @@ export function createPsdFileActions(
       // is built once and kept — so it has to be told, or it goes on showing
       // the stack from before the edit.
       inspector.reloadPsdLayers(key);
+      changed();
     } catch (err) {
       log.error(`Could not refresh ${key}:`, err);
     }
@@ -231,6 +242,7 @@ export function createPsdFileActions(
     // Reordering renumbers every layer, so the next edit has to be made
     // against the file as it is now rather than as it was.
     inspector.reloadPsdLayers(key);
+    changed();
   }
 
   /**
@@ -244,6 +256,7 @@ export function createPsdFileActions(
       const result = await psd.rename(projectId, key, name);
       if (result.key === key) return;
       await scene()?.renamePsd(key, result.key);
+      changed();
       log.info(`${key}.psd → ${result.key}.psd`);
     } catch (err) {
       log.error(`Could not rename ${key}.psd:`, err);
@@ -274,6 +287,7 @@ export function createPsdFileActions(
         copy.key,
         copy.manifest,
       );
+      changed();
       log.info(`${key}.psd → ${copy.key}.psd — this placement is now its own`);
     } catch (err) {
       log.error(`Could not break the reference to ${key}:`, err);
