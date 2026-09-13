@@ -2557,6 +2557,19 @@ change, a change is a repaint, and a repaint now asks for an object at exactly
 the moment the old textures have gone and the new ones have not arrived.
 `canPlace` is what it asks, so the window closes for both renderers at once.
 
+**And `attach` destroys what it replaces.** `placements` is the only handle
+anything has on a placed object — `detachKey` works from it, and so does the
+sweep — so an entry overwritten in place left a live Phaser object that
+nothing could ever take down. Invisible while its textures lasted, and a throw
+inside the renderer on every frame the moment they were evicted. That is not
+an exotic path: pen mode's Apply derives the canvas state on every progress
+line the pipeline emits, so the same placement was placed a dozen times while
+the file was written and then had its textures pulled from under every orphan
+at once. The fix is in `attach` rather than at the caller, because the next
+caller driven by a callback will do the same thing — and `revealInstance`
+answers whether anything *changed*, so being told the same thing again costs
+nothing at all.
+
 **Nothing on one is picked on the canvas.** `picking.ts` makes a pattern layer
 inert to the pointer, for the reason a locked one is but a different one:
 there is no single object under the pointer for a tap to *name*. The copies

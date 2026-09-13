@@ -531,7 +531,13 @@ export class PsdPlacements {
   placeUnit(instance: string): void {
     for (const layer of this.host.store.layers) {
       for (const placement of layer.placements) {
-        if (instanceOf(placement) === instance) this.placeOne(layer.id, placement);
+        // Only what is missing. Re-placing something already on the canvas is
+        // a fresh Phaser object for the same record, and the one it replaces
+        // is only cleaned up because `attach` now destroys it — which is a
+        // safety net rather than a plan.
+        if (instanceOf(placement) !== instance) continue;
+        if (this.host.docRenderer.has(placement.id)) continue;
+        this.placeOne(layer.id, placement);
       }
     }
     this.host.docRenderer.render();

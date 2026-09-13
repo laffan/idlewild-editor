@@ -178,11 +178,16 @@ export class DocRenderer {
    * document says the file is, and the ink goes into the file at its own
    * resolution either way. Showing the prototype there is simply agreeing
    * with the frame.
+   *
+   * Answers whether anything changed, because the caller has work of its own
+   * to do when it did — and pen mode derives this on every progress line the
+   * pipeline emits, so being told the same thing again has to be free.
    */
-  revealInstance(instance: string | null): void {
-    if (this.revealed === instance) return;
+  revealInstance(instance: string | null): boolean {
+    if (this.revealed === instance) return false;
     this.revealed = instance;
     this.syncPlacements();
+    return true;
   }
 
   /**
@@ -433,6 +438,16 @@ export class DocRenderer {
       log.warn(`psd-to-phaser returned nothing placeable for ${placement.psdKey}`);
       return;
     }
+    // Whatever was here goes. This map is the only handle anything has on a
+    // placed object — `detachKey` and the sweep both work from it — so an
+    // entry overwritten in place left a live Phaser object that nothing could
+    // ever take down: invisible while its textures lasted, and a throw inside
+    // the renderer on every frame the moment they were evicted. Placing the
+    // same placement twice is not exotic, either; it is what any caller
+    // driven by a progress callback does.
+    const held = this.placements.get(placement.id);
+    if (held && held.object !== candidate) destroyPlaced(held.object);
+
     this.placements.set(placement.id, {
       placement,
       layerId,
@@ -440,6 +455,11 @@ export class DocRenderer {
       parts: partsOf(candidate),
     });
     this.syncPlacements();
+  }
+
+  /** Whether this placement already has something on the canvas. */
+  has(placementId: string): boolean {
+    return this.placements.has(placementId);
   }
 
   /**

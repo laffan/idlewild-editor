@@ -254,6 +254,63 @@ describe("revealing a placed unit on a pattern layer", () => {
  * the document says draw it with nothing on the canvas answering to it, which
  * is a selection outline around an empty box.
  */
+/**
+ * The map this renderer keys placements by is the only handle anything has on
+ * a placed object: `detachKey` works from it, and so does the sweep. An entry
+ * overwritten in place therefore left a live Phaser object nothing could ever
+ * take down — invisible while its textures lasted, and a throw inside the
+ * renderer on every frame the moment they were evicted.
+ *
+ * That is not an exotic path. Pen mode's Apply derives the canvas state on
+ * every progress line the pipeline emits, so the same placement was being
+ * placed a dozen times in a second while the file was written — and then its
+ * textures were evicted out from under every orphan at once.
+ */
+describe("attaching over something already there", () => {
+  function setUp() {
+    const one = placement("a", "unit-1");
+    const store = new DocStore("p", doc(one));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    return { renderer, one };
+  }
+
+  it("destroys what it replaces", () => {
+    const { renderer, one } = setUp();
+    const first = placed();
+    const second = placed();
+    renderer.attach("l1", one, first);
+    renderer.attach("l1", one, second);
+
+    expect(first.destroyed).toBe(true);
+    expect(second.destroyed).toBe(false);
+  });
+
+  it("leaves the same object alone when it is attached again", () => {
+    const { renderer, one } = setUp();
+    const only = placed();
+    renderer.attach("l1", one, only);
+    renderer.attach("l1", one, only);
+    expect(only.destroyed).toBe(false);
+  });
+
+  it("says what it is already holding, so a caller need not ask twice", () => {
+    const { renderer, one } = setUp();
+    expect(renderer.has("a")).toBe(false);
+    renderer.attach("l1", one, placed());
+    expect(renderer.has("a")).toBe(true);
+  });
+
+  /** A refusal must not take down what is standing there perfectly well. */
+  it("keeps what it has when handed something unplaceable", () => {
+    const { renderer, one } = setUp();
+    const only = placed();
+    renderer.attach("l1", one, only);
+    renderer.attach("l1", one, { nothing: true });
+    expect(only.destroyed).toBe(false);
+    expect(renderer.has("a")).toBe(true);
+  });
+});
+
 describe("a placement the document draws and the canvas has none of", () => {
   it("is asked for", () => {
     const a = placement("a", "unit-1");
@@ -279,6 +336,17 @@ describe("a placement the document draws and the canvas has none of", () => {
     });
     renderer.render();
     expect(asked).toEqual(["a", "b"]);
+  });
+
+  it("is not asked for one it is already holding", () => {
+    const a = placement("a", "unit-1");
+    const store = new DocStore("p", doc(a));
+    const renderer = new DocRenderer(scene, store, new Grid("isometric", 64));
+    renderer.attach("l1", a, placed());
+    const asked: string[] = [];
+    renderer.setPlacer((_layerId, p) => asked.push(p.id));
+    renderer.render();
+    expect(asked).toEqual([]);
   });
 
   it("is not asked for on a layer that does not draw it", () => {

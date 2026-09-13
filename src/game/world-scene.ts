@@ -566,9 +566,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   revealInstance(instance: string | null): void {
-    this.docRenderer.revealInstance(instance);
-    // Revealing decides that it *may* be drawn; something still has to make
-    // it, and on a pattern layer nothing ever has.
+    // Only on a change, and that is not tidiness: pen mode derives this on
+    // every progress line the pipeline emits while a PSD is being written, so
+    // being told the same thing again has to cost nothing. Revealing decides
+    // that a unit *may* be drawn; `placeUnit` is what makes it, because on a
+    // pattern layer nothing ever has.
+    if (!this.docRenderer.revealInstance(instance)) return;
     if (instance) this.psds.placeUnit(instance);
   }
 
