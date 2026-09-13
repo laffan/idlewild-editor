@@ -26,6 +26,7 @@ import type { Cell, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { DocRenderer } from "./doc-renderer";
 import { instanceOf } from "./instance";
+import { layerKind } from "../lib/layer-kinds";
 import { evictPsd, loadPsd } from "./psd-loader";
 import { reconcilePlacements } from "./reconcile";
 
@@ -391,10 +392,21 @@ export class PsdPlacements {
     return loadPsd(this.host.scene, this.plugin(), key, this.host.assetBase);
   }
 
-  /** Draw one placement the document already holds. */
+  /**
+   * Draw one placement the document already holds.
+   *
+   * Nothing to draw on a pattern layer: its placements are the palette a rule
+   * scatters rather than things standing anywhere, and where the copies go is
+   * `pattern-render.ts`'s answer. The renderer's own sweep would destroy an
+   * object attached here on its next pass — it keys placements by id and
+   * drops every one it no longer finds — so this is a flash of a heap of
+   * elements on the anchor space rather than a leak, and not drawing it at
+   * all is simply saying what is true.
+   */
   placeOne(layerId: string, placement: Placement): void {
     const p2p = this.plugin();
     if (!p2p) return;
+    if (layerKind(this.host.store.layer(layerId)) === "pattern") return;
     try {
       const object = p2p.place(this.host.scene, placement.psdKey, placement.layerPath);
       this.host.docRenderer.attach(layerId, placement, object);
