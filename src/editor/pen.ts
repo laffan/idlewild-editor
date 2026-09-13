@@ -109,6 +109,18 @@ interface Session {
 
 export function createPenUi(options: PenUiOptions): PenUi {
   let session: Session | null = null;
+  /**
+   * Whether Apply's write is still in flight.
+   *
+   * It is not quick: the file is rebuilt and the whole psd-to-json pipeline
+   * runs over it, which is seconds on anything with layers in it. Nothing
+   * stopped a second press in that window, and a second press was not a
+   * second no-op — the strokes are only discarded once the first write lands,
+   * so the same ink went into the file twice, and the second pass then read
+   * `session` after the first had set it to null and reported the resulting
+   * TypeError as `Could not draw into <key>.psd`, stack and all.
+   */
+  let writing = false;
 
   const bar = new PenBar({
     onApply: () => void apply(),
@@ -164,7 +176,14 @@ export function createPenUi(options: PenUiOptions): PenUi {
       // stays where it is — nobody asked for it to go — but the session is
       // over, so a later Apply cannot write strokes nobody is still framing.
       session = null;
-      bar.update({ active, key: "", layer: "", summary: "", canApply: false });
+      bar.update({
+        active,
+        key: "",
+        layer: "",
+        summary: "",
+        canApply: false,
+        busy: false,
+      });
       return;
     }
     const strokes = sessionStrokes();
@@ -174,13 +193,15 @@ export function createPenUi(options: PenUiOptions): PenUi {
       active,
       key: mode?.target?.key ?? "",
       layer: mode?.target?.name ?? "",
-      summary:
-        strokes.length === 0
+      summary: writing
+        ? "putting the ink in the file…"
+        : strokes.length === 0
           ? "nothing drawn yet"
           : inside
             ? `${strokes.length} ${strokes.length === 1 ? "stroke" : "strokes"}`
             : `${strokes.length} outside the frame`,
       canApply: inside,
+      busy: writing,
     });
   }
 
@@ -249,6 +270,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
 
   /** Throw the session's ink away and leave. */
   function cancel(): void {
+    if (writing) return;
     const held = session;
     const strokes = sessionStrokes();
     if (held && strokes.length > 0) {
@@ -307,13 +329,22 @@ export function createPenUi(options: PenUiOptions): PenUi {
    * The mode stays up until the write lands. A rewrite can be refused — a PSD
    * with masks or clipping cannot be rebuilt without flattening it — and a
    * session that had already closed would have taken the drawing with it.
+   *
+   * Which is also why it can only run once at a time. The write takes
+   * seconds, the bar stays up for all of them, and the ink is still on the
+   * layer until the first one lands — so a second press wrote the same
+   * strokes into the file again. The session is taken as a local for the same
+   * reason: everything after the `await` belongs to *this* call, and the
+   * field it used to read can be null by then.
    */
   async function apply(): Promise<void> {
+    if (writing) return;
     const scene = options.scene();
     const mode = scene?.modes.pen;
     const target = mode?.target;
     const frame = mode?.frame;
-    if (!scene || !mode || !target || !frame || !session) return;
+    const held = session;
+    if (!scene || !mode || !target || !frame || !held) return;
 
     const strokes = sessionStrokes();
     const raster = rasteriseStrokes(
@@ -326,6 +357,8 @@ export function createPenUi(options: PenUiOptions): PenUi {
       return;
     }
 
+    writing = true;
+    sync();
     try {
       // Where the ink sits in the file's own pixels. Rust trims whatever
       // falls off the canvas, so a stroke drawn over the edge of the frame is
@@ -355,7 +388,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
       options.store.history.begin();
       try {
         await options.onWritten(target.key, manifest);
-        discard(session.inkLayerId, strokes);
+        discard(held.inkLayerId, strokes);
       } finally {
         options.store.history.end();
       }
@@ -365,10 +398,13 @@ export function createPenUi(options: PenUiOptions): PenUi {
       );
     } catch (err) {
       log.error(`Could not draw into ${target.key}.psd:`, err);
+      writing = false;
+      sync();
       return;
     }
 
-    const from = session.from;
+    const from = held.from;
+    writing = false;
     session = null;
     mode.stop();
     // Back to the panel this was entered from, with the drawing in the layer

@@ -59,6 +59,17 @@ export const DEFAULT_OPTIONS: GameOptions = {
 };
 
 /**
+ * What `defaultZoom` is allowed to be.
+ *
+ * Named here rather than typed into the control, because the editor's camera
+ * clamps its own zoom and the two have to agree: a ceiling below this one
+ * meant Project Options would take a number, write it into the config the
+ * game reads, and then show the canvas at something else — the one place a
+ * setting can lie without failing.
+ */
+export const ZOOM_RANGE = { min: 0.25, max: 8 } as const;
+
+/**
  * A project's options, filled in.
  *
  * Rust writes the whole object on every save, so `options` is absent only on a

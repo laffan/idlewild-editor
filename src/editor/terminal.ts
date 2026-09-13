@@ -11,6 +11,12 @@
  * remembered; they only appear while the drawer is open, because a filter on
  * something you cannot see is chrome for nothing.
  *
+ * **Clear** is beside them, and it is not a third filter: a filter hides
+ * lines and this one throws them away, for both sources at once, which is how
+ * you tell what the *next* thing you try writes. It is deliberately not
+ * remembered and deliberately not undoable — the console is a record of what
+ * happened, not a document.
+ *
  * A line is drawn from its parts: text runs carry whatever styling a `%c`
  * asked for, and an argument that was an object is a tree you can open
  * (`log-tree.ts`). Where the line came from a file the code modal can open,
@@ -49,6 +55,13 @@ export class Terminal {
       { class: "terminal-filters hidden" },
       this.filter("app", "App", "Lines the editor wrote"),
       this.filter("js", "JS", "The JavaScript console, here and in play mode"),
+      h("button", {
+        class: "terminal-filter terminal-clear",
+        type: "button",
+        text: "Clear",
+        title: "Throw away every line in the console, from both sources",
+        onClick: () => log.clearLog(),
+      }),
     );
 
     this.root = h(

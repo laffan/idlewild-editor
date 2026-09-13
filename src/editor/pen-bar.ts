@@ -30,17 +30,30 @@ export interface PenBarState {
   /** How much ink is waiting to go in, and whether any of it is in frame. */
   summary: string;
   canApply: boolean;
+  /**
+   * Whether the write Apply started is still in flight.
+   *
+   * It takes seconds — the file is rebuilt and the whole psd-to-json pipeline
+   * runs over it — and a bar that looked ready that whole time invited a
+   * second press. See `apply` in pen.ts for what the second one did.
+   */
+  busy: boolean;
 }
 
 export class PenBar {
   readonly root: HTMLElement;
   private readonly title: HTMLElement;
   private readonly size: HTMLElement;
+  private readonly cancel: HTMLButtonElement;
   private readonly apply: HTMLButtonElement;
 
   constructor(callbacks: PenBarCallbacks) {
     this.title = h("div", { class: "mode-title", text: "Pen Mode" });
     this.size = h("div", { class: "mode-size" });
+    this.cancel = h("button", {
+      text: "Cancel",
+      onClick: callbacks.onCancel,
+    });
     this.apply = h("button", {
       class: "mode-apply",
       text: "Apply",
@@ -52,7 +65,7 @@ export class PenBar {
       this.title,
       this.size,
       h("div", { class: "mode-spacer" }),
-      h("button", { text: "Cancel", onClick: callbacks.onCancel }),
+      this.cancel,
       this.apply,
     );
   }
@@ -64,6 +77,10 @@ export class PenBar {
    * there is ink: a stroke drawn entirely outside the PSD's canvas is trimmed
    * away on the way in, so a button that wrote it would rebuild the file and
    * re-run the whole pipeline to change nothing at all.
+   *
+   * Both ways out go quiet while a write is in flight. Cancel as well as
+   * Apply: the strokes it would throw away are the ones being written, and
+   * the mode is only still up because the write can be refused.
    */
   update(state: PenBarState): void {
     this.root.classList.toggle("hidden", !state.active);
@@ -72,7 +89,8 @@ export class PenBar {
     this.size.textContent = state.layer
       ? `${state.layer} · ${state.summary}`
       : state.summary;
-    this.apply.disabled = !state.canApply;
+    this.apply.disabled = state.busy || !state.canApply;
+    this.cancel.disabled = state.busy;
   }
 
   destroy(): void {

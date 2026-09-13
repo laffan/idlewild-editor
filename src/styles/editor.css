@@ -365,6 +365,11 @@
   background: var(--chrome-rule);
   color: var(--chrome-dim);
 }
+/* Neither way out is available while pen mode is writing the file: the ink
+   Cancel would throw away is the ink being written. Placed after the two
+   rules above so it wins the hover on either of them. */
+.mode-bar button[disabled] { color: var(--chrome-dim); }
+.mode-bar button[disabled]:hover { background: transparent; }
 
 /* While a canvas mode is up, the selection that started it is gone and its
    action bar with it. The rail stays: the camera has to stay reachable,
@@ -457,6 +462,13 @@
   border-color: var(--chrome-text);
   color: var(--chrome-bg);
 }
+/* Clear is an action, not a third filter, so it never wears the pressed state
+   and is set apart from the two that do. */
+.terminal-clear {
+  margin-left: 4px;
+  border-color: transparent;
+}
+.terminal-clear:hover { color: var(--chrome-text); }
 .terminal-body {
   /* Starting height; the divider above writes an inline height over this. */
   height: 186px;

@@ -64,8 +64,12 @@ export async function mountEditor(
   const canvasWrap = h("div", { class: "editor-canvas-wrap" });
   // Pixel art, whole-pixel drawing and the zoom a scene opens at: what boot is
   // told, and what Project Options changes. `handle` is read through a closure
-  // because the sheet is opened long after the game is up.
-  const render = createRenderSettings(meta, () => handle);
+  // because the sheet is opened long after the game is up, and `gameFrame` for
+  // the same reason — a game that is up restarts on the options just written,
+  // the way it restarts on code just saved.
+  const render = createRenderSettings(meta, () => handle, () => {
+    if (gameFrame.isRunning) gameFrame.reload();
+  });
   // The console's level chip is a link when the line came from a file the
   // code modal can open. `code` is built further down, once there is a shell
   // to put it in; this only runs when something is clicked.
@@ -398,7 +402,7 @@ export async function mountEditor(
     {
       store,
       assetBase: base,
-      defaultZoom: render.options.defaultZoom,
+      defaultZoom: () => render.options.defaultZoom,
       onSelectionChange: (selection) => onSelection(selection),
       onCameraChange: () =>
         actions.update(

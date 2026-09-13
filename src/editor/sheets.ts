@@ -8,7 +8,12 @@ import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
 import { psd, publish, toBase64 } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
-import { projectOptions, type GameOptions, type ProjectMeta } from "../lib/types";
+import {
+  projectOptions,
+  ZOOM_RANGE,
+  type GameOptions,
+  type ProjectMeta,
+} from "../lib/types";
 import { isMobile } from "../lib/platform";
 import * as log from "../lib/log";
 import { clipboardImage } from "./clipboard";
@@ -477,8 +482,8 @@ function zoomRow(initial: number, onChange: (zoom: number) => void): HTMLElement
   const input = h("input", {
     class: "input sheet-row-input",
     type: "number",
-    min: "0.25",
-    max: "8",
+    min: String(ZOOM_RANGE.min),
+    max: String(ZOOM_RANGE.max),
     step: "0.25",
   }) as HTMLInputElement;
   input.value = String(initial);
@@ -488,7 +493,7 @@ function zoomRow(initial: number, onChange: (zoom: number) => void): HTMLElement
       input.value = String(initial);
       return;
     }
-    onChange(Math.min(8, Math.max(0.25, zoom)));
+    onChange(Math.min(ZOOM_RANGE.max, Math.max(ZOOM_RANGE.min, zoom)));
   });
 
   return h(

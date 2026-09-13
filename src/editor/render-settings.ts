@@ -31,9 +31,14 @@ export interface RenderSettings {
   open: (layerCount: number) => void;
 }
 
+/**
+ * `onChanged` fires once the new options are on disk, config included — what
+ * the shell uses to restart a game that is already running.
+ */
 export function createRenderSettings(
   meta: ProjectMeta,
   game: () => GameHandle | null,
+  onChanged: () => void = () => {},
 ): RenderSettings {
   let options = projectOptions(meta);
 
@@ -47,10 +52,14 @@ export function createRenderSettings(
         applyRoundPixels(handle.game, handle.scene, next.roundPixels);
       }
       if (next.defaultZoom !== options.defaultZoom) {
-        // Through the scene's own zoom rather than the camera's, so the move is
-        // centred and recorded: the camera rides the scene in the document, and
-        // a zoom the document did not hear about would be undone by the next
-        // scene switch. A default you cannot see is a number you cannot judge.
+        // The camera in front of you, now: a default you cannot see is a
+        // number you cannot judge, and this is the one sheet whose preview is
+        // the canvas behind it. Through the scene's own zoom rather than the
+        // camera's so the move is centred and recorded — the camera rides the
+        // scene in the document, and a zoom the document did not hear about
+        // would be undone by the next scene switch. What a scene nobody has
+        // opened yet arrives at is the other half, and the scene reads that
+        // straight off `options` below.
         const camera = handle.scene.cameras.main;
         handle.scene.zoomAt(
           next.defaultZoom / camera.zoom,
@@ -68,6 +77,11 @@ export function createRenderSettings(
       .setOptions(meta.id, next)
       .then((written) => {
         meta.options = written.options;
+        // Only now: a game that is up is running against `game.config.json`
+        // as it was, and Rust rewrites that file as part of this call. Told
+        // any earlier it would restart on the old numbers. "Here and in the
+        // game" is the promise the sheet's own hint makes.
+        onChanged();
       })
       .catch((err) => {
         log.error("Could not save the project's rendering options:", err);

@@ -12,6 +12,7 @@
 import Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
+import { ZOOM_RANGE } from "../lib/types";
 import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
@@ -31,10 +32,11 @@ export interface WorldSceneConfig {
   store: DocStore;
   assetBase: string;
   /**
-   * The zoom a scene with no camera of its own opens at. A project option
-   * rather than a document field, so it arrives rather than being read.
+   * The zoom a scene with no camera of its own opens at. Asked for rather
+   * than handed over: Project Options changes it under a running editor, and
+   * a number taken once is a scene still opening at what the editor booted at.
    */
-  defaultZoom: number;
+  defaultZoom: () => number;
   onSelectionChange: (selection: Selection) => void;
   onCameraChange: () => void;
   /**
@@ -64,7 +66,9 @@ export interface WorldSceneConfig {
 }
 
 const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 4;
+// As far in as Project Options may set a project, or the setting lies: this
+// was 4 while the sheet took 8, so 6× reached the game and 4× the canvas.
+const MAX_ZOOM = ZOOM_RANGE.max;
 
 export class WorldScene extends Phaser.Scene {
   private config!: WorldSceneConfig;
@@ -162,7 +166,7 @@ export class WorldScene extends Phaser.Scene {
       this.cameras.main.centerOn(saved.x, saved.y);
       this.cameraPlaced = true;
     } else {
-      this.cameras.main.setZoom(this.config.defaultZoom);
+      this.cameras.main.setZoom(this.config.defaultZoom());
       this.cameras.main.centerOn(0, 0);
       // Scale.RESIZE settles a frame or two after create(), and centring
       // against the pre-resize viewport leaves the origin off-screen. Keep
@@ -244,7 +248,7 @@ export class WorldScene extends Phaser.Scene {
     // origin, for one nobody has looked at yet.
     const saved = this.store.activeScene.camera;
     this.cameraPlaced = true;
-    this.cameras.main.setZoom(saved?.zoom ?? this.config.defaultZoom);
+    this.cameras.main.setZoom(saved?.zoom ?? this.config.defaultZoom());
     this.cameras.main.centerOn(saved?.x ?? 0, saved?.y ?? 0);
     this.gridRenderer.invalidate();
     this.config.onCameraChange();
@@ -352,7 +356,7 @@ export class WorldScene extends Phaser.Scene {
 
   centreOnOrigin(): void {
     this.cameraPlaced = true;
-    this.cameras.main.setZoom(this.config.defaultZoom);
+    this.cameras.main.setZoom(this.config.defaultZoom());
     this.cameras.main.centerOn(0, 0);
     this.gridRenderer.invalidate();
     this.persistCamera();

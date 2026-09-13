@@ -10,7 +10,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { DEFAULT_OPTIONS, projectOptions, type ProjectMeta } from "../types";
+import {
+  DEFAULT_OPTIONS,
+  projectOptions,
+  ZOOM_RANGE,
+  type ProjectMeta,
+} from "../types";
+// The scene as text, through Vite's own `?raw`: importing it would pull
+// Phaser into a test that wants one constant out of it.
+import worldScene from "../../game/world-scene.ts?raw";
 
 function meta(options?: ProjectMeta["options"]): ProjectMeta {
   return {
@@ -65,5 +73,28 @@ describe("a project's options", () => {
     const options = projectOptions(meta());
     options.defaultZoom = 4;
     expect(DEFAULT_OPTIONS.defaultZoom).toBe(1);
+  });
+});
+
+/**
+ * The zoom the sheet takes and the zoom the canvas can show have to be the
+ * same range.
+ *
+ * They were not: `MAX_ZOOM` in the scene was 4 while Project Options accepted
+ * up to 8, so a pixel-art project asked for 6×, got 6× written into the
+ * config its game reads, and got 4× on the canvas beside it. Nothing failed —
+ * the number was simply clamped on the way to the camera, which is a setting
+ * lying rather than a setting refusing. One constant now, and this is what
+ * stops the literal coming back.
+ */
+describe("the zoom a project can be set to", () => {
+  it("is a range the editor's own camera can reach", () => {
+    expect(ZOOM_RANGE).toEqual({ min: 0.25, max: 8 });
+    expect(worldScene).toContain("const MAX_ZOOM = ZOOM_RANGE.max;");
+  });
+
+  it("contains the zoom a project with no opinion opens at", () => {
+    expect(DEFAULT_OPTIONS.defaultZoom).toBeGreaterThanOrEqual(ZOOM_RANGE.min);
+    expect(DEFAULT_OPTIONS.defaultZoom).toBeLessThanOrEqual(ZOOM_RANGE.max);
   });
 });

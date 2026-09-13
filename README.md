@@ -42,8 +42,10 @@ remaining pieces are wired to real slots rather than mocked.
   scroll does not smear it. **Default zoom** is what a scene opens at, here and
   in the game; 8px art usually wants 3× or 4×. Both are in Project Options
   afterwards, as two switches and a number, and changing one is live: the
-  canvas re-filters every texture it has and the config the game reads is
-  rewritten under it
+  canvas re-filters every texture it has, the camera in front of you goes to
+  the zoom you just typed — and stays there for a scene you have never opened
+  — the config the game reads is rewritten under it, and a game that is
+  running restarts on it
 - **A character controller, optionally.** Ticked — the default — New Game
   writes `js/prefabs/character.js` and the line in the scene that puts it down:
   a prefab that walks the grid over A\*, or runs and jumps along it. Unticked,
@@ -225,7 +227,10 @@ remaining pieces are wired to real slots rather than mocked.
   smoothing as anywhere else. Apply lays the ink into that layer at the
   file's own resolution and re-parses, so it arrives as artwork rather than
   as strokes over the top of it; Cancel throws the drawing away, and ⌘Z
-  brings it back if that was the wrong button. The frame is the **document**,
+  brings it back if that was the wrong button. Applying takes a few seconds —
+  the file is rebuilt and re-parsed — and the bar says so and goes quiet while
+  it does, because pressing it twice used to put the same ink in twice.
+  The frame is the **document**,
   not the artwork: everything this editor writes has a grid space of clear
   canvas around it, and the boundary somebody draws up against had better be
   the one Photoshop would show them
@@ -335,7 +340,9 @@ remaining pieces are wired to real slots rather than mocked.
   this page's and the running game's, errors and stack traces included, so a
   `console.log` in your `WorldScene.js` shows up where you are looking. **App**
   and **JS** toggles on the right of its header bar, when it is open, filter
-  one from the other
+  one from the other, and **Clear** beside them empties it — which is how you
+  see what the next thing you try writes rather than reading it out of an
+  afternoon
 - Log an object and you get an object: a disclosure triangle, a one-line
   preview, and its contents a level at a time, with keys, strings, numbers and
   nulls each shown as what they are. Classes say which class they are, a Map

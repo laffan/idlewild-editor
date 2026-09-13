@@ -291,6 +291,30 @@ start-up and `game/render-options.ts` afterwards, and the exported game, through
 the canvas *and* rewrites the config the project's own code reads, and the two
 answers agree because they come from the same field.
 
+`defaultZoom` is two facts wearing one number, which is where it went wrong.
+The camera in front of you is one; the zoom a scene *with no camera of its
+own* opens at is the other, and that one lived in `WorldSceneConfig` as a
+number handed in when the scene was created. Changing the setting moved only
+the first, so the canvas went where you asked and every scene nobody had
+opened yet went on arriving at whatever the editor booted with. The field is
+`() => number` now — asked for at the moment a scene needs it, which is the
+same shape everything else that outlives a change already uses. Project
+Options still moves the camera itself, through the scene's `zoomAt` so the
+move is centred and recorded: the camera rides the scene in the document, and
+a zoom the document did not hear about is undone by the next scene switch.
+
+The camera's own clamp has to reach as far as the setting is allowed to go, or
+the setting lies without failing: `MAX_ZOOM` was 4 while the sheet accepted up
+to 8, so a pixel-art project asked for 6×, got 6× in the config its game
+reads, and got 4× on the canvas beside it. `ZOOM_RANGE` in `types.ts` is the
+one place that number is written now, and a test pins the scene to it.
+
+And a game that is already running is restarted once the write lands, the way
+saving a file in Code restarts it — the config it is running against has just
+been rewritten underneath it. Once the write lands, not before: Rust
+regenerates `game.config.json` as part of `set_project_options`, so a reload
+fired any earlier would come back on the old numbers.
+
 Applying `pixelArt` to a game that is already up is two jobs rather than one.
 Phaser reads it once, at construction, where it turns `antialias` off — and
 `antialias` is what every texture *source* consults for its filter as it is
@@ -3032,6 +3056,25 @@ checks both. The two are only in step for as long as nobody else has rewritten
 the file, and a paint against a stale index would put somebody's drawing into
 the wrong layer — the one failure here that would be completely silent.
 
+### Apply runs once
+
+The write is not quick — the file is rebuilt and the whole psd-to-json
+pipeline runs over it — and the bar stays up for all of it, because a rewrite
+can be refused and a session that had already closed would have taken the
+drawing with it. Nothing stopped a second press in that window, and a second
+press was not a second no-op: the strokes are only discarded once the first
+write lands, so the same ink went into the file twice. The second pass then
+read `session` after the first had set it to null, and what reached the
+console was `Could not draw into <key>.psd: d@tauri://localhost/assets/
+index-….js:150:38810` — a minified stack where a sentence should be.
+
+So there is a `writing` flag: Apply returns early while one is in flight, both
+buttons on the bar go quiet, and the bar says what it is doing rather than
+looking ready. Cancel as well as Apply, because the ink it would throw away is
+the ink being written. And the session is taken as a local at the top of
+`apply` — everything after the `await` belongs to that call, and the field it
+used to read can be null by then.
+
 ### Hold still, and the rest of the stroke is ruled
 
 A second inside a stroke with the pen not moving and `beginDraw` latches its
@@ -3628,6 +3671,13 @@ for anyone who has never touched them.
 An `Error` is now stringified with its stack. `TypeError: undefined is not an
 object` with no frame under it names nothing you can go and look at, and a
 frame is the point of the JS half.
+
+**Clear** sits beside the two toggles and is not a third one. A filter hides
+lines; this throws them away, both sources at once, which is what you press
+before trying the thing you are actually debugging so that what appears next
+is only about that. It goes through `log.clearLog`, so the store and every
+drawer painting from it empty together. Not remembered, and not undoable — the
+console is a record of what happened rather than a document.
 
 ## Known gaps
 
