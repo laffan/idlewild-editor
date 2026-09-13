@@ -383,36 +383,60 @@ pub fn paint(
 }
 
 /// Take a layer's own rectangle out of the canvas-sized buffer `rgba()`
-/// hands back, clamped to the canvas.
+/// hands back.
 ///
-/// Two traps here, both silent. `rgba()` returns the layer composited onto
-/// the *whole canvas*, not its own rect, so the crop is a windowed read
-/// rather than a copy — and anything hanging off the canvas edge was never
-/// in that buffer to begin with. And `layer_right()` / `layer_bottom()` are
+/// Three traps here, all silent. `rgba()` returns the layer composited onto
+/// the *whole canvas*, not its own rect, so the read is a window into that
+/// buffer rather than a copy. And `layer_right()` / `layer_bottom()` are
 /// **inclusive** in this crate (`width() == right - left + 1`), so the size
 /// is taken from `width()` and `height()` and every edge below is exclusive.
+///
+/// The third is why the rectangle handed back is the layer's **own** rather
+/// than the part of it that fits. Anything hanging off the canvas edge was
+/// never in `rgba()` to begin with, so those pixels are gone whatever this
+/// does — but the *rectangle* is not, and it is load-bearing. `P | anchor` is
+/// a twelve-pixel dot centred on the anchor, and `psd_marks::layout` puts the
+/// anchor on the very edge of a sketch's canvas or, when the anchor space is
+/// not one of the spaces the ink covers, outside it altogether. Clamping the
+/// rectangle to the canvas therefore moved the mark's centre three pixels on
+/// the first rewrite, and deleted the mark outright when the whole dot was
+/// past the edge — a rename in the inspector, a New layer, or a stroke laid
+/// down in pen mode, and the file came back with no anchor in it. So the
+/// rect is kept and the part of it that is off the canvas comes back clear.
 pub(crate) fn crop(
     layer: &psd::PsdLayer,
     canvas_w: u32,
     canvas_h: u32,
 ) -> (i32, i32, u32, u32, Vec<u8>) {
-    let x0 = layer.layer_left().max(0);
-    let y0 = layer.layer_top().max(0);
-    let x1 = (layer.layer_left() + layer.width() as i32).min(canvas_w as i32);
-    let y1 = (layer.layer_top() + layer.height() as i32).min(canvas_h as i32);
-    if x1 <= x0 || y1 <= y0 {
-        return (x0, y0, 0, 0, Vec::new());
+    let left = layer.layer_left();
+    let top = layer.layer_top();
+    let width = layer.width() as u32;
+    let height = layer.height() as u32;
+    if width == 0 || height == 0 {
+        return (left, top, 0, 0, Vec::new());
     }
 
-    let width = (x1 - x0) as u32;
-    let height = (y1 - y0) as u32;
+    let mut out = vec![0u8; (width as usize) * (height as usize) * 4];
+
+    // The window of the layer that is actually on the canvas, which is the
+    // only part `rgba()` can answer for.
+    let x0 = left.max(0);
+    let y0 = top.max(0);
+    let x1 = (left + width as i32).min(canvas_w as i32);
+    let y1 = (top + height as i32).min(canvas_h as i32);
     let canvas = layer.rgba();
-    let mut out = Vec::with_capacity((width * height * 4) as usize);
-    for y in 0..height {
-        let row = ((y0 as u32 + y) * canvas_w + x0 as u32) as usize * 4;
-        out.extend_from_slice(&canvas[row..row + (width as usize) * 4]);
+    let expected = (canvas_w as usize) * (canvas_h as usize) * 4;
+    if x1 > x0 && y1 > y0 && canvas.len() >= expected {
+        let run = ((x1 - x0) as usize) * 4;
+        for y in y0..y1 {
+            let from = ((y as usize) * (canvas_w as usize) + x0 as usize) * 4;
+            let into = (((y - top) as usize) * (width as usize)
+                + ((x0 - left) as usize))
+                * 4;
+            out[into..into + run].copy_from_slice(&canvas[from..from + run]);
+        }
     }
-    (x0, y0, width, height, out)
+    (left, top, width, height, out)
 }
 
 /// The reason the *inspector* cannot rewrite a file, or None when it can.

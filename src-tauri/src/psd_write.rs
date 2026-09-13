@@ -372,6 +372,11 @@ impl Rebuild<'_> {
     }
 
     /// One layer carried across, moved by however far the anchor moved.
+    ///
+    /// A layer with no rectangle at all is the only one dropped: everything
+    /// that has one keeps it, off the canvas edge included, because a
+    /// rectangle clamped to the canvas is a mark whose centre has moved —
+    /// see `psd_layers::crop`.
     fn layer(&self, idx: usize) -> Option<LayerBuilder> {
         let layer = self.doc.layer_by_idx(idx);
         let (left, top, w, h, pixels) = psd_layers::crop(layer, self.old_w, self.old_h);

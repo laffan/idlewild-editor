@@ -127,10 +127,17 @@ fn built(doc: &Psd, source: &[Row], node: &Node<'_>) -> Result<Option<Built>, St
                 height,
                 rgba: pixels,
             });
-            let Some(patch) = painted(doc, node, held)? else {
-                // Nothing of it is on the canvas, so there is nothing to write.
-                return Ok(None);
-            };
+            // A rewrite never loses a row. A layer with no rectangle at all —
+            // an empty one somebody left in the file — keeps its place as the
+            // same clear pixel `psd_layers::add` writes, which is a row to
+            // rename and reorder and nothing the game can see.
+            let patch = painted(doc, node, held)?.unwrap_or(Patch {
+                left,
+                top,
+                width: 1,
+                height: 1,
+                rgba: vec![0, 0, 0, 0],
+            });
             Ok(Some(Built::Layer(
                 raster(name, patch)
                     .opacity(layer.opacity())

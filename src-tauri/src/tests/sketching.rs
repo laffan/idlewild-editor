@@ -227,3 +227,136 @@ fn rows_of(doc: &psd::Psd) -> Vec<String> {
         })
         .collect()
 }
+
+/// A rename in the inspector must not cost the file its anchor.
+///
+/// The bug this pins, from the round trip that found it: draw a sketch,
+/// convert it, retype the ink layer's name in the inspector's list, press
+/// Apply — and the console says the file came back with no `P | anchor`,
+/// every placement of it is held where it stands rather than on its space,
+/// and nothing brings the mark back, because the mark is gone from the file.
+///
+/// The cause is `psd_layers::crop`, which used to hand a rewrite the part of
+/// a layer that fits on the canvas rather than the layer's own rectangle. A
+/// sketch anchored on the top edge has six of the dot's twelve pixels above
+/// the canvas, so the mark came back half as tall and three pixels lower;
+/// a sketch whose anchor space is not one of the spaces the ink covers has
+/// the whole dot above the canvas, and the mark came back not at all.
+///
+/// Both are checked through the real pipeline, because the value of a mark
+/// is entirely in what psd-to-json reports back about it.
+#[test]
+fn a_rewrite_keeps_the_mark_a_sketch_hangs_off_its_canvas() {
+    // The anchor on the very top edge: the ordinary sketch, and the case
+    // `a_sketch_anchored_on_the_top_edge_keeps_its_mark` writes.
+    rewritten(
+        "sketch-edge-rewrite",
+        AnchorMarks {
+            outline: vec![at(-256.0, 0.0), at(192.0, 0.0), at(192.0, 224.0), at(-256.0, 224.0)],
+            lines: vec![],
+            art: Some(at(-150.0, 38.0)),
+            margin: None,
+            cols: 5,
+            rows: 5,
+            art_on_top: true,
+        },
+        (256.0, 0.0),
+    );
+
+    // And the anchor space left uncovered — an L or a diagonal of spaces,
+    // whose bounding box has an empty corner. The footprint then starts a
+    // long way below the anchor and the dot is nowhere near the canvas.
+    rewritten(
+        "sketch-far-rewrite",
+        AnchorMarks {
+            outline: vec![at(-256.0, 96.0), at(192.0, 96.0), at(192.0, 320.0), at(-256.0, 320.0)],
+            lines: vec![],
+            art: Some(at(-150.0, 134.0)),
+            margin: None,
+            cols: 5,
+            rows: 5,
+            art_on_top: true,
+        },
+        (256.0, -96.0),
+    );
+}
+
+/// Write a sketch, rename its ink layer through the inspector's own path, and
+/// check the anchor psd-to-json reports before and after.
+fn rewritten(name: &str, marks: AnchorMarks, expected: (f64, f64)) {
+    use crate::psd_layers::{self, LayerEdit};
+
+    let meta = store::create_project(
+        "Rewritten sketch",
+        Projection::Isometric,
+        Genre::Topdown,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes = psd_write::psd_from_rgba_marked(name, 284, 156, ink(284, 156), Some(&marks))
+            .expect("the sketch should convert");
+        std::fs::write(
+            store::psd_dir(id).expect("psd dir").join(format!("{name}.psd")),
+            &bytes,
+        )
+        .expect("PSD should save");
+
+        let before = psd_pipeline::process(
+            id,
+            name,
+            &psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("the pipeline should run");
+        assert_eq!(anchor_in(&before), Some(expected), "before the rewrite");
+
+        // Exactly what the inspector sends: every row back in the order it
+        // was read, with one name retyped.
+        let list = psd_layers::read(id, name).expect("the list should read");
+        let edits: Vec<LayerEdit> = list
+            .layers
+            .iter()
+            .map(|row| {
+                let renamed = if row.name.starts_with("S | ") {
+                    "S | plants".to_string()
+                } else {
+                    row.name.clone()
+                };
+                LayerEdit::keep(row.index, renamed, row.depth)
+            })
+            .collect();
+        let after = psd_layers::write(id, name, &edits, |_| {})
+            .expect("the rewrite should land");
+
+        assert_eq!(
+            anchor_in(&after),
+            Some(expected),
+            "the mark should read back where it was — {after}"
+        );
+        // And the row is still in the list, so a second Apply is against the
+        // same file the first one was.
+        let list = psd_layers::read(id, name).expect("the list should read again");
+        let names: Vec<&str> = list.layers.iter().map(|l| l.name.as_str()).collect();
+        assert!(names.contains(&"P | anchor"), "got {names:?}");
+        assert!(names.contains(&"S | plants"), "got {names:?}");
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// Where the manifest says the anchor mark is, if it says at all.
+fn anchor_in(manifest: &str) -> Option<(f64, f64)> {
+    let parsed: serde_json::Value = serde_json::from_str(manifest).expect("manifest should be JSON");
+    let mark = parsed["layers"]
+        .as_array()?
+        .iter()
+        .find(|l| l["name"] == "anchor")?;
+    Some((mark["x"].as_f64()?, mark["y"].as_f64()?))
+}

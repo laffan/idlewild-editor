@@ -1092,7 +1092,11 @@ Three details in that rebuild are silent when wrong, and each cost a test:
 
 - `layer.rgba()` returns the layer composited onto the **whole canvas**, not
   its own rect. `crop` reads a window out of it, and anything hanging off
-  the canvas edge was never in the buffer to begin with.
+  the canvas edge was never in the buffer to begin with. Those *pixels* are
+  gone whatever it does; the **rectangle** is not, and it is load-bearing, so
+  what `crop` hands back is the layer's own rect with the part that is off
+  the canvas returned clear. Clamping the rect instead is what made a rename
+  eat a sketch's anchor — see *A rewrite may not lose a row*.
 - `layer_right()` and `layer_bottom()` are **inclusive** in this crate
   (`width() == right - left + 1`), so a 32×32 layer measured from them comes
   out 31×31. Sizes come from `width()`/`height()`, and every edge below
@@ -1106,6 +1110,36 @@ Three details in that rebuild are silent when wrong, and each cost a test:
 
 `layers()` reads top-first and `add_layer` stacks bottom-up, so the edited
 order goes back in reversed; the round trip is pinned by a test.
+
+### A rewrite may not lose a row
+
+Apply, New layer and pen mode's Apply are all the same rebuild, and the
+rebuild used to drop any layer with nothing left of it after the crop. That
+read as a rule about pixels and was really a rule about *rectangles*, which is
+how it came to delete a mark.
+
+`P | anchor` is a twelve-pixel dot centred on the anchor, and `psd_marks::
+layout` sizes the canvas from the artwork and the footprint — not from the
+anchor. A sketch's footprint is measured from its anchor space *down*, so the
+anchor lands on the very top edge and six of the dot's twelve pixels are above
+the canvas; and when the anchor space is not one of the spaces the ink covers
+— an L, a diagonal, anything whose bounding box has an empty corner — the
+whole dot is above it. Neither is a problem for the file as written: the psd
+fork records the rect it was given and psd-to-json reports the point's centre
+from that rect, negative top and all.
+
+It was a problem for the rebuild. Clamped to the canvas, the edge case came
+back six pixels tall with its centre three pixels lower — every placement of
+that file three pixels out, once, silently — and the far case came back not at
+all. What the console then said was `came back with no "P | anchor" — holding
+it where it is`, which reads like a file somebody flattened in Photoshop
+rather than like a rename in the inspector, and no re-import fixes it because
+the mark is gone from the file on disk.
+
+So `crop` keeps the layer's own rectangle and clears the part that is off the
+canvas, and a row whose rectangle is empty outright keeps its place as the
+same single clear pixel `add` writes. Nothing a rewrite is asked to carry
+across comes out the other side missing.
 
 **Edits are held until Apply.** A write rebuilds the file and runs the whole
 psd-to-json pipeline over it, which is far too much to hang off a keypress.
