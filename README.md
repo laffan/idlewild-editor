@@ -20,8 +20,10 @@ psd-to-phaser integration is uniform: a screenshot and a hand-built Photoshop
 document arrive at the runtime the same way.
 
 Publishing hands you either a zipped runnable site or a `.idlewild` file — the
-whole project, source PSDs included, to open somewhere else. Direct publishing
-to a web server over rsync is planned and explicitly out of scope for now.
+whole project, source PSDs included, to open somewhere else — and Export Assets
+hands back the artwork on its own, for the PSDs that are wanted somewhere that
+is not a game. Direct publishing to a web server over rsync is planned and
+explicitly out of scope for now.
 
 ## Status
 
@@ -31,6 +33,13 @@ remaining pieces are wired to real slots rather than mocked.
 **Working**
 
 - Project list with thumbnails, long-press rename / duplicate / delete
+- **Select**, beside Open, turns the grid into a set of choices: a tap picks a
+  card instead of opening it, each one carries a box in the corner of its
+  thumbnail, and the row above them offers All, None, Duplicate and Delete. A
+  bulk delete asks **once**, naming the projects while the list is short enough
+  to read and counting them when it is not. There is no ⌘-click on an iPad and
+  no rubber band over a grid of cards, so the mode is the honest shape; the
+  card's own menu is untouched, and stays the only way to Rename
 - New Game: template (isometric, orthogonal, blank), style (top down,
   platformer) and grid scale (8–256 px — 8 and 16 are there for pixel art,
   where a space is a sprite rather than a room). Blank has no lattice: a
@@ -53,8 +62,8 @@ remaining pieces are wired to real slots rather than mocked.
   It is the one choice Project Options reports rather than offers, because it
   was lines in a file and the file is yours from the moment it is written
 - A full-width header carrying the project, undo and redo, and the
-  **Draw / Code / Play** toggle, with Publish and Project Options behind its
-  menu. It insets itself out of the iPad's status bar, as the console drawer
+  **Draw / Code / Play** toggle, with Publish, Export Assets and Project Options
+  behind its menu. It insets itself out of the iPad's status bar, as the console drawer
   does out of the home indicator
 - Infinite grid, two-finger zoom, tap-to-pick. The lattice is a hairline
   whatever the camera is doing: a line one *screen* pixel wide, so a project
@@ -140,6 +149,15 @@ remaining pieces are wired to real slots rather than mocked.
   exactly as a paste is. Drag it over an image already there and that image
   lights up: dropping on it offers to put the new file behind it instead,
   which changes every placement of that PSD at once
+- **Two PSDs with a same-named layer no longer collide.** psd-to-phaser keys a
+  texture on the layer's own name, so two files each holding a `S | layer 1` —
+  which is what New layer calls its rows, counting within each file — were the
+  same key: Phaser declines a key it already holds without saying so, one file's
+  artwork was drawn for the other's, and a pattern layer scattered the object
+  layer's picture. Every load now names a texture after the file it came from as
+  well, in the editor and in the game a publish writes. A project made before
+  this keeps its own `game/` tree, so its exported game takes the fix when you
+  Reset `preload` in the code panel
 - Every import carries its grid space into the PSD as two marks a game never
   sees: a red dot on the space it is anchored to, and the outline of the
   selection it was dropped into. Move the dot in Photoshop and the artwork
@@ -225,7 +243,9 @@ remaining pieces are wired to real slots rather than mocked.
   in their own colour, placed PSDs as the space they take up, boundaries and
   points as the marks they are on the canvas, and a sketch as the line it was
   drawn as — and a layer you have hidden is hidden here too. It keeps its own
-  height, like every other divider in the shell
+  height, like every other divider in the shell. It is **Draw's**: in Code and
+  Play the canvas is behind a running game, and a frame drawn around a camera
+  nobody is looking through says nothing
 - **Points**, from the rail: tap and a named place lands on that space, in
   the layer palette and on the canvas. Rename it in the inspector, drag it a
   space at a time, delete it. One point per scene can be its **start point** —
@@ -258,10 +278,19 @@ remaining pieces are wired to real slots rather than mocked.
   boundaries, in Info / Transform / Layers sections. A placed image's title is its filename,
   and retyping the part before `.psd` renames the file, moves its assets with
   it, and repoints every placement on it
-- Option-drag a fill or an image to copy it. A copied image references the
-  same PSD, which the inspector says so you know editing one edits both —
-  and Remove Reference gives it a copy of its own. Option-shift-drag skips
-  the step: the copy comes out independent
+- **Every named section folds away.** A placed PSD carries Info, Transform, its
+  collider, its own layer stack and — on a pattern layer — the rule and its
+  shapes, and most of the time only one of those is being worked on. Click a
+  heading and it shuts; it stays shut for the next thing you select and for the
+  next time you open the app, because closing Collider once is a statement about
+  how you work rather than about that one PSD
+- Option-drag a fill or an image to copy it. Two placed PSDs on the same file
+  are **instances** of it: equal objects rather than one pointing at another, so
+  editing the artwork edits every one of them and deleting any leaves the rest
+  as they were. The canvas outlines a selected instance with a **dashed** box,
+  the inspector says how many objects an edit would reach, and **Make Unique**
+  gives this one a copy of the file — every other instance keeps the original.
+  Option-shift-drag asks for that up front: the copy comes out independent
 - The selected PSD's own layer stack, in the inspector: drag by the grip to
   reorder it, rename in place, then Apply to rewrite the file and re-run the
   pipeline. Renaming is how a sprite becomes a tileset, so it is worth having
@@ -459,6 +488,13 @@ remaining pieces are wired to real slots rather than mocked.
   itself, source PSDs and all, with the document, the processed assets and the
   code as it was edited. A published site cannot give you back the file a
   sprite was drawn in; that is what the second one is for
+- **Export Assets**, beside Publish in the menu, is the third exit and the only
+  one that hands back artwork rather than a program. Tick the PSDs you want and
+  say what of them: the assets the pipeline made — each file's `data.json` and
+  the sprites and tiles beside it, which is what another engine can read — the
+  source PSDs, which is what opens in Photoshop, or both. It lists what is in
+  `psd/` rather than what the document places, because a file whose placement
+  you deleted is still a file you drew
 - **Open**, beside New Game on the home screen, reads a `.idlewild` back in as
   a project of its own. Everything comes with it, including the solids behind
   extruded layers — so a shape you pulled on one machine is a shape you can go

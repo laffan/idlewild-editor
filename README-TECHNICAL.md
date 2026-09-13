@@ -46,6 +46,7 @@ Extension of [README.md](README.md).
 │  game_files.rs   the editable game/ tree, as the code modal    │
 │                  sees it                                       │
 │  publish.rs      zip export, both runtimes included            │
+│  export_assets.rs  chosen PSDs alone: sources, output, or both │
 │  game_config.rs  the document, as the exported game reads it   │
 │  file_server.rs  tiny_http over the project store              │
 └───────────────────────────────────────────────────────────────┘
@@ -694,6 +695,15 @@ nothing where there is something is worse than one that shows it roughly.
 Strokes are sampled to at most 96 points, which at this size is the same line
 drawn faster.
 
+**It is Draw's.** The map frames the camera the canvas is looking through, and in
+Code and Play the canvas is behind a running game — so the frame would be drawn
+around a camera nobody is looking through. Play takes the whole left sidebar
+down anyway; Code is the mode that *keeps* it, to switch scene and adjust the
+document while the game runs, so the rule has to name both and
+`styles.test.ts` asserts that it does. `display: none` also stops the paint: the
+body has no box to fit anything into, `paint` returns on that, and the
+`ResizeObserver` brings it back the moment there is one again.
+
 **A scrub freezes the projection.** A press names a place and the camera goes
 there at the zoom it is already at; the finger keeps naming places until it
 comes up. But centring the camera can widen the union — that is exactly what
@@ -1106,35 +1116,68 @@ the browser is not the fourth cache.
 
 ### The texture keys, and why getting them wrong hangs the editor
 
-**A texture is keyed on the layer's own name, not the PSD's.** The plugin's
-sprite loader is `scene.load.image(layer.name, url)`, so a PSD keyed `tower`
-holding `S | roof` produces a texture called `roof` and nothing called
-`tower_roof`. This file used to sweep for `<psdKey>_*` on eviction, which
-worked for exactly one reason: an image the editor converts names its only
-layer after the key, so `roof === tower` and the sweep caught it by accident.
+psd-to-phaser has **two** loading paths and they name textures differently, and
+which one is used is the whole of this section.
 
-Add a second layer in Photoshop and it stops working, in a way that looks
-nothing like a stale-cache bug. Phaser's loader **silently drops** a file
-whose key already exists — `LoaderPlugin.addFile` consults `keyExists` and
-simply does not queue it, with no event and no error. The plugin counts its
-own assets in and waits for a `filecomplete` that will never fire, so its
-total is never reached and `psdLoadComplete` is never emitted. The editor
-then sat on `loadPsd`'s fifteen-second timeout and placed a PSD whose
-textures had all been evicted and never replaced: every image on that file
-disappeared.
+`p2p.load.load` keys a sprite on `layer.name` alone: a PSD keyed `tower` holding
+`S | roof` produces a texture called `roof` and nothing called `tower_roof`. So
+two PSDs with a same-named layer share one texture. That is not a corner case —
+`New layer` names its rows `layer-1` upward, *counting within each file*, so two
+files that each have one collide by construction. And Phaser's loader **silently
+drops** a file whose key already exists (`LoaderPlugin.addFile` consults
+`keyExists` and simply does not queue it, with no event and no error), so the
+first file's artwork answered for the second and nothing anywhere said so. What
+it looked like was a pattern layer scattering the object layer's picture: the
+pattern's element had no texture of its own, `place` found the name already in
+the cache, and the other file's artwork went everywhere.
 
-So the names are read out of the plugin's own parsed data before it is
-cleared, rather than derived from a convention, and three shapes are removed
-per name — `name`, `name_mask`, and `name_tile_<col>_<row>`.
+`p2p.load.loadMultiple` keys it `<psdKey>_<layerName>` and sets an
+`isMultiplePsd` flag that `place` reads back, so both halves agree about the
+name. **Every load this editor makes goes through that path**, with one config
+in it — see `game/psd-loader.ts` — and `lib/manifest.ts`'s `textureKey` and
+`scopeKeys` are the one place that spells the key. `canPlace` asks the same way
+round, because asking the unscoped question answered *yes* about a layer whose
+name another file happened to share.
 
-The same fact from the other end is why `evictPsd` takes the project's other
-PSD keys. Two files with a same-named layer share one texture, which the
-plugin can only fix by loading them through `loadMultiple`; until then, a
-name another loaded PSD is still using is left alone. A stale texture on the
-file being reloaded is a smaller lie than a blank one on a file nobody
-touched — and `loadPsd` no longer hangs when it meets one, because the loader
-going idle settles the wait as a second, weaker signal, and any sprite left
-without a texture is named in the console.
+What that costs is a **microtask**. `loadMultiple` loads each `data.json`, then
+queues the images from a `Promise.all().then()` — and Phaser emits
+`filecomplete-json-…` synchronously and then checks its queue in the same tick,
+so the pass is declared finished and `create` runs before that callback lands.
+The editor does not care: it awaits the plugin's own `psdLoadComplete`, as it
+always did. The exported game's scene *did* care, because it placed the document
+from `create`, so the scaffold places it from `psdLoadComplete` instead and
+`placeDocument` returns early until then. A pattern layer needs no such care: it
+places what the camera can see every frame and retries what it could not.
+
+Two smaller consequences:
+
+- **The manifest is cached under `<key>_temp_json`, not `<key>`.** A load has to
+  watch for the failure of that key rather than of the PSD's, and — the trap —
+  `load.json` on a key the cache already holds is dropped with no event at all,
+  so a stale entry is a reload that waits out its whole timeout with the file off
+  the canvas. `evictPsd` clears both.
+- **Masks stay unscoped**, because `<name>_mask` is what `place` looks one up by
+  on *both* paths — scoping one would be a texture nothing ever asks for. The
+  multi path does not fetch them either, so `loadPsd` queues them itself after
+  the main load, which is the behaviour being preserved rather than traded away.
+  A mask can therefore still be shared between two files with a same-named
+  masked layer, which is why `evictPsd` still takes the project's other PSD keys:
+  a mask another loaded file is using has to survive this file being dropped.
+  The artwork needs no such care now, and a `<key>_*` sweep is exact rather than
+  a guess.
+
+The old shape is worth keeping on record, because it is what the second half of
+`evictPsd` still exists for. The names had to be read out of the plugin's own
+parsed data before it was cleared rather than derived from a convention, and
+three shapes removed per name — `name`, `name_mask`, `name_tile_<col>_<row>` —
+then filtered against every *other* loaded PSD's names, so a name still in use
+elsewhere was left stale rather than blanked. Miss one and the reload hangs: the
+plugin counts its own assets in and waits for a `filecomplete` that never fires,
+`psdLoadComplete` is never emitted, and `loadPsd` sat on its fifteen-second
+timeout and placed a PSD whose textures had all been evicted and never replaced.
+`loadPsd` no longer hangs when it meets that, because the loader going idle
+settles the wait as a second, weaker signal, and any sprite left without a
+texture is named in the console.
 
 Placements survive the swap: each keeps its position and its size *relative
 to* what the manifest exported, so a deliberately shrunk image stays shrunk
@@ -1871,22 +1914,68 @@ to look like a light touch. `getCoalescedEvents` is drained on every move,
 which is the difference between a curve and a polyline on a 120 Hz Pencil
 against a 60 Hz frame.
 
-### References
+### Instances
 
 An option-drag copies the fill or placement under the pointer and drags the
 copy, so the original stays put and the thing under the finger is the new one.
 
-A copied *placement* keeps its `psdKey`. Both then read the same file, which
-is what makes it a reference rather than a duplicate: the copy costs one
-`place()` call and no disk at all, because the textures are already in. What
-it costs instead is that editing the PSD edits both, so the inspector says so
-above everything else — that is the consequence, not a detail.
+A copied *placement* keeps its `psdKey`. Both then read the same file, and the
+two are **instances** of it: the copy costs one `place()` call and no disk at
+all, because the textures are already in. What it costs instead is that editing
+the PSD edits both, so the inspector says so above everything else — that is the
+consequence, not a detail.
 
-`Remove Reference` copies the PSD to a key of its own (`<key>-copy`) and
-repoints only the selected placement. Whichever of the two you were looking
-at is the one that becomes independent; everything else still reading the
-original is left alone, which is the point of doing it per placement rather
-than per key.
+**They were called references, and both halves of that were wrong about what
+they described.** A reference reads as one object pointing at another, as though
+one of five lamp-posts were the real one and the rest were pointers to it; in
+fact none of them is, they are five equal instances of a file, and deleting any
+of them leaves the other four exactly as they were. And the way out was called
+*Remove Reference*, which names a mechanism rather than a result — and not
+accurately, since nothing is removed: the file is copied and this object is
+pointed at the copy. **Make Unique** is what that does.
+
+`game/instances.ts` answers the one question the canvas and the inspector both
+ask — how many things on the grid an edit to this file would reach. In **units**,
+not placements: a PSD with a wall and a roof placed once is one thing standing on
+the grid, not two. The old count was of placements matching both the key and the
+layer path, which comes to the same number for the copies an option-drag makes
+and to a different question for anything else, which is why it went unnoticed.
+And it is asked of every scene, because `psd/` is one directory per project.
+
+The canvas says it in its own vocabulary: a selected instance is outlined with a
+**dashed** box rather than a solid one. A different kind of line rather than a
+different colour, because the accent is the only colour this design has, and
+because dashed already reads as *shared with something else*. Phaser's Graphics
+has no dash pattern, so `dashedRect` walks the four sides a dash and a gap at a
+time, starting each side at a corner so the box reads as a box.
+
+#### Make Unique, and why it used to do nothing
+
+`Make Unique` copies the PSD to a key of its own (`<key>-copy`) and repoints
+**the whole unit** — every placement of the object you have selected, and none of
+the other instances. Whichever instance you were looking at is the one that
+becomes its own; everything else still reading the original is left alone, which
+is the point of doing it per object rather than per file.
+
+The whole unit is the fix. It repointed the placement that happened to be
+selected, and a PSD with a wall and a roof in it stands on the grid as **two
+placements of one unit** — so the object came away half-attached: one row read
+the copy and the other went on reading the original, an edit to either file still
+changed part of both pictures, and which half came loose depended on which row
+had been clicked. The duplicate on disk was real, which is what made it hard to
+see. Nothing was missing; the two simply stayed linked, and the feature read as
+though it had done nothing at all.
+
+A second, quieter half of the same complaint was the texture cache. The copy is
+byte-identical, so its layers have the same *names* as the original's — and until
+textures were namespaced on the PSD key, a same-named layer meant a shared
+texture, so even a correctly repointed copy went on drawing the original's
+artwork. See **The texture keys**.
+
+And the copy takes a collider of its own, derived the way a fresh import's is:
+until somebody edits one of them it blocks what the original blocks, but it
+blocks it as a record of its own rather than as a second reader of the
+original's.
 
 ### Managing the game tree
 
@@ -2044,33 +2133,76 @@ user's tree and nothing rewrites it — and deleting the block, or the one line 
 is still a runnable game, just an empty one, so a corrupt document falls back
 to `empty()` rather than aborting with a half-written archive.
 
-**The load is not racy, and the templates do not treat it as one.** P2P queues
-its sprites from inside the handler that parses `data.json`, so it is fair to
-wonder whether a scene that loads in `preload()` and places in `create()` can
-find no textures. It cannot: Phaser's loader picks up files added during a
-pass, and `create()` waits for the queue to drain — checked in a browser
-against the real plugin, with the manifest artificially delayed. The editor
-waits on `psdLoadComplete` because it loads at *runtime*, long after any
-`preload()`, which is a different situation.
+**The load is racy, and the templates now say so.** It was not, on P2P's
+single-file path: that queues its sprites from inside the handler that parses
+`data.json`, Phaser's loader picks up files added during a pass, and `create()`
+waits for the queue to drain — checked in a browser against the real plugin,
+with the manifest artificially delayed. `loadMultiple` queues them from a
+promise callback instead, which lands one microtask *after* Phaser has declared
+the pass finished and called `create`. That is the price of having a texture
+named after the file it came from, and it is worth paying — see **The texture
+keys**. So the scaffolded scene places the document from the plugin's own
+`psdLoadComplete` and `placeDocument` returns early until then, and the editor
+goes on awaiting `psdLoadComplete` as it always did, because it loads at
+*runtime* rather than from a `preload()`.
 
-## Publish has two exits
+## Three exits
 
-They answer different questions, and the difference is the source PSDs.
+They answer different questions, and the differences are the source PSDs and
+whether what comes out is a program at all.
 
 | | Carries | For |
 |---|---|---|
 | **Export site** (`.zip`) | `game/`, processed `assets/`, both runtimes, a generated config | Serving. Nothing in it is what you would edit the project with |
 | **Export project** (`.idlewild`) | the manifest, `doc.json`, `thumbnail.png`, `psd/`, `assets/`, `game/` | Opening somewhere else and carrying on |
+| **Export Assets** (`.zip`) | the chosen keys' `psd/<key>.psd`, `assets/<key>/…`, or both | Taking the artwork somewhere that is not a game |
 
 A published site cannot give back the file a sprite was drawn in. That is the
 whole reason the second format exists, and why `psd/` is in one and not the
 other.
 
-Both are written straight to the path the save dialog returned
-(`publish_site`, `export_project`). The site export used to come back across
-the IPC boundary as base64 and be written by `save_bytes`; an archive carrying
-every processed asset — let alone every source PSD — has no business being a
-string in a JSON message first.
+All three are written straight to the path the save dialog returned
+(`publish::publish_site`, `archive::export_project`,
+`export_assets::export_assets_zip`, each living with the code that builds it the
+way `game_files`'s commands do). The site export used to come back across the IPC
+boundary as base64 and be written by `save_bytes`; an archive carrying every
+processed asset — let alone every source PSD — has no business being a string in
+a JSON message first.
+
+### Export Assets, and why it is not a mode of Publish
+
+The first two are all-or-nothing and both hand back something only a program can
+read. What was missing is the pictures: the sprite sheets a tileset was sliced
+into, for another engine or a document, and the source PSDs, so a file drawn on an
+iPad opens on a desktop. Neither is a *publish* — nothing about it runs — so it is
+a menu item beside Publish rather than a third row inside it.
+
+So the sheet asks two questions and nothing else. **Which files**, as a list with
+a checkbox each, everything ticked to begin with because "all of them" is the
+common answer and un-ticking three is less work than ticking twelve. And **what of
+them** — assets, PSDs, or both — as one segmented control rather than two
+checkboxes, because two boxes let somebody tick neither and find out at the far
+end of a save dialog.
+
+It lists what is in `psd/` rather than what the document places
+(`export_assets::list`). A file whose placement has been deleted is still a file
+somebody drew, and artwork is the one thing this export exists to rescue; the
+document's own list would quietly refuse to hand back the only copy of it. A file
+the pipeline has never run over says so on its row, because it has no generated
+half to give.
+
+Inside the archive the paths are **the store's own** — `psd/<key>.psd` and
+`assets/<key>/…` under the project's sanitised name — because that layout is
+already described everywhere else in this app and a second one invented for the
+zip would be a second thing to learn.
+
+A key the project has not got is **skipped**, not failed on: the list came from a
+picker, so the only way to ask for a missing one is to have deleted it between
+opening the sheet and pressing the button, and losing the other nine files to
+that is not a trade worth making. What *is* refused is an archive that would come
+out empty — neither half chosen, no files chosen, or every chosen key missing —
+because a zip somebody has to open to discover was empty is worse than one that
+did not happen.
 
 ### The format
 
@@ -2135,6 +2267,45 @@ open would put Idlewild in macOS's "Open with" for a file it then ignores; the
 declaration and the `RunEvent::Opened` / deep-link handling behind it belong
 together, and neither has been exercised on either platform yet.
 
+## Select, on the home screen
+
+Rename, duplicate and delete have always been a card's long-press menu, one card
+at a time. That is right for rename, which is about one thing by definition, and
+wrong for the other two the moment there is a shelf of experiments: clearing out
+six was six long presses and six confirmations, and the confirmation is the part
+that makes it feel like six separate decisions rather than one.
+
+**It is a mode of the grid, not a modifier on a press.** There is no ⌘-click on an
+iPad and no rubber band over a grid of cards, so the honest shape is a switch:
+while it is on, a tap picks a card instead of opening it, every card carries a box
+in the corner of its thumbnail, and the long-press menu stands down. The row that
+normally says how to reach that menu carries All, None, the tally, Duplicate,
+Delete and Done — the *same strip of screen* either way, so turning the mode on
+does not move the cards under the finger that turned it on. The tick and the
+disabled buttons are drawn rather than hidden for the same reason.
+
+The mode is read at press time, not captured when a card is built: the grid is
+rebuilt on every reload, and a handler that closed over the mode would be a card
+built in one mode and pressed in another. Leaving the mode drops what was picked,
+because a selection held over no way to see it is a selection that acts on the
+next press somebody makes; a reload drops the ids of projects that have gone,
+however they went.
+
+`home-select.ts` is the two bulk actions, and both are **sequential**.
+Duplicating a project copies its source PSDs and its processed assets, and six of
+those at once is six concurrent walks of the same store. A failure part-way
+through does not abandon the rest — five copied and one refused is a better answer
+than one copied and five silently dropped, which is what a `Promise.all` would
+give — and the console says how many landed rather than one line per copy, which
+would be the shape of the loop rather than of what was asked for.
+
+A bulk delete **asks once**. It names the projects while the list is short enough
+to read and counts them when it is not: "these 14 projects" is a number somebody
+can check, and fourteen titles is a wall nobody reads. Declining is answered
+differently from deleting nothing — `null` rather than `0` — because the home
+screen has to tell "you said no" from "all six failed": the first keeps the
+selection lit for another try, and the second has nothing left to keep.
+
 ## Testing
 
 `cargo test --lib` covers the load-bearing path: RGBA → PSD → psd-to-json →
@@ -2143,7 +2314,12 @@ export's config carries, the whole of a layer's eye — an edit hides it, the
 file comes back hidden, the manifest says so, a rewrite that says nothing
 leaves it alone, and a second extrude Apply does not switch it back on — the shapes a file picker hands back, and the order a
 manifest lists a PSD's layers in — which the frontend mirrors and cannot check
-for itself. The project's options are next door in `tests/options.rs`: that an
+for itself. `tests/exports.rs` holds what leaving with a project *takes*, split
+from the scaffold tests along that seam: the document in the shape the game
+reads, the spaces every placed PSD blocks, a document too broken to read, and
+Export Assets — that it takes the files and the halves it was asked for and
+nothing else, and that an archive which would come out empty is refused with a
+sentence rather than written. The project's options are next door in `tests/options.rs`: that an
 unticked character controller means no prefab and no `spawnCharacter` rather
 than one that is never called, that no conditional marker survives into a
 project's own files either way, that a Reset asks for the scaffold the project
@@ -2173,8 +2349,11 @@ what a manifest says is hidden and what a placement records about it,
 undo's three answers about a write and what a restored document is,
 what each canvas mode counts as one step of its own, whether a selection still
 names something, the unit arithmetic
-behind a placed PSD, what the clipboard hands a paste and where that paste
-lands, what a failed clipboard read says happened and which of a dragged
+behind a placed PSD and how many objects share one of its files, how a texture
+is keyed and what dropping a PSD's is allowed to reach, that Make Unique moves
+every layer of the object rather than the row that was selected, what the
+inspector remembers about a folded section, what a bulk delete asks and how it
+answers a no, what the clipboard hands a paste and where that paste lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest
 reader, the platformer's body step, the docs panel's markdown rendering and
 its two kinds of lookup, what a project with no options of its own renders as,
@@ -2182,8 +2361,9 @@ and the drawing layer's ported maths. The handful of CSS declarations that are
 load-bearing for input are asserted as text — the drawing surface's
 positioning, the code panel's four placements, where a docked rule that
 stopped taking the panel out of `position: absolute` would look like a panel
-that had covered the editor, and the minimap's `touch-action`, without which
-an iPad takes a drag on the map as a scroll of the sidebar it is in.
+that had covered the editor, the minimap's `touch-action`, without which
+an iPad takes a drag on the map as a scroll of the sidebar it is in, and that the
+minimap is down in both of the modes that run the game over the canvas.
 The last two earn their place: a slice that cuts in the wrong spot or a lasso
 that misses is a tool that does not work, and a body that catches on the seam
 between two floor tiles is a game that does not work. Neither shows up in a
@@ -2264,6 +2444,42 @@ a polygon, both addressed in world coordinates no layer owns, so moving one
 between layers is a change of draw order and the reorder above already covers
 it.
 
+## The inspector's sections fold
+
+The panel describes one thing at a time, and the thing it describes can be
+several screens of it: a placed PSD carries Info, Transform, its collider, its
+own layer stack and — on a pattern layer — the rule and its shapes. Most of the
+time only one of those is being worked on, and scrolling past four headings to
+reach the fifth is the whole of the complaint.
+
+**The fold is applied to the finished panel, not written into each section.**
+Sections are built in seven files — `inspector.ts`, `inspect-panels.ts`,
+`inspect-placement.ts`, `inspect-collider.ts`, `inspect-pattern.ts`,
+`inspect-background.ts`, `psd-layers.ts` — and threading one through all of them
+would be seven copies of the same three lines with an eighth forgetting. What
+makes one pass over the DOM honest is that the markup already says which sections
+have a heading: `inspect-collapse.ts` folds a `.inspect-section` whose **first**
+child is an `.inspect-section-title`, and leaves everything else alone. A section
+with no heading — the row of buttons at the foot of a panel — is not something to
+hide behind a name it has not got.
+
+Two sections used a heading as a *sub-label* rather than as their own name — the
+pattern's Density and Repeat boundary, and a gradient's From, To and Direction —
+and are now separate sections, because a heading that is not a section's own is a
+heading that closes its neighbours with it.
+
+What is folded is state of the **panel**, not of the document, so it is
+per-install like a sidebar's width and keyed on the section's **name**: close
+Collider once and it stays closed for the next PSD you select, which is the
+reason to close it. A heading that counts in itself — `Shapes · 2` — is keyed on
+the part before the count, or adding a shape would reopen it. The set is held in
+memory as well as in `localStorage`, because the panel rebuilds on every document
+change and a drag rebuilds it per pointer move.
+
+The pass is idempotent — a section it has been over carries
+`data-collapsible` — which matters because the PSD layer list is built once and
+kept across re-renders, so the same element comes back round.
+
 ## Selection
 
 Hit-testing reads the **document**, not the rendered Phaser objects
@@ -2343,17 +2559,29 @@ Placing a PSD makes one placement per placeable layer — that is what
 psd-to-phaser hands back and what the inspector needs in order to talk about a
 stack. But a file with three layers in it is still *one thing someone dropped
 on the grid*, and dragging a roof off its tower is almost never what was
-meant. So the placements one `placePsd` call produces share an `instance` id,
-and the canvas works on the instance by default: selecting any member selects
-the unit, the overlay draws the union of their boxes, and a drag moves every
-member by the same cell step.
+meant. So the placements one `placePsd` call produces share a **unit**, and the
+canvas works on the unit by default: selecting any member selects the unit, the
+overlay draws the union of their boxes, and a drag moves every member by the
+same cell step.
 
-`game/instance.ts` is the whole of the model — `instanceOf`, `instanceMembers`,
+**A unit is not an instance**, and the two are kept apart for the reason the two
+senses of "layer" are. A unit is the layers of *one* placed PSD: how many
+rectangles move when you drag. An *instance* is one of several placed PSDs
+reading the *same file*: how many things on the grid an edit to that file would
+change. One file can stand on the grid as three units of three layers each;
+every one of those units is an instance of the file, and every placement belongs
+to exactly one unit. See **Instances** below.
+
+`game/unit.ts` is the whole of the model — `unitOf`, `unitMembers`,
 `unionRect`, `scaleWithin` — and it is pure, so the arithmetic is tested
-without a canvas. `instance` is optional on disk, because documents written
-before it existed have none; `instanceOf` falls back to the placement's own
-id, which makes such a placement a unit of one, and the scene migrates whole
-documents on load so the fallback is a floor rather than the usual path.
+without a canvas. The unit's id is stored on a placement as `instance`, which is
+the older name and stays on disk: renaming a field that every document in every
+project carries, and that the exported game reads, to say the same thing a
+different way is not a trade worth making, and every reader comes through
+`unitOf`. It is optional there, because documents written before units existed
+have none; `unitOf` falls back to the placement's own id, which makes such a
+placement a unit of one, and the scene migrates whole documents on load so the
+fallback is a floor rather than the usual path.
 
 **Resizing scales the members, it does not scale a group.** Each placement is
 an independent rectangle in the document, so a member's offset inside the unit
@@ -2365,7 +2593,7 @@ it is the shared anchor that brings them back in the same arrangement after a
 re-import.
 
 **Double-tapping opens a unit up.** In that mode — `adjusting`, holding the
-instance id — a drag moves the one layer under the finger, the overlay
+unit id — a drag moves the one layer under the finger, the overlay
 outlines it with filled handles and draws its siblings faintly, and the
 inspector says so and offers a way out. Selecting anything outside the unit
 closes the mode, so it never outlives what it is about: `setSelection` clears
@@ -2375,7 +2603,7 @@ survive a *tap that was offered to the drag controller first*, which is why
 not as a tap.
 
 Carrying a placed PSD to another layer in the left panel takes the unit with
-it, `instance` and all. The panel lists one row per placed *file* rather than
+it, its id and all. The panel lists one row per placed *file* rather than
 one per layer inside it, so what the gesture picks up is the file — see
 **Two senses of "layer"** below.
 
@@ -3271,10 +3499,10 @@ PSD and the inspector builds its layer list from that selection, so a record
 written afterwards arrives too late for the row that offers the way back in.
 
 **Keyed by the file, not carried on a placement**, because that is what the
-shape is a fact about: two placements of one PSD are two views of the same
+shape is a fact about: two instances of one PSD are two views of the same
 solid, and continuing either rewrites the file both draw. A rename moves the
-record with the file and Remove Reference copies it to the new key, for the
-same reason.
+record with the file and Make Unique copies it to the new key, for the same
+reason.
 
 **The record keeps the anchor it was written at.** A placement that has been
 dragged since is now some number of spaces from where its voxels were
@@ -3422,10 +3650,10 @@ something to walk through.
 ### It is a fact about the file, and it is stored as offsets
 
 `GameDoc.colliders` is keyed by PSD key, beside `extrusions` and for the same
-reason: two placements of one file are two views of the same thing, and a tree
-that blocks the space it stands on blocks it wherever it is put. A copy made
-by Remove Reference takes the collider with it and the two part company from
-then on, which is what breaking a reference means everywhere else.
+reason: two instances of one file are two views of the same thing, and a tree
+that blocks the space it stands on blocks it wherever it is put. A copy made by
+Make Unique takes the collider with it and the two part company from then on,
+which is what Make Unique means everywhere else.
 
 The spaces are **offsets from the anchor** — `{cx: 0, cy: 0}` is the space the
 artwork hangs from. That is what lets a placement be dragged without anything
@@ -4359,11 +4587,12 @@ console is a record of what happened rather than a document.
 - A pattern shape drawn with the pencil is baked to cells when it is made and
   never re-baked. Changing the grid size afterwards leaves the spaces where
   they were rather than following the line that produced them.
-- Two PSDs with a same-named layer collide in Phaser's texture cache: P2P
-  keys textures on the layer name unless loaded via `loadMultiple`. Reloading
-  one of them now leaves the shared texture alone rather than blanking the
-  other, so the collision shows as the wrong artwork rather than none — but it
-  is still a collision.
+- Two PSDs with a same-named **mask** still collide in Phaser's texture cache.
+  Artwork no longer does — every load goes through `loadMultiple`, which keys a
+  texture on the PSD as well as the layer — but `place` looks a mask up as
+  `<name>_mask` on both of the plugin's loading paths, so there is no key to
+  scope it under. Masks are rare, and a shared one is a wrong shape rather than a
+  missing picture. See **The texture keys**.
 - A placed group is still a Phaser Group rather than a Container. Its parts
   are positioned and scaled one at a time, from the offsets they were made
   at, which is what makes a composition move and resize as one — but there is
