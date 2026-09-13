@@ -2355,6 +2355,205 @@ it, `instance` and all. The panel lists one row per placed *file* rather than
 one per layer inside it, so what the gesture picks up is the file — see
 **Two senses of "layer"** below.
 
+## Three kinds of layer
+
+A layer says what it is *for*, and that decides what putting a PSD on it
+means. `LayerKind` is `"object" | "pattern" | "background"`, and everything
+that reads it goes through `layerKind()` in `lib/layer-kinds.ts`.
+
+**Absent is object.** Every layer in every document written before there was
+more than one kind has no `kind` field, and every one of them is an object
+layer — the reading the whole editor was written against. So the migration is
+a default rather than a rewrite: nothing walks the document on open, nothing
+is written back, and a project opened by an older build still reads. A layer
+made *now* writes `"object"` out even so, so nothing downstream has to tell
+"old" from "deliberately an object".
+
+The types are in `types.ts`, beside the rest of the document's shape; the
+functions over them are `lib/layer-kinds.ts`, which the store reaches through
+one hatch — `DocStore.editLayer`. That split is the line rule and a real seam
+at once: the store is about the document, and what a *kind* of layer holds is
+a different question it has no opinion on.
+
+### An object layer's one rule
+
+A placed PSD needs `P | anchor` at the **root** of its stack. Without it the
+row greys out and says *No anchor*, under the layer and in the inspector.
+
+Not the same question `manifest.anchor` answers. That one finds the mark
+wherever it is, because a file whose author tucked it inside a folder should
+still land where they put it. `hasRootAnchor` is the *rule*: the mark has to be
+a top-level layer, where anybody opening the file sees it and nothing else in
+the stack can hide it, turn it off, or take it away by being deleted.
+
+It is not a refusal, and that is deliberate. The artwork is placed and it
+draws; what it cannot do is come home from Photoshop lined up on the same
+space, because there is nothing in the file to line up on — `anchorOffset`
+falls back to the canvas centre, which moves the moment anyone crops. That is
+worth saying where the file is listed and not worth throwing artwork away
+over. The grid footprint stays optional for the same reason it always was: it
+is an orienting mark, not a fact anything reads back.
+
+**Asked, not cached.** `PsdPlacements.anchored` reads psd-to-phaser's own copy
+of the manifest — `getData(key).original` — rather than a field on the
+placement. A cache would have to be kept in step through a re-import, a
+rewritten layer stack and a rename, three edits that can each take the mark
+away, and a stale *anchored* is exactly the reassurance this exists to
+withhold. A key that has not loaded answers **true**: the panel greys a row to
+say a file is wrong, and saying so about a file nobody has read yet would put
+the warning on every row for the first second of every session. `onPsdsLoaded`
+is what re-renders the panels once the manifests are in — nothing in the
+document moves when they arrive, so the change event the panels normally
+listen to never fires.
+
+The rule is an object layer's alone. A pattern layer's placements are a
+palette and a background layer's are scenery; neither is a thing standing on a
+grid space, so neither has anywhere to be anchored *to*.
+
+### A pattern layer holds a rule, not a scene
+
+There is no world bound in this editor to fill. The lattice is recomputed from
+the camera over exactly the cells the viewport can see, and a pattern has to
+be able to do the same — so what is stored is four numbers and a list of
+shapes, and what falls where is worked out on demand.
+
+`PatternSpec` is the type: an arrangement (`random` or `grid`), a density, a
+repeat in grid spaces, a seed, and the shapes it is confined to. `lib/pattern.ts`
+is the generator, and it is asked *what falls in this repeat tile* one tile at
+a time. The tile's own coordinates are part of the seed, which is what buys
+three things at once: the same space answers the same way whatever route the
+camera took to get there, so panning never re-rolls the pattern under you;
+`patternInstances` over a wide range and over a narrow one inside it agree
+exactly, so the edge of the viewport is not a seam; and the exported game
+regenerates the arrangement from the same four numbers rather than being
+shipped ten thousand positions.
+
+**The placements on a pattern layer are its palette.** They are what the
+pattern is made of rather than things standing anywhere, so nothing reads the
+`x`/`y` a placement carries as a position — what is read is the *offset* from
+the space the file was anchored to, which is what makes a copy of a tree stand
+on its space exactly the way the original did. It is also the only reading
+under which the inspector's size controls mean anything there: resizing the
+file resizes every copy of it. `doc-renderer.ts` and the minimap both skip
+those placements, and so does the scaffolded `placeDocument`; drawing them
+where the document holds them would put one of every element in a heap on the
+anchor space, underneath the pattern made of them.
+
+`game/pattern-render.ts` makes copies as they come into view and destroys them
+as they leave, keyed by tile and index, so panning back over ground you have
+already crossed re-uses what is there. `MAX_ON_SCREEN` is a ceiling rather
+than a budget: a density typed one digit too long is four thousand Phaser
+groups, and the difference between a slow pan and an editor that has stopped
+answering is whether anything said no. The console says when it bites, because
+a pattern that silently stops half way across the screen looks like a bug in
+the pattern.
+
+**Nothing on one is picked on the canvas.** `picking.ts` makes a pattern layer
+inert to the pointer, for the reason a locked one is but a different one:
+there is no single object under the pointer for a tap to *name*. The copies
+belong to no record. A pattern layer is reached from the sidebar, which is
+where the thing it holds actually is.
+
+**The repeat follows the type while it is still a default.** Switching from
+random to grid brings grid's own 10 × 10, because 20 × 20 is what a scatter
+arrives with rather than a number anybody chose — but a repeat somebody typed
+is theirs, and switching type is not a reason to throw it away. The same
+distinction a collider draws between a guess and an answer, and `edited` is
+what a collider uses; here the test is whether the numbers are still the ones
+the old type ships with.
+
+### Shapes, and why a drawn one is baked
+
+An empty shape list means everywhere, which is the default and the whole of
+what makes a fresh pattern layer infinite. A shape in it confines the pattern
+to the spaces it covers.
+
+Two ways to make one, because there are two ways to say "here". The long-press
+selection every other part of this editor asks space with gives a run of grid
+spaces, and the floating bar grows a **Pattern Shape** button while the active
+layer is a pattern layer — the one button there that is not about turning
+space into content. The pencil gives an outline, through the same
+`strokesToZonePoints` a boundary is made from, because a shape only has to be
+accurate to the space it confines.
+
+A drawn shape is **baked down to cells** when it is made — `cellsInPolygon` —
+and keeps its outline beside them. What a pattern asks of a shape is *is this
+space inside*, once per element per frame, and a point-in-polygon walk over a
+few hundred vertices at that rate is the difference between a pan and a stall.
+The outline is kept so the canvas can draw the line somebody actually drew.
+A shape carrying only an outline — which only a hand-edited document could
+hold — confines the pattern to **nothing** rather than to everything, since
+the alternative is a shape list that silently stops confining anything.
+
+Both halves are two gestures rather than one control, so the request is held
+in `editor/pattern-actions.ts`: which layer asked, cleared the moment an
+answer arrives. That held request is also what decides whether the two
+*finishing* buttons appear at all — on a project with no pattern layer they
+would be buttons with nowhere to put their answer.
+
+### A background layer is the backdrop
+
+`Background` is a colour or a gradient, and both are camera-locked with no
+extent: a backdrop is wherever the camera is looking, which on a world with no
+edge is the only reading that never eventually shows its own. So there is
+nothing to position and nothing to size, and the inspector offers colours and
+a direction and nothing else.
+
+`game/background-render.ts` draws the camera's own `worldView` rather than
+using `setScrollFactor(0)`. A scroll factor of zero pins an object to the
+camera but not to its *zoom*, so a backdrop sized to the viewport in screen
+pixels shrinks away from the corners the moment anybody zooms out. Following
+the world view is the same answer with none of that. Gradients go in as
+Phaser's four corner colours, each corner sampled off the gradient's own axis
+— which is what makes an angle mean anything at all through an API that only
+takes four colours.
+
+**An image background is a placement, not a record.** A picture painted in
+Photoshop is a thing of a certain size standing in a certain place, which is
+what a `Placement` already is, and the editor and the exported game both
+already load, place, scale and stack one. A second kind of record holding the
+same key would be two things to keep in step for nothing. What makes it a
+background is the layer it is on.
+
+The file is written in Rust — `psd_background.rs` — and no pixels cross the
+bridge. Thirty tiles by ten at psd-to-json's 512px slice is a 78-megapixel
+RGBA buffer, and base64 of that is four hundred megabytes of string through
+an IPC bridge. Zeroed pages cost almost nothing to allocate and compress to
+almost nothing in the file, so the one place the size is real is
+`MAX_BACKGROUND_PIXELS`, which turns "sixty by forty" from an allocation
+nobody recovers from into a sentence naming the limit.
+
+It is anchored on the origin space with its **top-left** on it rather than
+centred the way an imported image is: a backdrop has an opinion about where it
+begins and none about where its middle is, and a strip thirty tiles wide
+centred on the origin would start fifteen tiles off the left of everything
+anybody has built.
+
+### What the exported game is told
+
+`game_config.rs` carries `kind` on every layer — written out as `"object"`
+where the document is silent, so no reader of the file has to know that absent
+means object — plus the pattern's rule and a background layer's backdrops.
+Both ride through opaque: a pattern is a rule the scene's own code runs, and a
+backdrop is two colours and an angle, so passing them along is the whole of
+what Rust has to do with them.
+
+The scene templates gain three marked blocks: `paintBackgrounds`,
+`placePatterns`, and `patternRule` — the generator itself, mirroring
+`lib/pattern.ts` line for line. The generator is **in the scene file** rather
+than in `js/shared/`, which is the one thing here that looks like a mistake
+and is not. A project's `game/` tree is its own copy and only `addMissingBlocks`
+can carry a new feature into one that predates it; an import at the top of
+`WorldScene.js` is outside every block, so a helper in another file could
+never reach a project made before today. `drawOrder`, `applyDepth`,
+`applyScale` and `applyHidden` are already duplicated per genre for the same
+reason.
+
+Keep the two copies in step. The same rule the editor drew has to come out of
+the game, or Play shows a different world from the one you built —
+`lib/__tests__/pattern.test.ts` pins the contract both depend on rather than a
+screenshot of the numbers.
+
 ### Two senses of "layer", and why the panels must not mix them
 
 A **document layer** is Phaser's idea: draw order and visibility over anything
@@ -3923,7 +4122,24 @@ console is a record of what happened rather than a document.
 ## Known gaps
 
 - Pattern fills store their PSD key and render as a tint; the texture is not
-  yet sampled into the fill.
+  yet sampled into the fill. That is a *fill*, not a pattern layer — the two
+  share a word and nothing else.
+- A pattern layer is absent from the minimap in both directions: its
+  placements are a palette standing nowhere, so drawing them would show a
+  heap of elements on one space, and the pattern made of them reaches
+  everywhere, so there is nothing about it a map of where your work *is*
+  could usefully frame.
+- A pattern's elements are placed one Phaser group at a time, which is what
+  `MAX_ON_SCREEN` exists to bound. A scatter dense enough to matter wants a
+  blitter or a render texture, and at that point the ceiling becomes a
+  performance note rather than a wall.
+- An image background is written as a canvas of whole tiles with one clear
+  sprite layer inside `T | Background`. Nothing samples what the artist
+  paints back into a *smaller* file, so a backdrop asked for at thirty tiles
+  stays thirty tiles wide however much of it is left transparent.
+- A pattern shape drawn with the pencil is baked to cells when it is made and
+  never re-baked. Changing the grid size afterwards leaves the spaces where
+  they were rather than following the line that produced them.
 - Two PSDs with a same-named layer collide in Phaser's texture cache: P2P
   keys textures on the layer name unless loaded via `loadMultiple`. Reloading
   one of them now leaves the shared texture alone rather than blanking the
