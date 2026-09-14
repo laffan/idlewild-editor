@@ -395,21 +395,21 @@ describe("drawOrder", () => {
   /**
    * One PSD's worth: ground at the back, then walls, then the roof.
    *
-   * `row` is the space it stands on — `cx + cy` on an isometric grid, which
-   * counts rows away from the camera. The artwork's own Y follows it, the way
-   * a real placement's does, and the three parts sit at different heights up
-   * the screen: the roof is *above* the ground it belongs to, which is the
-   * whole reason a unit sorts as one thing rather than layer by layer.
+   * `base` is where the thing's *feet* are — the bottom of the artwork, which
+   * is the corner of its footprint nearest the camera and what the isometric
+   * ordering sorts on. The three parts sit at different heights up the screen
+   * from it, which is the whole reason a unit sorts as one thing rather than
+   * layer by layer: the roof is a hundred pixels above the ground it belongs
+   * to and must not be ordered against it.
    */
-  function unit(id: string, row: number): Placement[] {
-    const y = row * 16;
-    const at = (name: string, dy: number, order: number): Placement => ({
-      ...placement(name, 0, y + dy),
-      anchor: { cx: row, cy: 0 },
+  function unit(id: string, base: number): Placement[] {
+    // Every part is 100 tall, so a part's own bottom is `y + 100`.
+    const at = (name: string, above: number, order: number): Placement => ({
+      ...placement(name, 0, base - 100 - above),
       instance: id,
       order,
     });
-    return [at(`${id}-roof`, 0, 2), at(`${id}-walls`, 30, 1), at(`${id}-ground`, 70, 0)];
+    return [at(`${id}-roof`, 70, 2), at(`${id}-walls`, 40, 1), at(`${id}-ground`, 0, 0)];
   }
 
   it("draws a PSD's layers in the order its author stacked them", () => {
@@ -432,43 +432,57 @@ describe("drawOrder", () => {
     ]);
   });
 
-  it("sorts separate PSDs on the row they stand on, nearer in front", () => {
+  it("sorts separate PSDs on where they stand, nearer in front", () => {
     const far = unit("far", 0);
-    const near = unit("near", 12);
+    const near = unit("near", 200);
     const order = drawOrder([...near, ...far], true).map((p) => p.id);
     expect(order.slice(0, 3)).toEqual(["far-ground", "far-walls", "far-roof"]);
     expect(order.slice(3)).toEqual(["near-ground", "near-walls", "near-roof"]);
   });
 
   /**
-   * The bug the row key exists for. A tower's roof is high up the screen and
-   * a bush in front of it is not, so sorting on the top of the artwork put
-   * the tower — which is standing further back — in front of the bush.
+   * A tall thing standing behind a short one. Sorting on the *top* of the
+   * artwork put the tower in front, because its roof is high up the screen and
+   * a bush behind it is not — and the tower's feet are what say where it is.
    */
-  it("does not put a tall thing in front because its roof is tall", () => {
-    const tower: Placement[] = [
-      { ...placement("tower", 0, -400), anchor: { cx: 0, cy: 0 }, instance: "t", order: 0 },
-    ];
-    const bush: Placement[] = [
-      { ...placement("bush", 0, 90), anchor: { cx: 3, cy: 0 }, instance: "b", order: 0 },
-    ];
-    expect(drawOrder([...bush, ...tower], true).map((p) => p.id)).toEqual([
-      "tower",
+  it("does not put a tall thing in front because it is tall", () => {
+    // Feet at y = 0 either way: the tower is 400 tall, the bush 20.
+    const tower = [{ ...placement("tower", 0, -400), height: 400, instance: "t" }];
+    const bush = [{ ...placement("bush", 0, -60), height: 20, instance: "b" }];
+    expect(drawOrder([...tower, ...bush], true).map((p) => p.id)).toEqual([
       "bush",
+      "tower",
     ]);
   });
 
-  /** Two things on the same row: neither is nearer, so placement order wins. */
+  /**
+   * The one the *anchor* key got wrong. A building's anchor is the middle of
+   * its footprint, so a character walking through it swapped over half way
+   * along; the near corner is the bottom of the artwork, and nothing that
+   * stands further back than that may sort in front of it.
+   */
+  it("sorts a wide thing on its near corner, not on its middle", () => {
+    // A building whose base sweeps from y = 0 down to y = 160, and a post
+    // standing at y = 100 — inside the building's ground, so behind it.
+    const hall = [{ ...placement("hall", 0, -200), height: 360, instance: "h" }];
+    const post = [{ ...placement("post", 0, 60), height: 40, instance: "p" }];
+    expect(drawOrder([...post, ...hall], true).map((p) => p.id)).toEqual([
+      "post",
+      "hall",
+    ]);
+  });
+
+  /** Two things whose feet are level: neither is nearer, so order wins. */
   it("leaves a tie in the order it was given", () => {
-    const a = unit("a", 5);
-    const b = unit("b", 5);
+    const a = unit("a", 120);
+    const b = unit("b", 120);
     const order = drawOrder([...a, ...b], true).map((p) => p.id);
     expect(order[0]).toBe("a-ground");
     expect(order[3]).toBe("b-ground");
   });
 
   it("leaves separate PSDs in the order they were placed where nothing snaps", () => {
-    const first = unit("first", 18);
+    const first = unit("first", 300);
     const second = unit("second", 0);
     const order = drawOrder([...first, ...second], false).map((p) => p.id);
     expect(order[0]).toBe("first-ground");

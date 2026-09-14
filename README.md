@@ -63,11 +63,13 @@ remaining pieces are wired to real slots rather than mocked.
   was lines in a file and the file is yours from the moment it is written
 - On an **isometric** project the character sorts itself into the scene as it
   walks, so it goes behind a tree it is standing behind and in front of one it
-  is standing in front of — the same ordering everything placed on the layer
-  is already in, which is the space each thing stands on rather than how tall
-  its artwork is. It walks among the front-most object layer, which is one
-  line in the scene to change: anything on a layer in front of that draws over
-  it always, which is how you get a canopy to walk under
+  is standing in front of. The line it crosses is the one straight up from the
+  corner of a thing's footprint nearest you — where the two visible faces of a
+  box meet — which is the bottom of its artwork and the same footprint its
+  collider is derived from, so what you walk behind and what you walk around
+  agree. It walks among the front-most object layer, which is one line in the
+  scene to change: anything on a layer in front of that draws over it always,
+  which is how you get a canopy to walk under
 - A full-width header carrying the project, undo and redo, and the
   **Draw / Code / Play** toggle, with Publish, Export Assets and Project Options
   behind its menu. It insets itself out of the iPad's status bar, as the console drawer

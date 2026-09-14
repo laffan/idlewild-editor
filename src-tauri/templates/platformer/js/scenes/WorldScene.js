@@ -370,28 +370,26 @@ function drawOrder(placements, isometric) {
   }
 
   if (isometric) {
-    // The space a unit *stands on*, not the top of its artwork.
+    // The **nearest ground point** of the unit: the bottom of its artwork.
     //
-    // On an isometric grid `cx + cy` counts rows away from the camera, so it
-    // is the whole of "which of these two is nearer" — and it is a fact about
-    // the ground rather than about how tall a thing is. Sorting on the
-    // artwork's top edge put a tower behind a bush it was standing in front
-    // of, because the tower's roof is high up the screen and the bush is not.
-    // It is also the key anything that *walks* can compute for itself, which
-    // is what lets a character sort into this order; see `sortCharacter`.
+    // Which is the corner of its footprint closest to the camera — the one
+    // where the two visible faces of a box meet — and the line straight up
+    // from it is where a thing passing by stops being behind and starts being
+    // in front. `y + height` is that point for anything standing on the
+    // ground, and it agrees with the collider by construction: a default
+    // collider is "the spaces its base covers", derived from the same edge.
     //
-    // The old key is the fallback for a placement with no anchor, which no
-    // document the editor writes has.
-    const row = (unit) => {
-      const anchor = unit[0].anchor;
-      return anchor
-        ? anchor.cx + anchor.cy
-        : Math.min(...unit.map((p) => p.y));
-    };
-    // A stable sort, so two units standing on the same row keep the order
-    // they were placed in — which is the only answer available and the one
-    // the editor's panel shows.
-    units.sort((a, b) => row(a) - row(b));
+    // The two keys this replaced were both wrong, in opposite directions. The
+    // artwork's *top* is a fact about how tall a thing is, so a short thing
+    // standing behind a tall one drew in front of it. The unit's *anchor* is
+    // the space it hangs from, which on a footprint more than one space across
+    // is the middle of it — so a character walking through a building popped
+    // in front half way along.
+    const near = (unit) => Math.max(...unit.map((p) => p.y + p.height));
+    // A stable sort, so two units whose near corners are level keep the order
+    // they were placed in — which is the only answer available and the one the
+    // editor's panel shows.
+    units.sort((a, b) => near(a) - near(b));
   }
 
   return units.flatMap((unit) =>

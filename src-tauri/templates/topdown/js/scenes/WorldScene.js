@@ -184,13 +184,10 @@ export class WorldScene extends Phaser.Scene {
           applyHidden(object, placement);
         }
       });
-      // The same list, as rows: one number per step, already in order, so a
+      // The same list, as nearest ground points — one number per step, so a
       // character can find its own place in it without re-sorting anything.
       if (sortOnY && index === walkLayer) {
-        this.walkAmong = {
-          base: depth * 1000,
-          rows: order.map((p) => (p.anchor ? p.anchor.cx + p.anchor.cy : 0)),
-        };
+        this.walkAmong = { base: depth * 1000, near: nearPoints(order) };
       }
     });
   }
@@ -387,7 +384,7 @@ export class WorldScene extends Phaser.Scene {
   sortCharacter() {
     if (!this.walkAmong || !this.character) return;
     this.character.sprite.setDepth(
-      walkDepth(this.walkAmong, this.character.sprite.y, this.grid.tileHeight / 2),
+      walkDepth(this.walkAmong, this.character.sprite.y),
     );
   }
   // idlewild:end if
@@ -467,45 +464,76 @@ function contains(box, p) {
 /**
  * Where something standing at screen `y` sorts among a layer's placements.
  *
- * On an isometric grid the thing further down the screen is the thing nearer
- * the camera, and a cell's `cx + cy` counts exactly that — so everything on
- * the walk layer is already in a list ordered by it (`placeDocument` records
- * the rows as it places), and finding a character's place in that order is
- * finding where its own row belongs in that list.
+ * Everything on that layer is already in a list ordered by its **nearest
+ * ground point** — the bottom of its artwork, which is the corner of its
+ * footprint closest to the camera, and the line straight up from that corner
+ * is where passing it stops meaning behind and starts meaning in front. See
+ * `drawOrder`. `placeDocument` keeps those numbers as it places, so finding a
+ * character's place in the order is finding where its own ground point belongs
+ * among them.
  *
- * **The row comes from a screen position, not from a cell.** A character's
- * `cell` is as much where it is walking *to* as where it is, and one taking
- * its depth from its destination would pop behind the tree it is about to pass
- * the moment you tapped. On an isometric grid `y` is `(cx + cy) × half a
- * tile`, so dividing that back out gives a row that moves continuously as the
- * tween does: it slides through the ordering rather than snapping through it a
- * space at a time.
+ * Plain world Y on both sides, which is what makes it one comparison rather
+ * than a projection. An object's is the bottom of what it drew; a character's
+ * is where it is standing — `sprite.y`, which for the template's centred
+ * rectangle is the middle of the space it is on, and for a sprite given its
+ * feet as an origin is the feet. Both are the point it touches the ground at,
+ * which is the only thing being compared.
+ *
+ * **The position comes off the sprite, not off a cell.** A character's `cell`
+ * is as much where it is walking *to* as where it is, and one taking its depth
+ * from its destination would pop behind the tree it is about to pass the
+ * moment you tapped. The sprite's own Y moves with the tween, so it slides
+ * through the ordering rather than snapping through it a space at a time.
  *
  * A binary search rather than a scan, because this runs every frame and the
- * list is everything on the layer. `<=` puts the character *in front of*
- * whatever shares its row, which is the right way round — you are standing at
- * that space, not behind it.
+ * list is everything on the layer. `<=` counts a placement level with the
+ * character as behind it, which is the right way round: level means beside,
+ * and the thing you are beside is the thing you have drawn past.
  *
- * The sliver it is nudged down by is what keeps it out of anybody else's
- * slot, and it has to be a sliver rather than a half. Placement `k` sits at
- * `base + k`, and `applyDepth` spaces the parts of a multi-layer PSD across
- * the *whole* interval above it — `(rank + 1) / (parts + 1)`, which for a
- * three-layer building is 0.25, 0.5 and 0.75. So half a step down from
- * `base + k` is not the gap between two placements, it is the gap between
- * somebody's walls and their roof, and a character put there is drawn inside
- * the building. A thousandth clears the highest part any PSD short of a
- * thousand layers can have, and at `k = 0` it lands just under `base`, which
- * is why a fill sits a whole step below at `base - 1`.
+ * The sliver it is nudged down by keeps it out of anybody else's slot, and it
+ * has to be a sliver rather than a half. Placement `k` sits at `base + k`, and
+ * `applyDepth` spaces the parts of a multi-layer PSD across the *whole*
+ * interval above it — `(rank + 1) / (parts + 1)`, which for a three-layer
+ * building is 0.25, 0.5 and 0.75. So half a step down from `base + k` is not
+ * the gap between two placements, it is the gap between somebody's walls and
+ * their roof, and a character put there is drawn inside the building. A
+ * thousandth clears the highest part any PSD short of a thousand layers can
+ * have, and at `k = 0` it lands just under `base`, which is why a fill sits a
+ * whole step below at `base - 1`.
  */
 // idlewild:begin walkDepth
-function walkDepth(among, y, halfTile) {
-  const row = halfTile > 0 ? y / halfTile : 0;
-  const rows = among.rows;
+/**
+ * The nearest ground point of each placement's **unit**, one per entry.
+ *
+ * `drawOrder` hands back a flat list — a three-layer building is three entries
+ * — and what `walkDepth` searches has to be sorted. A placement's own bottom
+ * edge is not: a roof's is above the tower's under it, so the numbers dip
+ * inside a unit. Worse than unsorted, it would be *wrong*: a character between
+ * the roof's bottom and the walls' would land between them and be drawn inside
+ * the building.
+ *
+ * So every member of a unit carries its unit's own key, which is the number
+ * `drawOrder` sorted the units by — and because it sorted by exactly this, the
+ * result is non-decreasing by construction.
+ */
+function nearPoints(order) {
+  const byUnit = new Map();
+  for (const p of order) {
+    const unit = p.instance ?? p.id;
+    const near = p.y + p.height;
+    const held = byUnit.get(unit);
+    if (held === undefined || near > held) byUnit.set(unit, near);
+  }
+  return order.map((p) => byUnit.get(p.instance ?? p.id));
+}
+
+function walkDepth(among, y) {
+  const near = among.near;
   let low = 0;
-  let high = rows.length;
+  let high = near.length;
   while (low < high) {
     const mid = (low + high) >> 1;
-    if (rows[mid] <= row) low = mid + 1;
+    if (near[mid] <= y) low = mid + 1;
     else high = mid;
   }
   // Just under the placement it goes behind, which is just over everything of
@@ -557,28 +585,26 @@ function drawOrder(placements, isometric) {
   }
 
   if (isometric) {
-    // The space a unit *stands on*, not the top of its artwork.
+    // The **nearest ground point** of the unit: the bottom of its artwork.
     //
-    // On an isometric grid `cx + cy` counts rows away from the camera, so it
-    // is the whole of "which of these two is nearer" — and it is a fact about
-    // the ground rather than about how tall a thing is. Sorting on the
-    // artwork's top edge put a tower behind a bush it was standing in front
-    // of, because the tower's roof is high up the screen and the bush is not.
-    // It is also the key anything that *walks* can compute for itself, which
-    // is what lets a character sort into this order; see `sortCharacter`.
+    // Which is the corner of its footprint closest to the camera — the one
+    // where the two visible faces of a box meet — and the line straight up
+    // from it is where a thing passing by stops being behind and starts being
+    // in front. `y + height` is that point for anything standing on the
+    // ground, and it agrees with the collider by construction: a default
+    // collider is "the spaces its base covers", derived from the same edge.
     //
-    // The old key is the fallback for a placement with no anchor, which no
-    // document the editor writes has.
-    const row = (unit) => {
-      const anchor = unit[0].anchor;
-      return anchor
-        ? anchor.cx + anchor.cy
-        : Math.min(...unit.map((p) => p.y));
-    };
-    // A stable sort, so two units standing on the same row keep the order
-    // they were placed in — which is the only answer available and the one
-    // the editor's panel shows.
-    units.sort((a, b) => row(a) - row(b));
+    // The two keys this replaced were both wrong, in opposite directions. The
+    // artwork's *top* is a fact about how tall a thing is, so a short thing
+    // standing behind a tall one drew in front of it. The unit's *anchor* is
+    // the space it hangs from, which on a footprint more than one space across
+    // is the middle of it — so a character walking through a building popped
+    // in front half way along.
+    const near = (unit) => Math.max(...unit.map((p) => p.y + p.height));
+    // A stable sort, so two units whose near corners are level keep the order
+    // they were placed in — which is the only answer available and the one the
+    // editor's panel shows.
+    units.sort((a, b) => near(a) - near(b));
   }
 
   return units.flatMap((unit) =>

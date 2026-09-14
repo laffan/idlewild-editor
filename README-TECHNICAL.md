@@ -3356,23 +3356,43 @@ So depth is now assigned from an explicit order. `drawOrder` sorts one
 document layer's placements back to front, and each takes the next depth up
 from the layer's base:
 
-- **Between placed PSDs**, an isometric *object* layer sorts on **the space
-  each unit stands on** — its shared anchor's `cx + cy`, which is what counts
-  rows away from the camera on an isometric grid. Everything else leaves units
-  in the order they were placed: every layer of a flat projection, and a
-  pattern or background layer of either. `drawOrder` itself takes a plain
-  boolean; the rule that decides it is `ordersByHand`, above.
+- **Between placed PSDs**, an isometric *object* layer sorts on each unit's
+  **nearest ground point** — the bottom of its artwork, `max(y + height)`
+  across its members. Everything else leaves units in the order they were
+  placed: every layer of a flat projection, and a pattern or background layer
+  of either. `drawOrder` itself takes a plain boolean; the rule that decides it
+  is `ordersByHand`, above.
 - **Within one placed PSD**, the author's stack and nothing else.
 
-**The key used to be the top edge of the artwork**, and that is a fact about
-how *tall* a thing is rather than about where it stands. A tower's roof is high
-up the screen and a bush in front of it is not, so a tower standing further
-back sorted in front of the bush — and a unit sorted on `min(p.y)` moved
-through the ordering whenever anybody redrew its roof. The anchor is the space
-the file hangs from, it does not move when the artwork changes, and it is the
-one key a thing that *walks* can compute for itself: see **A character sorts
-itself in**. The old key survives as the fallback for a placement carrying no
-anchor, which no document this editor writes has.
+**Why the bottom edge**, and why it took two goes to get there. The key is
+looking for the corner of a thing's footprint nearest the camera — where the
+two visible faces of a box meet, and the line straight up from that corner is
+what a passer-by crosses to stop being behind it and start being in front. Two
+earlier answers were both wrong, in opposite directions:
+
+- The artwork's **top** edge, `min(p.y)`, is a fact about how *tall* a thing
+  is. A short thing standing behind a tall one sorted in front of it, and a
+  unit's place in the order moved whenever anybody redrew its roof.
+- The unit's **anchor**, `cx + cy`, is the space the file hangs from — which on
+  a footprint more than one space across is the *middle* of it. So anything
+  walking through a building swapped over half way along, which is exactly what
+  it looked like.
+
+`max(y + height)` is the near corner itself. A placement's box is one layer's
+pixels cropped to what is in them, so the bottom of it is where the artwork
+meets the ground: the base of a tree's trunk, the bottom of an extrusion's near
+face, the near vertex of a floor tile. It agrees with the **collider** by
+construction — a default collider is "the spaces its base covers", derived from
+that same edge (see *The defaults*) — so what a thing sorts behind and what it
+blocks are the same footprint. And it is the one quantity a thing that *walks*
+can work out for itself: see **A character sorts itself in**.
+
+A single number per object cannot be exactly right for every arrangement of
+extended footprints — the exact rule is a pairwise "is A behind B" over the two
+grid axes, and resolving it is a topological sort rather than a sort key. What
+the near corner gets wrong is objects that do not overlap on screen anyway: a
+wall running along one axis and something level with its far end sit side by
+side rather than in front of each other.
 
 The stack is recorded on each placement as `order`, because once a placement
 is in the document nothing in it says which of two layers was above — and it
@@ -4566,29 +4586,47 @@ depth a function of position, or let the character find its rank in the
 ordering that already exists. The second is what this does, and it is the one
 that leaves the document renderer alone.
 
-So `placeDocument` keeps the rows it sorted by. One number per step, already
-in order, on the layer the character walks:
+So `placeDocument` keeps the numbers it sorted by. One per step, already in
+order, on the layer the character walks:
 
 ```js
-this.walkAmong = { base: depth * 1000, rows: order.map(rowOf) };
+this.walkAmong = { base: depth * 1000, near: nearPoints(order) };
 ```
 
-and `walkDepth` is a binary search for the character's own row in that list —
-`base + low − 0.001`, where `low` is the first placement standing nearer the
-camera than the character is.
+and `walkDepth` is a binary search for the character's own ground point in that
+list — `base + low − 0.001`, where `low` is the first placement standing nearer
+the camera than the character is.
 
-**The row comes off the sprite, not off the character's cell.** `cell` is as
-much where it is walking *to* as where it is — `moveTo` picks a path and the
+**Plain world Y on both sides**, which is what makes it one comparison rather
+than a projection. An object's number is the bottom of what it drew; the
+character's is `sprite.y`, which for the template's centred rectangle is the
+middle of the space it stands on and for a sprite given its feet as an origin
+is the feet. Both are the point the thing touches the ground at, and that is
+the only thing being compared. A space whose middle is level with an object's
+near corner is *beside* it rather than behind it — on a diamond grid the two
+share an edge — so `<=` counts level as past, which is the right way round.
+
+**The position comes off the sprite, not off the character's cell.** `cell` is
+as much where it is walking *to* as where it is — `moveTo` picks a path and the
 destination is known from the first frame of the walk — so a depth taken from
 it would put the character behind the tree it is about to pass the moment you
-tapped, and leave it there for the length of the walk. On an isometric grid a
-screen `y` is `(cx + cy) × half a tile`, so dividing that back out gives a row
-that moves *continuously* as the tween does: the character slides through the
-ordering rather than snapping through it a space at a time. (Reading the
-sprite fixed a second thing on the way. `cell` was a field holding the
-destination, and `moveTo` pathed from it — so a second tap mid-walk searched
-from somewhere the character was not, and it set off diagonally towards a
-route it had never been on. It is a getter over the sprite now.)
+tapped, and leave it there for the length of the walk. The sprite's own Y moves
+with the tween, so the character slides through the ordering rather than
+snapping through it a space at a time. (Reading the sprite fixed a second thing
+on the way. `cell` was a field holding the destination, and `moveTo` pathed
+from it — so a second tap mid-walk searched from somewhere the character was
+not, and it set off diagonally towards a route it had never been on. It is a
+getter over the sprite now.)
+
+**Every member of a unit carries its unit's number**, which is `nearPoints`'
+whole job and the half that is easy to get wrong and impossible to see.
+`drawOrder` hands back a flat list — a three-layer building is three entries —
+and a roof's bottom edge is above the walls' under it, so each placement's own
+number dips in the middle of a unit. A binary search over that does not give a
+fuzzy answer; it finds a place *between* two layers of one building and draws
+the character inside it. Because `drawOrder` sorted the units by exactly this
+number, giving each member its unit's makes the list non-decreasing by
+construction.
 
 **A thousandth, not a half.** This is the number that has to be right, and the
 obvious one is wrong. Placement `k` sits at `base + k`, and `applyDepth`
@@ -4604,6 +4642,13 @@ Fills moved down a whole step to `base − 1`, which they wanted anyway: a fill
 is the ground of its layer and everything placed on that layer stands on it,
 so tying with the first placement and settling the tie by which Phaser was
 handed first was never an answer.
+
+**Where the line falls** is one constant and one comparison, both in
+`walkDepth`, which is the thing to reach for when it feels early or late. The
+character is in front of a placement once its own ground point is past that
+placement's near corner; moving the comparison to `<` holds it back until it
+has properly left, and offsetting the stored number half a space either way
+moves the line within the crossing step.
 
 **Which layer it walks on** is the front-most visible object layer, and that is
 one line to change — scenery the character should sort against goes on the

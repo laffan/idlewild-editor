@@ -23,17 +23,18 @@ const templateDrawOrder = blockFrom<
 >(topdownSource, "drawOrder");
 
 /**
- * `row` is the space it stands on, which is what the isometric ordering sorts
- * on — `cx + cy` counts rows away from the camera. `y` is where the artwork
- * happens to sit up the screen, which is a different question and, for a tall
- * thing, a misleading one.
+ * `y` is the top of the artwork and `height` how far down it reaches, so
+ * `y + height` is where the thing's feet are — the corner of its footprint
+ * nearest the camera, and what the isometric ordering sorts on. How high up
+ * the screen the artwork starts is a different question and, for a tall thing,
+ * a misleading one.
  */
 function placement(
   id: string,
   y: number,
   order?: number,
   instance?: string,
-  row = 0,
+  height = 32,
 ): Placement {
   return {
     id,
@@ -42,8 +43,8 @@ function placement(
     x: 0,
     y,
     width: 32,
-    height: 32,
-    anchor: { cx: row, cy: 0 },
+    height,
+    anchor: { cx: 0, cy: 0 },
     ...(order === undefined ? {} : { order }),
     ...(instance ? { instance } : {}),
   };
@@ -65,26 +66,36 @@ const FIXTURES: Array<[string, Placement[]]> = [
   [
     "two units, one nearer the viewer",
     [
-      placement("far-base", 0, 0, "unit-far", 0),
-      placement("far-roof", -40, 1, "unit-far", 0),
-      placement("near-base", 200, 0, "unit-near", 12),
-      placement("near-roof", 160, 1, "unit-near", 12),
+      placement("far-base", 0, 0, "unit-far"),
+      placement("far-roof", -40, 1, "unit-far"),
+      placement("near-base", 200, 0, "unit-near"),
+      placement("near-roof", 160, 1, "unit-near"),
     ],
   ],
   [
-    "a tall thing standing behind a short one",
+    // Feet level at y = 0; only the height differs.
+    "a tall thing standing beside a short one",
     [
-      placement("bush", 90, 0, "unit-bush", 3),
-      placement("tower", -400, 0, "unit-tower", 0),
+      placement("bush", -20, 0, "unit-bush", 20),
+      placement("tower", -400, 0, "unit-tower", 400),
+    ],
+  ],
+  [
+    // The building's ground sweeps past the post, so the post is behind it
+    // even though the building's *middle* is further back.
+    "a post standing on a building's own ground",
+    [
+      placement("post", 60, 0, "unit-post", 40),
+      placement("hall", -200, 0, "unit-hall", 360),
     ],
   ],
   [
     "single-layer placements, which are units of one",
-    [placement("a", 90, undefined, undefined, 5), placement("b", 10, undefined, undefined, 1), placement("c", 50, undefined, undefined, 3)],
+    [placement("a", 90), placement("b", 10), placement("c", 50)],
   ],
   [
-    "two units on the same row, which is a tie",
-    [placement("first", 30, undefined, undefined, 4), placement("second", 20, undefined, undefined, 4)],
+    "two units whose feet are level, which is a tie",
+    [placement("first", 30), placement("second", 30)],
   ],
   [
     "a document written before order and units existed",
@@ -129,15 +140,30 @@ describe("what the order actually is", () => {
   });
 
   /**
-   * The key is the space a thing stands on, not the top of its artwork. A
-   * tower's roof is high up the screen and a bush in front of it is not, so
-   * the old key put the tower — standing further back — in front of the bush.
+   * The key is where a thing's feet are, not the top of its artwork. A tower's
+   * roof is high up the screen and a bush beside it is not, so the old key put
+   * the tower behind everything however far forward it stood.
    */
-  it("sorts on the row a unit stands on, not on how tall it is", () => {
+  it("sorts on where a unit stands, not on how tall it is", () => {
     const [, , , [, tall]] = FIXTURES;
+    // Feet level, so the tie holds and the order given survives.
     expect(templateDrawOrder(tall, true).map((p) => p.id)).toEqual([
-      "tower",
       "bush",
+      "tower",
+    ]);
+  });
+
+  /**
+   * And the one the *anchor* key got wrong. A unit's anchor is the middle of
+   * its footprint, so a wide building swapped over half way along; its near
+   * corner is the bottom of its artwork, and a post standing on its own ground
+   * is behind it.
+   */
+  it("sorts a wide thing on its near corner, not on its middle", () => {
+    const [, , , , [, inside]] = FIXTURES;
+    expect(templateDrawOrder(inside, true).map((p) => p.id)).toEqual([
+      "post",
+      "hall",
     ]);
   });
 
