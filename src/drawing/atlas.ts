@@ -10,10 +10,21 @@
  * radial fallback Hush draws with until its PNG lands — and the first
  * strokes of a session are never blocked on a file.
  *
- * Tinting is `source-in` against a solid fill, cached per brush and colour:
- * a canvas used as a `drawImage` source is mutable, so the browser re-uploads
- * it on every stamp, and re-tinting per stroke would do that thousands of
- * times a second.
+ * Tinting is `source-in` against a solid fill, cached per brush and colour,
+ * and then — this is the part that matters on an iPad — **promoted to an
+ * `ImageBitmap`**. This is Hush's delta #30, and the reasoning is worth
+ * keeping because it is not obvious: a canvas used as a `drawImage` *source*
+ * is a mutable object, so WebKit cannot cache the texture it uploaded for it
+ * and re-converts the whole 512 × 128 surface on **every stamp**. A stroke is
+ * hundreds of stamps and a repaint is every stroke, so what should be a
+ * texture bound once became a quarter of a megabyte of upload per stamp;
+ * Hush measured it as a ~220 ms commit stall on a few hundred of them. An
+ * `ImageBitmap` is immutable, so repeated stamps stay on the GPU.
+ *
+ * The promotion is asynchronous — `createImageBitmap` returns a promise — so
+ * the canvas stays the fallback for the millisecond or two before it
+ * resolves, and for ever on an engine without `createImageBitmap`. Nothing
+ * has to wait: the two draw identically, one of them just costs more.
  */
 
 import brush1 from "./brushes/brush-1.png";
@@ -95,6 +106,18 @@ export interface TintedAtlas {
   variants: number;
 }
 
+/**
+ * One tint, and its immutable copy once the browser has made one.
+ *
+ * Held as a mutable record rather than two map entries so the promise can
+ * fill the second half in without the reader having to look twice — and so
+ * the load handler can tell a tint it is dropping from one that replaced it.
+ */
+interface Tint {
+  canvas: HTMLCanvasElement;
+  bitmap: ImageBitmap | null;
+}
+
 /** A soft round tip, duplicated across the four variant slots. */
 function fallbackMask(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
@@ -131,11 +154,17 @@ export interface AtlasCache {
 
 export function createAtlasCache(): AtlasCache {
   const masks = new Map<number, CanvasImageSource>();
-  const tinted = new Map<string, TintedAtlas>();
+  const tinted = new Map<string, Tint>();
   const listeners = new Set<() => void>();
+  const canMakeBitmaps = typeof createImageBitmap === "function";
   let fallback: HTMLCanvasElement | null = null;
   let pixels: HTMLCanvasElement | null = null;
   let destroyed = false;
+
+  /** Let a tint's bitmap go, which is a texture the GPU is holding. */
+  const release = (tint: Tint | undefined): void => {
+    tint?.bitmap?.close();
+  };
 
   const maskFor = (brushId: number): CanvasImageSource => {
     // Built on first ask and kept, like the fallback — and unlike the five,
@@ -158,7 +187,9 @@ export function createAtlasCache(): AtlasCache {
       masks.set(brush.id, image);
       // Anything tinted from the fallback is now stale.
       for (const key of [...tinted.keys()]) {
-        if (key.startsWith(`${brush.id}|`)) tinted.delete(key);
+        if (!key.startsWith(`${brush.id}|`)) continue;
+        release(tinted.get(key));
+        tinted.delete(key);
       }
       for (const listener of listeners) listener();
     };
@@ -173,7 +204,13 @@ export function createAtlasCache(): AtlasCache {
       // drops exactly those entries.
       const key = `${brushId}|${color}`;
       const cached = tinted.get(key);
-      if (cached) return cached;
+      if (cached) {
+        return {
+          atlas: cached.bitmap ?? cached.canvas,
+          cell: ATLAS_CELL,
+          variants: ATLAS_VARIANTS,
+        };
+      }
 
       const canvas = document.createElement("canvas");
       canvas.width = ATLAS_WIDTH;
@@ -186,13 +223,21 @@ export function createAtlasCache(): AtlasCache {
         ctx.fillRect(0, 0, ATLAS_WIDTH, ATLAS_CELL);
       }
 
-      const entry: TintedAtlas = {
-        atlas: canvas,
-        cell: ATLAS_CELL,
-        variants: ATLAS_VARIANTS,
-      };
-      tinted.set(key, entry);
-      return entry;
+      const tint: Tint = { canvas, bitmap: null };
+      tinted.set(key, tint);
+      if (canMakeBitmaps) {
+        // Guarded on the way back in: by the time this resolves the entry may
+        // have been dropped — a brush PNG landing invalidates every tint made
+        // from its fallback — and a bitmap nobody will read is a texture to
+        // close rather than to keep.
+        void createImageBitmap(canvas)
+          .then((made) => {
+            if (!destroyed && tinted.get(key) === tint) tint.bitmap = made;
+            else made.close();
+          })
+          .catch(() => undefined);
+      }
+      return { atlas: canvas, cell: ATLAS_CELL, variants: ATLAS_VARIANTS };
     },
     onLoad(listener) {
       listeners.add(listener);
@@ -201,6 +246,7 @@ export function createAtlasCache(): AtlasCache {
     destroy() {
       destroyed = true;
       listeners.clear();
+      for (const tint of tinted.values()) release(tint);
       tinted.clear();
       masks.clear();
     },

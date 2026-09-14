@@ -12,7 +12,7 @@
 import Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import type { Cell, EditorMode, Placement, Selection } from "../lib/types";
+import type { Cell, EditorMode, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
 import { SceneCamera } from "./scene-camera";
@@ -27,7 +27,15 @@ import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
 import { fillRegion } from "./fill-region";
-import { unitMembers, unitOf } from "./unit";
+import { selectionLayer } from "../lib/selection";
+import { patternSpec } from "../lib/layer-kinds";
+import { unitOf } from "./unit";
+import {
+  doomedPlacements,
+  inAdjustedInstance,
+  selectedPlacement,
+  toggleUnit,
+} from "./adjusting";
 import type { Viewport } from "../drawing";
 
 export interface WorldSceneConfig {
@@ -66,6 +74,8 @@ export interface WorldSceneConfig {
   onColliderChange?: () => void;
   /** Pen mode has started or finished. */
   onPenChange?: () => void;
+  /** Mask mode has started, finished, or changed the spaces it holds. */
+  onMaskChange?: () => void;
   /**
    * Every PSD the open scene places has loaded.
    *
@@ -103,7 +113,7 @@ export class WorldScene extends Phaser.Scene {
   private editing = true;
   private selection: Selection = { kind: "none" };
   private drag!: DragController;
-  /** The modes that take the canvas over: extrude, and collider. */
+  /** The modes that take the canvas over — see `canvas-modes.ts`. */
   modes!: CanvasModes;
   private psds!: PsdPlacements;
   /** The layer new work lands on. */
@@ -140,8 +150,17 @@ export class WorldScene extends Phaser.Scene {
     this.backgrounds = new BackgroundRender(this, this.store);
     // The same gate `placeOne` asks, so the two can never disagree about
     // whether a file is ready. Read lazily: `psds` is built further down.
-    this.patterns = new PatternRender(this, this.store, this.grid, (key, path) =>
-      this.psds.canPlace(key, path),
+    this.patterns = new PatternRender(
+      this,
+      this.store,
+      this.grid,
+      (key, path) => this.psds.canPlace(key, path),
+      // A pattern layer's shapes are chrome about that layer, so they show
+      // while it is the subject and go when it is not — the same rule a
+      // placement's outline keeps. Nothing while mask mode is up: that mode
+      // draws the same shapes itself, live, and the document's copy of the
+      // one being edited is by then the version before the edit.
+      () => (this.modes.mask.active ? null : selectionLayer(this.selection)),
     );
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
@@ -170,9 +189,16 @@ export class WorldScene extends Phaser.Scene {
         this.marquee.cancel();
         this.setSelection({ kind: "none" });
       },
+      // Everything else on the layer, so a shape is not edited blind against
+      // the boundaries it sits beside — see `mask-render.ts`.
+      otherShapes: (layerId, shapeId) =>
+        patternSpec(this.store.layer(layerId)).shapes.filter(
+          (shape) => shape.id !== shapeId,
+        ),
       onExtrudeChange: () => this.config.onExtrudeChange?.(),
       onColliderChange: () => this.config.onColliderChange?.(),
       onPenChange: () => this.config.onPenChange?.(),
+      onMaskChange: () => this.config.onMaskChange?.(),
     });
 
     // Where the camera is, what it is allowed to do, and where that is
@@ -300,6 +326,10 @@ export class WorldScene extends Phaser.Scene {
     // way the lattice is: a backdrop is wherever you are looking, and a
     // pattern is a rule evaluated over the spaces the viewport can see.
     this.backgrounds.update(this.cameras.main);
+    // And the lattice floats over whatever backdrop is front-most: a flat
+    // colour across the whole view is the one thing on this canvas that can
+    // leave the editor with no ground to build on. See `setBackdropDepth`.
+    this.gridRenderer.setBackdropDepth(this.backgrounds.frontDepth());
     this.patterns.sync(this.gridRenderer.visibleRange(this.cameras.main));
     // Pen mode's dim is cut out of what the camera can see, so it follows the
     // camera the way the lattice does — a pan moves it as surely as a zoom.
@@ -418,7 +448,10 @@ export class WorldScene extends Phaser.Scene {
     // Layer adjustment belongs to the unit it was opened on. Selecting
     // anything else closes it, so the mode never outlives what it is about
     // and a PSD is one thing again the moment you look away from it.
-    if (this.adjusting && !this.inAdjustedInstance(selection)) {
+    if (
+      this.adjusting &&
+      !inAdjustedInstance(this.store, selection, this.adjusting)
+    ) {
       this.adjusting = null;
     }
     this.selection = selection;
@@ -431,95 +464,45 @@ export class WorldScene extends Phaser.Scene {
     this.config.onSelectionChange(selection);
   }
 
-  private inAdjustedInstance(selection: Selection): boolean {
-    if (selection.kind !== "placement") return false;
-    const placement = this.store
-      .layer(selection.layerId)
-      ?.placements.find((p) => p.id === selection.placementId);
-    return !!placement && unitOf(placement) === this.adjusting;
-  }
-
   /** Which unit is open for layer-by-layer editing, if any. */
   get adjustingUnit(): string | null {
     return this.adjusting;
   }
 
-  /**
-   * Open the placed PSD under the finger up into its own layers, or close it.
-   *
-   * The first tap of the double has already selected something, so this only
-   * has to decide what that selection means from here on.
-   */
+  /** Open the placed PSD under the finger up into its layers, or close it. */
   private handleDoubleTap(screenX: number, screenY: number): void {
     if (!this.editing) return;
     // Two taps under the Point tool are two points, not a request to open
-    // whatever the second one happened to land on.
-    if (this.gestureMode === "point") return;
-    // A second tap inside collider mode is a second space painted, not a
-    // request to open the PSD under it up into its layers.
-    if (this.modes.collider.active) return;
+    // whatever the second one happened to land on. A second tap inside
+    // collider mode is a second space painted, for the same reason.
+    if (this.gestureMode === "point" || this.modes.collider.active) return;
     const world = this.worldAt(screenX, screenY);
     const hit = this.docRenderer.pick(world.x, world.y);
     if (!hit) return;
 
-    const instance = unitOf(hit.placement);
-    this.adjusting = this.adjusting === instance ? null : instance;
-    log.info(
-      this.adjusting
-        ? `${hit.placement.psdKey}.psd — adjusting layers; tap away to finish`
-        : `${hit.placement.psdKey}.psd — moving as one again`,
-    );
-    this.setSelection({
-      kind: "placement",
-      layerId: hit.layerId,
-      placementId: hit.placement.id,
-    });
+    const next = toggleUnit(hit, this.adjusting);
+    this.adjusting = next.adjusting;
+    log.info(next.message);
+    this.setSelection(next.selection);
   }
 
   /** Open the selected PSD up into its layers, from outside the canvas. */
   startAdjusting(): void {
-    if (this.selection.kind !== "placement") return;
-    const placement = this.selectedPlacement();
+    const placement = selectedPlacement(this.store, this.selection);
     if (!placement) return;
     this.adjusting = unitOf(placement);
     this.refresh();
     this.config.onSelectionChange(this.selection);
   }
 
-  /**
-   * Remove what is selected, when it is a placed PSD.
-   *
-   * The unit, unless it has been opened up — deleting one layer of a PSD that
-   * moves as one thing would leave the rest of it behind looking broken, and
-   * "Remove from layer" on something drawn as a single outline should remove
-   * what that outline is around.
-   */
+  /** Remove what is selected, when it is a placed PSD — see `adjusting.ts`. */
   removeSelectedPlacement(): void {
     if (this.selection.kind !== "placement") return;
-    const placement = this.selectedPlacement();
-    if (!placement) return;
-
-    const doomed =
-      this.adjusting === unitOf(placement)
-        ? [placement]
-        : unitMembers(
-            this.store.layers,
-            this.selection.layerId,
-            unitOf(placement),
-          );
+    const doomed = doomedPlacements(this.store, this.selection, this.adjusting);
     for (const member of doomed) {
       this.store.removePlacement(this.selection.layerId, member.id);
     }
-    this.setSelection({ kind: "none" });
-  }
-
-  private selectedPlacement(): Placement | undefined {
-    // Copied to a local so TypeScript narrows the union past the callback.
-    const selection = this.selection;
-    if (selection.kind !== "placement") return undefined;
-    return this.store
-      .layer(selection.layerId)
-      ?.placements.find((p) => p.id === selection.placementId);
+    if (doomed.length > 0) this.setSelection({ kind: "none" });
   }
 
   /** Leave layer adjustment without changing what is selected. */

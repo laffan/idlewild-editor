@@ -11,6 +11,16 @@
  * together. That is Hush's rule on iPad and it is the whole reason the
  * Pencil feels like a pencil there: you can rest a hand, pan with it, and
  * keep drawing without ever switching tools.
+ *
+ * **A document change is not an ink change.** The store fires `change` for
+ * every edit anywhere in the project — a placement dragged, a density typed,
+ * a layer renamed — and this layer used to answer every one of them by
+ * re-laying every stroke on its layer. Hush's first shim invariant is that
+ * unrelated mutations cost the engine nothing, and it is kept here the way it
+ * is kept there: by identity. The strokes array is replaced on every edit to
+ * it and on no other edit, so `Surface.apply` can tell "nothing happened to
+ * the ink" from "one stroke was added" from "something else" with a reference
+ * compare, and does the least of the three that will do.
  */
 
 import type { DocStore } from "../lib/doc-store";
@@ -81,7 +91,11 @@ export class DrawingLayer {
     doc.addEventListener("change", () => {
       // An erase drag is already painting from its working copy; letting the
       // document's own change event repaint would undo the preview.
-      if (!this.working) this.repaint();
+      //
+      // `apply` rather than `repaint`: most changes are not about ink at all,
+      // and the one that usually is — a stroke finished — is an append, which
+      // is stamped rather than re-laid. See the note at the top.
+      if (!this.working) this.surface.apply(this.strokes());
     });
 
     const el = this.root;
@@ -97,7 +111,13 @@ export class DrawingLayer {
     if (!this.session) this.surface.clearLive();
   };
 
-  /** The layer strokes land on — the editor's active layer. */
+  /**
+   * The layer strokes land on — the editor's active layer.
+   *
+   * A full repaint rather than `apply`, and it has to be: the backing holds
+   * the *other* layer's ink, and a new layer whose list happens to extend the
+   * old one's would otherwise be stamped on top of it.
+   */
   setLayer(layerId: string): void {
     this.store.setLayer(layerId);
     this.repaint();
@@ -125,6 +145,14 @@ export class DrawingLayer {
     this.surface.sync(view, this.strokes());
   }
 
+  /**
+   * Re-lay every stroke from scratch.
+   *
+   * Two callers, and both of them mean it. A brush's PNG replacing its
+   * procedural tip changes what every stroke drawn with it looks like, and a
+   * change of layer changes which strokes there are — neither is describable
+   * as a diff against what is on the backing.
+   */
   repaint(): void {
     this.surface.repaint(this.strokes());
   }

@@ -10,7 +10,7 @@
 
 import type { Stroke } from "../lib/types";
 import type { AtlasCache } from "./atlas";
-import { streamlinePoints, toPoints, type StreamPoint } from "./geometry";
+import { streamlineFor, type StreamPoint } from "./geometry";
 import { stampAngle } from "./geometry";
 import type { StrokeStyle } from "./types";
 
@@ -83,13 +83,20 @@ export function stampStream(
   }
 }
 
-/** Lay one stored stroke into a context already carrying the world transform. */
+/**
+ * Lay one stored stroke into a context already carrying the world transform.
+ *
+ * Through `streamlineFor`, which caches on the points array's identity — see
+ * the note there. A stroke is immutable once stored, so the streamline is
+ * computed once for the life of the stroke however many times the backing is
+ * re-baked.
+ */
 export function renderStroke(
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
   atlas: AtlasCache,
 ): void {
-  const stream = streamlinePoints(toPoints(stroke.points), STREAMLINE);
+  const stream = streamlineFor(stroke.points, STREAMLINE);
   paint(ctx, stream, stroke.size, stroke.color, stroke.mode, stroke.brushId, atlas);
 }
 

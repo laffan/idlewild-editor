@@ -19,7 +19,7 @@ import { PatternRender } from "../pattern-render";
 import { DocStore } from "../../lib/doc-store";
 import { emptyLayer } from "../../lib/doc-shape";
 import { Grid } from "../../lib/grid";
-import type { GameDoc, Layer, Placement } from "../../lib/types";
+import type { GameDoc, Layer, PatternShape, Placement } from "../../lib/types";
 
 vi.mock("../../lib/ipc", () => ({
   doc: { read: vi.fn(), write: vi.fn(async () => undefined) },
@@ -49,6 +49,7 @@ function fakeScene(made: Made[]) {
     destroy: vi.fn(),
   };
   return {
+    graphics,
     add: { graphics: () => graphics },
     cameras: { main: { zoom: 1 } },
     P2P: {
@@ -85,7 +86,7 @@ function placement(psdKey: string): Placement {
   };
 }
 
-function patternLayer(keys: string[]): Layer {
+function patternLayer(keys: string[], shapes: PatternShape[] = []): Layer {
   return {
     ...emptyLayer("Pattern 1"),
     kind: "pattern",
@@ -94,14 +95,16 @@ function patternLayer(keys: string[]): Layer {
       density: 4,
       repeat: { cols: 4, rows: 4 },
       seed: 1,
-      shapes: [],
+      shapes,
     },
     placements: keys.map(placement),
   };
 }
 
-function setup(keys: string[]) {
+function setup(keys: string[], shapes: PatternShape[] = []) {
   const made: Made[] = [];
+  /** Which layer the selection names, moved by the tests that care. */
+  const focus: { id: string | null } = { id: null };
   // What `PsdPlacements.canPlace` answers: the manifest is in, the texture is
   // in, and no rewrite has the file off the canvas. Stubbed as one set,
   // because to this renderer it is one question.
@@ -112,7 +115,9 @@ function setup(keys: string[]) {
     projection: "orthogonal",
     gridSize: 32,
     activeSceneId: "scene-main",
-    scenes: [{ id: "scene-main", name: "Main", layers: [patternLayer(keys)] }],
+    scenes: [
+      { id: "scene-main", name: "Main", layers: [patternLayer(keys, shapes)] },
+    ],
   };
   const store = new DocStore("test", doc);
   const render = new PatternRender(
@@ -120,8 +125,11 @@ function setup(keys: string[]) {
     store,
     new Grid("orthogonal", 32),
     (psdKey) => ready.has(psdKey),
+    // Which layer the selection names: what the shape outlines follow. Null
+    // in most of these, because none of them are about the outlines.
+    () => focus.id,
   );
-  return { made, render, ready };
+  return { made, render, ready, store, scene, focus };
 }
 
 const view = { from: { cx: 0, cy: 0 }, to: { cx: 7, cy: 7 } };
@@ -237,5 +245,69 @@ describe("a pattern layer's copies", () => {
     render.sync(view);
     render.clear();
     expect(made.every((m) => m.destroyed)).toBe(true);
+  });
+});
+
+/**
+ * A shape says where the pattern is allowed to be, and it is chrome about the
+ * layer rather than a feature of the ground. Left up unconditionally it reads
+ * as a patch of grid that has been highlighted and cannot be un-highlighted,
+ * which is how it was reported: the grid under a shape stayed lit whether or
+ * not the layer was.
+ *
+ * `moveTo` counts the outlines — one per cell polygon. The pattern's own
+ * copies draw none, because they are Phaser groups rather than paths.
+ */
+describe("a pattern layer's shapes", () => {
+  const shapes: PatternShape[] = [
+    {
+      id: "s1",
+      name: "Shape 1",
+      cells: [
+        { cx: 1, cy: 1 },
+        { cx: 2, cy: 1 },
+      ],
+    },
+  ];
+
+  it("are drawn only while the layer is the one selected", () => {
+    const { render, scene, store, focus } = setup(["tree"], shapes);
+    const g = scene.graphics;
+
+    render.sync(view);
+    expect(g.moveTo).not.toHaveBeenCalled();
+
+    focus.id = store.layers[0].id;
+    render.sync(view);
+    expect(g.moveTo).toHaveBeenCalled();
+  });
+
+  it("go again when the selection moves off the layer", () => {
+    const { render, scene, store, focus } = setup(["tree"], shapes);
+    focus.id = store.layers[0].id;
+    render.sync(view);
+    expect(scene.graphics.moveTo).toHaveBeenCalled();
+
+    scene.graphics.moveTo.mockClear();
+    focus.id = null;
+    render.sync(view);
+    expect(scene.graphics.moveTo).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The focus is part of the signature `sync` compares, which it has to be:
+   * a selection moving from one layer to another changes what is drawn
+   * without moving the camera a pixel, and the range alone would say nothing
+   * had happened.
+   */
+  it("follow a selection that moved without the camera", () => {
+    const { render, scene, store, focus } = setup(["tree"], shapes);
+    render.sync(view);
+    render.sync(view);
+    expect(scene.graphics.moveTo).not.toHaveBeenCalled();
+
+    focus.id = store.layers[0].id;
+    render.sync(view);
+    expect(scene.graphics.moveTo).toHaveBeenCalled();
   });
 });

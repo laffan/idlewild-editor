@@ -1,9 +1,9 @@
 /* The bar a canvas mode puts along the bottom of the canvas — extrude,
-   collider and pen — and what the canvas does around it while one is up.
+   collider, pen and mask — and what the canvas does around it while one is up.
 
-   Split out of editor.css when that file reached its 700 lines. The three
+   Split out of editor.css when that file reached its 700 lines. The four
    modes share every rule in here, which is the point of them: a mode always
-   looks the same, so learning one is learning all three.
+   looks the same, so learning one is learning all four.
 
    A row across the bottom of the canvas column rather than a sheet: the thing
    being worked on is what every button is about, and a modal over it would
@@ -101,10 +101,17 @@
    action bar with it. The rail stays: the camera has to stay reachable,
    because a solid is built from more than one angle and a collider is drawn
    by looking at the artwork it belongs to — and pen mode needs the rail most
-   of all, since the thing it is a mode *for* is a tool on it. */
+   of all, since the thing it is a mode *for* is a tool on it.
+
+   Mask mode is on the list for a sharper reason than the other three. The bar
+   it hides is where *Pattern Shape* lives, and Pattern Shape is one of the two
+   ways into this mode: left up, it would offer to start a second shape from
+   inside the first one. */
 .editor-canvas-wrap.extruding .selection-actions,
 .editor-canvas-wrap.extruding .edge-toggle,
 .editor-canvas-wrap.colliding .selection-actions,
 .editor-canvas-wrap.colliding .edge-toggle,
 .editor-canvas-wrap.penning .selection-actions,
-.editor-canvas-wrap.penning .edge-toggle { display: none; }
+.editor-canvas-wrap.penning .edge-toggle,
+.editor-canvas-wrap.masking .selection-actions,
+.editor-canvas-wrap.masking .edge-toggle { display: none; }

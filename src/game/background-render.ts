@@ -32,8 +32,14 @@ const DEPTH_STRIDE = 1000;
  *
  * Inside the layer's own slot, under everything else on it — a background
  * layer can hold scenery as well as a colour, and the colour is behind the
- * scenery. Below the lattice too, which is at -10,000: the editor's grid is
- * scaffolding to build on and a backdrop is part of what is being built.
+ * scenery.
+ *
+ * It stays in the stack rather than being pushed under the whole document,
+ * because where a background layer sits among the others is a thing somebody
+ * chose and the exported game honours it. The editor's **lattice** is what
+ * moves instead: it is scaffolding rather than content, it does not exist in
+ * the game at all, and a flat colour over the whole view left nothing of it to
+ * build on. `frontDepth` is what it follows — see `grid-renderer.ts`.
  */
 const BEHIND = 1;
 
@@ -50,6 +56,8 @@ export class BackgroundRender {
    */
   private readonly surfaces = new Map<string, Phaser.GameObjects.Graphics>();
   private signature = "";
+  /** The front-most backdrop drawn, or null while there is none. */
+  private front: number | null = null;
 
   constructor(scene: Phaser.Scene, store: DocStore) {
     this.scene = scene;
@@ -77,6 +85,17 @@ export class BackgroundRender {
   }
 
   /**
+   * The depth of the front-most backdrop on screen, or null for none.
+   *
+   * What the lattice floats over. Read rather than computed twice because a
+   * backdrop's depth is its layer's slot less `BEHIND`, and a second copy of
+   * that arithmetic somewhere else is a second thing to keep in step.
+   */
+  frontDepth(): number | null {
+    return this.front;
+  }
+
+  /**
    * What the document currently says, as one string.
    *
    * Compared rather than diffed: there are never many backdrops, and a
@@ -101,6 +120,7 @@ export class BackgroundRender {
   private draw(view: Phaser.Geom.Rectangle): void {
     const layers = this.store.layers;
     const seen = new Set<string>();
+    this.front = null;
 
     layers.forEach((layer, index) => {
       if (layerKind(layer) !== "background" || !layer.visible) return;
@@ -108,9 +128,11 @@ export class BackgroundRender {
       if (backgrounds.length === 0) return;
       seen.add(layer.id);
 
+      const depth = (layers.length - index) * DEPTH_STRIDE - BEHIND;
+      this.front = this.front === null ? depth : Math.max(this.front, depth);
       const g = this.surface(layer.id);
       g.clear();
-      g.setDepth((layers.length - index) * DEPTH_STRIDE - BEHIND);
+      g.setDepth(depth);
       // Back-most last in the document, so it is painted first here and
       // whatever is in front of it goes over the top.
       for (const background of [...backgrounds].reverse()) {
@@ -140,6 +162,7 @@ export class BackgroundRender {
     for (const g of this.surfaces.values()) g.destroy();
     this.surfaces.clear();
     this.signature = "";
+    this.front = null;
   }
 }
 

@@ -1,12 +1,12 @@
 /**
  * The modes that take the canvas over, and the one place that asks them.
  *
- * Three of them now — a solid being pulled out of the grid, a collider being
- * painted on it, and one layer of a PSD being drawn into — and they share a
- * rule: while one is up it owns the pointer, and every press, drag and tap
- * belongs to it rather than to the document underneath. The scene asks here
- * first at each stage and falls through to its ordinary behaviour only when
- * nobody claimed the gesture.
+ * Four of them now — a solid being pulled out of the grid, a collider being
+ * painted on it, one layer of a PSD being drawn into, and a pattern layer's
+ * shape being swept — and they share a rule: while one is up it owns the
+ * pointer, and every press, drag and tap belongs to it rather than to the
+ * document underneath. The scene asks here first at each stage and falls
+ * through to its ordinary behaviour only when nobody claimed the gesture.
  *
  * Pen mode claims every gesture and *does* nothing with any of them, which
  * looks like a mistake and is the point: what draws there is the drawing
@@ -24,9 +24,10 @@
 
 import type Phaser from "phaser";
 import type { Grid } from "../lib/grid";
-import type { Point } from "../lib/types";
+import type { PatternShape, Point } from "../lib/types";
 import { ColliderMode } from "./collider-mode";
 import { ExtrudeMode } from "./extrude-mode";
+import { MaskMode } from "./mask-mode";
 import { PenMode } from "./pen-mode";
 
 /** What the modes need from the scene around them. */
@@ -45,15 +46,19 @@ export interface CanvasModesHost {
    * from, whose action bar would otherwise float over a dimmed canvas.
    */
   clearSelection(): void;
+  /** A pattern layer's other shapes, drawn behind the one mask mode holds. */
+  otherShapes(layerId: string, shapeId: string | null): readonly PatternShape[];
   onExtrudeChange(): void;
   onColliderChange(): void;
   onPenChange(): void;
+  onMaskChange(): void;
 }
 
 export class CanvasModes {
   readonly extrude: ExtrudeMode;
   readonly collider: ColliderMode;
   readonly pen: PenMode;
+  readonly mask: MaskMode;
 
   constructor(host: CanvasModesHost) {
     const shared = {
@@ -77,11 +82,22 @@ export class CanvasModes {
       clearSelection: () => host.clearSelection(),
       onChange: () => host.onPenChange(),
     });
+    this.mask = new MaskMode({
+      ...shared,
+      otherShapes: (layerId, shapeId) => host.otherShapes(layerId, shapeId),
+      clearSelection: () => host.clearSelection(),
+      onChange: () => host.onMaskChange(),
+    });
   }
 
   /** Whether any mode currently owns the canvas. */
   get active(): boolean {
-    return this.extrude.active || this.collider.active || this.pen.active;
+    return (
+      this.extrude.active ||
+      this.collider.active ||
+      this.pen.active ||
+      this.mask.active
+    );
   }
 
   // ── entering one, which is leaving the other ──────────────────────────────
@@ -94,30 +110,42 @@ export class CanvasModes {
   startExtrude(...args: Parameters<ExtrudeMode["start"]>): boolean {
     this.collider.stop();
     this.pen.stop();
+    this.mask.stop();
     return this.extrude.start(...args);
   }
 
   resumeExtrude(...args: Parameters<ExtrudeMode["resume"]>): boolean {
     this.collider.stop();
     this.pen.stop();
+    this.mask.stop();
     return this.extrude.resume(...args);
   }
 
   startCollider(...args: Parameters<ColliderMode["start"]>): boolean {
     this.extrude.stop();
     this.pen.stop();
+    this.mask.stop();
     return this.collider.start(...args);
   }
 
   startPen(...args: Parameters<PenMode["start"]>): boolean {
     this.extrude.stop();
     this.collider.stop();
+    this.mask.stop();
     return this.pen.start(...args);
+  }
+
+  startMask(...args: Parameters<MaskMode["start"]>): boolean {
+    this.extrude.stop();
+    this.collider.stop();
+    this.pen.stop();
+    return this.mask.start(...args);
   }
 
   beginDrag(screenX: number, screenY: number): boolean {
     return (
       this.pen.claims() ||
+      this.mask.beginSweep(screenX, screenY) ||
       this.collider.beginPaint(screenX, screenY) ||
       this.extrude.beginPull(screenX, screenY)
     );
@@ -126,13 +154,19 @@ export class CanvasModes {
   moveDrag(screenX: number, screenY: number): boolean {
     return (
       this.pen.claims() ||
+      this.mask.moveSweep(screenX, screenY) ||
       this.collider.movePaint(screenX, screenY) ||
       this.extrude.movePull(screenX, screenY)
     );
   }
 
   endDrag(): boolean {
-    return this.pen.claims() || this.collider.endPaint() || this.extrude.endPull();
+    return (
+      this.pen.claims() ||
+      this.mask.endSweep() ||
+      this.collider.endPaint() ||
+      this.extrude.endPull()
+    );
   }
 
   /**
@@ -144,6 +178,7 @@ export class CanvasModes {
   beginSelect(screenX: number, screenY: number): boolean {
     return (
       this.pen.claims() ||
+      this.mask.beginSweep(screenX, screenY) ||
       this.collider.beginPaint(screenX, screenY) ||
       this.extrude.beginSelect(screenX, screenY)
     );
@@ -152,6 +187,7 @@ export class CanvasModes {
   extendSelect(screenX: number, screenY: number): boolean {
     return (
       this.pen.claims() ||
+      this.mask.moveSweep(screenX, screenY) ||
       this.collider.movePaint(screenX, screenY) ||
       this.extrude.extendSelect(screenX, screenY)
     );
@@ -159,13 +195,17 @@ export class CanvasModes {
 
   endSelect(): boolean {
     return (
-      this.pen.claims() || this.collider.endPaint() || this.extrude.endSelect()
+      this.pen.claims() ||
+      this.mask.endSweep() ||
+      this.collider.endPaint() ||
+      this.extrude.endSelect()
     );
   }
 
   tap(screenX: number, screenY: number): boolean {
     return (
       this.pen.claims() ||
+      this.mask.tap() ||
       this.collider.tap(screenX, screenY) ||
       this.extrude.tap(screenX, screenY)
     );
@@ -176,6 +216,7 @@ export class CanvasModes {
     this.extrude.refresh();
     this.collider.refresh();
     this.pen.refresh();
+    this.mask.refresh();
   }
 
   /** Leave all of them, keeping nothing. What play mode and a teardown do. */
@@ -183,11 +224,13 @@ export class CanvasModes {
     this.extrude.stop();
     this.collider.stop();
     this.pen.stop();
+    this.mask.stop();
   }
 
   destroy(): void {
     this.extrude.destroy();
     this.collider.destroy();
     this.pen.destroy();
+    this.mask.destroy();
   }
 }

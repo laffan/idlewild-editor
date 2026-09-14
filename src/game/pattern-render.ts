@@ -84,6 +84,14 @@ export class PatternRender {
   private lastRange = "";
   private warned = false;
   /**
+   * Which layer the selection names, if any — see `drawShapes`.
+   *
+   * Read through rather than pushed, because it changes for reasons this
+   * renderer has no way to hear about: a tap on the canvas, a row in the
+   * sidebar, a mode opening and clearing what was chosen.
+   */
+  private readonly highlighted: () => string | null;
+  /**
    * Whether an object may be made from a file's layer right now.
    *
    * Asked rather than worked out here, and asked of `PsdPlacements`, which is
@@ -98,11 +106,13 @@ export class PatternRender {
     store: DocStore,
     grid: Grid,
     canPlace: (psdKey: string, layerPath: string) => boolean,
+    highlighted: () => string | null,
   ) {
     this.scene = scene;
     this.store = store;
     this.grid = grid;
     this.canPlace = canPlace;
+    this.highlighted = highlighted;
     this.shapes = scene.add.graphics();
     // Over the pattern it confines and under the selection overlay, which is
     // where every other outline the editor draws about the document sits.
@@ -139,14 +149,19 @@ export class PatternRender {
    * does, and the window is a few frames long.
    */
   sync(range: CellRange): void {
+    const focus = this.highlighted();
     const signature = [
       range.from.cx,
       range.from.cy,
       range.to.cx,
       range.to.cy,
+      // Part of the signature because the shapes come and go with it: a
+      // selection moving from one layer to another changes what is drawn
+      // without moving the camera a pixel.
+      focus ?? "",
     ].join(",");
     if (signature === this.lastRange) return;
-    this.drawShapes();
+    this.drawShapes(focus);
 
     const seen = new Set<string>();
     const layers = this.store.layers;
@@ -272,7 +287,16 @@ export class PatternRender {
   }
 
   /**
-   * Outline every pattern shape in the open scene.
+   * Outline the pattern shapes on the layer that is currently highlighted.
+   *
+   * **On that layer only**, which is the rule every other mark this editor
+   * makes about the document already keeps: a placement's box, a fill's
+   * outline and a zone's wash all appear when the thing is chosen and go when
+   * it is not. A shape is a boundary someone drew, not a feature of the
+   * ground, and left up unconditionally it reads as a patch of grid that has
+   * been highlighted and cannot be un-highlighted — which is exactly how it
+   * was reported. Mask mode draws its own while it is up, so there is always a
+   * way to look at one on purpose.
    *
    * Cell by cell rather than as one union outline: the spaces *are* the
    * shape — a drawn one is baked down to them when it is made — and the
@@ -280,22 +304,22 @@ export class PatternRender {
    * boundary wants to see. A shape that was drawn keeps its own line on top,
    * so what it was is still legible under what it became.
    */
-  private drawShapes(): void {
+  private drawShapes(focus: string | null): void {
     const g = this.shapes;
     g.clear();
-    const hair = HAIRLINE / this.scene.cameras.main.zoom;
+    if (focus === null) return;
+    const layer = this.store.layer(focus);
+    if (!layer || layerKind(layer) !== "pattern" || !layer.visible) return;
 
-    for (const layer of this.store.layers) {
-      if (layerKind(layer) !== "pattern" || !layer.visible) continue;
-      for (const shape of patternSpec(layer).shapes) {
-        g.lineStyle(hair, SHAPE_COLOR, 0.5);
-        for (const cell of shape.cells ?? []) {
-          outline(g, this.grid.cellPolygon(cell));
-        }
-        if (shape.points && shape.points.length > 2) {
-          g.lineStyle(hair * 2, SHAPE_COLOR, 0.9);
-          outline(g, shape.points);
-        }
+    const hair = HAIRLINE / this.scene.cameras.main.zoom;
+    for (const shape of patternSpec(layer).shapes) {
+      g.lineStyle(hair, SHAPE_COLOR, 0.5);
+      for (const cell of shape.cells ?? []) {
+        outline(g, this.grid.cellPolygon(cell));
+      }
+      if (shape.points && shape.points.length > 2) {
+        g.lineStyle(hair * 2, SHAPE_COLOR, 0.9);
+        outline(g, shape.points);
       }
     }
   }

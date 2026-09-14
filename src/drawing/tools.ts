@@ -6,6 +6,25 @@
  * surface reads, and the release writes the document once. An erase drag
  * that slices thirty strokes is one save and one entry in the layer panel's
  * count, not thirty.
+ *
+ * ## A move records; a frame paints
+ *
+ * Every `move` here marks the session dirty and asks for a repaint on the
+ * next animation frame rather than painting where it stands. That is Hush's
+ * delta #24 applied to the ink — see `frame.ts` for the whole of why — and it
+ * is the single largest thing in this file. `getCoalescedEvents` hands a
+ * 120 Hz Pencil's samples over several at a time, and a repaint of an
+ * in-flight stroke is a smoothing pass over every sample so far plus one
+ * `drawImage` per stamp: painting per sample did all of that four or eight
+ * times inside one frame and presented exactly one of them.
+ *
+ * Nothing is dropped by it. The samples are recorded as they arrive; only the
+ * *drawing* waits, and it waits for the moment the drawing could first be
+ * seen.
+ *
+ * Each session also tells the surface where it painted, so the next clear
+ * covers that rectangle rather than the whole four-thousand-pixel backing —
+ * see `Surface.endLive`.
  */
 
 import type { Stroke } from "../lib/types";
@@ -22,9 +41,10 @@ import {
   toPoints,
   type InkPoint,
 } from "./geometry";
+import { onFrame } from "./frame";
 import { renderLive, STREAMLINE } from "./render";
 import type { AtlasCache } from "./atlas";
-import { ERASER_RADIUS, type StrokeStyle } from "./types";
+import { ERASER_RADIUS, type Bounds, type StrokeStyle } from "./types";
 
 const ACCENT = "#ec3013";
 
@@ -32,6 +52,27 @@ const ACCENT = "#ec3013";
 export interface ToolSession {
   move(worldX: number, worldY: number, pressure: number): void;
   end(): void;
+}
+
+/** The box a run of points covers, grown by `pad` on every side. */
+function boundsOf(points: readonly { x: number; y: number }[], pad: number): Bounds {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (minX === Infinity) return { x: 0, y: 0, width: 0, height: 0 };
+  return {
+    x: minX - pad,
+    y: minY - pad,
+    width: maxX - minX + pad * 2,
+    height: maxY - minY + pad * 2,
+  };
 }
 
 // ── pencil ──────────────────────────────────────────────────────────────────
@@ -74,18 +115,42 @@ export function beginDraw(
   // the style: it is true of this stroke and nothing else.
   let straight = false;
 
-  // The samples as the stroke will be *kept*, which is also what is drawn
-  // while it is in flight. Smoothing is applied here rather than at render
-  // time so the ink under the pointer is the ink that lands in the document —
-  // at 100 the preview is already the straight line it will become, which is
-  // the only way a setting like this can be aimed.
-  const shaped = () => smoothPoints(points, straight ? 100 : style.smoothing);
-
-  const paint = () => {
-    const ctx = surface.beginLive();
-    renderLive(ctx, streamlinePoints(shaped(), STREAMLINE), style, atlas);
-    surface.endLive();
+  /**
+   * The samples as the stroke will be *kept*, which is also what is drawn
+   * while it is in flight.
+   *
+   * Smoothing is applied here rather than at render time so the ink under the
+   * pointer is the ink that lands in the document — at 100 the preview is
+   * already the straight line it will become, which is the only way a setting
+   * like this can be aimed.
+   *
+   * Memoised on the sample count and the setting, which between them say
+   * everything about the answer: samples are only ever appended, so a list of
+   * the same length is the same list. Without it the frame paint and `end`
+   * each ran the fourteen relaxation passes again over the whole stroke.
+   */
+  let shapedAt = -1;
+  let shapedStraight = false;
+  let shapedPoints: InkPoint[] = points;
+  const shaped = (): InkPoint[] => {
+    if (shapedAt === points.length && shapedStraight === straight) {
+      return shapedPoints;
+    }
+    shapedAt = points.length;
+    shapedStraight = straight;
+    shapedPoints = smoothPoints(points, straight ? 100 : style.smoothing);
+    return shapedPoints;
   };
+
+  const paint = (): void => {
+    const held = shaped();
+    const ctx = surface.beginLive();
+    renderLive(ctx, streamlinePoints(held, STREAMLINE), style, atlas);
+    // The stroke's own box, grown by the brush: a stamp is laid centred on the
+    // path, so the ink reaches half a nominal width past the furthest sample.
+    surface.endLive(boundsOf(held, style.size));
+  };
+  const frame = onFrame(paint);
   paint();
 
   const holdMs = options.straightenAfterMs ?? 0;
@@ -101,8 +166,8 @@ export function beginDraw(
     timer = window.setTimeout(() => {
       timer = null;
       straight = true;
-      // Snap now rather than at the next sample: the whole point of the hold
-      // is that nothing is moving, so nothing else would repaint.
+      // Now rather than on the next frame: the whole point of the hold is
+      // that nothing is moving, so nothing else would ask for one.
       paint();
     }, holdMs);
   };
@@ -122,10 +187,11 @@ export function beginDraw(
         held = { x: mx, y: my };
         arm();
       }
-      paint();
+      frame.request();
     },
     end() {
       disarm();
+      frame.cancel();
       surface.clearLive();
       if (points.length < 2) {
         // A tap is not a stroke. Two points is the minimum the streamline
@@ -154,6 +220,23 @@ export function beginErase(
 ): ToolSession {
   let strokes: Stroke[] = [...store.strokes];
   let changed = false;
+  /** Where the disc is, for the cursor the frame paints. */
+  let at = { x, y };
+  /** Whether a cut since the last frame has left the backing to rebuild. */
+  let stale = false;
+
+  const paint = (): void => {
+    // The re-bake first, so the cursor is drawn over ink that is current. It
+    // is the expensive half and it is why this is on a frame at all: a cut
+    // re-lays every stroke on the layer, and an erase drag reports as many
+    // samples as a draw does.
+    if (stale) {
+      stale = false;
+      surface.repaint(strokes);
+    }
+    drawEraserCursor(surface, at.x, at.y);
+  };
+  const frame = onFrame(paint);
 
   const cut = (cx: number, cy: number) => {
     const next: Stroke[] = [];
@@ -197,19 +280,24 @@ export function beginErase(
     if (!hit) return;
     changed = true;
     strokes = next;
+    stale = true;
     working(strokes);
-    surface.repaint(strokes);
   };
 
   cut(x, y);
-  drawEraserCursor(surface, x, y);
+  paint();
 
   return {
     move(mx, my) {
+      at = { x: mx, y: my };
       cut(mx, my);
-      drawEraserCursor(surface, mx, my);
+      frame.request();
     },
     end() {
+      frame.cancel();
+      // The last cut may still be waiting on a frame that will never come, and
+      // the document is about to be handed the strokes it produced.
+      if (stale) surface.repaint(strokes);
       surface.clearLive();
       working(null);
       if (changed) store.replace(strokes);
@@ -224,7 +312,12 @@ export function drawEraserCursor(surface: Surface, x: number, y: number): void {
   ctx.lineWidth = surface.worldPerScreenPixel * 1.5;
   ctx.strokeStyle = ACCENT;
   ctx.stroke();
-  surface.endLive();
+  surface.endLive({
+    x: x - ERASER_RADIUS,
+    y: y - ERASER_RADIUS,
+    width: ERASER_RADIUS * 2,
+    height: ERASER_RADIUS * 2,
+  });
 }
 
 // ── fill ────────────────────────────────────────────────────────────────────
@@ -263,17 +356,19 @@ export function beginFill(
     ctx.lineWidth = surface.worldPerScreenPixel * 1.5;
     ctx.strokeStyle = ACCENT;
     ctx.stroke();
-    surface.endLive();
+    surface.endLive(boundsOf(points, surface.worldPerScreenPixel * 2));
   };
+  const frame = onFrame(paint);
 
   return {
     move(mx, my) {
       const last = points[points.length - 1];
       if (Math.hypot(mx - last.x, my - last.y) < 1) return;
       points.push({ x: mx, y: my, pressure: 1 });
-      paint();
+      frame.request();
     },
     end() {
+      frame.cancel();
       surface.clearLive();
       // Three points is the least that encloses anything; a tap is a miss.
       if (points.length < 3) return;
@@ -315,17 +410,24 @@ export function beginLasso(
     ]);
     ctx.stroke();
     ctx.setLineDash([]);
-    surface.endLive();
+    surface.endLive(
+      boundsOf(
+        poly.map(([px, py]) => ({ x: px, y: py })),
+        surface.worldPerScreenPixel * 2,
+      ),
+    );
   };
+  const frame = onFrame(paint);
 
   return {
     move(mx, my) {
       const [lx, ly] = poly[poly.length - 1];
       if (Math.hypot(mx - lx, my - ly) < 1) return;
       poly.push([mx, my]);
-      paint();
+      frame.request();
     },
     end() {
+      frame.cancel();
       surface.clearLive();
       if (poly.length < 3) {
         // A tap clears rather than selecting nothing loudly.

@@ -30,29 +30,15 @@ import type { PanelActions, PanelSurface } from "./inspect-panels";
 /** What the panel needs from the shell to make a shape. */
 export interface PatternActions {
   /**
-   * Take a grid selection as a shape.
+   * Open the mask editor on a shape, or on a new one when `shapeId` is null.
    *
-   * The shell's, because it owns the tool rail: asking for one puts the
-   * Select tool up and says what to do with it, and the shape itself is made
-   * by the button that appears over the selection — see `selection-actions.ts`.
+   * One entry point where there were two, because making a shape is now a
+   * *mode* rather than a request the editor holds while you go and do
+   * something else — see `game/mask-mode.ts`. The shell's, because entering a
+   * canvas mode means putting the rail's tool down and dimming what is not
+   * the subject, and a panel knows nothing about either.
    */
-  onAddShapeFromSelection: (layerId: string) => void;
-  /** The other route: put the pencil up and wait for an outline. */
-  onAddShapeByDrawing: (layerId: string) => void;
-  /**
-   * Take everything drawn on the layer as the outline, and stop waiting.
-   *
-   * The finishing half of the draw route. It used to be reachable only by
-   * switching to the lasso and sweeping the ink — the same gesture a sketch
-   * becomes a boundary through — which is right when a layer holds several
-   * sketches and wrong here: somebody who has just pressed Add Shape and
-   * drawn one outline has said which strokes they mean.
-   */
-  onFinishDrawnShape: (layerId: string) => void;
-  /** Stop waiting for an outline, leaving the ink where it is. */
-  onCancelShape: () => void;
-  /** The layer a shape has been asked for, if one has. */
-  shapeTarget: () => string | null;
+  onEditShape: (layerId: string, shapeId: string | null) => void;
 }
 
 const TYPES: readonly { type: PatternType; label: string }[] = [
@@ -171,7 +157,6 @@ function shapesSection(
   actions: PatternActions,
 ): HTMLElement {
   const spec = patternSpec(layer);
-  const waiting = actions.shapeTarget() === layer.id;
   const section = h(
     "div",
     { class: "inspect-section" },
@@ -192,55 +177,23 @@ function shapesSection(
     );
   } else {
     for (const shape of spec.shapes) {
-      section.appendChild(shapeRow(store, layer.id, shape));
+      section.appendChild(shapeRow(store, layer.id, shape, actions));
     }
-  }
-
-  // While one has been asked for, the section is about finishing it rather
-  // than about asking again: two more Add buttons over a half-drawn outline
-  // are two ways to lose it.
-  if (waiting) {
-    const strokes = layer.strokes.length;
-    section.append(
-      h("div", {
-        class: "field-hint",
-        text: strokes
-          ? "Draw more if you need to, then finish."
-          : "Draw the outline on the canvas. It does not have to close.",
-      }),
-      h("button", {
-        class: strokes ? "panel-btn primary" : "panel-btn",
-        text: strokes
-          ? `Finish shape — ${count(strokes, "stroke")}`
-          : "Finish shape — nothing drawn",
-        disabled: strokes ? null : "true",
-        onClick: () => actions.onFinishDrawnShape(layer.id),
-      }),
-      h("button", {
-        class: "panel-btn",
-        text: "Cancel",
-        onClick: () => actions.onCancelShape(),
-      }),
-    );
-    return section;
   }
 
   section.append(
     h("button", {
       class: "panel-btn",
-      text: "Add Shape — select",
-      onClick: () => actions.onAddShapeFromSelection(layer.id),
-    }),
-    h("button", {
-      class: "panel-btn",
-      text: "Add Shape — draw",
-      onClick: () => actions.onAddShapeByDrawing(layer.id),
+      text: "Add shape",
+      onClick: () => actions.onEditShape(layer.id, null),
     }),
     h("div", {
       class: "field-hint",
       text:
-        "Select asks for a patch of grid — press and hold, then Pattern Shape. " +
-        "Draw puts the pencil up and takes the outline you draw.",
+        "Opens the shape editor: sweep the ground the pattern may use, and " +
+        "Remove to take spaces back out. A patch of grid you have already " +
+        "selected has Pattern Shape on the bar over it, which starts one from " +
+        "those spaces.",
     }),
   );
   return section;
@@ -250,19 +203,29 @@ function shapeRow(
   store: DocStore,
   layerId: string,
   shape: PatternShape,
+  actions: PatternActions,
 ): HTMLElement {
   const spaces = shape.cells?.length ?? 0;
   return h(
     "div",
     { class: "inspect-row shape-row" },
     // How it was made as well as how big it is: a drawn shape keeps its
-    // outline and a selected one does not, which is the difference between
+    // outline and a swept one does not, which is the difference between
     // the two rows anybody would want to tell apart.
     icon(shape.points ? ICONS.pencil : ICONS.select, 12),
     h("span", { class: "inspect-key m", text: shape.name }),
     h("span", {
       class: "inspect-value m",
       text: count(spaces, "space"),
+    }),
+    // Edit before Remove, and both on the row rather than behind a selected
+    // state: a shape has no canvas selection of its own — `picking.ts` makes
+    // the whole layer inert — so the row *is* how it is reached.
+    h("button", {
+      class: "row-btn",
+      "aria-label": `Edit ${shape.name}`,
+      text: "Edit",
+      onClick: () => actions.onEditShape(layerId, shape.id),
     }),
     h("button", {
       class: "row-btn",

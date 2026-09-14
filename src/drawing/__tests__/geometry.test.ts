@@ -16,6 +16,7 @@ import {
   smoothPoints,
   strokeBox,
   strokeInPolygon,
+  streamlineFor,
   streamlinePoints,
   strokesBox,
   toFlat,
@@ -288,5 +289,46 @@ describe("strokes → boundary", () => {
   it("refuses a selection with no region in it", () => {
     expect(strokesToZonePoints([], 64)).toEqual([]);
     expect(strokesToZonePoints([stroke(line(0, 1))], 64)).toEqual([]);
+  });
+});
+
+/**
+ * The streamline of a *stored* stroke is computed once and kept.
+ *
+ * It is sound only because of the hard rule the document keeps: a stroke is
+ * replaced rather than written through, so the points array's identity is a
+ * fact about its contents. Before the cache, a full repaint re-ran this for
+ * every stroke on the layer and allocated two objects per point doing it —
+ * which is most of what a hundred-stroke layer cost to re-bake.
+ */
+describe("the streamline cache", () => {
+  it("hands back the same answer for the same points", () => {
+    const flat = toFlat(line(0, 20));
+    const first = streamlineFor(flat, 0.42);
+    expect(streamlineFor(flat, 0.42)).toBe(first);
+  });
+
+  it("recomputes when the streamline itself changes", () => {
+    const flat = toFlat(line(0, 20));
+    const first = streamlineFor(flat, 0.42);
+    const other = streamlineFor(flat, 0.9);
+    expect(other).not.toBe(first);
+    // And the new answer is the one that is kept, not the old one.
+    expect(streamlineFor(flat, 0.9)).toBe(other);
+  });
+
+  /** A different array is a different stroke, whatever it holds. */
+  it("does not confuse two strokes that happen to match", () => {
+    const a = toFlat(line(0, 20));
+    const b = toFlat(line(0, 20));
+    expect(streamlineFor(b, 0.42)).not.toBe(streamlineFor(a, 0.42));
+  });
+
+  it("agrees with the uncached path", () => {
+    const points = line(0, 20);
+    const flat = toFlat(points);
+    expect(streamlineFor(flat, 0.42)).toEqual(
+      streamlinePoints(points, 0.42),
+    );
   });
 });

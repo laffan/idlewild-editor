@@ -1,25 +1,33 @@
 /**
- * Add Shape, both ways round.
+ * The two ways into a pattern shape that are not the panel's own button.
  *
- * A pattern is infinite until somebody says where it is allowed to be, and
- * saying so is a gesture rather than a control: a patch of grid asked for
- * with the long-press selection every other part of this editor asks space
- * with, or an outline drawn with the pencil. Neither is instant, so the
- * request is held here — which layer asked — and cleared the moment an answer
- * arrives.
+ * Making one used to be a *request*: press Add Shape, and the editor
+ * remembered which layer had asked while you went and made a gesture
+ * somewhere else. Two buttons set that request, two other buttons in two
+ * other places consumed it, and nothing on the canvas said the editor was
+ * waiting for anything. Mask mode replaced the whole arrangement — see
+ * `game/mask-mode.ts` — and with it the held request, which is why this file
+ * is a quarter of what it was.
  *
- * That held request is also what decides whether the two *finishing* buttons
- * are offered at all: Pattern Shape over a grid selection, and Convert to
- * pattern shape beside a lassoed sketch. Neither appears until something has
- * asked for a shape, because on a project with no pattern layer they would be
- * buttons with nowhere to put their answer.
+ * What is left is the two shortcuts, and they are shortcuts in the strict
+ * sense: both start from something the user has *already* described, so
+ * making them walk into the mode and sweep it again would be asking twice.
+ *
+ * - **A run of grid spaces**, from the floating action bar over a region.
+ *   It seeds the mode rather than writing a shape, so Cancel still leaves the
+ *   layer alone and the spaces can be trimmed before they are committed.
+ * - **A lassoed sketch**, from the sketch panel. This one writes, because the
+ *   outline is the point: a shape made from a drawn line keeps that line
+ *   beside its spaces so the canvas can draw what somebody actually drew, and
+ *   handing it to a mode that sweeps rectangles would throw the line away on
+ *   the first touch.
  */
 
 import type { DocStore } from "../lib/doc-store";
 import { cellsInRange, type Grid } from "../lib/grid";
-import { addPatternShapeCells, layerKind } from "../lib/layer-kinds";
+import { layerKind } from "../lib/layer-kinds";
 import * as log from "../lib/log";
-import type { Selection, ToolId } from "../lib/types";
+import type { Cell, Selection } from "../lib/types";
 import type { DrawingLayer } from "../drawing";
 import { convertStrokesToPatternShape } from "./stroke-actions";
 
@@ -28,86 +36,45 @@ export interface PatternShapeDeps {
   grid: Grid;
   drawing: () => DrawingLayer | null;
   getSelection: () => Selection;
-  setSelection: (selection: Selection) => void;
-  /** The layer the rail is pointed at, when nothing has asked for a shape. */
+  /** The layer the rail is pointed at, when the selection names none. */
   activeLayerId: () => string;
-  useTool: (tool: ToolId) => void;
+  /** Open the mask editor — on a new shape when `shapeId` is null. */
+  openMask: (
+    layerId: string,
+    shapeId: string | null,
+    seed?: readonly Cell[],
+  ) => void;
 }
 
 export interface PatternShapes {
-  /** The layer waiting for a shape, or null. Read by both panels. */
-  target: () => string | null;
-  /** Ask for one from a grid selection, or by drawing it. */
-  askFromSelection: (layerId: string) => void;
-  askByDrawing: (layerId: string) => void;
-  /** Stop waiting, leaving whatever has been drawn where it is. */
-  cancel: () => void;
-  /** Finish: take the selected patch of grid. */
+  /**
+   * The pattern layer a lassoed sketch would become a shape on, or null.
+   *
+   * The layer the ink is *on*, which is the only reading that needs nothing
+   * remembered: draw the outline on the pattern layer, sweep it up with the
+   * lasso, and the button says which layer it is about because there is only
+   * one layer involved.
+   */
+  strokeTarget: () => string | null;
+  /** Take the selected patch of grid into a new shape, and open it. */
   fromSelection: () => void;
-  /** Finish: take the lassoed outline — the strokes panel's button. */
+  /** Take the lassoed outline as a shape on the layer the ink is on. */
   fromStrokes: () => void;
-  /** Finish: take everything drawn on the layer — the pattern panel's. */
-  fromLayerStrokes: (layerId: string) => void;
 }
 
 export function createPatternShapes(deps: PatternShapeDeps): PatternShapes {
-  let target: string | null = null;
+  function strokeTarget(): string | null {
+    const selection = deps.getSelection();
+    if (selection.kind !== "strokes") return null;
+    const layer = deps.store.layer(selection.layerId);
+    return layer && layerKind(layer) === "pattern" ? layer.id : null;
+  }
 
   return {
-    target: () => target,
-
-    askFromSelection(layerId) {
-      target = layerId;
-      deps.useTool("select");
-      log.info("Press and hold on the grid to select an area, then Pattern Shape.");
-    },
-
-    askByDrawing(layerId) {
-      target = layerId;
-      deps.useTool("pencil");
-      // The selection stays on the layer, which is what keeps its panel — and
-      // the Finish button that has just appeared in it — in front of the
-      // person now holding a pencil.
-      deps.setSelection({ kind: "layer", layerId });
-      log.info("Draw the outline, then Finish shape in the inspector.");
-    },
-
-    cancel() {
-      target = null;
-    },
+    strokeTarget,
 
     /**
-     * Everything drawn on the layer, as the outline.
-     *
-     * The finishing half of Add Shape — draw, and it does not go through the
-     * lasso. Sweeping the ink is the right gesture for a sketch becoming a
-     * boundary, where a layer may hold several and one of them is meant; it
-     * is the wrong one here, because somebody who has just pressed Add Shape
-     * and drawn an outline has already said which strokes they mean. It also
-     * put the only way to finish in a panel they had no reason to open.
-     */
-    fromLayerStrokes(layerId) {
-      const drawing = deps.drawing();
-      const layer = deps.store.layer(layerId);
-      if (!drawing || !layer) return;
-      const ids = layer.strokes.map((stroke) => stroke.id);
-      if (ids.length === 0) {
-        log.warn("Nothing drawn yet — draw the outline first");
-        return;
-      }
-      target = null;
-      convertStrokesToPatternShape(
-        deps.store,
-        deps.grid,
-        drawing,
-        { kind: "strokes", layerId, ids },
-        layerId,
-      );
-      deps.setSelection({ kind: "layer", layerId });
-    },
-
-    /**
-     * Every space in the selected range.
+     * Every space in the selected range, as a shape being made.
      *
      * The spaces rather than the outline around them: what a pattern asks of
      * a shape is whether a space is inside it, and a run of spaces is that
@@ -116,33 +83,20 @@ export function createPatternShapes(deps: PatternShapeDeps): PatternShapes {
     fromSelection() {
       const selection = deps.getSelection();
       if (selection.kind !== "region") return;
-      const layerId = target ?? deps.activeLayerId();
+      const layerId = deps.activeLayerId();
       const layer = deps.store.layer(layerId);
       if (!layer || layerKind(layer) !== "pattern") {
         log.warn("Pattern Shape needs a pattern layer to confine");
         return;
       }
-      target = null;
-      const cells = [...cellsInRange(selection.from, selection.to)];
-      const shape = addPatternShapeCells(deps.store, layerId, cells);
-      if (!shape) return;
-      log.info(`${shape.name} — ${cells.length} spaces on ${layer.name}`);
-      deps.setSelection({ kind: "layer", layerId });
+      deps.openMask(layerId, null, [...cellsInRange(selection.from, selection.to)]);
     },
 
-    /**
-     * The lassoed outline, handed to whichever layer asked.
-     *
-     * The request is consumed either way. A conversion that is refused says
-     * why in the console, and leaving the button up afterwards would make it
-     * look as though nothing had been pressed.
-     */
     fromStrokes() {
       const selection = deps.getSelection();
       const drawing = deps.drawing();
-      const layerId = target;
+      const layerId = strokeTarget();
       if (selection.kind !== "strokes" || !drawing || !layerId) return;
-      target = null;
       convertStrokesToPatternShape(
         deps.store,
         deps.grid,
@@ -150,7 +104,6 @@ export function createPatternShapes(deps: PatternShapeDeps): PatternShapes {
         selection,
         layerId,
       );
-      deps.setSelection({ kind: "layer", layerId });
     },
   };
 }

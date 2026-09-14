@@ -126,16 +126,53 @@ export function smoothPoints(
   return straighten(relax(raw, Math.round(amount * SMOOTH_PASSES)), amount ** 2);
 }
 
-/** Laplacian passes with the ends pinned. Pressure is left alone. */
+/**
+ * Laplacian passes with the ends pinned. Pressure is left alone.
+ *
+ * Over two `Float64Array` buffers that ping-pong rather than over arrays of
+ * objects, and the objects are made once at the end. The arithmetic is the
+ * same; what changes is the litter. The obvious shape of this — rebuild the
+ * list each pass with `map` — allocated *two objects per point per pass*, and
+ * it is applied to the whole in-flight stroke on every repaint: at fourteen
+ * passes and a few hundred samples that is tens of thousands of short-lived
+ * objects a frame, which on an iPad is a garbage collector running inside the
+ * gesture. That is the second half of why a long line got slower the longer
+ * it got, and the half that showed up as the app going away rather than as
+ * lag.
+ */
 function relax(points: readonly InkPoint[], passes: number): InkPoint[] {
-  let out = points.map((p) => ({ ...p }));
+  const n = points.length;
+  let xs = new Float64Array(n);
+  let ys = new Float64Array(n);
+  let nx = new Float64Array(n);
+  let ny = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    xs[i] = points[i].x;
+    ys[i] = points[i].y;
+  }
+
   for (let pass = 0; pass < passes; pass++) {
-    const next = out.map((p) => ({ ...p }));
-    for (let i = 1; i < out.length - 1; i++) {
-      next[i].x = (out[i - 1].x + 2 * out[i].x + out[i + 1].x) / 4;
-      next[i].y = (out[i - 1].y + 2 * out[i].y + out[i + 1].y) / 4;
+    // The ends never move: a line that started somewhere other than where the
+    // pen went down is a line that ignored you.
+    nx[0] = xs[0];
+    ny[0] = ys[0];
+    nx[n - 1] = xs[n - 1];
+    ny[n - 1] = ys[n - 1];
+    for (let i = 1; i < n - 1; i++) {
+      nx[i] = (xs[i - 1] + 2 * xs[i] + xs[i + 1]) / 4;
+      ny[i] = (ys[i - 1] + 2 * ys[i] + ys[i + 1]) / 4;
     }
-    out = next;
+    const tx = xs;
+    const ty = ys;
+    xs = nx;
+    ys = ny;
+    nx = tx;
+    ny = ty;
+  }
+
+  const out: InkPoint[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    out[i] = { x: xs[i], y: ys[i], pressure: points[i].pressure };
   }
   return out;
 }
@@ -187,6 +224,45 @@ export function stampAngle(i: number): number {
   h = Math.imul(h ^ (h >>> 15), h | 1);
   h ^= h + Math.imul(h ^ (h >>> 7), h | 61);
   return (((h ^ (h >>> 14)) >>> 0) / 4294967296) * Math.PI * 2;
+}
+
+/**
+ * The streamlined points of a **stored** stroke, cached on its points array.
+ *
+ * Hush's delta #26, and the same reasoning end to end. Every render of every
+ * stroke used to recompute this from scratch — a full repaint of a layer with
+ * a hundred strokes on it re-ran the streamline a hundred times and allocated
+ * two objects per point doing it — and the answer never changes, because the
+ * document's strokes are **immutable once stored**: the hard rule at the top
+ * of README-TECHNICAL says every mutation replaces the object, so the points
+ * array's own identity is a sound key.
+ *
+ * A `WeakMap` on that array rather than a field on the stroke, which is where
+ * this parts company with Hush. Hush keeps engine-private copies of its
+ * strokes and can hang a `_streamCache` on them; here a stroke *is* the
+ * document's record, it is serialised to `doc.json` as it stands, and a cache
+ * field on it would be written to disk. Keyed on the array, nothing can leak
+ * and nothing has to be cleaned up: the entry goes when the stroke does.
+ *
+ * **Never used for the stroke in flight.** Its points array grows in place
+ * while its identity stays the same, so a cached answer would freeze the live
+ * line at the length it had when the first sample landed. `tools.ts` calls
+ * `streamlinePoints` directly for exactly that reason.
+ */
+const streamCache = new WeakMap<
+  readonly number[],
+  { streamline: number; points: StreamPoint[] }
+>();
+
+export function streamlineFor(
+  flat: readonly number[],
+  streamline: number,
+): StreamPoint[] {
+  const held = streamCache.get(flat);
+  if (held && held.streamline === streamline) return held.points;
+  const points = streamlinePoints(toPoints(flat), streamline);
+  streamCache.set(flat, { streamline, points });
+  return points;
 }
 
 // ── bounds ──────────────────────────────────────────────────────────────────

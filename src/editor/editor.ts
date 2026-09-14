@@ -142,15 +142,14 @@ export async function mountEditor(
     minimap.root,
   );
 
-  /** Add Shape, and the request it holds between the two halves of one. */
+  /** The two shortcuts into a pattern shape that are not the panel's own. */
   const shapes = createPatternShapes({
     store,
     grid,
     drawing: () => drawing,
     getSelection: () => handle?.scene.getSelection() ?? { kind: "none" },
-    setSelection: (selection) => handle?.scene.setSelection(selection),
     activeLayerId: () => activeLayerId,
-    useTool: (tool) => tools.apply(tool, false),
+    openMask: (layerId, shapeId, seed) => modes.mask.open(layerId, shapeId, seed),
   });
 
   /** What New Background needs: the project, the grid and a way to place. */
@@ -180,17 +179,12 @@ export async function mountEditor(
     onStrokesToPsd: () => void convert.strokesToPsd(),
     onStrokesToZone: () => convert.strokesToZone(),
     isAnchored: (key) => handle?.scene.psdAnchored(key) ?? true,
-    // Add Shape, both ways round — `pattern-actions.ts`. Neither makes the
-    // shape itself: one asks for a patch of grid and the other for an
-    // outline, and the button that finishes the job is beside what was drawn
-    // or selected.
-    patternShapeTarget: () => shapes.target(),
-    shapeTarget: () => shapes.target(),
+    // A pattern shape is drawn in mask mode — `editor/mask.ts`. The panel's
+    // own button opens it; the sketch panel's turns a lassoed outline into one
+    // directly, because that route's whole point is keeping the drawn line.
+    patternShapeTarget: () => shapes.strokeTarget(),
     onStrokesToPatternShape: () => shapes.fromStrokes(),
-    onAddShapeFromSelection: (layerId) => shapes.askFromSelection(layerId),
-    onAddShapeByDrawing: (layerId) => shapes.askByDrawing(layerId),
-    onFinishDrawnShape: (layerId) => shapes.fromLayerStrokes(layerId),
-    onCancelShape: () => shapes.cancel(),
+    onEditShape: (layerId, shapeId) => modes.mask.open(layerId, shapeId),
     onFillToPsd: () => void convert.fillToPsd(),
     onMakeUnique: (key) => void convert.makeUnique(key),
     // Renaming a layer changes the path a placement reads, so the rename map
@@ -304,10 +298,10 @@ export async function mountEditor(
     onPatternShape: () => shapes.fromSelection(),
   });
 
-  // The three bars along the bottom of the canvas — a solid being pulled out
-  // of the grid, a collider painted on it, a PSD layer drawn into. The modes
-  // themselves are the scene's; see editor/canvas-mode-ui.ts for what the
-  // shell owes them.
+  // The four bars along the bottom of the canvas — a solid being pulled out
+  // of the grid, a collider painted on it, a PSD layer drawn into, a pattern
+  // layer's shape swept. The modes themselves are the scene's; see
+  // editor/canvas-mode-ui.ts for what the shell owes them.
   const modes = createCanvasModeUis({
     projectId: meta.id,
     store,
@@ -325,6 +319,9 @@ export async function mountEditor(
       inspector.reloadPsdLayers(key);
       psdChanged();
     },
+    // Back to the layer's own panel, which is where the shape list — and the
+    // button that opens the next one — is.
+    onMaskDone: (layerId) => handle?.scene.setSelection({ kind: "layer", layerId }),
   });
   const { extrude, collider, pen } = modes;
 
@@ -483,6 +480,7 @@ export async function mountEditor(
       onExtrudeChange: () => extrude.sync(),
       onColliderChange: () => collider.sync(),
       onPenChange: () => pen.sync(),
+      onMaskChange: () => modes.mask.sync(),
     },
     render.options,
   );

@@ -56,8 +56,9 @@ export class WorldScene extends Phaser.Scene {
    * microtask *after* Phaser has decided the pass is finished and called
    * `create` — so the document cannot be placed from `create`. It is placed
    * from the plugin's own completion signal instead, and `placeDocument` does
-   * nothing until that has arrived. A pattern layer needs no such care: it
-   * places what the camera can see every frame and retries what it could not.
+   * nothing until that has arrived. `syncPatterns` waits on the same flag,
+   * for a sharper reason: it keeps what it makes, so one call against a
+   * half-loaded file caches an empty group for ever.
    */
   // idlewild:begin preload
   preload() {
@@ -230,6 +231,14 @@ export class WorldScene extends Phaser.Scene {
 
   syncPatterns() {
     if (!this.patternLayers || this.patternLayers.length === 0) return;
+    // Nothing is placed from a PSD before every PSD is in — the same gate
+    // `placeDocument` keeps, and for a reason that bites harder here. A
+    // `place` whose manifest has parsed but whose images have not returns a
+    // group with no sprites in it, and that group is cached against the tile
+    // it belongs to: the pattern then stays empty over the ground that was in
+    // view at startup, which is all of it. `create` runs before the images
+    // land, so without this the first call is the one that poisons the map.
+    if (!this.psdsReady) return;
     const range = this.visibleCells();
     const seen = new Set();
     for (const layer of this.patternLayers) {

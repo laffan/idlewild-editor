@@ -1,12 +1,12 @@
 /**
- * The three modes that take the canvas over, as the shell builds them.
+ * The four modes that take the canvas over, as the shell builds them.
  *
- * The counterpart to `game/canvas-modes.ts`, which groups the same three on
- * the scene's side and for the same reason: they are one idea in three
+ * The counterpart to `game/canvas-modes.ts`, which groups the same four on
+ * the scene's side and for the same reason: they are one idea in four
  * shapes. Each is a bar along the bottom of the canvas column, a class on
  * that column while it is up, and one thing the mode itself deliberately
- * cannot do — extrude and pen write files, and none of the three know what a
- * project is.
+ * cannot do — extrude and pen write files, mask mode writes the document, and
+ * none of them know what a project is.
  *
  * What differs between them is only where they are entered from — the
  * floating action bar, a row of the inspector, a row of a PSD's layer list —
@@ -20,6 +20,7 @@ import type { DrawingLayer } from "../drawing";
 import type { WorldScene } from "../game/world-scene";
 import { createColliderUi, type ColliderUi } from "./collider";
 import { createExtrudeUi, type ExtrudeUi } from "./extrude";
+import { createMaskUi, type MaskUi } from "./mask";
 import { createPenUi, type PenUi } from "./pen";
 import type { PenTool } from "./pen-rail";
 
@@ -32,8 +33,8 @@ export interface CanvasModeUiOptions {
   scene: () => WorldScene | null;
   drawing: () => DrawingLayer | null;
   /**
-   * Two of the three read the pointer over the canvas, so a drawing tool
-   * holding it would leave them unreachable; the third *is* a drawing tool.
+   * Three of the four read the pointer over the canvas, so a drawing tool
+   * holding it would leave them unreachable; the fourth *is* a drawing tool.
    */
   useSelectTool: () => void;
   usePencil: () => void;
@@ -50,12 +51,21 @@ export interface CanvasModeUiOptions {
   onPenTool: (tool: PenTool) => void;
   /** A PSD was rewritten and re-parsed; take the result back. */
   onPsdWritten: (key: string, manifest: string) => Promise<void> | void;
+  /**
+   * Mask mode is over, either way out.
+   *
+   * It is the one of the four entered from the *left* sidebar rather than
+   * from something on the canvas, so the way back is a layer rather than a
+   * placement: the panel every one of its buttons is on is the layer's own.
+   */
+  onMaskDone: (layerId: string) => void;
 }
 
 export interface CanvasModeUis {
   extrude: ExtrudeUi;
   collider: ColliderUi;
   pen: PenUi;
+  mask: MaskUi;
   destroy: () => void;
 }
 
@@ -98,14 +108,25 @@ export function createCanvasModeUis(
     onWritten: options.onPsdWritten,
   });
 
+  // Swept on the grid, from a pattern layer's own panel. The only one of the
+  // four whose subject is a *layer* rather than something standing on one,
+  // which is why it is entered from the sidebar and hands a layer back.
+  const mask = createMaskUi({
+    ...shared,
+    useSelectTool: options.useSelectTool,
+    onDone: options.onMaskDone,
+  });
+
   return {
     extrude,
     collider,
     pen,
+    mask,
     destroy: () => {
       extrude.destroy();
       collider.destroy();
       pen.destroy();
+      mask.destroy();
     },
   };
 }

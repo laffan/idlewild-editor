@@ -244,6 +244,54 @@ function addPatternShape(
   return shape;
 }
 
+/**
+ * Write the spaces of a shape, making it if it does not exist yet.
+ *
+ * What mask mode applies. A shape it was opened on keeps its id, its name and
+ * its place in the list — the rest of the editor refers to it by id and the
+ * panel's rows would otherwise reshuffle under the user's hand — and loses its
+ * **outline**, when the spaces have moved. That is the honest answer rather
+ * than a convenience: `points` is kept so the canvas can draw the line
+ * somebody actually drew, and once the spaces are not the ones that line
+ * enclosed, the line is a drawing of a shape that no longer exists. Spaces
+ * that came back unchanged mean nothing was swept, so the line still describes
+ * them and stays.
+ */
+export function writePatternShape(
+  store: DocStore,
+  layerId: string,
+  shapeId: string | null,
+  cells: readonly Cell[],
+): PatternShape | null {
+  if (cells.length === 0) return null;
+  const held = cells.map((c) => ({ ...c }));
+  if (shapeId === null) return addPatternShapeCells(store, layerId, held);
+
+  const before = patternSpec(store.layer(layerId)).shapes.find(
+    (shape) => shape.id === shapeId,
+  );
+  if (!before) return addPatternShapeCells(store, layerId, held);
+
+  const moved = !sameCells(before.cells ?? [], held);
+  const after: PatternShape = moved
+    ? { id: before.id, name: before.name, cells: held }
+    : before;
+  if (moved) {
+    editPattern(store, layerId, (spec) => ({
+      ...spec,
+      shapes: spec.shapes.map((shape) => (shape.id === shapeId ? after : shape)),
+    }));
+  }
+  return after;
+}
+
+/** Order-insensitive, because a sweep rebuilds the list from a set. */
+function sameCells(a: readonly Cell[], b: readonly Cell[]): boolean {
+  if (a.length !== b.length) return false;
+  const held = new Set(a.map((c) => `${c.cx},${c.cy}`));
+  return b.every((c) => held.has(`${c.cx},${c.cy}`));
+}
+
 export function removePatternShape(
   store: DocStore,
   layerId: string,

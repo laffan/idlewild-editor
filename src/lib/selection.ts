@@ -44,6 +44,21 @@ export function selectionAlive(store: DocStore, selection: Selection): boolean {
   }
 }
 
+/**
+ * Which document layer a selection is on, or null for one that is on none.
+ *
+ * Every kind but `none` and `region` names one: a region is a rectangle of
+ * grid rather than a thing on a layer, and nothing selected is nothing
+ * selected. What it is for is the chrome a *layer* owns — a pattern layer's
+ * shapes, for one — which appears when the layer is the subject and goes when
+ * it is not, the way a placement's box does.
+ */
+export function selectionLayer(selection: Selection): string | null {
+  return selection.kind === "none" || selection.kind === "region"
+    ? null
+    : selection.layerId;
+}
+
 function has(items: ReadonlyArray<{ id: string }>, id: string): boolean {
   return items.some((item) => item.id === id);
 }

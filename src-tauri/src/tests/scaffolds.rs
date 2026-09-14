@@ -434,6 +434,42 @@ fn both_scenes_load_psds_namespaced_and_wait_for_them() {
     }
 }
 
+/// A pattern layer waits for the same load `placeDocument` waits for.
+///
+/// It is the sharper half of the same rule. `placeDocument` runs once and
+/// would simply place nothing; `syncPatterns` runs every frame and **keeps
+/// what it makes**, so a single call against a file whose `data.json` has
+/// parsed and whose images have not caches a group with no sprites in it,
+/// against the tile it belongs to, for as long as the camera stays there. And
+/// `create` is exactly that moment. The symptom is a pattern layer that never
+/// appears in the exported game while the editor draws it correctly, which is
+/// as far from the cause as a bug gets.
+#[test]
+fn both_scenes_hold_their_patterns_until_the_psds_are_in() {
+    for genre in [Genre::Topdown, Genre::Platformer] {
+        let scene = templates::template_file(
+            "js/scenes/WorldScene.js",
+            &seed(Projection::Orthogonal, genre, 32, GameOptions::default()),
+        )
+        .expect("the scene has a scaffold");
+
+        let body = scene
+            .split_once("syncPatterns() {")
+            .expect("the scene generates its patterns")
+            .1;
+        let guard = body
+            .find("if (!this.psdsReady) return;")
+            .expect("syncPatterns does not wait for the PSDs");
+        let place = body
+            .find("this.P2P.place(")
+            .expect("syncPatterns places nothing");
+        assert!(
+            guard < place,
+            "{genre:?} places a pattern element before its textures are in"
+        );
+    }
+}
+
 /// Every marked block in a scaffolded scene closes, and both genres carry the
 /// same set — the code modal finds a block by id, so a template that renamed
 /// one on one side would silently stop offering its Reset on that side.
