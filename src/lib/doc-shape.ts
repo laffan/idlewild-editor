@@ -17,6 +17,24 @@ import type {
   StoredDoc,
 } from "./types";
 
+/**
+ * What a fill covers, in the units it is stored in.
+ *
+ * A run of grid spaces counts spaces; a rectangle on a blank project has no
+ * spaces to count and reports its size, because "0 spaces" is what a fill
+ * that covers 420 by 260 pixels was saying before this existed.
+ *
+ * Here rather than in `types.ts`, where it lived until that file reached its
+ * seven hundred lines: it is a reading of a fill, and this is the file about
+ * the shapes a document is made of.
+ */
+export function describeFill(fill: FillPatch): string {
+  if (fill.rect) {
+    return `${Math.round(fill.rect.width)} × ${Math.round(fill.rect.height)} px`;
+  }
+  return `${fill.cells.length} ${fill.cells.length === 1 ? "space" : "spaces"}`;
+}
+
 let nextId = 0;
 export function makeId(prefix: string): string {
   nextId += 1;

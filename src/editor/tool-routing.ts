@@ -1,7 +1,7 @@
 /**
  * What a tool means to the pointer.
  *
- * Nine tools on three bars and one more on PSD Edit mode's bar, and picking
+ * Ten tools on two columns and one more on PSD Edit mode's bar, and picking
  * any of them answers the same short list of questions again: who gets the
  * raw input — the drawing layer, or the game canvas and its gesture arbiter —
  * what a drag on empty space does, what the cursor over the canvas is, and
@@ -10,16 +10,22 @@
  * Split out of `editor.ts` because it is the one part of the shell that is
  * about the *pointer* rather than about the document.
  *
- * **Two of them are the pencil wearing a tool's clothes.** Pixels is the
- * pencil with a hard checker for a tip and Rub is the pencil with the paint
- * taken out, so both come down to a brush and a stroke mode rather than to a
- * gesture of their own. Saying so in one place is what lets them be buttons
- * like any other: Pixels has to remember the brush it borrowed the slot from,
- * and going back to the plain pencil has to give it back.
+ * **Two of them are the pencil wearing a tool's clothes.** Pattern is the
+ * pencil with a pattern for its paint and Rub is the pencil with the paint
+ * taken out, so both come down to a stroke mode and a style rather than to a
+ * gesture of their own.
+ *
+ * Pattern used to be *Pixels*, and it used to borrow the brush slot: the
+ * checkered tip went in, the pencil's own brush was remembered, and picking
+ * the pencil again gave it back. None of that is here now. What makes a
+ * Pattern stroke a pattern is the paint on the style — the tip is not
+ * involved at all, because the stroke is not stamped; see
+ * `drawing/paint-render.ts`. Nothing is borrowed, so nothing has to be
+ * given back.
  */
 
-import { DEFAULT_STYLE, PIXEL_BRUSH, type DrawingLayer } from "../drawing";
-import type { StrokeStyle } from "../drawing";
+import type { DrawingLayer, DrawingTool, StrokeStyle } from "../drawing";
+import { patternLibrary, shapeLibrary } from "../lib/library";
 import * as log from "../lib/log";
 import type { ToolId } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
@@ -49,18 +55,21 @@ export interface ToolRouting {
 }
 
 /** Which tools hand the raw pointer to the drawing layer, and as what. */
-const DRAWN: Partial<Record<ToolId, "pencil" | "eraser" | "lasso" | "fill" | "zone">> =
-  {
-    pencil: "pencil",
-    // The pencil, drawn differently. Both are a brush and a stroke mode; see
-    // `styleFor` for the half that is not the gesture.
-    pixels: "pencil",
-    rub: "pencil",
-    eraser: "eraser",
-    lasso: "lasso",
-    fill: "fill",
-    zone: "zone",
-  };
+const DRAWN: Partial<Record<ToolId, DrawingTool>> = {
+  pencil: "pencil",
+  // The pencil, drawn differently. Both are a stroke mode and a style; see
+  // `styleFor` for the half that is not the gesture.
+  rub: "pencil",
+  // Its own gesture in the layer, because what it records is a path that will
+  // be read as lattice cells rather than stamped — and because the live
+  // preview has to show the pattern rather than a tip.
+  pattern: "pattern",
+  shape: "shape",
+  eraser: "eraser",
+  lasso: "lasso",
+  fill: "fill",
+  zone: "zone",
+};
 
 /** What each of them says in the console when it is picked up. */
 const ANNOUNCE: Partial<Record<ToolId, string>> = {
@@ -69,7 +78,8 @@ const ANNOUNCE: Partial<Record<ToolId, string>> = {
   point: "Point — tap to put one down; drag still pans",
   zone: "Boundary — sweep an outline and it becomes a blocking zone",
   pencil: "Pencil — draw with a pencil or a mouse; fingers pan",
-  pixels: "Pixels — the pencil with a hard pixel pattern for a tip",
+  pattern: "Pattern — sweep to reveal a pattern pinned to the world",
+  shape: "Shape — every grid space you cross takes a copy of the shape",
   eraser: "Eraser — drag across a stroke to cut it where the disc passes",
   lasso: "Lasso — sweep around strokes to select them",
   fill: "Fill — sweep a closed shape, or tap its corners out",
@@ -77,21 +87,42 @@ const ANNOUNCE: Partial<Record<ToolId, string>> = {
 };
 
 export function createToolRouting(host: ToolRoutingHost): ToolRouting {
-  /** The brush the pencil had before Pixels borrowed the slot. */
-  let remembered = DEFAULT_STYLE.brushId;
-
   /**
-   * The brush and the stroke mode a tool draws with.
+   * The stroke mode and the paint a tool draws with.
    *
-   * Only three tools change either, and the plain pencil is one of them: it
-   * is what gives the borrowed brush slot back. Fill and Lasso are left alone
-   * deliberately — a swept shape takes the drawing colour and no tip at all,
-   * so a stale `brushId` on the style does nothing to it.
+   * Rub is the only one that changes the *mode* — it is the pencil
+   * compositing `destination-out` — and the three painting tools each say
+   * what their paint has to be: Pattern is a pattern, Shape is a shape, and
+   * the plain pencil is a colour. Fill is deliberately left alone, because
+   * Fill is the tool whose whole point is that it can be any of the three.
+   *
+   * A tool that changes the kind keeps whatever row was last chosen for it —
+   * that is the library's business, not this file's, so what goes out is only
+   * the kind and `paint-picker.ts` fills the rest in.
    */
-  function styleFor(tool: ToolId): Partial<StrokeStyle> | null {
-    if (tool === "pixels") return { mode: "ink", brushId: PIXEL_BRUSH };
-    if (tool === "rub") return { mode: "erase", brushId: remembered };
-    if (tool === "pencil") return { mode: "ink", brushId: remembered };
+  function styleFor(tool: ToolId, style: StrokeStyle): Partial<StrokeStyle> | null {
+    if (tool === "rub") return { mode: "erase" };
+    if (tool === "pencil") return { mode: "ink", paint: { ...style.paint, kind: "color" } };
+    if (tool === "pattern") {
+      return {
+        mode: "ink",
+        paint: {
+          ...style.paint,
+          kind: "pattern",
+          patternId: style.paint.patternId ?? patternLibrary.selectedId ?? undefined,
+        },
+      };
+    }
+    if (tool === "shape") {
+      return {
+        mode: "shape",
+        paint: {
+          ...style.paint,
+          kind: "shape",
+          shapeId: style.paint.shapeId ?? shapeLibrary.selectedId ?? undefined,
+        },
+      };
+    }
     return null;
   }
 
@@ -100,13 +131,7 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     host.rail.setTool(tool);
 
     if (drawing) {
-      // Remembered before the swap, and only when there is something to
-      // remember: picking Pixels twice must not leave the checker as the
-      // brush the pencil goes back to.
-      if (tool === "pixels" && drawing.style.brushId !== PIXEL_BRUSH) {
-        remembered = drawing.style.brushId;
-      }
-      const patch = styleFor(tool);
+      const patch = styleFor(tool, drawing.style);
       if (patch) drawing.style = { ...drawing.style, ...patch };
     }
 

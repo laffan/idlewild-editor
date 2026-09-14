@@ -40,6 +40,7 @@ export { strokesToZonePoints, zonePoints } from "./to-zone";
 export { STRIDE, strokesBox } from "./geometry";
 export type { Viewport } from "./surface";
 export { BRUSHES, PIXEL_BRUSH, brushStampUrl } from "./atlas";
+export type { StampBox, StampBoxAt } from "./tools-stamp";
 export {
   DEFAULT_STYLE,
   type DrawingTool,

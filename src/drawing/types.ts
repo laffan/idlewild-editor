@@ -1,4 +1,5 @@
 import type { Stroke } from "../lib/types";
+import { DEFAULT_PAINT_SPEC, type PaintSpec } from "../lib/paint";
 
 /**
  * What the drawing toolbar's tools do.
@@ -10,7 +11,14 @@ import type { Stroke } from "../lib/types";
  * canvas holds nothing to promote, so drawing the outline has to be something
  * you can do to it.
  */
-export type DrawingTool = "pencil" | "eraser" | "lasso" | "fill" | "zone";
+export type DrawingTool =
+  | "pencil"
+  | "pattern"
+  | "shape"
+  | "eraser"
+  | "lasso"
+  | "fill"
+  | "zone";
 
 /**
  * The two ways the sweep fill is aimed.
@@ -42,6 +50,26 @@ export interface StrokeStyle {
   smoothing: number;
   color: string;
   mode: Stroke["mode"];
+  /**
+   * What the mark is made of, beyond its colour — see `lib/paint.ts`.
+   *
+   * On the style rather than on the tool, because the same three kinds are
+   * wanted by three different tools and a colour is one of them: the Pattern
+   * brush is "the pencil with a pattern for its paint", the Fill tool is "a
+   * swept outline with a paint in it", and the Shape brush is "a stamp with a
+   * paint in it". Keeping it here is what lets the one control in the TOOL
+   * zone set it for all of them.
+   */
+  paint: PaintSpec;
+  /**
+   * The box one shape stamp fills, in world pixels.
+   *
+   * The grid's own tile, handed down by the shell — the drawing layer knows
+   * nothing about projections and must not learn. Width and height differ on
+   * an isometric project, which is what makes a tile shape come out as the
+   * diamond it was drawn to be.
+   */
+  stamp: { width: number; height: number };
 }
 
 export const DEFAULT_STYLE: StrokeStyle = {
@@ -50,6 +78,8 @@ export const DEFAULT_STYLE: StrokeStyle = {
   smoothing: 0,
   color: "#201e1d",
   mode: "ink",
+  paint: DEFAULT_PAINT_SPEC,
+  stamp: { width: 32, height: 32 },
 };
 
 /** How wide the eraser's disc is, in world pixels. */

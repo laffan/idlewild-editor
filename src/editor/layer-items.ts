@@ -19,7 +19,8 @@ import { h, ICONS, icon } from "../lib/dom";
 import { unitKey, unitsInDrawOrder } from "../lib/units";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { LayerKind } from "../lib/types";
-import { describeFill, type Layer, type Placement, type Selection } from "../lib/types";
+import type { Layer, Placement, Selection } from "../lib/types";
+import { describeFill } from "../lib/doc-shape";
 
 export interface LayerItem {
   /** What selecting this row means. */

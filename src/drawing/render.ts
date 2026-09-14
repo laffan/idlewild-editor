@@ -9,6 +9,8 @@
  */
 
 import type { Stroke } from "../lib/types";
+import { DEFAULT_PAINT_SPEC, type PaintSpec } from "../lib/paint";
+import { paintPatternStroke, paintRegion, paintShapeStroke } from "./paint-render";
 import type { AtlasCache } from "./atlas";
 import { STRIDE, streamlineFor, type StreamPoint } from "./geometry";
 import { stampAngle } from "./geometry";
@@ -108,11 +110,17 @@ export function renderStroke(
   stroke: Stroke,
   atlas: AtlasCache,
 ): void {
+  // A shape stroke is not streamlined for the same reason a fill is not, only
+  // more so: its points are the corners of grid spaces, and a lag filter over
+  // those would slide every tile off the space it was put on.
   const stream =
-    stroke.mode === "fill"
+    stroke.mode === "fill" || stroke.mode === "shape"
       ? asStream(stroke.points)
       : streamlineFor(stroke.points, STREAMLINE);
-  paint(ctx, stream, stroke.size, stroke.color, stroke.mode, stroke.brushId, atlas);
+  paint(ctx, stream, stroke.size, stroke.color, stroke.mode, stroke.brushId, atlas, {
+    paint: stroke.paint ?? DEFAULT_PAINT_SPEC,
+    stamp: stroke.stamp,
+  });
 }
 
 /** A stroke's flat points as the stream shape, with nothing done to them. */
@@ -131,7 +139,10 @@ export function renderLive(
   style: StrokeStyle,
   atlas: AtlasCache,
 ): void {
-  paint(ctx, stream, style.size, style.color, style.mode, style.brushId, atlas);
+  paint(ctx, stream, style.size, style.color, style.mode, style.brushId, atlas, {
+    paint: style.paint,
+    stamp: style.stamp,
+  });
 }
 
 /**
@@ -161,6 +172,18 @@ function modeComposite(
   return { composite: "source-over", strokeAlpha: alpha };
 }
 
+/**
+ * What a mark is made of, as the two painters need it.
+ *
+ * Handed through rather than read off the stroke, because `renderLive` has a
+ * style and `renderStroke` has a record, and the two carry the same two facts
+ * under different names.
+ */
+interface PaintOptions {
+  paint: PaintSpec;
+  stamp?: { width: number; height: number };
+}
+
 function paint(
   ctx: CanvasRenderingContext2D,
   stream: readonly StreamPoint[],
@@ -169,16 +192,39 @@ function paint(
   mode: Stroke["mode"],
   brushId: number,
   atlas: AtlasCache,
+  options: PaintOptions,
 ): void {
   if (stream.length === 0) return;
+  const spec = options.paint ?? DEFAULT_PAINT_SPEC;
+
+  // A stamped field of shapes, which is the whole of what a shape stroke is.
+  // It falls back to nothing rather than to flat colour when the shape has
+  // gone: a stroke's points are grid corners, and a line drawn through them
+  // would be a mark nobody made.
+  if (mode === "shape") {
+    paintShapeStroke(ctx, stream, color, spec, options.stamp);
+    return;
+  }
+
   // A fill is a closed outline rather than a path to stamp along, so it
   // leaves the loop below entirely — and a 2D context reads `#rrggbbaa` on
   // its own, so opacity needs nothing said about it here.
   if (mode === "fill") {
     ctx.save();
-    fillRegion(ctx, stream, color);
+    const painted =
+      spec.kind !== "color" &&
+      paintRegion(ctx, stream, color, spec, options.stamp ?? { width: 32, height: 32 });
+    if (!painted) fillRegion(ctx, stream, color);
     ctx.restore();
     return;
+  }
+
+  // The Pattern brush: the lattice cells the tip passed over, with the
+  // pattern's own ones filled. `paintPatternStroke` answers false when the
+  // pattern has gone, and a plain stamped stroke is the right thing to draw
+  // then — the mark was made, and its colour is what survives of it.
+  if (spec.kind === "pattern" && mode === "ink") {
+    if (paintPatternStroke(ctx, stream, size, color, spec)) return;
   }
 
   // The atlas is tinted with the colour at **full** opacity, and the opacity

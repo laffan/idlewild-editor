@@ -38,6 +38,7 @@ import {
   type ToolSession,
 } from "./tools";
 import { PointFill } from "./fill-points";
+import { beginShapeStamp, type StampBox, type StampBoxAt } from "./tools-stamp";
 import {
   DEFAULT_STYLE,
   type DrawingTool,
@@ -63,6 +64,17 @@ export interface DrawingCallbacks {
    * which is all the inspector needs to offer or withhold its two buttons.
    */
   onFillPoints: (count: number) => void;
+  /**
+   * The box a shape stamp at this world point would fill — a grid space,
+   * where the grid snaps.
+   *
+   * The Shape brush's whole geometry, asked of the shell rather than worked
+   * out here: this layer knows nothing about projections and an isometric
+   * space is a diamond. Optional, because PSD Edit mode builds a drawing layer
+   * of its own that has no grid behind it at all; without one the brush falls
+   * back to a lattice of its own stamp size.
+   */
+  stampBoxAt?: StampBoxAt;
 }
 
 export class DrawingLayer {
@@ -401,6 +413,32 @@ export class DrawingLayer {
         y,
       );
     }
+    if (tool === "pattern") {
+      // The pencil's own session. What makes it a Pattern brush is the style
+      // it carries, not the gesture — see `paint-render.ts`, which turns the
+      // path into the lattice cells it passed over.
+      return beginDraw(
+        this.store,
+        this.surface,
+        this.atlas,
+        this.style,
+        x,
+        y,
+        pressure,
+        { straightenAfterMs: this.straightenHoldMs },
+      );
+    }
+    if (tool === "shape") {
+      return beginShapeStamp(
+        this.store,
+        this.surface,
+        this.atlas,
+        this.style,
+        (wx, wy) => this.stampBox(wx, wy),
+        x,
+        y,
+      );
+    }
     if (tool === "fill") {
       return this.fill === "points"
         ? this.pointFill.begin(x, y, this.style)
@@ -410,6 +448,25 @@ export class DrawingLayer {
       return beginZone(this.surface, this.callbacks.onZone, x, y);
     }
     return beginLasso(this.store, this.surface, this.callbacks.onSelect, x, y);
+  }
+
+  /**
+   * Where a stamp goes, with the fallback for a layer that has no grid.
+   *
+   * A lattice of the style's own stamp size, anchored on the world origin —
+   * the same rule the pattern lattice follows, and for the same reason: two
+   * strokes over the same ground have to agree about where the boxes are.
+   */
+  private stampBox(x: number, y: number): StampBox | null {
+    const asked = this.callbacks.stampBoxAt?.(x, y);
+    if (asked) return asked;
+    const { width, height } = this.style.stamp;
+    return {
+      x: Math.floor(x / width) * width,
+      y: Math.floor(y / height) * height,
+      width,
+      height,
+    };
   }
 
   private onMove = (event: PointerEvent): void => {

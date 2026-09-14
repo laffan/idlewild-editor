@@ -164,7 +164,7 @@ export class PointFill {
     const ctx = this.surface.beginLive();
 
     if (this.canFill) {
-      fillPreview(ctx, this.points, style.color, this.slop(1.5));
+      fillPreview(ctx, this.points, style, this.slop(1.5));
     } else {
       // Two points are a line and one is a dot: there is nothing to fill yet,
       // so what is drawn is the edge so far rather than a shape it is not.

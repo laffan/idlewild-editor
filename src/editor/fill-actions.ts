@@ -21,6 +21,7 @@ import { Grid, cellsBounds as cellsRange, describeRange, fillShape } from "../li
 import { psd } from "../lib/ipc";
 import type { AnchorMarks } from "../lib/ipc";
 import type { Cell, FillPatch, Point, Rect, Selection } from "../lib/types";
+import type { Paint } from "../lib/paint";
 import * as log from "../lib/log";
 import type { WorldScene } from "../game/world-scene";
 import {
@@ -281,22 +282,32 @@ function toBase64(bytes: Uint8ClampedArray): string {
 }
 
 /**
- * What the inspector's colour picker means, which depends on what is selected.
+ * What the inspector's paint control means, which depends on what is selected.
  *
- * A fill selected is recoloured — and turned back into a colour fill, since
- * picking a colour is how somebody says they no longer want the pattern. A
- * grid selection has nothing to recolour yet, so the colour fills it, which
- * is the same thing the floating bar's Fill does.
+ * A fill selected is repainted — and turned back into a plain fill, since
+ * setting a paint is how somebody says they no longer want the PSD texture a
+ * `kind: "pattern"` patch carries. A grid selection has nothing to repaint
+ * yet, so the paint fills it, which is the same thing the floating bar's Fill
+ * does.
+ *
+ * The two senses of *pattern* meet here and are kept apart deliberately:
+ * `kind` is about a **PSD** whose texture tiles the patch, and `paint` is
+ * about a row in the app-wide **library**. See `FillPatch`.
  */
-export function applyFillColour(
+export function applyFillPaint(
   store: DocStore,
   scene: WorldScene | null,
-  color: string,
+  paint: Paint,
 ): void {
   const selection = scene?.getSelection();
+  const { color, ...spec } = paint;
   if (selection?.kind === "fill") {
-    store.updateFill(selection.layerId, selection.fillId, { kind: "color", color });
+    store.updateFill(selection.layerId, selection.fillId, {
+      kind: "color",
+      color,
+      paint: spec.kind === "color" ? undefined : spec,
+    });
     return;
   }
-  if (selection?.kind === "region") scene?.fillSelection(color, false);
+  if (selection?.kind === "region") scene?.fillSelection(paint, false);
 }

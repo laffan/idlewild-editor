@@ -33,6 +33,7 @@ import { generatePsdForRegion } from "./fill-actions";
 import { createConversions } from "./conversions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
+import { libraryPointer, libraryStyle } from "./stamp-box";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { confirmDeleteLayer, deleteSelected } from "./layer-actions";
 import { openExportAssets } from "./export-assets";
@@ -232,7 +233,7 @@ export async function mountEditor(
   });
 
   const actions = new SelectionActions(grid, {
-    onFill: () => handle?.scene.fillSelection(inspector.fillColor, false),
+    onFill: () => handle?.scene.fillSelection(inspector.fillPaint, false),
     onAddImage: () => {
       const selection = handle?.scene.getSelection();
       if (selection?.kind !== "region") return;
@@ -508,7 +509,9 @@ export async function mountEditor(
       inspector.render();
       fillBar.sync();
     },
+    ...libraryPointer(grid),
   });
+  drawing.style = libraryStyle(grid, drawing.style);
   canvasWrap.appendChild(drawing.root);
   drawing.sync(handle.scene.viewport());
   if (import.meta.env.DEV) {

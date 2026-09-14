@@ -50,22 +50,26 @@ import {
 } from "./inspect-panels";
 import { fillColliderSection } from "./inspect-collider";
 import type { PsdLayerEditor } from "./psd-layers";
-import { createColorPicker } from "../lib/color-picker";
 import { DEFAULT_FILL_COLOR } from "../lib/color";
+import { DEFAULT_PAINT_SPEC, type Paint } from "../lib/paint";
+import { createPaintPicker } from "./paint-picker";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import {
-  describeFill,
-  type FillPatch,
-  type Selection,
-  type ToolId,
-} from "../lib/types";
+import { describeFill } from "../lib/doc-shape";
+import type { FillPatch, Selection, ToolId } from "../lib/types";
 
 export interface InspectorCallbacks
   extends PatternActions,
     PanelActions,
     PlacementActions {
-  onFillColor: (color: string) => void;
+  /**
+   * The paint control settled on something — a colour, a pattern or a shape.
+   *
+   * One callback rather than one per kind, because what it means depends on
+   * the selection rather than on the kind: a fill selected is repainted, and a
+   * run of grid spaces is filled. See `fill-actions.ts`.
+   */
+  onFillPaint: (paint: Paint) => void;
   onToggleWalkable: (walkable: boolean) => void;
   /**
    * Get rid of a whole document layer, and everything drawn on it.
@@ -163,8 +167,14 @@ export class Inspector {
    */
   private toolId: ToolId = "select";
   private strokeStyle: StrokeStyle | null = null;
-  /** Carried between selections so the picker reopens where it was left. */
-  private lastColor = DEFAULT_FILL_COLOR;
+  /**
+   * Carried between selections so the picker reopens where it was left.
+   *
+   * The whole paint rather than only the colour: picking a dither, filling
+   * three separate patches with it and having the fourth come back as flat
+   * grey is the shape of bug this used to have with colours alone.
+   */
+  private lastPaint: Paint = { ...DEFAULT_PAINT_SPEC, color: DEFAULT_FILL_COLOR };
   private suspended = false;
   /**
    * The layer list for the PSD currently being inspected, kept across
@@ -228,9 +238,9 @@ export class Inspector {
     if (!suspended) this.render();
   }
 
-  /** The colour a new fill should take — whatever the picker last settled on. */
-  get fillColor(): string {
-    return this.lastColor;
+  /** What a new fill should be made of — whatever the picker last settled on. */
+  get fillPaint(): Paint {
+    return { ...this.lastPaint };
   }
 
   setSelection(selection: Selection): void {
@@ -315,6 +325,9 @@ export class Inspector {
     this.open("TOOL", title);
     const rows = toolPanel(this.toolId, this.strokeStyle, {
       onStyle: (patch) => this.callbacks.onStrokeStyle(patch),
+      // A grid space, for the two library editors' previews — the one thing
+      // in this zone that is about the project rather than about the tool.
+      cell: this.grid.tileWidth,
       fillMode: this.callbacks.fillMode(),
       onFillMode: (mode) => this.callbacks.onFillMode(mode),
       fillPoints: this.callbacks.fillPoints(),
@@ -604,17 +617,30 @@ export class Inspector {
     );
   }
 
+  /**
+   * What a run of grid spaces is filled with.
+   *
+   * All three kinds, because this is the one place where a shape fill makes
+   * the most sense it ever makes: the spaces are already there, so "a shape in
+   * every space" is a tileset laid down in one gesture rather than a field
+   * approximated on a lattice.
+   *
+   * **Use pattern image** stays where it was and means something else — a PSD
+   * in *this project* whose texture tiles the patch, rather than a row in the
+   * app-wide library. The two are kept apart on `FillPatch`; see the note
+   * there.
+   */
   private fillSection(fill: FillPatch | undefined): void {
-    // A full picker rather than a fixed palette: the theme's four accents are
-    // the app's colours, not the game's.
-    const picker = createColorPicker({
-      value: fill?.color ?? this.lastColor,
-      onChange: (hex) => {
-        this.lastColor = hex;
-        this.callbacks.onFillColor(hex);
-      },
-      onCommit: (hex) => {
-        this.lastColor = hex;
+    const value: Paint = fill
+      ? { ...(fill.paint ?? DEFAULT_PAINT_SPEC), color: fill.color ?? this.lastPaint.color }
+      : { ...this.lastPaint };
+
+    const picker = createPaintPicker({
+      value,
+      cell: this.grid.tileWidth,
+      onChange: (paint) => {
+        this.lastPaint = { ...paint };
+        this.callbacks.onFillPaint(paint);
       },
     });
 

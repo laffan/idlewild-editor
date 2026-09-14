@@ -17,12 +17,16 @@
  * promoted into either, so putting one down has to be a thing you do to a
  * patch of empty grid.
  *
- * **The drawing toolbar**, from the bottom, is the ink: Pencil, Pixels,
- * Eraser, Lasso and Fill. Fill and Pixels used to be reachable only inside
- * PSD Edit mode, from that second rail. They are the same tools everywhere —
- * a swept shape, and the pencil with a hard checker for a tip — so they are
- * on the toolbar with the rest of the ink, and PSD Edit mode borrows them
- * rather than owning them.
+ * **The drawing toolbar**, from the bottom, is the ink: Pencil, Pattern,
+ * Shape, Eraser, Lasso and Fill. Fill and Pattern used to be reachable only
+ * inside PSD Edit mode, from that second rail. They are the same tools
+ * everywhere, so they are on the toolbar with the rest of the ink, and PSD
+ * Edit mode borrows them rather than owning them.
+ *
+ * Three of the six paint with the **library** rather than with a colour —
+ * Pattern always, Shape always, Fill when it is aimed at one — and all three
+ * are set from the same control in the inspector's TOOL zone. See
+ * `editor/paint-picker.ts`.
  *
  * Both are columns, and both are 56px buttons, so the two read as one
  * vocabulary held apart rather than as two kinds of chrome. A hand resting on
@@ -68,11 +72,18 @@ export const TOOLS: ToolSpec[] = [
   },
   { id: "pencil", name: "Pencil", bar: "draw", path: ICONS.pencil },
   {
-    id: "pixels",
-    name: "Pixels",
-    hint: "The pencil with a hard pixel pattern for a tip",
+    id: "pattern",
+    name: "Pattern",
+    hint: "Reveal a pixel pattern, pinned to the world",
     bar: "draw",
     path: ICONS.pixels,
+  },
+  {
+    id: "shape",
+    name: "Shape",
+    hint: "Stamp a shape into every grid space you cross",
+    bar: "draw",
+    path: ICONS.shape,
   },
   { id: "eraser", name: "Eraser", bar: "draw", path: ICONS.eraser },
   {

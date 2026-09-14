@@ -30,10 +30,19 @@ describe("the two columns", () => {
   });
 
   it("stands the ink on the bottom", () => {
-    // Pixels and Fill are here rather than inside PSD Edit mode, which is the
+    // Pattern and Fill are here rather than inside PSD Edit mode, which is the
     // move: both work anywhere, and a rail that appeared with a mode was a
-    // rail whose buttons moved under your hand.
-    expect(bar("draw")).toEqual(["pencil", "pixels", "eraser", "lasso", "fill"]);
+    // rail whose buttons moved under your hand. Pattern and Shape sit beside
+    // the Pencil because all three are things that lay a mark down — what
+    // differs is what the mark is made of.
+    expect(bar("draw")).toEqual([
+      "pencil",
+      "pattern",
+      "shape",
+      "eraser",
+      "lasso",
+      "fill",
+    ]);
   });
 
   it("gives every tool exactly one home", () => {

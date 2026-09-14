@@ -22,12 +22,22 @@
 
 import { h } from "../lib/dom";
 import { BRUSHES, brushStampUrl, type FillMode, type StrokeStyle } from "../drawing";
-import { createColorPicker } from "../lib/color-picker";
+import { createPaintPicker } from "./paint-picker";
+import type { Paint, PaintKind } from "../lib/paint";
 import type { ToolId } from "../lib/types";
 
 /** What the TOOL section can change, beyond the style itself. */
 export interface ToolPanelActions {
   onStyle: (patch: Partial<StrokeStyle>) => void;
+  /**
+   * How big a grid space is, in world pixels.
+   *
+   * Only for the two library editors, which preview a pattern and a shape at
+   * the size the project will actually draw them — a dither previewed at some
+   * arbitrary zoom tells you nothing about whether it is the density you
+   * wanted on *this* grid.
+   */
+  cell: number;
   /** Which half of the sweep fill is aimed, and the way to change it. */
   fillMode: FillMode;
   onFillMode: (mode: FillMode) => void;
@@ -44,7 +54,8 @@ export interface ToolPanelActions {
 /** The name the section's heading carries after `TOOL : `. */
 export const TOOL_TITLES: Partial<Record<ToolId, string>> = {
   pencil: "Pencil",
-  pixels: "Pixels",
+  pattern: "Pattern",
+  shape: "Shape",
   rub: "Rub",
   fill: "Fill",
 };
@@ -59,23 +70,116 @@ export function toolPanel(
   actions: ToolPanelActions,
 ): HTMLElement[] | null {
   if (tool === "fill") return fillPanel(style, actions);
-  if (tool === "pencil" || tool === "pixels" || tool === "rub") {
-    return inkPanel(tool, style, actions);
-  }
+  if (tool === "pattern") return patternPanel(style, actions);
+  if (tool === "shape") return shapePanel(style, actions);
+  if (tool === "pencil" || tool === "rub") return inkPanel(tool, style, actions);
   return null;
 }
 
 /**
- * The pencil and its two disguises.
+ * The paint control, wired to the style.
  *
- * Pixels is the pencil with a hard checker for a tip, so the row of brushes
- * is not offered — the tip *is* the tool, and a brush picked there would be
- * a setting with no effect until you went back to the pencil. Rub is the
- * pencil with the paint taken out, so the colour is not offered for the
- * mirror-image reason: nothing it lays down has a colour.
+ * The picker hands back a whole `Paint` — the kind, the row and the colour —
+ * and the style keeps those in two fields, so this is where they come apart
+ * again. See `lib/paint.ts` for why the colour is not inside the spec.
+ */
+function paintSection(
+  title: string,
+  style: StrokeStyle,
+  actions: ToolPanelActions,
+  kinds: readonly PaintKind[],
+): HTMLElement {
+  const picker = createPaintPicker({
+    value: { ...style.paint, color: style.color } as Paint,
+    kinds,
+    cell: actions.cell,
+    onChange: (paint) => {
+      const { color, ...spec } = paint;
+      actions.onStyle({ color, paint: spec });
+    },
+  });
+  return h(
+    "div",
+    { class: "inspect-section" },
+    h("div", { class: "inspect-section-title m", text: title }),
+    picker.root,
+  );
+}
+
+/**
+ * The Pattern brush: a fill brush whose ink is a pixel pattern.
+ *
+ * It was *Pixels*, and it was the pencil with a hard checker for a tip —
+ * which made it a textured pencil rather than a tool of its own: the checker
+ * was stamped along the path, so its phase followed the hand and two strokes
+ * that crossed disagreed about where the squares were.
+ *
+ * It fills now. What a stroke lays down is the pattern's own cells, on a
+ * lattice pinned to the world, so drawing over your own tail changes nothing
+ * and a second stroke continues the first exactly. The area looks like it was
+ * already filled and is being uncovered, which is what a pattern brush does
+ * in every pixel-art editor that has one.
+ *
+ * No brush row, because there is no tip: the size is how wide the opening is,
+ * not what shape the paint is.
+ */
+function patternPanel(
+  style: StrokeStyle,
+  actions: ToolPanelActions,
+): HTMLElement[] {
+  return [
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Brush" }),
+      h("div", {
+        class: "field-hint",
+        text:
+          "Sweep to reveal the pattern. It is pinned to the world rather than " +
+          "to the stroke, so two passes line up exactly.",
+      }),
+      sizeRow(style, actions),
+      smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
+    ),
+    paintSection("Pattern", style, actions, ["pattern"]),
+  ];
+}
+
+/**
+ * The Shape brush: every grid space you cross takes a copy of the shape.
+ *
+ * There is no size here on purpose. A shape fills a **space**, and the space
+ * is the project's — so what would a size mean? The shapes come from a
+ * tileset generator, where the whole point is that the tile is the unit: half
+ * circles meet, quarter circles round a corner, angles run diagonally. A
+ * shape stamped at some other size is a decoration rather than a tile.
+ */
+function shapePanel(style: StrokeStyle, actions: ToolPanelActions): HTMLElement[] {
+  return [
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Stamp" }),
+      h("div", {
+        class: "field-hint",
+        text:
+          "Drag across the grid and every space you cross takes one copy, " +
+          "filling that space exactly. Crossing a space twice changes nothing.",
+      }),
+    ),
+    paintSection("Shape", style, actions, ["shape"]),
+  ];
+}
+
+/**
+ * The pencil and its one remaining disguise.
+ *
+ * Rub is the pencil with the paint taken out, so the colour is not offered:
+ * nothing it lays down has one. Pattern used to be the other disguise and is
+ * a tool in its own right now — see `patternPanel`.
  */
 function inkPanel(
-  tool: "pencil" | "pixels" | "rub",
+  tool: "pencil" | "rub",
   style: StrokeStyle,
   actions: ToolPanelActions,
 ): HTMLElement[] {
@@ -132,18 +236,12 @@ function inkPanel(
       h(
         "div",
         { class: "inspect-section" },
-        h("div", {
-          class: "inspect-section-title m",
-          text: tool === "pixels" ? "Pattern" : "Rubber",
-        }),
+        h("div", { class: "inspect-section-title m", text: "Rubber" }),
         h("div", {
           class: "field-hint",
           text:
-            tool === "pixels"
-              ? "The pencil with a hard checker for a tip, so what it leaves " +
-                "is a dither rather than a smudge."
-              : "The pencil with the paint taken out. It rubs out ink drawn " +
-                "in this session, tip and pressure and all.",
+            "The pencil with the paint taken out. It rubs out ink drawn in " +
+            "this session, tip and pressure and all.",
         }),
         sizeRow(style, actions),
         smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
@@ -151,7 +249,7 @@ function inkPanel(
     );
   }
 
-  if (tool !== "rub") rows.push(colourSection(style, actions));
+  if (tool !== "rub") rows.push(paintSection("Colour", style, actions, ["color"]));
   return rows;
 }
 
@@ -167,6 +265,11 @@ function inkPanel(
  * every corner still draggable until the shape is laid down. A sweep commits
  * on release and cannot be corrected; this is the half for a shape that has
  * corners in it rather than a gesture behind it.
+ *
+ * Both halves take a **paint** rather than a colour: the inside of the shape
+ * can be a flat colour, a pixel pattern revealed on the world's own lattice,
+ * or a field of a library shape laid out on the grid. It is the one tool that
+ * offers all three, which is why it is the one that shows the segmented row.
  */
 function fillPanel(
   style: StrokeStyle,
@@ -233,7 +336,7 @@ function fillPanel(
     );
   }
 
-  rows.push(colourSection(style, actions));
+  rows.push(paintSection("Paint", style, actions, ["color", "pattern", "shape"]));
   return rows;
 }
 
@@ -253,23 +356,6 @@ function segment(
     "aria-pressed": String(on),
     onClick: onPick,
   });
-}
-
-function colourSection(
-  style: StrokeStyle,
-  actions: ToolPanelActions,
-): HTMLElement {
-  const picker = createColorPicker({
-    value: style.color,
-    onChange: (hex) => actions.onStyle({ color: hex }),
-    onCommit: (hex) => actions.onStyle({ color: hex }),
-  });
-  return h(
-    "div",
-    { class: "inspect-section" },
-    h("div", { class: "inspect-section-title m", text: "Colour" }),
-    picker.root,
-  );
 }
 
 function sizeRow(style: StrokeStyle, actions: ToolPanelActions): HTMLElement {

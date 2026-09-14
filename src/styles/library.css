@@ -1,0 +1,312 @@
+/* The pattern and shape libraries: the two editors, and the paint control
+   that picks from them.
+
+   Both editors are the same three-column sheet — a toolbar, the thing being
+   edited, and a preview of it at the size the project will draw it — because
+   they are the same kind of work and the two should not have to be learned
+   separately. */
+
+.lib-work {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.lib-tools {
+  flex: 0 0 210px;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lib-stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.lib-side {
+  flex: 0 0 200px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lib-section {
+  padding: 12px 0;
+  border-bottom: var(--rule-chrome);
+}
+.lib-section:last-child { border-bottom: 0; }
+.lib-section-title {
+  font-size: 10px;
+  color: var(--chrome-dim);
+  margin-bottom: 8px;
+}
+
+.lib-hint {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--chrome-dim);
+  margin: 6px 0;
+}
+
+/* The canvases. A pattern is pixels, so nothing resamples them. */
+.lib-canvas {
+  border: 1px solid var(--chrome-rule);
+  background: #fff;
+  image-rendering: pixelated;
+  touch-action: none;
+  max-width: 100%;
+}
+
+.lib-preview {
+  border: 1px solid var(--chrome-rule);
+  overflow: hidden;
+  line-height: 0;
+}
+.lib-preview-canvas { image-rendering: pixelated; display: block; }
+
+.lib-name {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 500 13px var(--font-body);
+}
+.lib-name:focus { outline: none; border-color: var(--color-accent); }
+
+.lib-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--chrome-dim);
+}
+
+/* Rows of small choices: grid sizes, and the nudge pad. */
+.lib-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.lib-chip {
+  min-width: 34px;
+  padding: 5px 6px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-dim);
+  font: 500 11px var(--font-body);
+  cursor: pointer;
+}
+.lib-chip:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.lib-chip[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.lib-number {
+  width: 60px;
+  padding: 4px 6px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 500 11px var(--font-mono);
+}
+
+.lib-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 10px;
+  color: var(--chrome-dim);
+}
+.lib-field > span { flex: 0 0 52px; }
+.lib-slider { flex: 1 1 auto; min-width: 0; }
+.lib-readout {
+  flex: 0 0 auto;
+  min-width: 40px;
+  text-align: right;
+  font: 500 11px var(--font-mono);
+  color: var(--chrome-text);
+}
+.lib-zoom { width: 100%; max-width: 440px; }
+
+/* Brush tips: the tip itself on the button, as the pencil's brushes are. */
+.lib-brushes { display: flex; gap: 4px; margin-bottom: 8px; }
+.lib-brush {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.lib-brush:hover { background: var(--chrome-rule); }
+.lib-brush[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+.lib-brush[disabled] { opacity: 0.3; cursor: default; }
+.lib-brush canvas { display: block; }
+
+.lib-toggle {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-dim);
+  font: 500 11px var(--font-body);
+  cursor: pointer;
+  margin: 4px 0;
+}
+.lib-toggle:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.lib-toggle[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.lib-link {
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  color: var(--color-accent-400);
+  font: 500 11px var(--font-body);
+  text-align: left;
+  cursor: pointer;
+}
+.lib-link:hover { text-decoration: underline; }
+
+.lib-row-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
+.lib-row-buttons .btn { flex: 1 1 auto; padding: 6px 8px; font-size: 11px; }
+
+.lib-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.lib-grid-3 .btn { padding: 6px 4px; font-size: 11px; }
+
+/* The nudge pad: up over left-right over down, in a 3×3 with the middle out. */
+.lib-nudge {
+  display: grid;
+  grid-template-columns: repeat(3, 28px);
+  gap: 2px;
+  justify-content: start;
+  margin: 8px 0;
+}
+.lib-nudge-btn {
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-dim);
+  cursor: pointer;
+}
+.lib-nudge-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.lib-nudge-btn:nth-child(1) { grid-column: 2; }
+.lib-nudge-btn:nth-child(2) { grid-column: 1; grid-row: 2; }
+.lib-nudge-btn:nth-child(3) { grid-column: 3; grid-row: 2; }
+.lib-nudge-btn:nth-child(4) { grid-column: 2; grid-row: 3; }
+
+/* The shape editor's list of subpaths. */
+.lib-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow: auto;
+  margin-bottom: 8px;
+}
+.lib-path-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  padding: 2px 4px;
+}
+.lib-path-row[aria-selected="true"] { border-color: var(--color-neutral-700); }
+.lib-path-row[aria-current="true"] { border-color: var(--color-accent); }
+.lib-path-name {
+  flex: 1 1 auto;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 3px 2px;
+  color: var(--chrome-text);
+  font: 500 11px var(--font-body);
+  cursor: pointer;
+}
+.lib-path-count { font-size: 10px; color: var(--chrome-dim); }
+.lib-path-add {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: var(--chrome-dim);
+  cursor: pointer;
+}
+.lib-path-add[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+/* ── the paint control ──────────────────────────────────────────────────── */
+
+.paint-picker { display: flex; flex-direction: column; gap: 10px; }
+.paint-picker > .seg { width: 100%; }
+.paint-picker > .seg .seg-opt { flex: 1 1 0; text-align: center; }
+.paint-body { display: flex; flex-direction: column; gap: 12px; }
+.paint-section { display: flex; flex-direction: column; gap: 6px; }
+
+.paint-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(42px, 1fr));
+  gap: 4px;
+  max-height: 176px;
+  overflow: auto;
+  padding: 2px;
+}
+
+.paint-swatch {
+  padding: 1px;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  cursor: pointer;
+  line-height: 0;
+}
+.paint-swatch:hover { border-color: var(--color-neutral-400); }
+.paint-swatch[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.lib-swatch-canvas { display: block; image-rendering: pixelated; }
+
+.paint-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+/* Narrow screens — an iPad in portrait with both sidebars open. The three
+   columns stack rather than shrinking the canvas, because the canvas is the
+   one thing in here whose size means something. */
+@media (max-width: 860px) {
+  .lib-work { flex-direction: column; }
+  .lib-tools,
+  .lib-side { flex: 1 1 auto; width: 100%; }
+}

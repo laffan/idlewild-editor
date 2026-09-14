@@ -1,5 +1,7 @@
 /** Shared document + project types. Mirrored by src-tauri/src/project.rs. */
 
+import type { PaintSpec } from "./paint";
+
 /**
  * The three templates.
  *
@@ -135,6 +137,16 @@ export interface FillPatch {
   /** Set when kind is "pattern": the PSD key whose texture tiles the patch. */
   patternKey?: string;
   patternLayer?: string;
+  /**
+   * What the patch is *made of*, when it is not flat colour.
+   *
+   * Beside `kind` rather than a third value of it, because the two mean
+   * different things: `kind: "pattern"` is a PSD in this project whose
+   * texture tiles the patch, while this is a row in the app-wide library. A
+   * patch is usually `kind: "color"` and carries one of these as well — the
+   * colour is what the pattern or the shape is drawn in.
+   */
+  paint?: PaintSpec;
   walkable: boolean;
 }
 
@@ -248,20 +260,6 @@ export interface Zone {
   blocking: boolean;
 }
 
-/**
- * What a fill covers, in the units it is stored in.
- *
- * A run of grid spaces counts spaces; a rectangle on a blank project has no
- * spaces to count and reports its size, because "0 spaces" is what a fill
- * that covers 420 by 260 pixels was saying before this existed.
- */
-export function describeFill(fill: FillPatch): string {
-  if (fill.rect) {
-    return `${Math.round(fill.rect.width)} × ${Math.round(fill.rect.height)} px`;
-  }
-  return `${fill.cells.length} ${fill.cells.length === 1 ? "space" : "spaces"}`;
-}
-
 /** A freehand stroke from the drawing layer. */
 export interface Stroke {
   id: string;
@@ -278,13 +276,29 @@ export interface Stroke {
    * What the stroke does to what is under it.
    *
    * "ink" paints and "highlight" multiplies, as Hush has always had them.
-   * The other two are each the whole implementation of a tool rather than a
-   * variation on the pencil: "erase" stamps the same brush with
-   * `destination-out`, so it rubs ink out instead of laying it down, and
-   * "fill" is not stamped at all — its points are a closed outline and what
-   * is drawn is the inside of it.
+   * The other three are each the whole implementation of a tool: "erase"
+   * stamps the same brush with `destination-out`; "fill" is not stamped at
+   * all — its points are a closed outline and what is drawn is the inside of
+   * it; and "shape" stamps a *library shape* into a box at each recorded
+   * point, which is what makes the Shape brush lay tiles rather than a line.
    */
-  mode: "ink" | "highlight" | "erase" | "fill";
+  mode: "ink" | "highlight" | "erase" | "fill" | "shape";
+  /**
+   * What the mark is made of, when it is not flat colour.
+   *
+   * Absent means colour: every stroke drawn before the libraries existed, and
+   * every one drawn with the plain pencil since. The id it carries is a
+   * *library* id, and the library is per install — see `lib/library/store.ts`
+   * for why, and for what a project naming a row this machine does not have
+   * draws instead.
+   */
+  paint?: PaintSpec;
+  /**
+   * The box each stamp fills, in world pixels. Only on a "shape" stroke: a
+   * grid space, whose width and height differ on an isometric project, which
+   * is what makes a tile shape come out as the diamond it is meant to be.
+   */
+  stamp?: { width: number; height: number };
   createdAt: number;
 }
 
@@ -633,13 +647,18 @@ export type EditorMode = "draw" | "code" | "play";
 /**
  * What the pointer is doing.
  *
- * Nine tools over three bars — the rail's two, the place bar's two and the
- * drawing toolbar's five — plus one that has no button anywhere. "rub" is PSD
- * Edit mode's: the pencil with the paint taken out, offered as a toggle on
- * that mode's own bar rather than as a tenth button somewhere it would mean
- * nothing. It is a tool here all the same, because the pointer is doing
- * something of its own while it is up. See `editor/tool-rail.ts` for which
- * button is where and `editor/tool-routing.ts` for what each one means.
+ * Ten tools over two columns — the rail's four and the drawing toolbar's six
+ * — plus one that has no button anywhere. "rub" is PSD Edit mode's: the
+ * pencil with the paint taken out, offered as a toggle on that mode's own bar
+ * rather than as an eleventh button. It is a tool here all the same, because
+ * the pointer is doing something of its own while it is up. See
+ * `editor/tool-rail.ts` for which button is where and `tool-routing.ts` for
+ * what each one means.
+ *
+ * "pattern" and "shape" paint with the library rather than with a colour.
+ * Pattern was *pixels*, the pencil wearing a checkered tip; it is a fill
+ * brush now, and what it lays down is pinned to the world, so a stroke
+ * *reveals* an area rather than covering one.
  *
  * "point" and "zone" are the two ways of making something out of bare ground:
  * there is nothing already on an empty patch of canvas to promote into
@@ -653,7 +672,8 @@ export const TOOL_IDS = [
   "point",
   "zone",
   "pencil",
-  "pixels",
+  "pattern",
+  "shape",
   "eraser",
   "lasso",
   "fill",

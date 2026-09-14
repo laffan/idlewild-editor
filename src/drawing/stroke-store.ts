@@ -55,6 +55,12 @@ export class StrokeStore extends EventTarget {
       mode: style.mode,
       createdAt: Date.now(),
     };
+    // Written only when there is something to write. A plain pencil stroke is
+    // the overwhelming majority of what a document holds, and a `paint` of
+    // `{kind: "color"}` on every one of them is a field per stroke saying the
+    // default — which is bytes on disk and a diff in every test fixture.
+    if (style.paint && style.paint.kind !== "color") stroke.paint = { ...style.paint };
+    if (style.mode === "shape") stroke.stamp = { ...style.stamp };
     this.writeStrokes([...this.strokes, stroke]);
     return stroke;
   }

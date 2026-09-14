@@ -14,6 +14,8 @@ import { Grid, fillShape } from "../lib/grid";
 import { fillAt } from "../lib/doc-shape";
 import { layerKind } from "../lib/layer-kinds";
 import { alphaOf, hexToNumber } from "../lib/color";
+import { paintIsPlain } from "../lib/paint";
+import { FillPaintRender } from "./fill-paint";
 import { ordersByHand } from "../lib/units";
 import { unitOf } from "./unit";
 import {
@@ -98,6 +100,14 @@ export class DocRenderer {
   private readonly grid: Grid;
   private readonly store: DocStore;
   private readonly fillGraphics: Phaser.GameObjects.Graphics;
+  /**
+   * The fills that are made of a pattern or a shape.
+   *
+   * Its own renderer because `Graphics` cannot draw either — see
+   * `fill-paint.ts`. It is driven from `renderFills` so the two always agree
+   * about which patches it has taken over.
+   */
+  private readonly fillPaint: FillPaintRender;
   private readonly zoneGraphics: Phaser.GameObjects.Graphics;
   private readonly pointGraphics: Phaser.GameObjects.Graphics;
   private readonly placements = new Map<string, PlacementView>();
@@ -142,6 +152,7 @@ export class DocRenderer {
     this.store = store;
     this.grid = grid;
     this.fillGraphics = scene.add.graphics();
+    this.fillPaint = new FillPaintRender(scene, store, grid);
     this.zoneGraphics = scene.add.graphics();
     this.pointGraphics = scene.add.graphics();
   }
@@ -244,9 +255,18 @@ export class DocRenderer {
       g.setDepth((layers.length - index) * DEPTH_STRIDE);
       for (const fill of layer.fills) this.paintFill(g, fill);
     });
+
+    this.fillPaint.render();
   }
 
   private paintFill(g: Phaser.GameObjects.Graphics, fill: FillPatch): void {
+    // A patch made of a library pattern or shape is drawn as its own image —
+    // see `fill-paint.ts` — and a flat wash under it would show through the
+    // pattern's gaps. `paintIsPlain` is what decides, so a fill naming a row
+    // this install does not have falls back to its colour rather than to
+    // nothing at all.
+    if (!paintIsPlain(fill.paint)) return;
+
     // Pattern fills carry a PSD texture; until it has loaded, and for colour
     // fills, a flat colour is what the grid shows.
     const shape = fillShape(this.grid, fill);
@@ -564,6 +584,7 @@ export class DocRenderer {
   }
 
   destroy(): void {
+    this.fillPaint.destroy();
     this.fillGraphics.destroy();
     this.zoneGraphics.destroy();
     this.pointGraphics.destroy();

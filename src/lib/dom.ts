@@ -130,9 +130,9 @@ export const ICONS = {
     "m4 20 4.2-4.2",
   ],
   fill: "M6 12 12 6l6 6-6 6-6-6Zm13 4c0 1.7 1 2.6 2 2.6",
-  /* A checkerboard, for the brush that leaves a dither rather than a smudge.
-     Four filled squares of a 4×4 grid, which is the smallest arrangement that
-     reads as a pattern at 21px rather than as four dots. */
+  /* A checkerboard, for the brush that reveals a pattern rather than laying
+     ink down. Four filled squares of a 4×4 grid, which is the smallest
+     arrangement that reads as a pattern at 21px rather than as four dots. */
   pixels: [
     "M4 4h5v5H4z",
     "M14 4h5v5h-5z",
@@ -141,6 +141,10 @@ export const ICONS = {
     "M14 14h5v5h-5z",
   ],
   boundary: "M3 8V4h4M17 4h4v4M21 16v4h-4M7 20H3v-4",
+  /* A tile with a corner rounded off — the Shape brush. It is deliberately
+     one of the shapes in the palette rather than a generic polygon: what the
+     tool stamps is a tile, and a quarter circle is the tile that says so. */
+  shape: ["M4 4h16v16H4z", "M20 4A16 16 0 0 0 4 20"],
   /* A freehand loop closing on itself — the lasso's own gesture. */
   lasso: [
     "M4 13a8 5 0 1 0 16 0 8 5 0 1 0-16 0",

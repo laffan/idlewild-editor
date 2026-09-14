@@ -11,10 +11,15 @@ import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { cellsInRange } from "../lib/grid";
 import type { FillPatch, Selection } from "../lib/types";
+import type { Paint } from "../lib/paint";
 import * as log from "../lib/log";
 
 /**
  * Fill a region on a layer, and hand back the selection to move to.
+ *
+ * `paint` is what the spaces are made of — a flat colour, a pixel pattern
+ * revealed on the world's own lattice, or a library shape in every space it
+ * covers. See `lib/paint.ts`.
  *
  * Null when there was nothing to fill or nowhere to put it: a locked layer
  * says so rather than silently doing nothing, because "I pressed fill and
@@ -25,7 +30,7 @@ export function fillRegion(
   grid: Grid,
   layerId: string,
   region: Extract<Selection, { kind: "region" }>,
-  color: string,
+  paint: Paint,
   walkable: boolean,
 ): Selection | null {
   const layer = store.layer(layerId);
@@ -42,10 +47,15 @@ export function fillRegion(
     ? { cells: [...cellsInRange(region.from, region.to)] }
     : { cells: [], rect: grid.rangeBounds(region.from, region.to) };
 
+  // The colour is always written, whatever the paint is made of: a pattern
+  // and a shape are both *drawn in* a colour, and it is what the fill falls
+  // back to on a machine whose library does not have that row.
+  const { color, ...spec } = paint;
   const fill = store.addFill(layer.id, {
     ...shape,
     kind: "color",
     color,
+    ...(spec.kind === "color" ? {} : { paint: spec }),
     walkable,
   });
   return { kind: "fill", layerId: layer.id, fillId: fill.id };

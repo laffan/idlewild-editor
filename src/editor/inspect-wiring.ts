@@ -15,7 +15,7 @@
  * was assembled.
  */
 
-import { applyFillColour } from "./fill-actions";
+import { applyFillPaint } from "./fill-actions";
 import { exportSelectionPng } from "./export-selection";
 import { openAddImage, openExportSelection } from "./sheets";
 import * as log from "../lib/log";
@@ -58,7 +58,7 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
   const { store, grid } = deps;
 
   return {
-    onFillColor: (color) => applyFillColour(store, deps.scene(), color),
+    onFillPaint: (paint) => applyFillPaint(store, deps.scene(), paint),
     onToggleWalkable: (walkable) => {
       const selection = deps.scene()?.getSelection();
       if (selection?.kind !== "fill") return;

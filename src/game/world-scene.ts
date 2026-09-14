@@ -27,6 +27,7 @@ import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
 import { fillRegion } from "./fill-region";
+import type { Paint } from "../lib/paint";
 import { selectionLayer } from "../lib/selection";
 import { patternSpec } from "../lib/layer-kinds";
 import { unitOf } from "./unit";
@@ -582,14 +583,14 @@ export class WorldScene extends Phaser.Scene {
   // ── content ───────────────────────────────────────────────────────────────
 
   /** Fill the current region selection on the active layer. */
-  fillSelection(color: string, walkable: boolean): void {
+  fillSelection(paint: Paint, walkable: boolean): void {
     if (this.selection.kind !== "region") return;
     const next = fillRegion(
       this.store,
       this.grid,
       this.activeLayerId,
       this.selection,
-      color,
+      paint,
       walkable,
     );
     if (next) this.setSelection(next);

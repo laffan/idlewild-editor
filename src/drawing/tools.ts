@@ -47,7 +47,9 @@ import {
   type InkPoint,
 } from "./geometry";
 import { onFrame } from "./frame";
+import { paintRegion } from "./paint-render";
 import { renderLive, STREAMLINE } from "./render";
+import { patternScaleOf } from "../lib/paint";
 import type { AtlasCache } from "./atlas";
 import { ERASER_RADIUS, type Bounds, type StrokeStyle } from "./types";
 
@@ -150,13 +152,22 @@ export function beginDraw(
     return shapedPoints;
   };
 
+  /**
+   * How far past the furthest sample the ink can reach.
+   *
+   * The brush, because a stamp is laid centred on the path — and, for a
+   * Pattern stroke, one lattice cell more: what it fills are whole cells, and
+   * the cell the tip's edge lands inside runs on past it.
+   */
+  const reach =
+    style.size +
+    (style.paint.kind === "pattern" ? patternScaleOf(style.paint) : 0);
+
   const paint = (): void => {
     const held = shaped();
     const ctx = surface.beginLive();
     renderLive(ctx, streamlinePoints(held, STREAMLINE), style, atlas);
-    // The stroke's own box, grown by the brush: a stamp is laid centred on the
-    // path, so the ink reaches half a nominal width past the furthest sample.
-    surface.endLive(boundsOf(held, style.size));
+    surface.endLive(boundsOf(held, reach));
   };
   const frame = onFrame(paint);
   paint();
@@ -373,7 +384,7 @@ export function beginFill(
     // a fill that previewed as a line would be a fill you had to imagine.
     const held = shaped();
     const ctx = surface.beginLive();
-    fillPreview(ctx, held, style.color, surface.worldPerScreenPixel * 1.5);
+    fillPreview(ctx, held, style, surface.worldPerScreenPixel * 1.5);
     surface.endLive(boundsOf(held, surface.worldPerScreenPixel * 2));
   };
   const frame = onFrame(paint);
@@ -414,18 +425,39 @@ export function beginFill(
 export function fillPreview(
   ctx: CanvasRenderingContext2D,
   points: readonly { x: number; y: number }[],
-  color: string,
+  style: Pick<StrokeStyle, "color" | "paint" | "stamp">,
   lineWidth: number,
 ): void {
   if (points.length === 0) return;
+
+  // The inside, in whatever the fill is made of. A pattern previews as the
+  // pattern rather than as its colour: the whole question a preview answers
+  // is "is this the shape I want filled with the thing I chose", and half of
+  // that was missing while a dither previewed as a flat wash.
+  ctx.globalAlpha = 0.7;
+  const painted =
+    style.paint.kind !== "color" &&
+    paintRegion(
+      ctx,
+      points.map((p) => ({ point: [p.x, p.y] as [number, number], pressure: 1 })),
+      style.color,
+      style.paint,
+      style.stamp,
+    );
+  if (!painted) {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    ctx.closePath();
+    ctx.fillStyle = style.color;
+    ctx.fill("nonzero");
+  }
+  ctx.globalAlpha = 1;
+
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
   ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.globalAlpha = 0.7;
-  ctx.fill("nonzero");
-  ctx.globalAlpha = 1;
   ctx.lineWidth = lineWidth;
   ctx.strokeStyle = ACCENT;
   ctx.stroke();
