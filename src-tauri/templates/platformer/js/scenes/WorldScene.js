@@ -349,7 +349,47 @@ export class WorldScene extends Phaser.Scene {
  * Keep the two in step.
  */
 // idlewild:begin drawOrder
-function drawOrder(placements, isometric) {
+/**
+ * The isometric ordering's key: the outermost edge of a unit's **collider**,
+ * in rows.
+ *
+ * A collider is the record of which grid spaces a file stands on — the spaces
+ * its base covers, or the ones an extrusion's voxels rest on at level zero —
+ * so it is the footprint, and on an isometric grid `cx + cy` counts rows away
+ * from the camera. The largest of them is the corner of the footprint nearest
+ * the camera, where the two visible faces of a box meet, and **one row further
+ * on** is the line straight up from that corner: a space whose middle is on
+ * that line is past the object and draws in front of it.
+ *
+ * Read off the collider rather than guessed from the pixels. The bottom edge
+ * of the artwork is a reasonable approximation and only that: a cast shadow,
+ * a bit of transparent margin or a picture pasted flat all move it, and none
+ * of them move where the thing stands. The collider is the answer the editor
+ * already holds and the one a person can correct by hand.
+ *
+ * The collider rides on one member of a unit — it is a fact about the file
+ * rather than about any one of its layers — so every member is asked and the
+ * first answer wins. Failing that, the anchor: a unit of one space.
+ */
+function nearRow(unit, colliderOf) {
+  let best = null;
+  for (const p of unit) {
+    const collider = colliderOf ? colliderOf(p) : p.collider;
+    for (const cell of (collider && collider.cells) || []) {
+      const row = p.anchor.cx + cell.cx + p.anchor.cy + cell.cy;
+      if (best === null || row > best) best = row;
+    }
+  }
+  if (best === null) {
+    for (const p of unit) {
+      const row = p.anchor.cx + p.anchor.cy;
+      if (best === null || row > best) best = row;
+    }
+  }
+  return (best ?? 0) + 1;
+}
+
+function drawOrder(placements, isometric, colliderOf) {
   const units = [];
   const byInstance = new Map();
   for (const placement of placements) {
@@ -370,26 +410,11 @@ function drawOrder(placements, isometric) {
   }
 
   if (isometric) {
-    // The **nearest ground point** of the unit: the bottom of its artwork.
-    //
-    // Which is the corner of its footprint closest to the camera — the one
-    // where the two visible faces of a box meet — and the line straight up
-    // from it is where a thing passing by stops being behind and starts being
-    // in front. `y + height` is that point for anything standing on the
-    // ground, and it agrees with the collider by construction: a default
-    // collider is "the spaces its base covers", derived from the same edge.
-    //
-    // The two keys this replaced were both wrong, in opposite directions. The
-    // artwork's *top* is a fact about how tall a thing is, so a short thing
-    // standing behind a tall one drew in front of it. The unit's *anchor* is
-    // the space it hangs from, which on a footprint more than one space across
-    // is the middle of it — so a character walking through a building popped
-    // in front half way along.
-    const near = (unit) => Math.max(...unit.map((p) => p.y + p.height));
-    // A stable sort, so two units whose near corners are level keep the order
-    // they were placed in — which is the only answer available and the one the
-    // editor's panel shows.
-    units.sort((a, b) => near(a) - near(b));
+    // The outermost edge of each unit's collider — see `nearRow`. A stable
+    // sort, so two units whose near edges are level keep the order they were
+    // placed in, which is the only answer available and the one the editor's
+    // panel shows.
+    units.sort((a, b) => nearRow(a, colliderOf) - nearRow(b, colliderOf));
   }
 
   return units.flatMap((unit) =>

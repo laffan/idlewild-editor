@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { destroyPlaced, drawOrder } from "../../game/doc-renderer";
+import { destroyPlaced } from "../../game/doc-renderer";
+import { drawOrder } from "../../game/draw-order";
 import {
   pickPlacement,
   pickPlacementsIn,
@@ -9,7 +10,7 @@ import {
 } from "../../game/picking";
 import { Grid } from "../grid";
 import { isSelected, layerItems } from "../../editor/layer-items";
-import type { Layer, MapPoint, Placement, Zone } from "../types";
+import type { Cell, Collider, Layer, MapPoint, Placement, Zone } from "../types";
 
 function placement(id: string, x: number, y: number): Placement {
   return {
@@ -393,28 +394,46 @@ describe("pickPlacementsIn", () => {
  */
 describe("drawOrder", () => {
   /**
+   * The footprint of each file, as the document holds it: cell offsets from
+   * the anchor. This is what the isometric ordering reads — see `nearRow` —
+   * and handing it in is how the two implementations of that ordering are kept
+   * to one contract, since the editor keeps colliders per PSD key and the
+   * exported game's config writes them onto a placement.
+   */
+  const footprints = new Map<string, Cell[]>();
+  const colliderOf = (p: Placement): Collider | undefined => {
+    const cells = footprints.get(p.psdKey);
+    return cells ? { cells, blocking: true } : undefined;
+  };
+
+  /**
    * One PSD's worth: ground at the back, then walls, then the roof.
    *
-   * `base` is where the thing's *feet* are — the bottom of the artwork, which
-   * is the corner of its footprint nearest the camera and what the isometric
-   * ordering sorts on. The three parts sit at different heights up the screen
-   * from it, which is the whole reason a unit sorts as one thing rather than
-   * layer by layer: the roof is a hundred pixels above the ground it belongs
-   * to and must not be ordered against it.
+   * `anchor` is the space it hangs from and `deep` how many spaces its
+   * footprint runs *towards* the camera from there — so a 1 × 1 tree is 1 and a
+   * hall four spaces across is 4. Its artwork sits at whatever height up the
+   * screen the parts say, which is a different question entirely: the roof is a
+   * hundred pixels above the ground it belongs to and must not be ordered
+   * against it.
    */
-  function unit(id: string, base: number): Placement[] {
-    // Every part is 100 tall, so a part's own bottom is `y + 100`.
+  function unit(id: string, anchor: number, deep = 1): Placement[] {
+    footprints.set(
+      id,
+      Array.from({ length: deep }, (_, i) => ({ cx: i, cy: 0 })),
+    );
     const at = (name: string, above: number, order: number): Placement => ({
-      ...placement(name, 0, base - 100 - above),
+      ...placement(name, 0, -above),
+      psdKey: id,
+      anchor: { cx: anchor, cy: 0 },
       instance: id,
       order,
     });
-    return [at(`${id}-roof`, 70, 2), at(`${id}-walls`, 40, 1), at(`${id}-ground`, 0, 0)];
+    return [at(`${id}-roof`, 170, 2), at(`${id}-walls`, 140, 1), at(`${id}-ground`, 100, 0)];
   }
 
   it("draws a PSD's layers in the order its author stacked them", () => {
     const hut = unit("hut", 0);
-    expect(drawOrder(hut, false).map((p) => p.id)).toEqual([
+    expect(drawOrder(hut, false, colliderOf).map((p) => p.id)).toEqual([
       "hut-ground",
       "hut-walls",
       "hut-roof",
@@ -422,20 +441,20 @@ describe("drawOrder", () => {
   });
 
   it("keeps a unit together rather than sorting its layers against each other", () => {
-    // Isometric sorts on screen Y, and a roof sits higher up the screen than
-    // the tower under it — sorting the two would put the roof behind it.
+    // A roof sits higher up the screen than the tower under it; sorting the
+    // two against each other would put the roof behind the building.
     const hut = unit("hut", 0);
-    expect(drawOrder(hut, true).map((p) => p.id)).toEqual([
+    expect(drawOrder(hut, true, colliderOf).map((p) => p.id)).toEqual([
       "hut-ground",
       "hut-walls",
       "hut-roof",
     ]);
   });
 
-  it("sorts separate PSDs on where they stand, nearer in front", () => {
+  it("sorts separate PSDs on the ground they stand on, nearer in front", () => {
     const far = unit("far", 0);
-    const near = unit("near", 200);
-    const order = drawOrder([...near, ...far], true).map((p) => p.id);
+    const near = unit("near", 12);
+    const order = drawOrder([...near, ...far], true, colliderOf).map((p) => p.id);
     expect(order.slice(0, 3)).toEqual(["far-ground", "far-walls", "far-roof"]);
     expect(order.slice(3)).toEqual(["near-ground", "near-walls", "near-roof"]);
   });
@@ -443,48 +462,65 @@ describe("drawOrder", () => {
   /**
    * A tall thing standing behind a short one. Sorting on the *top* of the
    * artwork put the tower in front, because its roof is high up the screen and
-   * a bush behind it is not — and the tower's feet are what say where it is.
+   * a bush in front of it is not — and where a thing stands is the collider's
+   * answer, not the artwork's.
    */
   it("does not put a tall thing in front because it is tall", () => {
-    // Feet at y = 0 either way: the tower is 400 tall, the bush 20.
-    const tower = [{ ...placement("tower", 0, -400), height: 400, instance: "t" }];
-    const bush = [{ ...placement("bush", 0, -60), height: 20, instance: "b" }];
-    expect(drawOrder([...tower, ...bush], true).map((p) => p.id)).toEqual([
-      "bush",
+    footprints.set("tower", [{ cx: 0, cy: 0 }]);
+    footprints.set("bush", [{ cx: 0, cy: 0 }]);
+    // The tower's artwork reaches 400px up the screen; the bush's is a stub
+    // standing three spaces nearer the camera.
+    const tower = [
+      { ...placement("tower", 0, -400), psdKey: "tower", anchor: { cx: 0, cy: 0 } },
+    ];
+    const bush = [
+      { ...placement("bush", 0, 0), psdKey: "bush", anchor: { cx: 3, cy: 0 } },
+    ];
+    expect(drawOrder([...bush, ...tower], true, colliderOf).map((p) => p.id)).toEqual([
       "tower",
+      "bush",
     ]);
   });
 
   /**
-   * The one the *anchor* key got wrong. A building's anchor is the middle of
-   * its footprint, so a character walking through it swapped over half way
-   * along; the near corner is the bottom of the artwork, and nothing that
-   * stands further back than that may sort in front of it.
+   * The one the *anchor* key got wrong. A hall's anchor is the middle of its
+   * footprint, so anything walking through it swapped over half way along; the
+   * key is the outermost edge of the collider, so a post standing on the hall's
+   * own ground is behind it.
    */
-  it("sorts a wide thing on its near corner, not on its middle", () => {
-    // A building whose base sweeps from y = 0 down to y = 160, and a post
-    // standing at y = 100 — inside the building's ground, so behind it.
-    const hall = [{ ...placement("hall", 0, -200), height: 360, instance: "h" }];
-    const post = [{ ...placement("post", 0, 60), height: 40, instance: "p" }];
-    expect(drawOrder([...post, ...hall], true).map((p) => p.id)).toEqual([
-      "post",
-      "hall",
-    ]);
+  it("sorts a wide thing on its outermost edge, not on its middle", () => {
+    // A hall anchored at row 0 whose footprint runs four spaces forward, and a
+    // post standing on row 2 — inside the hall's ground, so behind it.
+    const hall = unit("hall", 0, 4);
+    const post = unit("post", 2);
+    const order = drawOrder([...post, ...hall], true, colliderOf).map((p) => p.id);
+    expect(order[0]).toBe("post-ground");
+    expect(order[3]).toBe("hall-ground");
   });
 
-  /** Two things whose feet are level: neither is nearer, so order wins. */
+  /** Two footprints whose near edges are level: neither is nearer. */
   it("leaves a tie in the order it was given", () => {
-    const a = unit("a", 120);
-    const b = unit("b", 120);
-    const order = drawOrder([...a, ...b], true).map((p) => p.id);
+    const a = unit("a", 5);
+    const b = unit("b", 5);
+    const order = drawOrder([...a, ...b], true, colliderOf).map((p) => p.id);
     expect(order[0]).toBe("a-ground");
     expect(order[3]).toBe("b-ground");
   });
 
+  /** No collider yet — the frame or two after a file lands. The anchor. */
+  it("falls back to the anchor for a file with no footprint recorded", () => {
+    footprints.clear();
+    const far = unit("far", 0);
+    const near = unit("near", 9);
+    footprints.clear();
+    const order = drawOrder([...near, ...far], true, colliderOf).map((p) => p.id);
+    expect(order[0]).toBe("far-ground");
+  });
+
   it("leaves separate PSDs in the order they were placed where nothing snaps", () => {
-    const first = unit("first", 300);
+    const first = unit("first", 18);
     const second = unit("second", 0);
-    const order = drawOrder([...first, ...second], false).map((p) => p.id);
+    const order = drawOrder([...first, ...second], false, colliderOf).map((p) => p.id);
     expect(order[0]).toBe("first-ground");
     expect(order[3]).toBe("second-ground");
   });
@@ -493,7 +529,7 @@ describe("drawOrder", () => {
     // A document written before the stack was recorded, opened before the
     // scene's migration has run over it.
     const loose = [placement("a", 0, 0), placement("b", 0, 0)];
-    expect(drawOrder(loose, false)).toHaveLength(2);
+    expect(drawOrder(loose, false, colliderOf)).toHaveLength(2);
   });
 });
 

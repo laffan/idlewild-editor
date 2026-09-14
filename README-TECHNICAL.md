@@ -226,8 +226,9 @@ through on the way in from disk. Split from `doc-store.ts` for the line rule,
 and it splits cleanly: none of it touches the store.
 
 - **Layers are top-first**, matching Hush. Phaser depth counts upward, so
-  layer *N* of *M* renders at depth `(M − N) × 1000`. Isometric placements add
-  their world Y so nearer objects draw in front.
+  layer *N* of *M* renders at depth `(M − N) × 1000`. Inside a layer's slot
+  each placed file takes the next whole number up, in an order worked out once
+  — see *What is drawn over what*.
 - **Cells are integers**, never pixels. `src/lib/grid.ts` owns the projection:
   isometric tiles are 2:1 diamonds addressed by centre, orthogonal tiles are
   squares addressed by top-left corner. Everything downstream — selection,
@@ -3337,6 +3338,14 @@ can open it.
 
 ### What is drawn over what
 
+`src/game/draw-order.ts` is this, split out of `doc-renderer.ts` when that file
+reached its 700 lines — and a clean seam rather than a convenient one: nothing
+in it touches Phaser's display list or the document store. It holds
+`DEPTH_STRIDE`, `applyDepth`, `drawOrder` and `layerDepth`, which is the whole
+answer to "which of these two is in front", and the exported game's
+`WorldScene.js` carries the same answer in blocks of its own because it cannot
+import it.
+
 A PSD is a stack of layers and the order is the artwork: a roof over a tower
 is not the same picture as a tower over a roof. psd-to-json reports that
 order — the manifest lists layers top-first, as Photoshop's panel does, and
@@ -3356,19 +3365,21 @@ So depth is now assigned from an explicit order. `drawOrder` sorts one
 document layer's placements back to front, and each takes the next depth up
 from the layer's base:
 
-- **Between placed PSDs**, an isometric *object* layer sorts on each unit's
-  **nearest ground point** — the bottom of its artwork, `max(y + height)`
-  across its members. Everything else leaves units in the order they were
-  placed: every layer of a flat projection, and a pattern or background layer
-  of either. `drawOrder` itself takes a plain boolean; the rule that decides it
-  is `ordersByHand`, above.
+- **Between placed PSDs**, an isometric *object* layer sorts on the **outermost
+  edge of each unit's collider**: `max(cx + cy)` over the collider's spaces,
+  plus one. Everything else leaves units in the order they were placed: every
+  layer of a flat projection, and a pattern or background layer of either.
+  `drawOrder` itself takes a plain boolean; the rule that decides it is
+  `ordersByHand`, above.
 - **Within one placed PSD**, the author's stack and nothing else.
 
-**Why the bottom edge**, and why it took two goes to get there. The key is
-looking for the corner of a thing's footprint nearest the camera — where the
-two visible faces of a box meet, and the line straight up from that corner is
-what a passer-by crosses to stop being behind it and start being in front. Two
-earlier answers were both wrong, in opposite directions:
+**Why the collider's outer edge**, and why it took three goes to get there. The
+key is looking for the corner of a thing's footprint nearest the camera — where
+the two visible faces of a box meet, and the line straight up from that corner
+is what a passer-by crosses to stop being behind it and start being in front.
+On an isometric grid `cx + cy` counts rows away from the camera, so the largest
+of a footprint's rows is that corner and the row after it is the line. Three
+earlier answers were wrong in three different ways:
 
 - The artwork's **top** edge, `min(p.y)`, is a fact about how *tall* a thing
   is. A short thing standing behind a tall one sorted in front of it, and a
@@ -3377,15 +3388,25 @@ earlier answers were both wrong, in opposite directions:
   a footprint more than one space across is the *middle* of it. So anything
   walking through a building swapped over half way along, which is exactly what
   it looked like.
+- The artwork's **bottom** edge, `max(y + height)`, is the right corner
+  measured the wrong way: it reads the pixels. A cast shadow, a transparent
+  margin or a picture pasted flat all move that edge and none of them move
+  where the thing stands, so the line drifted off the ground it belonged to.
 
-`max(y + height)` is the near corner itself. A placement's box is one layer's
-pixels cropped to what is in them, so the bottom of it is where the artwork
-meets the ground: the base of a tree's trunk, the bottom of an extrusion's near
-face, the near vertex of a floor tile. It agrees with the **collider** by
-construction — a default collider is "the spaces its base covers", derived from
-that same edge (see *The defaults*) — so what a thing sorts behind and what it
-blocks are the same footprint. And it is the one quantity a thing that *walks*
-can work out for itself: see **A character sorts itself in**.
+The **collider** is the same corner read off the record that already holds it.
+A collider is which grid spaces a file stands on — "the spaces its base covers"
+by default, or the ones an extrusion's voxels rest on at level zero (see *The
+defaults*) — so what a thing sorts behind and what it blocks are the same
+footprint by construction rather than by coincidence, and a footprint somebody
+has corrected by hand corrects the sorting with it. It is also the one quantity
+a thing that *walks* can work out for itself, because it is grid spaces rather
+than a texture: see **A character sorts itself in**.
+
+The lookup is handed in rather than read inside `drawOrder`, because the two
+sides keep colliders in different places — the document holds one record per
+PSD key, the exported config writes it onto the first placement of a unit — and
+a unit with no collider recorded yet falls back to its anchor, which is the
+old answer for the frame or two before the record lands.
 
 A single number per object cannot be exactly right for every arrangement of
 extended footprints — the exact rule is a pairwise "is A behind B" over the two
@@ -4590,21 +4611,26 @@ So `placeDocument` keeps the numbers it sorted by. One per step, already in
 order, on the layer the character walks:
 
 ```js
-this.walkAmong = { base: depth * 1000, near: nearPoints(order) };
+this.walkAmong = {
+  base: depth * 1000,
+  near: nearPoints(order, this.grid.tileHeight / 2),
+};
 ```
 
-and `walkDepth` is a binary search for the character's own ground point in that
+and `walkDepth` is a binary search for the character's own position in that
 list — `base + low − 0.001`, where `low` is the first placement standing nearer
 the camera than the character is.
 
 **Plain world Y on both sides**, which is what makes it one comparison rather
-than a projection. An object's number is the bottom of what it drew; the
-character's is `sprite.y`, which for the template's centred rectangle is the
-middle of the space it stands on and for a sprite given its feet as an origin
-is the feet. Both are the point the thing touches the ground at, and that is
-the only thing being compared. A space whose middle is level with an object's
-near corner is *beside* it rather than behind it — on a diamond grid the two
-share an edge — so `<=` counts level as past, which is the right way round.
+than a projection. An object's number is the line its collider's outer edge
+sits on, in world pixels: `nearRow × tileHeight / 2`, because an isometric row
+is half a tile of screen height. The character's is `sprite.y`, which for the
+template's centred rectangle is the middle of the space it stands on and for a
+sprite given its feet as an origin is the feet. Both are the point the thing
+touches the ground at, and that is the only thing being compared. A space whose
+middle is level with an object's near corner is *beside* it rather than behind
+it — on a diamond grid the two share an edge — so `<=` counts level as past,
+which is the right way round.
 
 **The position comes off the sprite, not off the character's cell.** `cell` is
 as much where it is walking *to* as where it is — `moveTo` picks a path and the
@@ -4621,12 +4647,12 @@ getter over the sprite now.)
 **Every member of a unit carries its unit's number**, which is `nearPoints`'
 whole job and the half that is easy to get wrong and impossible to see.
 `drawOrder` hands back a flat list — a three-layer building is three entries —
-and a roof's bottom edge is above the walls' under it, so each placement's own
-number dips in the middle of a unit. A binary search over that does not give a
-fuzzy answer; it finds a place *between* two layers of one building and draws
-the character inside it. Because `drawOrder` sorted the units by exactly this
-number, giving each member its unit's makes the list non-decreasing by
-construction.
+and the collider rides on the first of them, so each placement's own number
+dips in the middle of a unit as the rest fall back to their anchors. A binary
+search over that does not give a fuzzy answer; it finds a place *between* two
+layers of one building and draws the character inside it. Because `drawOrder`
+sorted the units by exactly this number, giving each member its unit's makes
+the list non-decreasing by construction.
 
 **A thousandth, not a half.** This is the number that has to be right, and the
 obvious one is wrong. Placement `k` sits at `base + k`, and `applyDepth`
@@ -4650,18 +4676,58 @@ placement's near corner; moving the comparison to `<` holds it back until it
 has properly left, and offsetting the stored number half a space either way
 moves the line within the crossing step.
 
-**Which layer it walks on** is the front-most visible object layer, and that is
-one line to change — scenery the character should sort against goes on the
-same layer, and a layer in front of that one draws over it always, which is how
-you get a canopy. A flat projection sets nothing, so the character keeps the
-depth the prefab gave it and draws in front of everything; sorting a flat
-top-down game on Y is a real thing to want, and it is a change to `drawOrder`
-as much as to this.
+**Which layer it walks on is the layer the start point is on.** A point used to
+say where play begins is the one thing in the document that says where the
+character *belongs*, so the stack around it means something: scenery on that
+layer sorts against the character space by space, everything on a layer behind
+it is always behind, and everything on a layer in front is always in front.
+That last one is how an overhang works — put a canopy, a bridge or a doorway's
+lintel on the layer above and the character walks under it however far forward
+it goes, which is not something a single ordering can express. A scene with no
+start point falls back to the front-most visible object layer, which is where
+scenery normally is. A flat projection sets nothing at all, so the character
+keeps the depth the prefab gave it and draws in front of everything; sorting a
+flat top-down game on Y is a real thing to want, and it is a change to
+`drawOrder` as much as to this.
 
 `walkDepth` is a marked block and the only one the two genres do not share: a
 platformer is seen from the side, where nothing sorts on Y at all. Its test
 pulls the block out of the template and runs it, the way the `drawOrder` test
 does — and it is the test that caught the half step.
+
+### Arrows beside the tap
+
+The top-down character takes the arrow keys as well as a tap, and the two are
+not alternatives. A tap walks there over A\*, which is the game. A held arrow
+nudges the sprite directly, which is not: it goes where a path cannot — half a
+space into a doorway, right up against the near edge of a building — and that
+is what you want when the thing you are checking is whether what you drew sorts
+the way you meant it to. Sorting is continuous in `sprite.y`, so the line it
+turns on can be found by leaning on a key rather than by tapping either side of
+it and inferring.
+
+Four decisions in `character.js` worth keeping:
+
+- **Screen directions, not grid axes.** On an isometric map the grid runs
+  diagonally, so a keyboard bound to it moves the character in directions the
+  arrows are not pointing. Up the screen is also *away*, which is the axis the
+  sorting turns on — the one you want a key for.
+- **A held key kills the tween.** Two things moving one sprite is a sprite that
+  jitters between them, so an arrow takes the character off whatever path it
+  was walking and keeps it.
+- **Each axis committed separately**, and only onto walkable ground. A
+  character pushed into a wall slides along it rather than stopping dead, and
+  can be parked anywhere inside a space instead of on its middle — which is the
+  point of having it.
+- **`delta` clamped at 50ms.** A tab left in the background hands back one
+  enormous frame, and a step taken by it crosses the map.
+
+The keys are a set of flags read once a frame by `character.step(delta)`,
+called from `update` next to `sortCharacter`, rather than a callback that moves
+anything: what a key means is the character's business. WASD is bound beside
+the arrows. Both are in the prefab, which is the file a project is expected to
+replace — a sprite instead of a rectangle, a run of animations — so none of it
+is in the scene.
 
 ### Saving applies
 

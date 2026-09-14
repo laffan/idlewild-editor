@@ -64,12 +64,20 @@ remaining pieces are wired to real slots rather than mocked.
 - On an **isometric** project the character sorts itself into the scene as it
   walks, so it goes behind a tree it is standing behind and in front of one it
   is standing in front of. The line it crosses is the one straight up from the
-  corner of a thing's footprint nearest you — where the two visible faces of a
-  box meet — which is the bottom of its artwork and the same footprint its
-  collider is derived from, so what you walk behind and what you walk around
-  agree. It walks among the front-most object layer, which is one line in the
-  scene to change: anything on a layer in front of that draws over it always,
-  which is how you get a canopy to walk under
+  corner of a thing's **collider** nearest you — where the two visible faces of
+  a box meet — so what you walk behind and what you walk around are the same
+  footprint, and correcting one corrects the other
+- **It walks among the layer your start point is on.** Scenery on that layer
+  sorts against it space by space; anything on a layer behind is always behind
+  and anything on a layer in front always draws over it, which is how you get a
+  canopy, a bridge or a doorway's lintel to walk under. A scene with no start
+  point falls back to the front-most object layer
+- **Arrow keys as well as a tap**, on a top-down project. A tap walks there
+  around whatever is in the way; holding an arrow nudges the character
+  directly, which goes where a path cannot — half a space into a doorway, right
+  up against the near edge of a building. It is for checking that what you drew
+  sorts the way you meant it to. WASD does the same, and both move up, down,
+  left and right on the *screen* rather than along the grid's diagonals
 - A full-width header carrying the project, undo and redo, and the
   **Draw / Code / Play** toggle, with Publish, Export Assets and Project Options
   behind its menu. It insets itself out of the iPad's status bar, as the console drawer

@@ -37,14 +37,17 @@ interface Among {
 interface Placed {
   id: string;
   instance?: string;
-  y: number;
-  height: number;
+  anchor: { cx: number; cy: number };
+  collider?: { cells: { cx: number; cy: number }[]; blocking: boolean };
 }
 
+// Two blocks, because `nearPoints` asks `drawOrder`'s `nearRow` what a unit's
+// line is — one number, worked out one way, whether it is being sorted or
+// searched.
 const { walkDepth, nearPoints } = blockFrom<{
   walkDepth: (among: Among, y: number) => number;
-  nearPoints: (order: readonly Placed[]) => number[];
-}>(topdownSource, "walkDepth", ["walkDepth", "nearPoints"]);
+  nearPoints: (order: readonly Placed[], halfTile: number) => number[];
+}>(topdownSource, ["drawOrder", "walkDepth"], ["walkDepth", "nearPoints"]);
 
 /**
  * A 64px isometric grid: a tile is 32 high, so a space's own diamond reaches
@@ -173,69 +176,98 @@ describe("the depth it hands back", () => {
 });
 
 /**
- * Every member of a placed unit carries its *unit's* nearest ground point.
+ * Every member of a placed unit carries its *unit's* line, and the line comes
+ * off the collider.
  *
- * This is the half that is easy to get wrong and impossible to see. The list
- * `walkDepth` searches is flat — a three-layer building is three entries — and
- * a roof's bottom edge sits above the walls' under it, so each placement's own
- * number dips in the middle of a unit. A binary search over that does not
- * merely give a fuzzy answer: it finds a place *between* two layers of one
- * building and draws the character inside it.
+ * Two claims in one. The **collider** is the record of which spaces a file
+ * stands on, so its outermost edge is the corner of the footprint nearest the
+ * camera — which is what a character has to pass to stop being behind it.
+ * Guessing that from where the pixels end is a guess: a cast shadow, a
+ * transparent margin or a picture pasted flat all move the pixels and none of
+ * them move the ground.
+ *
+ * And **per unit**, which is the half that is easy to get wrong and impossible
+ * to see. `drawOrder` hands back a flat list — a three-layer building is three
+ * entries — and one number per placement would not be sorted. Worse than
+ * unsorted, it would be wrong: a character between two of a building's layers
+ * would land between them and be drawn inside it.
  */
 describe("the list a character searches", () => {
-  /** A building placed back to front, as `drawOrder` hands it over. */
+  /** Half a tile of screen height, which is what one isometric row is worth. */
+  const HALF_TILE = 16;
+  const on = (row: number, deep = 1) => ({
+    anchor: { cx: row, cy: 0 },
+    collider: {
+      cells: Array.from({ length: deep }, (_, i) => ({ cx: i, cy: 0 })),
+      blocking: true,
+    },
+  });
+
+  /** A building on rows 2 to 5, placed back to front as `drawOrder` gives it. */
   const building: Placed[] = [
-    { id: "walls", instance: "b", y: 100, height: 70 },
-    { id: "roof", instance: "b", y: 40, height: 40 },
+    { id: "walls", instance: "b", ...on(2, 4) },
+    { id: "roof", instance: "b", ...on(2, 4) },
   ];
 
   it("gives every layer of a unit the same number", () => {
-    // The walls reach 170 and the roof stops at 80; the unit's is 170.
-    expect(nearPoints(building)).toEqual([170, 170]);
+    // The footprint's outermost space is row 5, so the line is row 6.
+    expect(nearPoints(building, HALF_TILE)).toEqual([96, 96]);
   });
 
   it("never dips, so a search over it is a search over something sorted", () => {
     const order: Placed[] = [
       ...building,
-      { id: "post", y: 300, height: 20 },
-      { id: "wall-back", instance: "w", y: 320, height: 40 },
-      { id: "wall-top", instance: "w", y: 280, height: 30 },
+      { id: "post", ...on(8) },
+      { id: "hall-back", instance: "h", ...on(9, 3) },
+      { id: "hall-top", instance: "h", ...on(9, 3) },
     ];
-    const near = nearPoints(order);
-    expect(near).toEqual([170, 170, 320, 360, 360]);
+    const near = nearPoints(order, HALF_TILE);
+    expect(near).toEqual([96, 96, 144, 192, 192]);
     for (let i = 1; i < near.length; i++) {
       expect(near[i]).toBeGreaterThanOrEqual(near[i - 1]);
     }
   });
 
   /**
-   * The failure the dip caused, stated as the assertion it broke: a character
-   * level with the roof's bottom edge but well behind the walls has to be
-   * behind the whole building, not between its two layers.
+   * The one the *anchor* key got wrong. The building is anchored on row 2 and
+   * its footprint runs to row 5, so a character standing on row 4 is on its
+   * own ground — inside it, with the near wall still in the way.
    */
-  it("keeps a character out of the middle of a building", () => {
-    const among: Among = { base: 4000, near: nearPoints(building) };
-    // 90 is past the roof's own bottom (80) and short of the walls' (170).
-    expect(walkDepth(among, 90)).toBeLessThan(4000);
+  it("keeps a character behind a building it is standing inside", () => {
+    const among: Among = { base: 4000, near: nearPoints(building, HALF_TILE) };
+    for (const row of [2, 3, 4, 5]) {
+      expect(walkDepth(among, row * HALF_TILE)).toBeLessThan(4000);
+    }
+    // And out the other side, once it is past the outermost edge.
+    expect(walkDepth(among, 6 * HALF_TILE)).toBeGreaterThan(4001);
   });
 
   /** A placement with no unit is a unit of one — a document before instances. */
   it("takes a placement with no unit as its own", () => {
-    expect(nearPoints([{ id: "loose", y: 10, height: 5 }])).toEqual([15]);
+    expect(nearPoints([{ id: "loose", ...on(3) }], HALF_TILE)).toEqual([64]);
+  });
+
+  /** No collider yet — the frame or two after a file lands. The anchor. */
+  it("falls back to the anchor for a file with no footprint recorded", () => {
+    const loose: Placed[] = [{ id: "fresh", anchor: { cx: 7, cy: 0 } }];
+    expect(nearPoints(loose, HALF_TILE)).toEqual([128]);
   });
 
   it("has nothing to say about an empty layer", () => {
-    expect(nearPoints([])).toEqual([]);
+    expect(nearPoints([], HALF_TILE)).toEqual([]);
   });
 });
 
-/** One managed block of the scaffolded scene, as the functions it declares. */
-function blockFrom<T>(source: string, id: string, names: string[]): T {
+/** Managed blocks of the scaffolded scene, as the functions they declare. */
+function blockFrom<T>(source: string, ids: string[], names: string[]): T {
   const lines = source.split("\n");
-  const from = lines.findIndex((line) => line.trim() === `// idlewild:begin ${id}`);
-  const to = lines.findIndex((line) => line.trim() === `// idlewild:end ${id}`);
-  if (from < 0 || to < 0) throw new Error(`no ${id} block in the template`);
+  const body = ids.map((id) => {
+    const from = lines.findIndex((l) => l.trim() === `// idlewild:begin ${id}`);
+    const to = lines.findIndex((l) => l.trim() === `// idlewild:end ${id}`);
+    if (from < 0 || to < 0) throw new Error(`no ${id} block in the template`);
+    return lines.slice(from + 1, to).join("\n");
+  });
   return new Function(
-    `${lines.slice(from + 1, to).join("\n")}\nreturn { ${names.join(", ")} };`,
+    `${body.join("\n")}\nreturn { ${names.join(", ")} };`,
   )() as T;
 }

@@ -111,13 +111,17 @@ export class WorldScene extends Phaser.Scene {
    * are cheap when there is nothing of the kind in the scene.
    */
   // idlewild:begin patternUpdate
-  update() {
+  update(_time, delta) {
     this.drawBackdrops();
     this.syncPatterns();
-    // Where the character is decides what it draws in front of, so it is
-    // re-sorted as it walks. A no-op on a flat projection and on a project
-    // that scaffolded no character.
-    if (this.character) this.sortCharacter();
+    if (this.character) {
+      // Held arrow keys, which move it off any path it was walking — see
+      // `step` in the prefab. A tap still walks it there over A*.
+      this.character.step(delta);
+      // And where it is decides what it draws in front of, so it is re-sorted
+      // as it goes. A no-op on a flat projection.
+      this.sortCharacter();
+    }
   }
   // idlewild:end patternUpdate
 
@@ -145,13 +149,32 @@ export class WorldScene extends Phaser.Scene {
     // Layers are stored top-first; Phaser depth counts upward, so the last
     // layer in the list is the furthest back.
     const layers = config.layers ?? [];
-    // Which layer anything that walks sorts among, and the rows of what is
-    // standing on it — see `sortCharacter`. The front-most object layer,
-    // because that is where the scenery a character moves through normally
-    // is; change this line to put it on another one.
-    const walkLayer = layers.findIndex(
-      (layer) => (layer.kind ?? "object") === "object" && layer.visible !== false,
-    );
+    // Which layer anything that walks sorts among — see `sortCharacter`.
+    //
+    // **The layer the start point is on**, when a point was used to say where
+    // play begins. That is the one thing in the document that says where the
+    // character *belongs*, and it makes the stack mean something: scenery on
+    // that layer sorts against the character space by space, everything on a
+    // layer behind it is always behind, and everything on a layer in front is
+    // always in front — which is how an overhang works. Put a canopy, a bridge
+    // or a doorway's lintel on the layer above and the character walks under
+    // it, however far forward it goes.
+    //
+    // A scene with no start point falls back to the front-most visible object
+    // layer, which is where scenery normally is.
+    const scene = (config.scenes ?? []).find((s) => s.id === config.activeScene);
+    const startId = scene && scene.startPointId;
+    let walkLayer = startId
+      ? layers.findIndex((layer) =>
+          (layer.points ?? []).some((point) => point.id === startId),
+        )
+      : -1;
+    if (walkLayer < 0) {
+      walkLayer = layers.findIndex(
+        (layer) =>
+          (layer.kind ?? "object") === "object" && layer.visible !== false,
+      );
+    }
     this.walkAmong = null;
     layers.forEach((layer, index) => {
       const depth = layers.length - index;
@@ -187,7 +210,10 @@ export class WorldScene extends Phaser.Scene {
       // The same list, as nearest ground points — one number per step, so a
       // character can find its own place in it without re-sorting anything.
       if (sortOnY && index === walkLayer) {
-        this.walkAmong = { base: depth * 1000, near: nearPoints(order) };
+        this.walkAmong = {
+          base: depth * 1000,
+          near: nearPoints(order, this.grid.tileHeight / 2),
+        };
       }
     });
   }
@@ -503,28 +529,35 @@ function contains(box, p) {
  */
 // idlewild:begin walkDepth
 /**
- * The nearest ground point of each placement's **unit**, one per entry.
+ * The line each placement's **unit** sits behind, as a world Y, one per entry.
  *
- * `drawOrder` hands back a flat list — a three-layer building is three entries
- * — and what `walkDepth` searches has to be sorted. A placement's own bottom
- * edge is not: a roof's is above the tower's under it, so the numbers dip
- * inside a unit. Worse than unsorted, it would be *wrong*: a character between
- * the roof's bottom and the walls' would land between them and be drawn inside
- * the building.
+ * `nearRow` is the row of that line — the outermost edge of the unit's
+ * collider — and on an isometric grid a row is half a tile of screen height,
+ * so multiplying gives the world Y a character's own position can be compared
+ * against directly.
  *
- * So every member of a unit carries its unit's own key, which is the number
- * `drawOrder` sorted the units by — and because it sorted by exactly this, the
- * result is non-decreasing by construction.
+ * Per *unit*, not per placement, and that is the half that is easy to get
+ * wrong and impossible to see. `drawOrder` hands back a flat list — a
+ * three-layer building is three entries — and what `walkDepth` searches has to
+ * be sorted. Give each entry its own number and it would not be: worse, a
+ * character between two of a building's layers would land between them and be
+ * drawn inside it. Because `drawOrder` sorted the units by exactly this
+ * number, giving every member its unit's makes the list non-decreasing by
+ * construction.
  */
-function nearPoints(order) {
-  const byUnit = new Map();
+function nearPoints(order, halfTile) {
+  const members = new Map();
   for (const p of order) {
     const unit = p.instance ?? p.id;
-    const near = p.y + p.height;
-    const held = byUnit.get(unit);
-    if (held === undefined || near > held) byUnit.set(unit, near);
+    const held = members.get(unit);
+    if (held) held.push(p);
+    else members.set(unit, [p]);
   }
-  return order.map((p) => byUnit.get(p.instance ?? p.id));
+  const lineOf = new Map();
+  for (const [unit, group] of members) {
+    lineOf.set(unit, nearRow(group) * halfTile);
+  }
+  return order.map((p) => lineOf.get(p.instance ?? p.id));
 }
 
 function walkDepth(among, y) {
@@ -564,7 +597,47 @@ function walkDepth(among, y) {
  * Keep the two in step.
  */
 // idlewild:begin drawOrder
-function drawOrder(placements, isometric) {
+/**
+ * The isometric ordering's key: the outermost edge of a unit's **collider**,
+ * in rows.
+ *
+ * A collider is the record of which grid spaces a file stands on — the spaces
+ * its base covers, or the ones an extrusion's voxels rest on at level zero —
+ * so it is the footprint, and on an isometric grid `cx + cy` counts rows away
+ * from the camera. The largest of them is the corner of the footprint nearest
+ * the camera, where the two visible faces of a box meet, and **one row further
+ * on** is the line straight up from that corner: a space whose middle is on
+ * that line is past the object and draws in front of it.
+ *
+ * Read off the collider rather than guessed from the pixels. The bottom edge
+ * of the artwork is a reasonable approximation and only that: a cast shadow,
+ * a bit of transparent margin or a picture pasted flat all move it, and none
+ * of them move where the thing stands. The collider is the answer the editor
+ * already holds and the one a person can correct by hand.
+ *
+ * The collider rides on one member of a unit — it is a fact about the file
+ * rather than about any one of its layers — so every member is asked and the
+ * first answer wins. Failing that, the anchor: a unit of one space.
+ */
+function nearRow(unit, colliderOf) {
+  let best = null;
+  for (const p of unit) {
+    const collider = colliderOf ? colliderOf(p) : p.collider;
+    for (const cell of (collider && collider.cells) || []) {
+      const row = p.anchor.cx + cell.cx + p.anchor.cy + cell.cy;
+      if (best === null || row > best) best = row;
+    }
+  }
+  if (best === null) {
+    for (const p of unit) {
+      const row = p.anchor.cx + p.anchor.cy;
+      if (best === null || row > best) best = row;
+    }
+  }
+  return (best ?? 0) + 1;
+}
+
+function drawOrder(placements, isometric, colliderOf) {
   const units = [];
   const byInstance = new Map();
   for (const placement of placements) {
@@ -585,26 +658,11 @@ function drawOrder(placements, isometric) {
   }
 
   if (isometric) {
-    // The **nearest ground point** of the unit: the bottom of its artwork.
-    //
-    // Which is the corner of its footprint closest to the camera — the one
-    // where the two visible faces of a box meet — and the line straight up
-    // from it is where a thing passing by stops being behind and starts being
-    // in front. `y + height` is that point for anything standing on the
-    // ground, and it agrees with the collider by construction: a default
-    // collider is "the spaces its base covers", derived from the same edge.
-    //
-    // The two keys this replaced were both wrong, in opposite directions. The
-    // artwork's *top* is a fact about how tall a thing is, so a short thing
-    // standing behind a tall one drew in front of it. The unit's *anchor* is
-    // the space it hangs from, which on a footprint more than one space across
-    // is the middle of it — so a character walking through a building popped
-    // in front half way along.
-    const near = (unit) => Math.max(...unit.map((p) => p.y + p.height));
-    // A stable sort, so two units whose near corners are level keep the order
-    // they were placed in — which is the only answer available and the one the
-    // editor's panel shows.
-    units.sort((a, b) => near(a) - near(b));
+    // The outermost edge of each unit's collider — see `nearRow`. A stable
+    // sort, so two units whose near edges are level keep the order they were
+    // placed in, which is the only answer available and the one the editor's
+    // panel shows.
+    units.sort((a, b) => nearRow(a, colliderOf) - nearRow(b, colliderOf));
   }
 
   return units.flatMap((unit) =>

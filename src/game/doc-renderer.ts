@@ -41,8 +41,8 @@ import {
   type ZonePickResult,
 } from "./picking";
 import * as log from "../lib/log";
-
-const DEPTH_STRIDE = 1000;
+// What is drawn over what — split out when this file reached its 700 lines.
+import { applyDepth, drawOrder, DEPTH_STRIDE } from "./draw-order";
 
 /** The accent, which is what every mark the editor makes is drawn in. */
 const POINT_COLOR = 0xec3013;
@@ -365,7 +365,15 @@ export class DocRenderer {
       // isometric scene sorts an *object* layer on screen Y; a layer of
       // backdrops has no such answer in it, so it keeps the order somebody
       // dragged it into, and the panel lists it the same way.
-      const order = drawOrder(layer.placements, !ordersByHand(layer, isometric));
+      const order = drawOrder(
+        layer.placements,
+        !ordersByHand(layer, isometric),
+        // A collider is a fact about the file, so it is keyed by PSD rather
+        // than carried on a placement. Every placed key has a record — one is
+        // written when the file lands and backfilled on open — and `nearRow`
+        // falls back to the anchor for the frame or two before that.
+        (placement) => this.store.colliders?.[placement.psdKey],
+      );
 
       order.forEach((placement, step) => {
         if (!this.draws(layer, placement)) return;
@@ -564,41 +572,6 @@ export class DocRenderer {
   }
 }
 
-/**
- * Give a placed object its depth, keeping a group's own stacking under it.
- *
- * psd-to-phaser grafts its own `setDepth` onto a Group, and that one recurses:
- * every child is given the *same* number. For a PSD placed one layer at a time
- * that was harmless — a Group of one — but an extrusion's artwork is a group
- * of three, and one number for all of them is the stacking gone. The file was
- * right and the canvas was wrong, which is the worst way for this to fail.
- *
- * So a group's children are ranked by the depth they already have — which
- * psd-to-phaser set from the manifest's `initialDepth` when it made them — and
- * spread across the interval below the next placement. Fractions rather than
- * whole numbers because the placements on a document layer are one apart, and
- * there is no room between them for anything else.
- *
- * Idempotent: ranking on the current depth gives the same order next time,
- * because the spread is monotonic in the rank.
- */
-function applyDepth(object: PlacedObject, depth: number): void {
-  const children = object.getChildren?.() ?? [];
-  if (children.length < 2) {
-    object.setDepth(depth);
-    return;
-  }
-  const ranked = [...children].sort((a, b) => depthOf(a) - depthOf(b));
-  ranked.forEach((child, rank) => {
-    const at = depth + (rank + 1) / (ranked.length + 1);
-    (child as { setDepth?: (v: number) => unknown }).setDepth?.(at);
-  });
-}
-
-function depthOf(child: unknown): number {
-  const depth = (child as { depth?: unknown }).depth;
-  return typeof depth === "number" ? depth : 0;
-}
 
 /**
  * Destroy what `place()` returned, children included.
@@ -623,69 +596,3 @@ export function destroyPlaced(object: PlacedObject): void {
   object.destroy();
 }
 
-/**
- * Everything on one document layer, back to front.
- *
- * Two orderings, one inside the other.
- *
- * **Between placed PSDs.** Sort on each one's nearest ground point — the
- * bottom of its artwork, which is the corner of its footprint closest to the
- * camera — and a thing standing nearer the viewer draws in front of one behind
- * it, which is what an isometric object layer wants. The whole unit sorts on
- * one point rather than each of its layers separately: a roof sits higher up
- * the screen than the tower under it, and sorting the two against each other
- * would put the roof behind the building every time. Otherwise they are left
- * in the order they were placed — every layer of a flat projection, and a
- * pattern or background layer of either, neither of which holds things
- * standing anywhere. The caller decides; see `ordersByHand` in
- * `lib/units.ts`.
- *
- * **Within one placed PSD.** The author's stack, and nothing else. A PSD is a
- * stack of layers and the order is the artwork — psd-to-json reports it,
- * psd-to-phaser applies it to every object it creates, and this used to
- * overwrite all of them with a single depth per document layer, which left
- * the stacking to the order Phaser was handed the objects in. That order was
- * top-first, so every multi-layer PSD was drawn upside down.
- */
-export function drawOrder(
-  placements: readonly Placement[],
-  isometric: boolean,
-): Placement[] {
-  const units = new Map<string, Placement[]>();
-  for (const placement of placements) {
-    const unit = units.get(unitOf(placement));
-    if (unit) unit.push(placement);
-    else units.set(unitOf(placement), [placement]);
-  }
-
-  const sorted = [...units.values()];
-  if (isometric) {
-    // The **nearest ground point** of the unit: the bottom of its artwork,
-    // which is the corner of its footprint closest to the camera — where the
-    // two visible faces of a box meet. It agrees with the collider by
-    // construction, since a default collider is "the spaces its base covers"
-    // derived from that same edge, and it is the one quantity anything that
-    // walks can work out for itself.
-    //
-    // The two keys this replaced were wrong in opposite directions: the
-    // artwork's *top* is a fact about how tall a thing is, so a short thing
-    // behind a tall one drew in front of it; and the unit's *anchor* is the
-    // space it hangs from, which on a footprint more than one space across is
-    // the middle of it, so anything walking through a building swapped over
-    // half way along.
-    const key = (unit: Placement[]) =>
-      Math.max(...unit.map((p) => p.y + p.height));
-    // Stable, so two units whose near corners are level keep the order they
-    // were placed in — the only answer available, and the one the panel lists.
-    sorted.sort((a, b) => key(a) - key(b));
-  }
-
-  return sorted.flatMap((unit) =>
-    [...unit].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-  );
-}
-
-export function layerDepth(layers: readonly Layer[], layerId: string): number {
-  const index = layers.findIndex((l) => l.id === layerId);
-  return index < 0 ? 0 : (layers.length - index) * DEPTH_STRIDE;
-}

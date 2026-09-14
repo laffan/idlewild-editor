@@ -17,6 +17,13 @@ import { findPath } from "../shared/navigation.js";
  * `isWalkable` is handed in rather than read from the config here: the scene
  * resolves the colliders once, and the search asks that question once per
  * node.
+ *
+ * **Two ways to move it**, and they are not alternatives. Tapping the ground
+ * walks there over A\*, which is the game; holding an arrow key nudges it
+ * directly, which is not. Free movement goes where a path cannot — half a
+ * space into a doorway, right up against the edge of a building — and that is
+ * what you want when you are checking whether the thing you drew sorts the way
+ * you meant it to.
  */
 export function createCharacter(scene, { grid, nav, start, isWalkable }) {
   const world = nav.cellToWorld(start.cx, start.cy);
@@ -27,9 +34,11 @@ export function createCharacter(scene, { grid, nav, start, isWalkable }) {
     // walks, so it goes behind what it is standing behind. See
     // `sortCharacter` in the scene.
     .setDepth(1e6);
+  const keys = bindArrows(scene);
 
   return {
     sprite,
+    keys,
 
     /**
      * The space it is standing on **now**, read off the sprite.
@@ -62,5 +71,84 @@ export function createCharacter(scene, { grid, nav, start, isWalkable }) {
       });
       scene.tweens.chain({ targets: sprite, tweens: steps });
     },
+
+    /**
+     * One frame of held arrow keys, in **screen** directions.
+     *
+     * Screen rather than grid, which is the choice worth naming. On an
+     * isometric map the grid axes run diagonally, so a keyboard bound to them
+     * moves the character in directions the arrows are not pointing — and the
+     * thing this is for is sliding along a boundary you are looking at. Up is
+     * up the screen, which on an isometric grid is also *away*, which is
+     * exactly the axis the sorting turns on.
+     *
+     * A held key takes the character off any path it was walking, because two
+     * things moving one sprite is a sprite that jitters between them.
+     *
+     * Each axis is committed separately and only onto walkable ground, so a
+     * character pushed into a wall slides along it instead of stopping dead —
+     * and can be parked anywhere inside a space rather than on its middle,
+     * which is the whole point.
+     *
+     * `delta` is clamped because a tab left in the background hands back one
+     * enormous frame, and a step taken by it crosses the map.
+     */
+    step(delta) {
+      const dx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      const dy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+      if (dx === 0 && dy === 0) return;
+
+      scene.tweens.killTweensOf(sprite);
+      // Normalised, so a diagonal is not half again as fast as a straight line.
+      const length = Math.hypot(dx, dy) || 1;
+      const travel = (NUDGE_SPACES * grid.size * Math.min(delta, 50)) / 1000;
+      const stepX = (dx / length) * travel;
+      const stepY = (dy / length) * travel;
+
+      const open = (x, y) => {
+        const cell = nav.worldToCell(x, y);
+        return isWalkable(cell.cx, cell.cy);
+      };
+      if (stepX !== 0 && open(sprite.x + stepX, sprite.y)) sprite.x += stepX;
+      if (stepY !== 0 && open(sprite.x, sprite.y + stepY)) sprite.y += stepY;
+    },
   };
+}
+
+/** How many grid spaces a second a held arrow moves the character. */
+const NUDGE_SPACES = 3;
+
+/**
+ * The four arrows, and WASD beside them.
+ *
+ * A set of flags read once a frame rather than a callback that moves anything:
+ * what a key means is the character's business, and a keyboard that wrote
+ * positions directly would fight the tween a tap starts.
+ */
+function bindArrows(scene) {
+  const keys = { left: false, right: false, up: false, down: false };
+  const map = {
+    ArrowLeft: "left",
+    KeyA: "left",
+    ArrowRight: "right",
+    KeyD: "right",
+    ArrowUp: "up",
+    KeyW: "up",
+    ArrowDown: "down",
+    KeyS: "down",
+  };
+
+  scene.input.keyboard.on("keydown", (event) => {
+    const action = map[event.code];
+    if (!action) return;
+    event.preventDefault();
+    keys[action] = true;
+  });
+  scene.input.keyboard.on("keyup", (event) => {
+    const action = map[event.code];
+    if (!action) return;
+    keys[action] = false;
+  });
+
+  return keys;
 }

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 // `include_str!` there, `?raw` here, one file either way.
 import topdownSource from "../../../src-tauri/templates/topdown/js/scenes/WorldScene.js?raw";
 import platformerSource from "../../../src-tauri/templates/platformer/js/scenes/WorldScene.js?raw";
-import { drawOrder } from "../doc-renderer";
-import type { Placement } from "../../lib/types";
+import { drawOrder } from "../draw-order";
+import type { Cell, Collider, Placement } from "../../lib/types";
 
 /**
  * One contract, two implementations — the same arrangement the console
@@ -18,33 +18,60 @@ import type { Placement } from "../../lib/types";
  * project's own `WorldScene.js`, which cannot import that. So the same
  * ordering exists twice and this holds the two to the same fixtures.
  */
-const templateDrawOrder = blockFrom<
-  (placements: readonly Placement[], isometric: boolean) => Placement[]
->(topdownSource, "drawOrder");
+type DrawOrder = (
+  placements: readonly Placement[],
+  isometric: boolean,
+  colliderOf?: (placement: Placement) => Collider | undefined,
+) => Placement[];
+
+const templateDrawOrder = blockFrom<DrawOrder>(topdownSource, "drawOrder");
 
 /**
- * `y` is the top of the artwork and `height` how far down it reaches, so
- * `y + height` is where the thing's feet are — the corner of its footprint
- * nearest the camera, and what the isometric ordering sorts on. How high up
- * the screen the artwork starts is a different question and, for a tall thing,
- * a misleading one.
+ * The footprint of each file: cell offsets from the anchor, as a collider
+ * holds them.
+ *
+ * Handed to both implementations, which is the point — the editor keeps
+ * colliders per PSD key and the exported game's config writes them onto a
+ * placement, so the *lookup* differs and the ordering must not.
+ */
+const footprints = new Map<string, Cell[]>();
+const colliderOf = (p: Placement): Collider | undefined => {
+  const cells = footprints.get(p.psdKey);
+  return cells ? { cells, blocking: true } : undefined;
+};
+
+/** A file standing on `deep` spaces, running towards the camera. */
+function footprint(key: string, deep: number): string {
+  footprints.set(
+    key,
+    Array.from({ length: deep }, (_, i) => ({ cx: i, cy: 0 })),
+  );
+  return key;
+}
+
+/**
+ * `row` is the space the file hangs from, and its footprint runs forward from
+ * there — together they give the outermost edge the isometric ordering sorts
+ * on. `y` is where the artwork happens to sit up the screen, which is a
+ * different question and, for a tall thing, a misleading one.
  */
 function placement(
   id: string,
   y: number,
   order?: number,
   instance?: string,
-  height = 32,
+  psdKey = "tower",
+  row = 0,
 ): Placement {
   return {
     id,
-    psdKey: "tower",
+    psdKey,
     layerPath: id,
     x: 0,
     y,
     width: 32,
-    height,
-    anchor: { cx: 0, cy: 0 },
+    height: 32,
+    anchor: { cx: row, cy: 0 },
     ...(order === undefined ? {} : { order }),
     ...(instance ? { instance } : {}),
   };
@@ -66,40 +93,51 @@ const FIXTURES: Array<[string, Placement[]]> = [
   [
     "two units, one nearer the viewer",
     [
-      placement("far-base", 0, 0, "unit-far"),
-      placement("far-roof", -40, 1, "unit-far"),
-      placement("near-base", 200, 0, "unit-near"),
-      placement("near-roof", 160, 1, "unit-near"),
+      placement("far-base", 0, 0, "unit-far", footprint("far", 1), 0),
+      placement("far-roof", -40, 1, "unit-far", "far", 0),
+      placement("near-base", 200, 0, "unit-near", footprint("near", 1), 12),
+      placement("near-roof", 160, 1, "unit-near", "near", 12),
     ],
   ],
   [
-    // Feet level at y = 0; only the height differs.
+    // Both stand on one space at row 0; only the artwork's height differs.
     "a tall thing standing beside a short one",
     [
-      placement("bush", -20, 0, "unit-bush", 20),
-      placement("tower", -400, 0, "unit-tower", 400),
+      placement("bush", -20, 0, "unit-bush", footprint("bush", 1), 0),
+      placement("tower", -400, 0, "unit-tower", footprint("tower2", 1), 0),
     ],
   ],
   [
-    // The building's ground sweeps past the post, so the post is behind it
-    // even though the building's *middle* is further back.
-    "a post standing on a building's own ground",
+    // The hall's footprint sweeps four spaces past its anchor, so the post
+    // standing on row 2 is on the hall's own ground and behind it — even
+    // though the hall's *anchor* is further back.
+    "a post standing on a hall's own ground",
     [
-      placement("post", 60, 0, "unit-post", 40),
-      placement("hall", -200, 0, "unit-hall", 360),
+      placement("post", 60, 0, "unit-post", footprint("post", 1), 2),
+      placement("hall", -200, 0, "unit-hall", footprint("hall", 4), 0),
     ],
   ],
   [
     "single-layer placements, which are units of one",
-    [placement("a", 90), placement("b", 10), placement("c", 50)],
+    [
+      placement("a", 90, undefined, undefined, footprint("a", 1), 5),
+      placement("b", 10, undefined, undefined, footprint("b", 1), 1),
+      placement("c", 50, undefined, undefined, footprint("c", 1), 3),
+    ],
   ],
   [
-    "two units whose feet are level, which is a tie",
-    [placement("first", 30), placement("second", 30)],
+    "two units whose near edges are level, which is a tie",
+    [
+      placement("first", 30, undefined, undefined, footprint("first", 1), 4),
+      placement("second", 20, undefined, undefined, footprint("second", 1), 4),
+    ],
   ],
   [
-    "a document written before order and units existed",
-    [placement("x", 30), placement("y", 20)],
+    "files with no footprint recorded, which fall back to the anchor",
+    [
+      placement("x", 30, undefined, undefined, "unknown-x", 6),
+      placement("y", 20, undefined, undefined, "unknown-y", 1),
+    ],
   ],
   ["nothing at all", []],
 ];
@@ -108,8 +146,10 @@ describe("the game's stacking and the editor's agree", () => {
   for (const isometric of [true, false]) {
     for (const [name, placements] of FIXTURES) {
       it(`${isometric ? "isometric" : "flat"}: ${name}`, () => {
-        const mine = drawOrder(placements, isometric).map((p) => p.id);
-        const theirs = templateDrawOrder(placements, isometric).map((p) => p.id);
+        const mine = drawOrder(placements, isometric, colliderOf).map((p) => p.id);
+        const theirs = templateDrawOrder(placements, isometric, colliderOf).map(
+          (p) => p.id,
+        );
         expect(theirs).toEqual(mine);
       });
     }
@@ -122,7 +162,7 @@ describe("what the order actually is", () => {
     // shape, shading, lines — and a manifest listing them the other way round
     // makes no difference.
     for (const source of [EXTRUSION, [...EXTRUSION].reverse()]) {
-      expect(templateDrawOrder(source, true).map((p) => p.id)).toEqual([
+      expect(templateDrawOrder(source, true, colliderOf).map((p) => p.id)).toEqual([
         "shape",
         "shading",
         "lines",
@@ -132,7 +172,7 @@ describe("what the order actually is", () => {
 
   it("sorts a unit as one thing, not layer by layer", () => {
     const [, , [, twoUnits]] = FIXTURES;
-    const order = templateDrawOrder(twoUnits, true).map((p) => p.id);
+    const order = templateDrawOrder(twoUnits, true, colliderOf).map((p) => p.id);
     // The far building and everything of it, then the near one — rather than
     // both roofs behind both bases, which is what sorting layer by layer
     // would give.
@@ -140,14 +180,14 @@ describe("what the order actually is", () => {
   });
 
   /**
-   * The key is where a thing's feet are, not the top of its artwork. A tower's
-   * roof is high up the screen and a bush beside it is not, so the old key put
-   * the tower behind everything however far forward it stood.
+   * The key is the ground a thing stands on, not the top of its artwork. A
+   * tower's roof is high up the screen and a bush beside it is not, so the old
+   * key put the tower behind everything however far forward it stood.
    */
-  it("sorts on where a unit stands, not on how tall it is", () => {
+  it("sorts on the ground a unit stands on, not on how tall it is", () => {
     const [, , , [, tall]] = FIXTURES;
-    // Feet level, so the tie holds and the order given survives.
-    expect(templateDrawOrder(tall, true).map((p) => p.id)).toEqual([
+    // Both on row 0, so the tie holds and the order given survives.
+    expect(templateDrawOrder(tall, true, colliderOf).map((p) => p.id)).toEqual([
       "bush",
       "tower",
     ]);
@@ -155,13 +195,13 @@ describe("what the order actually is", () => {
 
   /**
    * And the one the *anchor* key got wrong. A unit's anchor is the middle of
-   * its footprint, so a wide building swapped over half way along; its near
-   * corner is the bottom of its artwork, and a post standing on its own ground
-   * is behind it.
+   * its footprint, so a wide hall swapped over half way along; the key is the
+   * outermost edge of its collider, and a post on the hall's own ground is
+   * behind it.
    */
-  it("sorts a wide thing on its near corner, not on its middle", () => {
+  it("sorts a wide thing on its outermost edge, not on its anchor", () => {
     const [, , , , [, inside]] = FIXTURES;
-    expect(templateDrawOrder(inside, true).map((p) => p.id)).toEqual([
+    expect(templateDrawOrder(inside, true, colliderOf).map((p) => p.id)).toEqual([
       "post",
       "hall",
     ]);
@@ -169,7 +209,7 @@ describe("what the order actually is", () => {
 
   it("leaves a flat projection in the order things were placed", () => {
     const placed = [placement("a", 90), placement("b", 10)];
-    expect(templateDrawOrder(placed, false).map((p) => p.id)).toEqual(["a", "b"]);
+    expect(templateDrawOrder(placed, false, colliderOf).map((p) => p.id)).toEqual(["a", "b"]);
   });
 });
 
