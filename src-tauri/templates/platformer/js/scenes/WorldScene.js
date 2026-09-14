@@ -332,20 +332,20 @@ export class WorldScene extends Phaser.Scene {
  *
  * Two orderings, one inside the other.
  *
- * **Between placed PSDs.** An isometric scene sorts them on the *space each
- * one stands on* — `cx + cy`, which counts rows away from the camera — so a
- * thing standing nearer the viewer draws in front of one behind it. The whole
- * unit sorts on its shared anchor rather than each of its layers separately: a
- * roof sits higher up the screen than the tower under it, and sorting the two
- * against each other would put the roof behind the building every time.
- * Otherwise they are left in the order they were placed, which is what
- * `isometric` false means — a flat projection, or a layer holding nothing that
- * stands in the space for the sort to answer about. The caller decides.
+ * **Between placed PSDs.** An isometric scene sorts them on the outermost edge
+ * of each one's collider — see `nearRow` — so a thing standing nearer the
+ * viewer draws in front of one behind it. The whole unit sorts on one edge
+ * rather than each of its layers separately: a roof sits higher up the screen
+ * than the tower under it, and sorting the two against each other would put
+ * the roof behind the building every time. Otherwise they are left in the
+ * order they were placed, which is what `isometric` false means — a flat
+ * projection, or a layer holding nothing that stands in the space for the sort
+ * to answer about. The caller decides.
  *
  * **Within one placed PSD.** The author's stack, and nothing else — that is
  * what `order` is, counting up from the back of the file.
  *
- * Shared with the editor's own `drawOrder`, in `src/game/doc-renderer.ts`.
+ * Shared with the editor's own `drawOrder`, in `src/game/draw-order.ts`.
  * Keep the two in step.
  */
 // idlewild:begin drawOrder
@@ -436,7 +436,7 @@ function drawOrder(placements, isometric, colliderOf) {
  * spaced inside this placement's own slot: the file's stack survives, and the
  * whole group still sits between the placement below it and the one above.
  *
- * Shared with the editor's own `applyDepth`, in `src/game/doc-renderer.ts`.
+ * Shared with the editor's own `applyDepth`, in `src/game/draw-order.ts`.
  * Keep the two in step.
  */
 // idlewild:begin applyDepth

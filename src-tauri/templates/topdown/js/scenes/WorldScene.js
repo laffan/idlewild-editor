@@ -162,19 +162,25 @@ export class WorldScene extends Phaser.Scene {
     //
     // A scene with no start point falls back to the front-most visible object
     // layer, which is where scenery normally is.
+    // A layer only qualifies if there is something on it to sort against: an
+    // empty one gives the character a list of nothing to find its place in, so
+    // it lands at the bottom of that layer's slot and every layer in front
+    // draws over it — which looks exactly like a character stuck behind the
+    // whole scene.
+    const holdsObjects = (layer) =>
+      (layer.kind ?? "object") === "object" &&
+      layer.visible !== false &&
+      (layer.placements ?? []).length > 0;
     const scene = (config.scenes ?? []).find((s) => s.id === config.activeScene);
     const startId = scene && scene.startPointId;
     let walkLayer = startId
-      ? layers.findIndex((layer) =>
-          (layer.points ?? []).some((point) => point.id === startId),
+      ? layers.findIndex(
+          (layer) =>
+            (layer.points ?? []).some((point) => point.id === startId) &&
+            holdsObjects(layer),
         )
       : -1;
-    if (walkLayer < 0) {
-      walkLayer = layers.findIndex(
-        (layer) =>
-          (layer.kind ?? "object") === "object" && layer.visible !== false,
-      );
-    }
+    if (walkLayer < 0) walkLayer = layers.findIndex(holdsObjects);
     this.walkAmong = null;
     layers.forEach((layer, index) => {
       const depth = layers.length - index;
@@ -409,8 +415,9 @@ export class WorldScene extends Phaser.Scene {
    */
   sortCharacter() {
     if (!this.walkAmong || !this.character) return;
+    // The bottom of its artwork, not the middle of it — see `groundOf`.
     this.character.sprite.setDepth(
-      walkDepth(this.walkAmong, this.character.sprite.y),
+      walkDepth(this.walkAmong, groundOf(this.character)),
     );
   }
   // idlewild:end if
@@ -560,6 +567,37 @@ function nearPoints(order, halfTile) {
   return order.map((p) => lineOf.get(p.instance ?? p.id));
 }
 
+/**
+ * Where a thing that walks touches the ground: the bottom of its artwork.
+ *
+ * Not `sprite.y`, which for anything drawn from its middle is half its height
+ * up the screen — and half the template's character is exactly one isometric
+ * row, because the rectangle is half a space tall and a row is half a tile.
+ * Sorted on its middle the character reads as standing a row further from the
+ * camera than it is, so it stays behind things it has already walked past,
+ * which at a glance looks like it is behind everything.
+ *
+ * The number it is compared against is the near vertex of the outermost space
+ * a unit's collider covers — the bottom of that footprint — so the character's
+ * has to be the bottom of its own. The template's rectangle is drawn centred
+ * on the space it stands on and is half a space tall, so its bottom edge lands
+ * exactly on that space's near vertex. That is what makes the two comparable
+ * at all, and it is the thing to preserve when the rectangle is replaced.
+ *
+ * A prefab that draws something else says so with a numeric `ground`, which
+ * wins. Two cases want it: artwork with empty space under the feet, which
+ * sorts late by however much of it there is, and a sprite given its *feet* as
+ * its origin — whose bottom edge is the middle of the space rather than the
+ * near vertex of it, which is a row short.
+ */
+function groundOf(character) {
+  if (typeof character.ground === "number") return character.ground;
+  const sprite = character.sprite;
+  const height = sprite.displayHeight ?? 0;
+  const originY = sprite.originY ?? 0.5;
+  return sprite.y + height * (1 - originY);
+}
+
 function walkDepth(among, y) {
   const near = among.near;
   let low = 0;
@@ -580,20 +618,20 @@ function walkDepth(among, y) {
  *
  * Two orderings, one inside the other.
  *
- * **Between placed PSDs.** An isometric scene sorts them on the *space each
- * one stands on* — `cx + cy`, which counts rows away from the camera — so a
- * thing standing nearer the viewer draws in front of one behind it. The whole
- * unit sorts on its shared anchor rather than each of its layers separately: a
- * roof sits higher up the screen than the tower under it, and sorting the two
- * against each other would put the roof behind the building every time.
- * Otherwise they are left in the order they were placed, which is what
- * `isometric` false means — a flat projection, or a layer holding nothing that
- * stands in the space for the sort to answer about. The caller decides.
+ * **Between placed PSDs.** An isometric scene sorts them on the outermost edge
+ * of each one's collider — see `nearRow` — so a thing standing nearer the
+ * viewer draws in front of one behind it. The whole unit sorts on one edge
+ * rather than each of its layers separately: a roof sits higher up the screen
+ * than the tower under it, and sorting the two against each other would put
+ * the roof behind the building every time. Otherwise they are left in the
+ * order they were placed, which is what `isometric` false means — a flat
+ * projection, or a layer holding nothing that stands in the space for the sort
+ * to answer about. The caller decides.
  *
  * **Within one placed PSD.** The author's stack, and nothing else — that is
  * what `order` is, counting up from the back of the file.
  *
- * Shared with the editor's own `drawOrder`, in `src/game/doc-renderer.ts`.
+ * Shared with the editor's own `drawOrder`, in `src/game/draw-order.ts`.
  * Keep the two in step.
  */
 // idlewild:begin drawOrder
@@ -684,7 +722,7 @@ function drawOrder(placements, isometric, colliderOf) {
  * spaced inside this placement's own slot: the file's stack survives, and the
  * whole group still sits between the placement below it and the one above.
  *
- * Shared with the editor's own `applyDepth`, in `src/game/doc-renderer.ts`.
+ * Shared with the editor's own `applyDepth`, in `src/game/draw-order.ts`.
  * Keep the two in step.
  */
 // idlewild:begin applyDepth

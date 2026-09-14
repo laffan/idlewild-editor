@@ -27,6 +27,13 @@ import { findPath } from "../shared/navigation.js";
  */
 export function createCharacter(scene, { grid, nav, start, isWalkable }) {
   const world = nav.cellToWorld(start.cx, start.cy);
+  // Half a space tall and centred on the space it stands on, which is not an
+  // arbitrary shape: its bottom edge then lands exactly on that space's near
+  // vertex, and on an isometric map that edge is what sorts it — see
+  // `groundOf` in the scene. Draw something taller from its middle and it
+  // sorts as though it were standing further forward; draw it from its feet
+  // and it sorts a row short. Either is fixed by putting a numeric `ground`
+  // on what this returns, which `groundOf` takes over its own arithmetic.
   const sprite = scene.add
     .rectangle(world.x, world.y, grid.size * 0.3, grid.size * 0.5, 0x201e1d)
     // In front of everything, which is the right answer on a flat projection

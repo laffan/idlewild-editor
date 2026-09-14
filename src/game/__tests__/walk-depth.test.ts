@@ -44,10 +44,21 @@ interface Placed {
 // Two blocks, because `nearPoints` asks `drawOrder`'s `nearRow` what a unit's
 // line is — one number, worked out one way, whether it is being sorted or
 // searched.
-const { walkDepth, nearPoints } = blockFrom<{
+const { walkDepth, nearPoints, groundOf } = blockFrom<{
   walkDepth: (among: Among, y: number) => number;
   nearPoints: (order: readonly Placed[], halfTile: number) => number[];
-}>(topdownSource, ["drawOrder", "walkDepth"], ["walkDepth", "nearPoints"]);
+  groundOf: (character: Walker) => number;
+}>(
+  topdownSource,
+  ["drawOrder", "walkDepth"],
+  ["walkDepth", "nearPoints", "groundOf"],
+);
+
+/** As much of the character prefab as the ground point reads. */
+interface Walker {
+  ground?: number;
+  sprite: { y: number; displayHeight?: number; originY?: number };
+}
 
 /**
  * A 64px isometric grid: a tile is 32 high, so a space's own diamond reaches
@@ -255,6 +266,86 @@ describe("the list a character searches", () => {
 
   it("has nothing to say about an empty layer", () => {
     expect(nearPoints([], HALF_TILE)).toEqual([]);
+  });
+});
+
+/**
+ * Where the character is measured from, which is the bottom of its artwork.
+ *
+ * The comparison only means something if both sides are the same kind of
+ * number. An object's is the near vertex of the outermost space its collider
+ * covers — the bottom of that footprint — so the character's has to be the
+ * bottom of *its* own, and `sprite.y` is not that: anything drawn from its
+ * middle sits half its height up the screen.
+ *
+ * On the default grid that half is exactly one isometric row, because the
+ * template's rectangle is half a space tall and a row is half a tile. So
+ * sorting on the middle is not a fraction out — it is a whole row out, in the
+ * direction that keeps the character behind things it has already walked past.
+ */
+describe("the point a character is measured from", () => {
+  /** A 64px isometric project: 32px tile, 16px row, a 32px-tall character. */
+  const rect = (y: number): Walker => ({
+    sprite: { y, displayHeight: 32, originY: 0.5 },
+  });
+
+  it("takes the bottom of the artwork, not its middle", () => {
+    expect(groundOf(rect(100))).toBe(116);
+  });
+
+  /**
+   * The regression, stated as geometry. A character standing on row R has its
+   * middle on that row's centre line and its bottom edge on the row's near
+   * vertex — which is where an object standing on row R is measured to. Off by
+   * the middle, it reads as standing on row R − 1.
+   */
+  it("puts a character standing on a space on that space's near vertex", () => {
+    const row = 5;
+    expect(groundOf(rect(middleOf(row)))).toBe(nearOf(row));
+    // And the middle is a whole row short of it.
+    expect(nearOf(row) - middleOf(row)).toBe(HALF);
+  });
+
+  /**
+   * The regression run through the search. The building's line is the near
+   * vertex of row 5, so a character standing on row 5 has its feet on that
+   * line and is past it. Measured on its middle it is still behind, and does
+   * not catch up until row 6 — a whole row late, every time.
+   */
+  it("comes out in front a row earlier than the middle did", () => {
+    expect(groundOf(rect(middleOf(5)))).toBe(nearOf(5));
+
+    expect(walkDepth(among, groundOf(rect(middleOf(5))))).toBeGreaterThan(
+      among.base + 2,
+    );
+    expect(walkDepth(among, middleOf(5))).toBeLessThan(among.base + 1);
+    expect(walkDepth(among, middleOf(6))).toBeGreaterThan(among.base + 2);
+  });
+
+  /** Scale counts: `displayHeight` rather than `height`. */
+  it("reads the drawn height, so a scaled character still stands on it", () => {
+    expect(groundOf({ sprite: { y: 0, displayHeight: 64, originY: 0.5 } })).toBe(32);
+  });
+
+  /**
+   * The hook for artwork a bounding box describes badly — empty space under
+   * the feet, or a sprite given its feet as its origin, whose bottom edge is
+   * the middle of the space rather than the near vertex of it.
+   */
+  it("lets a prefab name its own ground point", () => {
+    expect(groundOf({ ground: 7, sprite: { y: 100, displayHeight: 32 } })).toBe(7);
+    // Zero is a ground point, not a missing one.
+    expect(groundOf({ ground: 0, sprite: { y: 100, displayHeight: 32 } })).toBe(0);
+  });
+
+  /** A prefab from before any of this: no size to read, and no crash. */
+  it("falls back to the middle when there is nothing to measure", () => {
+    expect(groundOf({ sprite: { y: 42 } })).toBe(42);
+  });
+
+  /** Feet as the origin: the bottom edge is the position itself. */
+  it("takes the position as given when the origin is already the feet", () => {
+    expect(groundOf({ sprite: { y: 80, displayHeight: 48, originY: 1 } })).toBe(80);
   });
 });
 

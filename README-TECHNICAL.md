@@ -4624,13 +4624,30 @@ the camera than the character is.
 **Plain world Y on both sides**, which is what makes it one comparison rather
 than a projection. An object's number is the line its collider's outer edge
 sits on, in world pixels: `nearRow × tileHeight / 2`, because an isometric row
-is half a tile of screen height. The character's is `sprite.y`, which for the
-template's centred rectangle is the middle of the space it stands on and for a
-sprite given its feet as an origin is the feet. Both are the point the thing
-touches the ground at, and that is the only thing being compared. A space whose
-middle is level with an object's near corner is *beside* it rather than behind
-it — on a diamond grid the two share an edge — so `<=` counts level as past,
-which is the right way round.
+is half a tile of screen height. The character's is the **bottom of its
+artwork**, which `groundOf` works out as `sprite.y + displayHeight × (1 −
+originY)`. Both are the point the thing touches the ground at, and that is the
+only thing being compared. A space whose middle is level with an object's near
+corner is *beside* it rather than behind it — on a diamond grid the two share
+an edge — so `<=` counts level as past, which is the right way round.
+
+**The bottom, not `sprite.y`**, and this one was worth a whole row. Anything
+drawn from its middle has `sprite.y` half its height up the screen, and the
+template's character is half a space tall while an isometric row is half a
+tile — so that half is *exactly one row*. Sorted on it the character reads as
+standing a row further from the camera than it is and stays behind things it
+has already walked past. At a glance that does not look like an off-by-one; it
+looks like a character stuck behind the scene.
+
+The two sides mean the same thing only because the rectangle is drawn centred
+on its space and half a space tall, which puts its bottom edge exactly on that
+space's **near vertex** — the same line an object's key is measured to. That is
+the property to preserve when the rectangle is replaced, and the two ways to
+lose it are opposite: artwork with empty space under the feet sorts late by
+however much of it there is, and a sprite given its *feet* as its origin has
+its bottom edge on the middle of the space rather than the near vertex of it,
+which is a row short again. A numeric `ground` on the character overrides the
+arithmetic, which is what either case should reach for.
 
 **The position comes off the sprite, not off the character's cell.** `cell` is
 as much where it is walking *to* as where it is — `moveTo` picks a path and the
@@ -4676,19 +4693,30 @@ placement's near corner; moving the comparison to `<` holds it back until it
 has properly left, and offsetting the stored number half a space either way
 moves the line within the crossing step.
 
-**Which layer it walks on is the layer the start point is on.** A point used to
-say where play begins is the one thing in the document that says where the
-character *belongs*, so the stack around it means something: scenery on that
-layer sorts against the character space by space, everything on a layer behind
-it is always behind, and everything on a layer in front is always in front.
-That last one is how an overhang works — put a canopy, a bridge or a doorway's
-lintel on the layer above and the character walks under it however far forward
-it goes, which is not something a single ordering can express. A scene with no
-start point falls back to the front-most visible object layer, which is where
-scenery normally is. A flat projection sets nothing at all, so the character
-keeps the depth the prefab gave it and draws in front of everything; sorting a
-flat top-down game on Y is a real thing to want, and it is a change to
-`drawOrder` as much as to this.
+**Which layer it walks on is the layer the start point is on**, as long as
+there is something on it. A point used to say where play begins is the one
+thing in the document that says where the character *belongs*, so the stack
+around it means something: scenery on that layer sorts against the character
+space by space, everything on a layer behind it is always behind, and
+everything on a layer in front is always in front. That last one is how an
+overhang works — put a canopy, a bridge or a doorway's lintel on the layer
+above and the character walks under it however far forward it goes, which is
+not something a single ordering can express.
+
+The qualification is not a detail. An **empty** layer gives the character a
+list of nothing to find its place in, so it lands at the bottom of that layer's
+slot and every layer in front draws over it — a character behind the entire
+scene, from one point dropped on a layer that happens to hold no artwork. So a
+layer qualifies only if it is a visible object layer *with placements on it*,
+and a start point on anything else falls through to the front-most layer that
+is, which is where scenery normally is. Nothing qualifying at all leaves
+`walkAmong` null and the character in front of everything, which is the failure
+you can see rather than the one you cannot.
+
+A flat projection sets nothing at all either, so the character keeps the depth
+the prefab gave it and draws in front of everything; sorting a flat top-down
+game on Y is a real thing to want, and it is a change to `drawOrder` as much as
+to this.
 
 `walkDepth` is a marked block and the only one the two genres do not share: a
 platformer is seen from the side, where nothing sorts on Y at all. Its test

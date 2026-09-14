@@ -67,11 +67,13 @@ remaining pieces are wired to real slots rather than mocked.
   corner of a thing's **collider** nearest you — where the two visible faces of
   a box meet — so what you walk behind and what you walk around are the same
   footprint, and correcting one corrects the other
-- **It walks among the layer your start point is on.** Scenery on that layer
-  sorts against it space by space; anything on a layer behind is always behind
-  and anything on a layer in front always draws over it, which is how you get a
-  canopy, a bridge or a doorway's lintel to walk under. A scene with no start
-  point falls back to the front-most object layer
+- **It walks among the layer your start point is on**, as long as there is
+  something on it. Scenery on that layer sorts against it space by space;
+  anything on a layer behind is always behind and anything on a layer in front
+  always draws over it, which is how you get a canopy, a bridge or a doorway's
+  lintel to walk under. A start point on an empty layer — or no start point at
+  all — falls back to the front-most layer that does hold something, because a
+  layer with nothing on it is a layer with nothing to sort against
 - **Arrow keys as well as a tap**, on a top-down project. A tap walks there
   around whatever is in the way; holding an arrow nudges the character
   directly, which goes where a path cannot — half a space into a doorway, right
