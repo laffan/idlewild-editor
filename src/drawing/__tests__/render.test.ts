@@ -25,6 +25,8 @@ interface FakeCtx {
   composites: string[];
   alphas: number[];
   fills: string[];
+  /** The vertices a filled region's path was walked through. */
+  path: number[][];
   canvas: { width: number; height: number };
   [key: string]: unknown;
 }
@@ -35,6 +37,7 @@ function fakeContext(canvas: { width: number; height: number }): FakeCtx {
     composites: [],
     alphas: [],
     fills: [],
+    path: [],
     canvas,
     globalCompositeOperation: "source-over",
     globalAlpha: 1,
@@ -61,6 +64,10 @@ function fakeContext(canvas: { width: number; height: number }): FakeCtx {
   ctx.fill = () => {
     ctx.fills.push(ctx.fillStyle as string);
   };
+  // Where a filled region's outline actually went, which is the whole of what
+  // a fill draws — see the corners test below.
+  ctx.moveTo = (x: number, y: number) => void (ctx.path as number[][]).push([x, y]);
+  ctx.lineTo = (x: number, y: number) => void (ctx.path as number[][]).push([x, y]);
   contexts.push(ctx);
   return ctx;
 }
@@ -198,5 +205,33 @@ describe("a fill", () => {
     );
     expect(ctx.draws).toBe(0);
     expect(ctx.fills).toEqual(["#3a7bd540"]);
+  });
+
+  /**
+   * And it goes in at the corners it was given.
+   *
+   * The streamline is a lag filter over the path a brush is stamped *along*:
+   * it drags every interior sample most of the way towards the one before it,
+   * which is what stops a hand's jitter from becoming a row of stamps at
+   * slightly wrong angles. A filled region has no stamping and no path — it
+   * has corners. Running it over a shape tapped out corner by corner moved
+   * every one of them, so the shape that appeared the moment you pressed Fill
+   * was not the shape on screen; on a swept outline of several hundred
+   * samples a pixel apart the same bug was invisible, which is how it lasted.
+   */
+  it("keeps the corners exactly where they were, unstreamlined", () => {
+    const ctx = target();
+    const corners = [0, 0, 1, 100, 10, 1, 90, 80, 1, 10, 70, 1];
+    renderStroke(
+      ctx as unknown as CanvasRenderingContext2D,
+      stroke({ mode: "fill", points: corners }),
+      atlas,
+    );
+    expect(ctx.path).toEqual([
+      [0, 0],
+      [100, 10],
+      [90, 80],
+      [10, 70],
+    ]);
   });
 });

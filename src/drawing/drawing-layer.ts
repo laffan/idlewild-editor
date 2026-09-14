@@ -67,7 +67,30 @@ export interface DrawingCallbacks {
 
 export class DrawingLayer {
   readonly root: HTMLElement;
-  style: StrokeStyle = { ...DEFAULT_STYLE };
+
+  private styleValue: StrokeStyle = { ...DEFAULT_STYLE };
+
+  /**
+   * What the next stroke will be drawn with — the brush, the size, the
+   * smoothing, the colour and the stroke mode.
+   *
+   * A property with a setter rather than a plain field, for one case:
+   * **a shape half tapped out is already on screen in the colour it will land
+   * in**, so picking a new colour has to reach it. Everything else here is
+   * about a stroke that does not exist yet and has nothing to repaint, which
+   * is why this was a field for so long. Assigning is how the shell changes
+   * it — the inspector's picker fires continuously while it is dragged — so
+   * the repaint belongs on the assignment rather than at each of the three
+   * call sites, one of which would eventually be added without it.
+   */
+  get style(): StrokeStyle {
+    return this.styleValue;
+  }
+
+  set style(next: StrokeStyle) {
+    this.styleValue = next;
+    if (this.showsPointFill()) this.pointFill.repaint(next);
+  }
 
   /**
    * How long a still hold inside a stroke straightens the rest of it, in

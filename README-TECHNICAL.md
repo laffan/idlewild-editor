@@ -1927,6 +1927,20 @@ small. A fill previews, undoes, slices, exports and applies through the code
 that was already there for a pencil line; a fill that was a new kind of object
 in the document would have needed all five written again.
 
+**A fill is not streamlined, and that is the one thing it does not share.**
+The streamline is a lag filter over the path a brush is stamped *along*: it
+drags every interior sample most of the way towards the one before it, which
+is what stops a hand's jitter from becoming a row of stamps at slightly wrong
+angles. A filled region has no stamping and no path — it has corners. Running
+it over a shape tapped out corner by corner moved every one of them, so what
+appeared the moment you pressed Fill was not the shape on screen; on a swept
+outline of several hundred samples a pixel apart the same bug was invisible,
+which is how it lasted. `renderStroke` therefore hands a fill its own points
+and everything else the streamline, and both previews are honest as a result —
+neither `fillPreview` nor the point fill's repaint streamlines either, so what
+you were looking at is what lands. Pinned in `render.test.ts`, because the
+failure draws a perfectly plausible shape.
+
 ### The sweep fill is two tools sharing a colour
 
 **Draw** is the gesture it always was: press, run a closed outline, release,
@@ -1988,9 +2002,20 @@ nothing explains.
 
 It lands as a `fill`-mode stroke, which is what the sweep lands as, so it
 reaches erase, undo, export and Apply through machinery that already exists
-and knows nothing about how it was aimed. Until then it is nowhere in the
-document at all, which is why both the panel's corner count and the floating
-bar are told by hand: nothing fires a `change` for them to hear.
+and knows nothing about how it was aimed — and it lands at the corners it was
+given, which took the renderer's streamline off fills to be true. Until then
+it is nowhere in the document at all, which is why both the panel's corner
+count and the floating bar are told by hand: nothing fires a `change` for them
+to hear.
+
+**The colour reaches the shape as it is picked.** `DrawingLayer.style` is a
+property with a setter rather than a plain field for this one case: a
+half-built shape is already on screen in the colour it will land in, so the
+picker — which fires continuously while it is dragged — has to repaint it.
+Everything else the style carries is about a stroke that does not exist yet
+and has nothing to repaint, which is why it was a field for so long. The
+repaint is on the assignment rather than at each of the three call sites, one
+of which would eventually have been added without it.
 
 **One `beginLive` per frame, and that is not tidiness.** `Surface.beginLive`
 clears the rectangle it last painted before handing the context back, so

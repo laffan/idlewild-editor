@@ -10,7 +10,7 @@
 
 import type { Stroke } from "../lib/types";
 import type { AtlasCache } from "./atlas";
-import { streamlineFor, type StreamPoint } from "./geometry";
+import { STRIDE, streamlineFor, type StreamPoint } from "./geometry";
 import { stampAngle } from "./geometry";
 import { alphaOf, opaqueHex } from "../lib/color";
 import type { StrokeStyle } from "./types";
@@ -91,14 +91,37 @@ export function stampStream(
  * the note there. A stroke is immutable once stored, so the streamline is
  * computed once for the life of the stroke however many times the backing is
  * re-baked.
+ *
+ * **A fill is not streamlined.** The streamline is a lag filter over the path
+ * a brush is stamped *along*: it drags every interior sample most of the way
+ * towards the one before it, which is what stops a hand's jitter from
+ * becoming a row of stamps at slightly wrong angles. A filled region has no
+ * stamping and no path — it has corners — and dragging those towards each
+ * other moves them. On a swept outline of several hundred samples a pixel
+ * apart that was invisible; on a shape tapped out corner by corner it was a
+ * different shape from the one on screen the moment you pressed Fill. It also
+ * means both previews are now honest: neither `fillPreview` nor the point
+ * fill's own repaint streamlines, so what you were looking at is what lands.
  */
 export function renderStroke(
   ctx: CanvasRenderingContext2D,
   stroke: Stroke,
   atlas: AtlasCache,
 ): void {
-  const stream = streamlineFor(stroke.points, STREAMLINE);
+  const stream =
+    stroke.mode === "fill"
+      ? asStream(stroke.points)
+      : streamlineFor(stroke.points, STREAMLINE);
   paint(ctx, stream, stroke.size, stroke.color, stroke.mode, stroke.brushId, atlas);
+}
+
+/** A stroke's flat points as the stream shape, with nothing done to them. */
+function asStream(points: readonly number[]): StreamPoint[] {
+  const out: StreamPoint[] = [];
+  for (let i = 0; i + STRIDE <= points.length; i += STRIDE) {
+    out.push({ point: [points[i], points[i + 1]], pressure: points[i + 2] });
+  }
+  return out;
 }
 
 /** Lay an in-flight stroke, which has a style but no record yet. */

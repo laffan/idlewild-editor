@@ -171,6 +171,35 @@ describe("where the shape is", () => {
   });
 });
 
+/**
+ * What lands is what was on screen.
+ *
+ * The corners go into the document exactly as they were tapped out: no
+ * smoothing, no streamline, no simplification. That is asserted here because
+ * the failure is silent and looks like a different feature — the renderer
+ * used to streamline a stored fill, which is a lag filter over the path a
+ * brush is stamped *along*, and on a four-corner shape it moved every
+ * interior corner most of the way towards the one before it. The shape that
+ * appeared when you pressed Fill was not the shape you had drawn.
+ */
+describe("what lands", () => {
+  it("is the corners themselves, in the order they were tapped", () => {
+    const { shape, laid } = setup();
+    const corners = [
+      [0, 0],
+      [100, 10],
+      [90, 80],
+      [10, 70],
+    ];
+    for (const [x, y] of corners) tap(shape, x, y, STYLE);
+    expect(shape.fill(STYLE)).toBe(true);
+    // Flat: x, y, pressure per corner.
+    expect(laid[0].points).toEqual([
+      0, 0, 1, 100, 10, 1, 90, 80, 1, 10, 70, 1,
+    ]);
+  });
+});
+
 describe("taking it back", () => {
   it("drops the last corner, and says so", () => {
     const { shape, changes } = setup();
