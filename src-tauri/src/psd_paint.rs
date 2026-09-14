@@ -1,6 +1,6 @@
 //! Laying new pixels into a layer a PSD already has.
 //!
-//! What pen mode applies. The editor draws over the canvas in its own ink,
+//! What PSD Edit mode applies. The editor draws over the canvas in its own ink,
 //! rasterises the strokes at the file's own resolution, and hands the result
 //! here to be composited into one named layer — so drawing into a PSD from
 //! the editor and painting into it in Photoshop leave the same kind of file
@@ -86,7 +86,7 @@ impl Paint {
 /// Take the part of a patch that is actually on the canvas.
 ///
 /// None when none of it is. A stroke drawn past the edge of the PSD's canvas
-/// is not an error — the frame pen mode draws is a boundary to work inside,
+/// is not an error — the frame PSD Edit mode draws is a boundary to work inside,
 /// not a wall — so what falls outside is simply dropped.
 pub fn clip(patch: Patch, canvas_w: u32, canvas_h: u32) -> Option<Patch> {
     let x0 = patch.left.max(0);

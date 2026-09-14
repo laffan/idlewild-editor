@@ -36,10 +36,29 @@ export function strokesToZonePoints(
 
   const path: InkPoint[] = [];
   for (const stroke of ordered) path.push(...toPoints(stroke.points));
+  return zonePoints(path, gridSize);
+}
+
+/**
+ * The same simplification, for an outline that was never a stroke.
+ *
+ * The boundary *tool* sweeps its polygon on the drawing surface and hands it
+ * straight out — no stroke is ever stored — so it arrives here as points
+ * rather than as ink. What happens to it afterwards has to be identical, or a
+ * boundary swept with the tool would block differently from one converted
+ * from a sketch of the same shape.
+ */
+export function zonePoints(
+  path: readonly { x: number; y: number }[],
+  gridSize: number,
+): Point[] {
   if (path.length < MIN_POINTS) return [];
 
   const tolerance = Math.max(1, gridSize * TOLERANCE_FRAC);
-  const kept = simplify(path, tolerance);
+  const kept = simplify(
+    path.map((p) => ({ x: p.x, y: p.y, pressure: 1 })),
+    tolerance,
+  );
   if (kept.length < MIN_POINTS) return [];
 
   return kept.map((p) => ({ x: p.x, y: p.y }));

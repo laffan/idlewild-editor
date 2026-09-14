@@ -1,26 +1,30 @@
 /**
  * What a tool means to the pointer.
  *
- * Five tools are on the rail and three more belong to pen mode, and picking
+ * Nine tools on three bars and one more on PSD Edit mode's bar, and picking
  * any of them answers the same short list of questions again: who gets the
  * raw input — the drawing layer, or the game canvas and its gesture arbiter —
  * what a drag on empty space does, what the cursor over the canvas is, and
  * what the inspector should be describing.
  *
  * Split out of `editor.ts` because it is the one part of the shell that is
- * about the *pointer* rather than about the document. The pen rail's three
- * are here too, for the reason they are a special case at all: they are a
- * brush swap wearing a tool's clothes, so Pixels has to remember the brush it
- * borrowed from and the plain pencil has to give it back.
+ * about the *pointer* rather than about the document.
+ *
+ * **Two of them are the pencil wearing a tool's clothes.** Pixels is the
+ * pencil with a hard checker for a tip and Rub is the pencil with the paint
+ * taken out, so both come down to a brush and a stroke mode rather than to a
+ * gesture of their own. Saying so in one place is what lets them be buttons
+ * like any other: Pixels has to remember the brush it borrowed the slot from,
+ * and going back to the plain pencil has to give it back.
  */
 
 import { DEFAULT_STYLE, PIXEL_BRUSH, type DrawingLayer } from "../drawing";
+import type { StrokeStyle } from "../drawing";
 import * as log from "../lib/log";
 import type { ToolId } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
 import type { ToolRail } from "./tool-rail";
-import { penToolEffect, type PenTool } from "./pen-rail";
 
 export interface ToolRoutingHost {
   rail: ToolRail;
@@ -36,27 +40,77 @@ export interface ToolRouting {
   /**
    * Put a tool in the pointer's hands.
    *
-   * Called by the rail and by the space bar, which borrows Pan for as long as
-   * it is held. `rail.setTool` is what the space bar needs from it: the rail
-   * has to show what the pointer is actually doing, or holding space looks
+   * Called by the bars and by the space bar, which borrows Pan for as long as
+   * it is held. `rail.setTool` is what the space bar needs from it: the bars
+   * have to show what the pointer is actually doing, or holding space looks
    * like nothing happened.
    */
   apply: (tool: ToolId, announce?: boolean) => void;
-  /** Put one of pen mode's own three in the pointer's hands, or take it back. */
-  applyPen: (tool: PenTool) => void;
 }
 
+/** Which tools hand the raw pointer to the drawing layer, and as what. */
+const DRAWN: Partial<Record<ToolId, "pencil" | "eraser" | "lasso" | "fill" | "zone">> =
+  {
+    pencil: "pencil",
+    // The pencil, drawn differently. Both are a brush and a stroke mode; see
+    // `styleFor` for the half that is not the gesture.
+    pixels: "pencil",
+    rub: "pencil",
+    eraser: "eraser",
+    lasso: "lasso",
+    fill: "fill",
+    zone: "zone",
+  };
+
+/** What each of them says in the console when it is picked up. */
+const ANNOUNCE: Partial<Record<ToolId, string>> = {
+  select: "Select — drag a box around what you want",
+  pan: "Pan tool: drag to move the camera",
+  point: "Point — tap to put one down; drag still pans",
+  zone: "Boundary — sweep an outline and it becomes a blocking zone",
+  pencil: "Pencil — draw with a pencil or a mouse; fingers pan",
+  pixels: "Pixels — the pencil with a hard pixel pattern for a tip",
+  eraser: "Eraser — drag across a stroke to cut it where the disc passes",
+  lasso: "Lasso — sweep around strokes to select them",
+  fill: "Fill — sweep a closed shape, or tap its corners out",
+  rub: "Rub — the pencil with the paint taken out",
+};
+
 export function createToolRouting(host: ToolRoutingHost): ToolRouting {
-  /** The brush the pencil had before the pen rail's Pixels borrowed it. */
+  /** The brush the pencil had before Pixels borrowed the slot. */
   let remembered = DEFAULT_STYLE.brushId;
+
+  /**
+   * The brush and the stroke mode a tool draws with.
+   *
+   * Only three tools change either, and the plain pencil is one of them: it
+   * is what gives the borrowed brush slot back. Fill and Lasso are left alone
+   * deliberately — a swept shape takes the drawing colour and no tip at all,
+   * so a stale `brushId` on the style does nothing to it.
+   */
+  function styleFor(tool: ToolId): Partial<StrokeStyle> | null {
+    if (tool === "pixels") return { mode: "ink", brushId: PIXEL_BRUSH };
+    if (tool === "rub") return { mode: "erase", brushId: remembered };
+    if (tool === "pencil") return { mode: "ink", brushId: remembered };
+    return null;
+  }
 
   function apply(tool: ToolId, announce = true): void {
     const drawing = host.drawing();
     host.rail.setTool(tool);
-    const drawingTool =
-      tool === "pencil" || tool === "eraser" || tool === "lasso" || tool === "fill"
-        ? tool
-        : null;
+
+    if (drawing) {
+      // Remembered before the swap, and only when there is something to
+      // remember: picking Pixels twice must not leave the checker as the
+      // brush the pencil goes back to.
+      if (tool === "pixels" && drawing.style.brushId !== PIXEL_BRUSH) {
+        remembered = drawing.style.brushId;
+      }
+      const patch = styleFor(tool);
+      if (patch) drawing.style = { ...drawing.style, ...patch };
+    }
+
+    const drawingTool = DRAWN[tool] ?? null;
     const scene = host.scene();
     scene?.suspendGestures(drawingTool !== null);
     scene?.setGestureMode(
@@ -68,27 +122,11 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     host.canvas.classList.toggle("panning", tool === "pan");
     host.canvas.classList.toggle("placing", tool === "point");
     drawing?.setTool(drawingTool);
-    host.inspector.setDrawingTool(drawingTool, drawing?.style ?? null);
+    host.inspector.setTool(tool, drawing?.style ?? null);
     if (!announce) return;
-    if (tool === "select") log.info("Select — drag a box around what you want");
-    if (tool === "pan") log.info("Pan tool: drag to move the camera");
-    if (tool === "point") log.info("Point — tap to put one down; drag still pans");
-    if (tool === "pencil") log.info("Pencil — draw with a pencil or a mouse; fingers pan");
-    if (tool === "lasso") log.info("Lasso — sweep around strokes to select them");
-    if (tool === "fill") log.info("Fill — sweep a closed shape and it fills");
+    const said = ANNOUNCE[tool];
+    if (said) log.info(said);
   }
 
-  function applyPen(tool: PenTool): void {
-    const drawing = host.drawing();
-    if (!drawing) return;
-    if (tool === "pixels" && drawing.style.brushId !== PIXEL_BRUSH) {
-      remembered = drawing.style.brushId;
-    }
-    const effect = penToolEffect(tool, remembered);
-    drawing.style = { ...drawing.style, ...effect.style };
-    apply(effect.tool, false);
-    host.inspector.updateStrokeStyle(drawing.style);
-  }
-
-  return { apply, applyPen };
+  return { apply };
 }

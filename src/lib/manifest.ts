@@ -340,7 +340,7 @@ function walk(
 /**
  * Where the PSD's whole canvas sits in the world, given one placement of it.
  *
- * The frame pen mode draws, and the thing a placement's own outline is *not*:
+ * The frame PSD Edit mode draws, and the thing a placement's own outline is *not*:
  * that box is one layer's artwork, cropped to its pixels, which on a file
  * with a margin or several layers is a good deal smaller than the document
  * somebody opens in Photoshop. Drawing inside the artwork's box and calling

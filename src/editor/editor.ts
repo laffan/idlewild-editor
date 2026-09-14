@@ -5,7 +5,7 @@
 
 import { clear, h } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
-import { describeRange, Grid } from "../lib/grid";
+import { Grid } from "../lib/grid";
 import { assetBase, checkAssetServer, platform, projects } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
@@ -14,6 +14,7 @@ import { snapshotPng } from "../game/snapshot";
 import { DrawingLayer } from "../drawing";
 import { CodePanel } from "./code-panel";
 import { Inspector } from "./inspector";
+import { inspectorCallbacks } from "./inspect-wiring";
 import { EditorHeader } from "./header";
 import { LayersPanel } from "./layers-panel";
 import { SelectionActions } from "./selection-actions";
@@ -23,22 +24,22 @@ import { startIntake } from "./intake";
 import { GameFrame } from "./game-frame";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
-import { exportSelectionPng } from "./export-selection";
 import { createShell } from "./shell";
 import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { openNewBackground, type BackgroundDeps } from "./background-actions";
 import { createPatternShapes } from "./pattern-actions";
 import { layerKind } from "../lib/layer-kinds";
-import { applyFillColour, generatePsdForRegion } from "./fill-actions";
+import { generatePsdForRegion } from "./fill-actions";
 import { createConversions } from "./conversions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { confirmDeleteLayer, deleteSelected } from "./layer-actions";
 import { openExportAssets } from "./export-assets";
-import { openAddImage, openExportSelection, openPublish } from "./sheets";
+import { openAddImage, openPublish } from "./sheets";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
+import { addSweptZone } from "./zone-actions";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
@@ -80,7 +81,7 @@ export async function mountEditor(
    * The same promise saving a code file makes — what is in front of you is
    * what is on disk — for the other half of a project. In Code the game runs
    * beside the canvas, and it holds the textures it loaded when it started;
-   * ink applied in pen mode, a layer renamed or turned off, a re-parse, a
+   * ink applied in PSD Edit mode, a layer renamed or turned off, a re-parse, a
    * file replaced by a drop all leave it drawing the version before. The
    * canvas re-places from the new manifest either way, so without this the
    * two halves of the same window disagree about the same file.
@@ -165,69 +166,32 @@ export async function mountEditor(
     },
   };
 
-  const inspector = new Inspector(store, grid, {
-    onFillColor: (color) =>
-      applyFillColour(store, handle?.scene ?? null, color),
-    onToggleWalkable: (walkable) => {
-      const selection = handle?.scene.getSelection();
-      if (selection?.kind !== "fill") return;
-      store.updateFill(selection.layerId, selection.fillId, { walkable });
-    },
-    onRenamePsd: (key, name) => void psdFile.rename(key, name),
-    onToggleCollider: (key, blocking) => collider.setBlocking(key, blocking),
-    onEditCollider: () => collider.open(),
-    onStrokesToPsd: () => void convert.strokesToPsd(),
-    onStrokesToZone: () => convert.strokesToZone(),
-    isAnchored: (key) => handle?.scene.psdAnchored(key) ?? true,
-    // A pattern shape is drawn in mask mode — `editor/mask.ts`. The panel's
-    // own button opens it; the sketch panel's turns a lassoed outline into one
-    // directly, because that route's whole point is keeping the drawn line.
-    patternShapeTarget: () => shapes.strokeTarget(),
-    onStrokesToPatternShape: () => shapes.fromStrokes(),
-    onEditShape: (layerId, shapeId) => modes.mask.open(layerId, shapeId),
-    onFillToPsd: () => void convert.fillToPsd(),
-    onMakeUnique: (key) => void convert.makeUnique(key),
-    // Renaming a layer changes the path a placement reads, so the rename map
-    // travels with the manifest — see reconcilePlacements.
-    // Every button in the PSD section, wired in psd-actions.ts beside the
-    // rest of what happens to the file behind a placement.
-    createPsdLayers: (key) => psdLayers(key),
-    onStrokeStyle: (patch) => {
-      if (!drawing) return;
-      drawing.style = { ...drawing.style, ...patch };
-      inspector.updateStrokeStyle(drawing.style);
-    },
-    onDeleteSelection: () => deleteSelection(),
-    onDeleteLayer: (layerId) => void deleteLayer(layerId),
-    onRenamePoint: (layerId, pointId, name) =>
-      store.updatePoint(layerId, pointId, { name }),
-    onSetStartPoint: (pointId) => {
-      store.setStartPoint(pointId);
-      const point = store.startPoint;
-      log.info(
-        point
-          ? `${store.activeScene.name} starts at ${point.name}`
-          : `${store.activeScene.name} has no start point`,
-      );
-    },
-    onExportSelection: () => {
-      const selection = handle?.scene.getSelection();
-      if (selection?.kind !== "region") return;
-      openExportSelection(
-        describeRange(grid, selection.from, selection.to),
-        async () => exportSelectionPng(store, grid, selection.from, selection.to),
-      );
-    },
-    onUsePatternImage: () =>
-      openAddImage(meta.id, os, (result) => {
-        const selection = handle?.scene.getSelection();
-        if (selection?.kind !== "fill") return;
-        store.updateFill(selection.layerId, selection.fillId, {
-          kind: "pattern",
-          patternKey: result.key,
-        });
-      }),
-  });
+  // Every control in the properties sidebar, wired in `inspect-wiring.ts`.
+  // Almost everything it reaches is built after it — the scene, the drawing
+  // layer, the PSD file actions that need the panel back — so the deps are
+  // read through rather than captured.
+  const inspector: Inspector = new Inspector(
+    store,
+    grid,
+    inspectorCallbacks({
+      projectId: meta.id,
+      os,
+      store,
+      grid,
+      scene: () => handle?.scene ?? null,
+      drawing: () => drawing,
+      inspector: () => inspector,
+      psdFile: () => psdFile,
+      convert: () => convert,
+      collider: () => collider,
+      shapes,
+      openShape: (layerId, shapeId) => modes.mask.open(layerId, shapeId),
+      psdLayers: (key) => psdLayers(key),
+      activeLayerId: () => activeLayerId,
+      deleteSelection: () => deleteSelection(),
+      deleteLayer: (layerId) => void deleteLayer(layerId),
+    }),
+  );
 
   // Everything that happens to the *file* behind a placement — out to
   // Photoshop and back, a rewritten layer stack, a rename, a copy of its own.
@@ -263,7 +227,7 @@ export async function mountEditor(
     file: psdFile,
     scene: () => handle?.scene ?? null,
     onExtrude: () => extrude.resume(),
-    onPen: (key, layer) => pen.open(key, layer),
+    onEditPsd: (key, layer) => psdEdit.open(key, layer),
   });
 
   const actions = new SelectionActions(grid, {
@@ -313,7 +277,11 @@ export async function mountEditor(
     usePencil: () => tools.apply("pencil", false),
     inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
-    onPenTool: (tool) => tools.applyPen(tool),
+    // Rub is PSD Edit mode's own, and it is a tool like any other once it is
+    // in hand — the pencil with the paint taken out. The bar reports the
+    // press; `tool-routing.ts` decides what it means to the pointer.
+    useRub: (rubbing) => tools.apply(rubbing ? "rub" : "pencil"),
+    isRubbing: () => rail.tool === "rub",
     onPsdWritten: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
@@ -323,12 +291,13 @@ export async function mountEditor(
     // button that opens the next one — is.
     onMaskDone: (layerId) => handle?.scene.setSelection({ kind: "layer", layerId }),
   });
-  const { extrude, collider, pen } = modes;
+  const { extrude, collider, psdEdit } = modes;
 
-  // Pencil, eraser and lasso hand the pointer to the drawing layer; select
-  // and pan leave it with the game canvas and its gesture arbiter. What each
-  // of them means to the pointer is `tool-routing.ts`; `tools` is read through
-  // a closure here because the rail is built before it.
+  // The ink's tools and the boundary sweep hand the pointer to the drawing
+  // layer; select, pan and point leave it with the game canvas and its
+  // gesture arbiter. What each of them means to the pointer is
+  // `tool-routing.ts`; `tools` is read through a closure here because the
+  // bars are built before it.
   const rail = new ToolRail((tool: ToolId) => tools.apply(tool));
   const tools = createToolRouting({
     rail,
@@ -360,9 +329,16 @@ export async function mountEditor(
   const gameFrame = new GameFrame(meta.id);
 
   // The header is a row of the shell, not chrome floating over the canvas, so
-  // only the tools and the selection bar are inside the canvas wrapper. The
+  // only the tools and the selection bar are inside the canvas wrapper —
+  // `rail.root` at the top left corner and `rail.dock` at the bottom one. The
   // two edge toggles go in too, from `createShell` — they are layout.
-  canvasWrap.append(rail.root, rail.label, actions.root, gameFrame.root);
+  canvasWrap.append(
+    rail.root,
+    rail.dock,
+    rail.label,
+    actions.root,
+    gameFrame.root,
+  );
 
   // The rows and columns, and the dividers between them — see `shell.ts`.
   const layout = createShell({
@@ -479,7 +455,7 @@ export async function mountEditor(
       },
       onExtrudeChange: () => extrude.sync(),
       onColliderChange: () => collider.sync(),
-      onPenChange: () => pen.sync(),
+      onPsdEditChange: () => psdEdit.sync(),
       onMaskChange: () => modes.mask.sync(),
     },
     render.options,
@@ -505,6 +481,14 @@ export async function mountEditor(
           : { kind: "none" },
       );
     },
+    // The Boundary tool's sweep. The drawing layer knows nothing about grids,
+    // so what arrives is the raw outline and the simplification is here.
+    onZone: (points) =>
+      addSweptZone(store, handle?.scene ?? null, activeLayerId, points),
+    // The point-to-point fill gained or lost a corner. Nothing in the
+    // document moved, so only the panel that offers Fill and Clear has to
+    // hear about it.
+    onFillPoints: () => inspector.render(),
   });
   canvasWrap.appendChild(drawing.root);
   drawing.sync(handle.scene.viewport());

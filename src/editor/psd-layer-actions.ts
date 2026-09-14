@@ -87,7 +87,7 @@ export function psdHeadRow(
  * New layer, under the list.
  *
  * It writes straight away rather than joining the pending edits above it: the
- * row it makes is somewhere to draw, and pen mode needs a layer that is
+ * row it makes is somewhere to draw, and PSD Edit mode needs a layer that is
  * really in the file before it can put ink in one. Disabled while a write is
  * already in flight, because two rebuilds of the same file racing each other
  * is how one of them gets lost.

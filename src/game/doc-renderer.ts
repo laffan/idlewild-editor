@@ -172,7 +172,7 @@ export class DocRenderer {
    * The inverse of `suppressInstance`, and it exists for one case: a pattern
    * layer's placements are the palette a rule scatters rather than things
    * standing anywhere, so nothing is ever drawn on the space the file is
-   * anchored to. Pen mode frames exactly that space — the PSD's own canvas,
+   * anchored to. PSD Edit mode frames exactly that space — the PSD's own canvas,
    * where the file stands on the grid — so without this it opens on an empty
    * box and there is nothing to draw over.
    *
@@ -182,7 +182,7 @@ export class DocRenderer {
    * with the frame.
    *
    * Answers whether anything changed, because the caller has work of its own
-   * to do when it did — and pen mode derives this on every progress line the
+   * to do when it did — and PSD Edit mode derives this on every progress line the
    * pipeline emits, so being told the same thing again has to be free.
    */
   revealInstance(instance: string | null): boolean {
@@ -200,7 +200,7 @@ export class DocRenderer {
    * because on a pattern layer the two have to agree: a sweep that destroys
    * what a placement just made is a flash of a heap of elements on the anchor
    * space, and a placement that never happens is a reveal with nothing to
-   * reveal. That second one is what made pen mode open on an empty box.
+   * reveal. That second one is what made PSD Edit mode open on an empty box.
    */
   draws(layer: Layer, placement: Placement): boolean {
     if (layerKind(layer) !== "pattern") return true;
@@ -351,7 +351,7 @@ export class DocRenderer {
       // them — and `seen` deliberately leaves them out, so anything already
       // on the canvas from before the layer became a pattern is destroyed.
       //
-      // Unless one of them is being worked on. Pen mode frames the space the
+      // Unless one of them is being worked on. PSD Edit mode frames the space the
       // file is anchored to, so the prototype has to be there to draw over —
       // see `revealInstance` and `draws`.
       if (layerKind(layer) === "pattern" && !this.revealed) return;

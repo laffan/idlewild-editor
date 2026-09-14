@@ -278,9 +278,9 @@ export interface Stroke {
    * What the stroke does to what is under it.
    *
    * "ink" paints and "highlight" multiplies, as Hush has always had them.
-   * The other two are pen mode's, and both are the whole implementation of a
-   * tool rather than a variation on the pencil: "erase" stamps the same brush
-   * with `destination-out`, so it rubs ink out instead of laying it down, and
+   * The other two are each the whole implementation of a tool rather than a
+   * variation on the pencil: "erase" stamps the same brush with
+   * `destination-out`, so it rubs ink out instead of laying it down, and
    * "fill" is not stamped at all — its points are a closed outline and what
    * is drawn is the inside of it.
    */
@@ -631,30 +631,36 @@ export type Selection =
 export type EditorMode = "draw" | "code" | "play";
 
 /**
- * The rail's tools. Boundary is not among them: a boundary is made from
- * strokes already drawn and lassoed, so it is an action on a selection
- * rather than a mode you draw in.
- *
- * Point *is* among them, for the opposite reason: there is nothing already
- * on the canvas to promote into one, so putting a point down has to be
- * something you do to empty space.
- */
-/**
  * What the pointer is doing.
  *
- * "fill" has no button on the rail — it is pen mode's, from the second column
- * that only exists while that mode is up — but it is a tool the same way the
- * others are: the drawing layer holds the pointer and the gesture means
- * something of its own. See `editor/pen-rail.ts`.
+ * Nine tools over three bars — the rail's two, the place bar's two and the
+ * drawing toolbar's five — plus one that has no button anywhere. "rub" is PSD
+ * Edit mode's: the pencil with the paint taken out, offered as a toggle on
+ * that mode's own bar rather than as a tenth button somewhere it would mean
+ * nothing. It is a tool here all the same, because the pointer is doing
+ * something of its own while it is up. See `editor/tool-rail.ts` for which
+ * button is where and `editor/tool-routing.ts` for what each one means.
+ *
+ * "point" and "zone" are the two ways of making something out of bare ground:
+ * there is nothing already on an empty patch of canvas to promote into
+ * either, so both have to be things you do to it. A boundary can still be
+ * made the other way — from strokes already drawn and lassoed — which is an
+ * action on a selection rather than a tool.
  */
-export type ToolId =
-  | "select"
-  | "pan"
-  | "point"
-  | "pencil"
-  | "eraser"
-  | "lasso"
-  | "fill";
+export const TOOL_IDS = [
+  "select",
+  "pan",
+  "point",
+  "zone",
+  "pencil",
+  "pixels",
+  "eraser",
+  "lasso",
+  "fill",
+  "rub",
+] as const;
+
+export type ToolId = (typeof TOOL_IDS)[number];
 
 export interface PsdManifestEntry {
   key: string;

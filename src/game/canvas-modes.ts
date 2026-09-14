@@ -8,11 +8,11 @@
  * document underneath. The scene asks here first at each stage and falls
  * through to its ordinary behaviour only when nobody claimed the gesture.
  *
- * Pen mode claims every gesture and *does* nothing with any of them, which
+ * PSD Edit mode claims every gesture and *does* nothing with any of them, which
  * looks like a mistake and is the point: what draws there is the drawing
  * layer, a stack of canvases over Phaser's rather than anything in the scene,
  * so the mode's job under the ink is to keep a drag made with some other tool
- * from moving the artwork being drawn on. See `pen-mode.ts`.
+ * from moving the artwork being drawn on. See `psd-edit-mode.ts`.
  *
  * Only one of them is ever up, because entering one leaves the others — which
  * is enforced here rather than trusted, since each is entered from a place
@@ -28,7 +28,7 @@ import type { PatternShape, Point } from "../lib/types";
 import { ColliderMode } from "./collider-mode";
 import { ExtrudeMode } from "./extrude-mode";
 import { MaskMode } from "./mask-mode";
-import { PenMode } from "./pen-mode";
+import { PsdEditMode } from "./psd-edit-mode";
 
 /** What the modes need from the scene around them. */
 export interface CanvasModesHost {
@@ -36,7 +36,7 @@ export interface CanvasModesHost {
   readonly scene: Phaser.Scene;
   readonly grid: Grid;
   zoom(): number;
-  /** The scene's camera, which pen mode's dim is cut out of what it sees. */
+  /** The scene's camera, which PSD Edit mode's dim is cut out of what it sees. */
   camera(): Phaser.Cameras.Scene2D.Camera;
   /** Where a client-space point lands in the world. */
   worldAt(screenX: number, screenY: number): Point;
@@ -50,14 +50,14 @@ export interface CanvasModesHost {
   otherShapes(layerId: string, shapeId: string | null): readonly PatternShape[];
   onExtrudeChange(): void;
   onColliderChange(): void;
-  onPenChange(): void;
+  onPsdEditChange(): void;
   onMaskChange(): void;
 }
 
 export class CanvasModes {
   readonly extrude: ExtrudeMode;
   readonly collider: ColliderMode;
-  readonly pen: PenMode;
+  readonly psdEdit: PsdEditMode;
   readonly mask: MaskMode;
 
   constructor(host: CanvasModesHost) {
@@ -76,11 +76,11 @@ export class CanvasModes {
       ...shared,
       onChange: () => host.onColliderChange(),
     });
-    this.pen = new PenMode({
+    this.psdEdit = new PsdEditMode({
       scene: host.scene,
       camera: () => host.camera(),
       clearSelection: () => host.clearSelection(),
-      onChange: () => host.onPenChange(),
+      onChange: () => host.onPsdEditChange(),
     });
     this.mask = new MaskMode({
       ...shared,
@@ -95,7 +95,7 @@ export class CanvasModes {
     return (
       this.extrude.active ||
       this.collider.active ||
-      this.pen.active ||
+      this.psdEdit.active ||
       this.mask.active
     );
   }
@@ -109,42 +109,42 @@ export class CanvasModes {
 
   startExtrude(...args: Parameters<ExtrudeMode["start"]>): boolean {
     this.collider.stop();
-    this.pen.stop();
+    this.psdEdit.stop();
     this.mask.stop();
     return this.extrude.start(...args);
   }
 
   resumeExtrude(...args: Parameters<ExtrudeMode["resume"]>): boolean {
     this.collider.stop();
-    this.pen.stop();
+    this.psdEdit.stop();
     this.mask.stop();
     return this.extrude.resume(...args);
   }
 
   startCollider(...args: Parameters<ColliderMode["start"]>): boolean {
     this.extrude.stop();
-    this.pen.stop();
+    this.psdEdit.stop();
     this.mask.stop();
     return this.collider.start(...args);
   }
 
-  startPen(...args: Parameters<PenMode["start"]>): boolean {
+  startPsdEdit(...args: Parameters<PsdEditMode["start"]>): boolean {
     this.extrude.stop();
     this.collider.stop();
     this.mask.stop();
-    return this.pen.start(...args);
+    return this.psdEdit.start(...args);
   }
 
   startMask(...args: Parameters<MaskMode["start"]>): boolean {
     this.extrude.stop();
     this.collider.stop();
-    this.pen.stop();
+    this.psdEdit.stop();
     return this.mask.start(...args);
   }
 
   beginDrag(screenX: number, screenY: number): boolean {
     return (
-      this.pen.claims() ||
+      this.psdEdit.claims() ||
       this.mask.beginSweep(screenX, screenY) ||
       this.collider.beginPaint(screenX, screenY) ||
       this.extrude.beginPull(screenX, screenY)
@@ -153,7 +153,7 @@ export class CanvasModes {
 
   moveDrag(screenX: number, screenY: number): boolean {
     return (
-      this.pen.claims() ||
+      this.psdEdit.claims() ||
       this.mask.moveSweep(screenX, screenY) ||
       this.collider.movePaint(screenX, screenY) ||
       this.extrude.movePull(screenX, screenY)
@@ -162,7 +162,7 @@ export class CanvasModes {
 
   endDrag(): boolean {
     return (
-      this.pen.claims() ||
+      this.psdEdit.claims() ||
       this.mask.endSweep() ||
       this.collider.endPaint() ||
       this.extrude.endPull()
@@ -177,7 +177,7 @@ export class CanvasModes {
    */
   beginSelect(screenX: number, screenY: number): boolean {
     return (
-      this.pen.claims() ||
+      this.psdEdit.claims() ||
       this.mask.beginSweep(screenX, screenY) ||
       this.collider.beginPaint(screenX, screenY) ||
       this.extrude.beginSelect(screenX, screenY)
@@ -186,7 +186,7 @@ export class CanvasModes {
 
   extendSelect(screenX: number, screenY: number): boolean {
     return (
-      this.pen.claims() ||
+      this.psdEdit.claims() ||
       this.mask.moveSweep(screenX, screenY) ||
       this.collider.movePaint(screenX, screenY) ||
       this.extrude.extendSelect(screenX, screenY)
@@ -195,7 +195,7 @@ export class CanvasModes {
 
   endSelect(): boolean {
     return (
-      this.pen.claims() ||
+      this.psdEdit.claims() ||
       this.mask.endSweep() ||
       this.collider.endPaint() ||
       this.extrude.endSelect()
@@ -204,7 +204,7 @@ export class CanvasModes {
 
   tap(screenX: number, screenY: number): boolean {
     return (
-      this.pen.claims() ||
+      this.psdEdit.claims() ||
       this.mask.tap() ||
       this.collider.tap(screenX, screenY) ||
       this.extrude.tap(screenX, screenY)
@@ -215,7 +215,7 @@ export class CanvasModes {
   refresh(): void {
     this.extrude.refresh();
     this.collider.refresh();
-    this.pen.refresh();
+    this.psdEdit.refresh();
     this.mask.refresh();
   }
 
@@ -223,14 +223,14 @@ export class CanvasModes {
   stop(): void {
     this.extrude.stop();
     this.collider.stop();
-    this.pen.stop();
+    this.psdEdit.stop();
     this.mask.stop();
   }
 
   destroy(): void {
     this.extrude.destroy();
     this.collider.destroy();
-    this.pen.destroy();
+    this.psdEdit.destroy();
     this.mask.destroy();
   }
 }

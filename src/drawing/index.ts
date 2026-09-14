@@ -34,10 +34,15 @@
 export { DrawingLayer, type DrawingCallbacks } from "./drawing-layer";
 export { StrokeStore } from "./stroke-store";
 export { rasteriseStrokes, strokesToPsd } from "./rasterise";
-export { strokesToZonePoints } from "./to-zone";
+export { strokesToZonePoints, zonePoints } from "./to-zone";
 // `STRIDE` with it: a stroke's points are flat — x, y, pressure — and anything
 // reading them back, the minimap included, has to know the step.
 export { STRIDE, strokesBox } from "./geometry";
 export type { Viewport } from "./surface";
-export { BRUSHES, PIXEL_BRUSH } from "./atlas";
-export { DEFAULT_STYLE, type DrawingTool, type StrokeStyle } from "./types";
+export { BRUSHES, PIXEL_BRUSH, brushStampUrl } from "./atlas";
+export {
+  DEFAULT_STYLE,
+  type DrawingTool,
+  type FillMode,
+  type StrokeStyle,
+} from "./types";

@@ -432,7 +432,7 @@ pub fn paint(
 /// rectangle to the canvas therefore moved the mark's centre three pixels on
 /// the first rewrite, and deleted the mark outright when the whole dot was
 /// past the edge — a rename in the inspector, a New layer, or a stroke laid
-/// down in pen mode, and the file came back with no anchor in it. So the
+/// down in PSD Edit mode, and the file came back with no anchor in it. So the
 /// rect is kept and the part of it that is off the canvas comes back clear.
 pub(crate) fn crop(
     layer: &psd::PsdLayer,

@@ -1,11 +1,16 @@
 /**
  * What each drawing tool does with a gesture.
  *
- * All three follow the same shape, which is Hush's: a gesture opens a
+ * They all follow the same shape, which is Hush's: a gesture opens a
  * session, every move updates it against a working copy that only the
  * surface reads, and the release writes the document once. An erase drag
  * that slices thirty strokes is one save and one entry in the layer panel's
  * count, not thirty.
+ *
+ * The one departure is the sweep fill's other half, which is a *shape* being
+ * assembled over several gestures rather than one gesture being recorded —
+ * see `fill-points.ts`. It keeps this file's session shape at the edges and
+ * holds its points between them.
  *
  * ## A move records; a frame paints
  *
@@ -55,7 +60,10 @@ export interface ToolSession {
 }
 
 /** The box a run of points covers, grown by `pad` on every side. */
-function boundsOf(points: readonly { x: number; y: number }[], pad: number): Bounds {
+export function boundsOf(
+  points: readonly { x: number; y: number }[],
+  pad: number,
+): Bounds {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -341,22 +349,32 @@ export function beginFill(
 ): ToolSession {
   const points: InkPoint[] = [{ x, y, pressure: 1 }];
 
+  /**
+   * The outline as it will be *kept*, which is also what is previewed.
+   *
+   * The pencil's own smoothing, for the pencil's own reason: an outline swept
+   * by hand carries every tremor of it, and a fill's edge shows a tremor more
+   * plainly than a line does because there is a flat colour on one side of
+   * it. Memoised on the sample count the way `beginDraw` memoises its own —
+   * samples are only appended, so a list of the same length is the same list
+   * — since both the frame paint and `end` ask for it.
+   */
+  let shapedAt = -1;
+  let shapedPoints: InkPoint[] = points;
+  const shaped = (): InkPoint[] => {
+    if (shapedAt === points.length) return shapedPoints;
+    shapedAt = points.length;
+    shapedPoints = smoothPoints(points, style.smoothing);
+    return shapedPoints;
+  };
+
   const paint = () => {
-    const ctx = surface.beginLive();
     // The shape as it will land, not an outline of where it is being swept:
     // a fill that previewed as a line would be a fill you had to imagine.
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-    ctx.closePath();
-    ctx.fillStyle = style.color;
-    ctx.globalAlpha = 0.7;
-    ctx.fill("nonzero");
-    ctx.globalAlpha = 1;
-    ctx.lineWidth = surface.worldPerScreenPixel * 1.5;
-    ctx.strokeStyle = ACCENT;
-    ctx.stroke();
-    surface.endLive(boundsOf(points, surface.worldPerScreenPixel * 2));
+    const held = shaped();
+    const ctx = surface.beginLive();
+    fillPreview(ctx, held, style.color, surface.worldPerScreenPixel * 1.5);
+    surface.endLive(boundsOf(held, surface.worldPerScreenPixel * 2));
   };
   const frame = onFrame(paint);
 
@@ -372,7 +390,100 @@ export function beginFill(
       surface.clearLive();
       // Three points is the least that encloses anything; a tap is a miss.
       if (points.length < 3) return;
-      store.add(toFlat(points), { ...style, mode: "fill" });
+      store.add(toFlat(shaped()), { ...style, mode: "fill" });
+    },
+  };
+}
+
+/**
+ * The swept shape, drawn as it will land.
+ *
+ * Shared with the point-to-point fill — see `fill-points.ts` — so the two
+ * halves of the one tool preview identically: the same translucent inside,
+ * the same accent outline.
+ *
+ * It takes a **context** rather than the surface, and that is load-bearing
+ * rather than tidy: `Surface.beginLive` clears the rectangle it last painted
+ * before handing the context back, so a caller that opened the live canvas
+ * twice in one frame erased its own first half. The point-to-point fill draws
+ * the shape and then its corner handles, which is exactly that shape of bug —
+ * the shape went down and the handles wiped it, leaving three dots floating
+ * over nothing. So opening the canvas is the caller's, once, and this only
+ * draws.
+ */
+export function fillPreview(
+  ctx: CanvasRenderingContext2D,
+  points: readonly { x: number; y: number }[],
+  color: string,
+  lineWidth: number,
+): void {
+  if (points.length === 0) return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.7;
+  ctx.fill("nonzero");
+  ctx.globalAlpha = 1;
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = ACCENT;
+  ctx.stroke();
+}
+
+// ── zone ────────────────────────────────────────────────────────────────────
+
+/**
+ * Sweep an outline and it becomes a boundary.
+ *
+ * The lasso's gesture with a third ending. That one *finds* the strokes
+ * inside the loop and the sweep fill *becomes* one; this one hands the
+ * polygon out and lets the shell make a `Zone` of it — which is the only one
+ * of the three whose result is not a stroke, so it is the only one that
+ * cannot end in the stroke store.
+ *
+ * Nothing is simplified here. How coarse a boundary may be is a fact about
+ * the grid it blocks — see `to-zone.ts` — and the drawing engine knows
+ * nothing about grids.
+ */
+export function beginZone(
+  surface: Surface,
+  onSweep: (points: readonly { x: number; y: number }[]) => void,
+  x: number,
+  y: number,
+): ToolSession {
+  const poly: { x: number; y: number }[] = [{ x, y }];
+
+  const paint = () => {
+    const ctx = surface.beginLive();
+    ctx.beginPath();
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+    ctx.closePath();
+    // Drawn the way a blocking boundary is drawn on the canvas: a wash inside
+    // and a solid edge, so the sweep looks like the thing it is about to be.
+    ctx.fillStyle = "rgba(236, 48, 19, 0.14)";
+    ctx.fill();
+    ctx.lineWidth = surface.worldPerScreenPixel * 2;
+    ctx.strokeStyle = ACCENT;
+    ctx.stroke();
+    surface.endLive(boundsOf(poly, surface.worldPerScreenPixel * 3));
+  };
+  const frame = onFrame(paint);
+
+  return {
+    move(mx, my) {
+      const last = poly[poly.length - 1];
+      if (Math.hypot(mx - last.x, my - last.y) < 1) return;
+      poly.push({ x: mx, y: my });
+      frame.request();
+    },
+    end() {
+      frame.cancel();
+      surface.clearLive();
+      // Three points is the least that encloses anything; a tap is a miss,
+      // and reported as one so the shell can say so rather than guess.
+      onSweep(poly.length < 3 ? [] : poly);
     },
   };
 }

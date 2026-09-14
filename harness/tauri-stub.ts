@@ -496,14 +496,14 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       stack.splice(0, stack.length, ...next);
       return psdManifest(key, stack);
     }
-    // What pen mode reads to work out where the file's canvas falls on the
+    // What PSD Edit mode reads to work out where the file's canvas falls on the
     // grid — the document's own size and its anchor mark, which is a
     // different question from where any one layer's artwork is.
     case "read_psd_manifest": {
       const key = String((args as any).key);
       return psdManifest(key, key === "tower" ? PSD_LAYERS : generatedStack(key));
     }
-    // The two writes pen mode is built on. Both edit the stack this stub
+    // The two writes PSD Edit mode is built on. Both edit the stack this stub
     // keeps for the key, so a script can add a layer, draw into it, and read
     // the file's shape back the way the reorder paths already can.
     case "add_psd_layer": {

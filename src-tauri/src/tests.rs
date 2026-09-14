@@ -8,7 +8,7 @@
 //! Neighbours split off for the 700-line rule, sharing only the store they
 //! create projects in and `swatch`. `marks` is the orienting marks an import
 //! writes and psd-to-json reports back. `rewrite` is what a *second* write to
-//! the same file has to keep. `painting` is the two writes pen mode makes —
+//! the same file has to keep. `painting` is the two writes PSD Edit mode makes —
 //! a layer added to a file, and ink laid into one. `scaffolds` is what a
 //! *project* is made of — the starter document, the runnable game each
 //! template selection writes, and the tree the code modal edits; `exports` is

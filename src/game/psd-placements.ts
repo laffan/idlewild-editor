@@ -549,7 +549,7 @@ export class PsdPlacements {
    *
    * `DocRenderer.draws` is the one place that decision is made, so that the
    * two ends agree: a session that reveals a unit needs it *placed*, and
-   * refusing here unconditionally is what left pen mode framing an empty box.
+   * refusing here unconditionally is what left PSD Edit mode framing an empty box.
    */
   placeOne(layerId: string, placement: Placement): void {
     const p2p = this.plugin();

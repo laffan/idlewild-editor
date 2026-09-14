@@ -14,6 +14,19 @@
  * the diff of a project where nobody touched the slider is empty.
  */
 
+/**
+ * What a fill starts out as, before anybody picks a colour.
+ *
+ * Grey rather than the app's accent. A fill is usually a block-out — a wall
+ * or a floor stood up to see whether the shape works — and the accent is the
+ * colour this editor draws its *own* marks in: selection outlines, the
+ * extrude plate, a blocking boundary. A block-out arriving in that colour
+ * read as chrome the editor had put on the canvas rather than as artwork the
+ * user had, and it was the one fill nobody could tell apart from a selection.
+ * Mid-grey says neither, which is what an untouched block-out means.
+ */
+export const DEFAULT_FILL_COLOR = "#8b8787";
+
 export interface Hsv {
   h: number; // 0–360
   s: number; // 0–1

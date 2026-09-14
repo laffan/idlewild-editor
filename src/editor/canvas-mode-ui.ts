@@ -5,8 +5,8 @@
  * the scene's side and for the same reason: they are one idea in four
  * shapes. Each is a bar along the bottom of the canvas column, a class on
  * that column while it is up, and one thing the mode itself deliberately
- * cannot do — extrude and pen write files, mask mode writes the document, and
- * none of them know what a project is.
+ * cannot do — extrude and PSD Edit write files, mask mode writes the document,
+ * and none of them know what a project is.
  *
  * What differs between them is only where they are entered from — the
  * floating action bar, a row of the inspector, a row of a PSD's layer list —
@@ -21,8 +21,7 @@ import type { WorldScene } from "../game/world-scene";
 import { createColliderUi, type ColliderUi } from "./collider";
 import { createExtrudeUi, type ExtrudeUi } from "./extrude";
 import { createMaskUi, type MaskUi } from "./mask";
-import { createPenUi, type PenUi } from "./pen";
-import type { PenTool } from "./pen-rail";
+import { createPsdEditUi, type PsdEditUi } from "./psd-edit";
 
 export interface CanvasModeUiOptions {
   projectId: string;
@@ -38,7 +37,7 @@ export interface CanvasModeUiOptions {
    */
   useSelectTool: () => void;
   usePencil: () => void;
-  /** The document layer new ink lands on, which is where pen mode's is. */
+  /** The document layer new ink lands on, which is where PSD Edit mode's is. */
   inkLayerId: () => string;
   /**
    * The zoom this project opens at, read when an extrusion is written: the
@@ -47,8 +46,10 @@ export interface CanvasModeUiOptions {
    * next.
    */
   defaultZoom: () => number;
-  /** One of pen mode's own three tools has been picked, or put back. */
-  onPenTool: (tool: PenTool) => void;
+  /** Rub was pressed on PSD Edit mode's bar, or pressed again to leave it. */
+  useRub: (rubbing: boolean) => void;
+  /** Whether the pointer is the rubber, so that bar can show it pressed. */
+  isRubbing: () => boolean;
   /** A PSD was rewritten and re-parsed; take the result back. */
   onPsdWritten: (key: string, manifest: string) => Promise<void> | void;
   /**
@@ -64,7 +65,7 @@ export interface CanvasModeUiOptions {
 export interface CanvasModeUis {
   extrude: ExtrudeUi;
   collider: ColliderUi;
-  pen: PenUi;
+  psdEdit: PsdEditUi;
   mask: MaskUi;
   destroy: () => void;
 }
@@ -98,13 +99,14 @@ export function createCanvasModeUis(
   // it does not hold the pointer: the drawing layer does, as it does
   // everywhere else. What this owns is the frame, the session's ink, and
   // getting that ink into the file.
-  const pen = createPenUi({
+  const psdEdit = createPsdEditUi({
     ...shared,
     projectId: options.projectId,
     drawing: options.drawing,
     usePencil: options.usePencil,
     inkLayerId: options.inkLayerId,
-    onPenTool: options.onPenTool,
+    useRub: options.useRub,
+    isRubbing: options.isRubbing,
     onWritten: options.onPsdWritten,
   });
 
@@ -120,12 +122,12 @@ export function createCanvasModeUis(
   return {
     extrude,
     collider,
-    pen,
+    psdEdit,
     mask,
     destroy: () => {
       extrude.destroy();
       collider.destroy();
-      pen.destroy();
+      psdEdit.destroy();
       mask.destroy();
     },
   };

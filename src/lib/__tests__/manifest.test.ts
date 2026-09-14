@@ -184,7 +184,7 @@ describe("the anchor mark", () => {
  * spanning (−50, −40) to (50, 40).
  */
 /**
- * The frame pen mode draws, which is the *document* rather than the artwork.
+ * The frame PSD Edit mode draws, which is the *document* rather than the artwork.
  *
  * The distinction is the whole reason this exists: a placement's own box is
  * one layer's pixels, and everything this editor writes has a grid space of

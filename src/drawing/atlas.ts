@@ -50,8 +50,9 @@ export interface BrushDef {
  * brush 5 the wet, even-edged one, which is Charcoal and Marker the other way
  * round. Only the *names* are swapped here. Swapping the masks instead would
  * repaint every stroke already drawn — a stroke records `brushId` and nothing
- * else about its tip — so the numbers on the buttons stay where they are and
- * the labels move.
+ * else about its tip — so the ids stay where they are and the labels move.
+ * The buttons show the tip itself now, which is the reading that cannot be
+ * wrong about which brush is which — see `brushStampUrl`.
  */
 export const BRUSHES: readonly BrushDef[] = [
   { id: 1, name: "Ink", url: brush1 },
@@ -60,6 +61,28 @@ export const BRUSHES: readonly BrushDef[] = [
   { id: 4, name: "Dry brush", url: brush4 },
   { id: 5, name: "Marker", url: brush5 },
 ];
+
+/**
+ * The mask a brush stamps with, as a URL something can show.
+ *
+ * The buttons that pick a brush show the tip rather than a number, which is
+ * the only thing about a brush anybody can recognise — "3" says nothing about
+ * whether a line will come out grainy. What the URL points at is the whole
+ * 512×128 atlas, so a caller showing one tip has to window the first of the
+ * four variants: `mask-size: 400% 100%` over the button, which is what
+ * `.brush-stamp` in panels.css does.
+ *
+ * A mask rather than an image, and that is not decoration. The PNGs are black
+ * with an alpha channel — the renderer tints them `source-in` — so drawn as
+ * pictures on this editor's dark chrome they would be black on black. Masked,
+ * the tip takes the button's own colour and goes white when the button is
+ * pressed, which is the state it has to read in.
+ *
+ * Empty for the pixel brush, which has no file behind it.
+ */
+export function brushStampUrl(brushId: number): string {
+  return BRUSHES.find((b) => b.id === brushId)?.url ?? "";
+}
 
 /**
  * The pixel brush, which has no PNG behind it.
@@ -71,8 +94,9 @@ export const BRUSHES: readonly BrushDef[] = [
  * 128×128 PNG of a checkerboard is a file to keep in step with the rule.
  *
  * It is out of the numbered set on purpose. The five are the pencil's
- * brushes, chosen from the rail's own panel; this is a *tool* in pen mode,
- * and giving it a sixth button beside them would put it in two places.
+ * brushes, chosen from the inspector's own TOOL section; this is a *tool* on
+ * the drawing toolbar, and giving it a sixth button beside them would put it
+ * in two places.
  */
 export const PIXEL_BRUSH = 90;
 

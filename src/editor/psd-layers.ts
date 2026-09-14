@@ -71,8 +71,8 @@ export interface PsdLayerEditorCallbacks {
   onRefresh: () => void;
   /** Open the placed PSD up into its layers on the canvas, or close it. */
   onToggleAdjust: () => void;
-  /** Draw into one sprite layer of this file — see `penable`. */
-  onPen: (layer: PsdLayerInfo) => void;
+  /** Draw into one sprite layer of this file — see `paintable`. */
+  onEditPsd: (layer: PsdLayerInfo) => void;
   /**
    * Show this file's layers on the canvas the way the list has them staged,
    * or stop and let the document answer again.
@@ -288,7 +288,7 @@ export class PsdLayerEditor {
         },
         onGripDown: (event) => this.beginDrag(event),
         onGripKey: (event, held) => this.onGripKey(event, held),
-        onPen: (layer) => this.callbacks.onPen(layer),
+        onEditPsd: (layer) => this.callbacks.onEditPsd(layer),
       });
       el.hidden = hidden[at];
       this.list.appendChild(el);
@@ -457,7 +457,7 @@ export class PsdLayerEditor {
    * Put an empty sprite layer on the top of the file.
    *
    * Written straight away rather than held with the pending edits above it,
-   * because what the row is *for* is somewhere to draw and pen mode can only
+   * because what the row is *for* is somewhere to draw and PSD Edit mode can only
    * put ink in a layer the file really has. The file is read again after, so
    * a half-typed rename waiting for Apply is lost — which is why the button
    * goes quiet while the write is in flight rather than trying to be clever

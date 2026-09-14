@@ -149,7 +149,7 @@ export interface PsdLayerEdit {
 
 /**
  * A rectangle of ink to lay into one layer of a PSD, in the file's own
- * pixels — what pen mode applies. See src-tauri/src/psd_paint.rs.
+ * pixels — what PSD Edit mode applies. See src-tauri/src/psd_paint.rs.
  */
 export interface PsdPaint {
   x: number;

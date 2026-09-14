@@ -1,6 +1,6 @@
 //! Adding a layer to a PSD, and drawing into one.
 //!
-//! The two writes pen mode is built on. Both go through the same rebuild a
+//! The two writes PSD Edit mode is built on. Both go through the same rebuild a
 //! rewrite does, so what these pin is the part that is specific to them: an
 //! added layer is real but has nothing in it, and ink laid into a layer joins
 //! what is already there rather than replacing it.
@@ -97,7 +97,7 @@ fn ink_past_the_edge_of_the_canvas_is_trimmed_rather_than_refused() {
     );
 }
 
-/// The round trip the inspector's New layer button and pen mode make.
+/// The round trip the inspector's New layer button and PSD Edit mode make.
 #[test]
 fn a_layer_can_be_added_and_then_drawn_into() {
     let meta = store::create_project(
@@ -201,7 +201,7 @@ fn a_layer_can_be_added_and_then_drawn_into() {
         std::panic::resume_unwind(payload);
     }
 }
-/// Applying in pen mode re-parses the file, and the assets on disk say so.
+/// Applying in PSD Edit mode re-parses the file, and the assets on disk say so.
 ///
 /// The half nobody can see from the editor. Ink goes into the PSD, the
 /// pipeline runs over it, and what the game loads is the sprite that run
@@ -247,7 +247,7 @@ fn applying_ink_re_parses_and_writes_the_sprite() {
         let sprites = store::assets_dir(id).unwrap().join("probe").join("sprites");
         assert!(sprites.join("probe.png").exists(), "the artwork it started with");
 
-        // New layer, then ink into it — pen mode's own route.
+        // New layer, then ink into it — PSD Edit mode's own route.
         psd_layers::add(id, "probe", |_| {}).expect("a layer should be added");
         let list = psd_layers::read(id, "probe").expect("the list should read");
         let row = list

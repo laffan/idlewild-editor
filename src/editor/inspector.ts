@@ -1,16 +1,36 @@
 /**
- * Right sidebar: the inspector for whatever is selected — a layer, a grid
- * region, a fill, a placed image or a boundary.
+ * The properties sidebar: three zones, always in the same order.
  *
- * The spec's Image Edit paragraph says image info appears in the "left
- * Inspector sidebar"; the Layout section puts the inspector on the right, so
- * that is where it is.
+ * It used to be one panel called **Inspector** that showed exactly one thing
+ * at a time — the brush while a drawing tool held the pointer, a layer while
+ * a layer was selected, a placed PSD while one was. Three unrelated subjects
+ * under one heading, each hiding the last: picking a PSD took the layer's
+ * facts away, and picking up the pencil took both away. The heading was the
+ * problem. "Inspector" names the panel rather than what is in it, so nothing
+ * on screen ever said which of the three you were looking at, and there was
+ * no way to look at two.
+ *
+ * So the heading is gone and there are three zones instead:
+ *
+ * - **TOOL** — what the thing in your hand has to set. Only for tools that
+ *   have something to set; see `inspect-brush.ts`.
+ * - **LAYER** — the layer being worked on, which is the selection's own when
+ *   there is one and the active layer otherwise. There is always one of
+ *   these, because there is always a layer new work lands on.
+ * - **OBJECT** — the thing selected on the canvas: a grid region, a fill, a
+ *   placed PSD, a point, a boundary, a backdrop, a sketch.
+ *
+ * Always in that order, and a zone with nothing to say is not drawn at all —
+ * an empty labelled box is the thing the old single heading was doing wrong.
+ * The order is the answer to the question the old panel could not settle:
+ * what is in my hand, where is it going, what is it on top of.
  */
 
 import { clear, h } from "../lib/dom";
-import type { DrawingTool, StrokeStyle } from "../drawing";
+import type { FillMode, StrokeStyle } from "../drawing";
 import { makeSectionsCollapsible } from "./inspect-collapse";
-import { brushPanel } from "./inspect-brush";
+import { toolPanel, TOOL_TITLES } from "./inspect-brush";
+import { createZone, type Zone } from "./inspect-zone";
 import { renderBackground } from "./inspect-background";
 import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
 import { layerKind } from "../lib/layer-kinds";
@@ -31,9 +51,15 @@ import {
 import { fillColliderSection } from "./inspect-collider";
 import type { PsdLayerEditor } from "./psd-layers";
 import { createColorPicker } from "../lib/color-picker";
+import { DEFAULT_FILL_COLOR } from "../lib/color";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import { describeFill, type FillPatch, type Selection } from "../lib/types";
+import {
+  describeFill,
+  type FillPatch,
+  type Selection,
+  type ToolId,
+} from "../lib/types";
 
 export interface InspectorCallbacks
   extends PatternActions,
@@ -71,23 +97,72 @@ export interface InspectorCallbacks
   createPsdLayers: (key: string) => PsdLayerEditor;
   /** The pencil's brush, size and colour changed. */
   onStrokeStyle: (patch: Partial<StrokeStyle>) => void;
+  /**
+   * Which layer the LAYER zone falls back to when nothing on the canvas is
+   * selected — the one new work lands on.
+   *
+   * Asked rather than stored, because the active layer is the shell's and can
+   * change without the document changing: picking a row in the left sidebar
+   * moves it, and nothing is written.
+   */
+  activeLayerId: () => string;
+  /** Which half of the sweep fill is aimed, and the way to change it. */
+  fillMode: () => FillMode;
+  onFillMode: (mode: FillMode) => void;
+  /** The point-to-point fill: how many corners are down, and what to do. */
+  fillPoints: () => number;
+  onFillShape: () => void;
+  onUndoFillPoint: () => void;
+  onClearFillPoints: () => void;
+}
+
+/**
+ * Which layer a selection belongs to, or "" for one that belongs to none.
+ *
+ * A region is the case that has none: a run of grid spaces is ground rather
+ * than a thing standing on a layer, and it is what the *next* Fill or Add
+ * Image will put something on. So the LAYER zone falls through to the active
+ * layer there, which is the layer that fill would land on anyway.
+ */
+function layerOf(selection: Selection): string {
+  switch (selection.kind) {
+    case "layer":
+    case "placement":
+    case "placements":
+    case "fill":
+    case "point":
+    case "zone":
+    case "background":
+    case "strokes":
+      return selection.layerId;
+    default:
+      return "";
+  }
 }
 
 export class Inspector {
   readonly root: HTMLElement;
   private readonly body: HTMLElement;
-  /** Where `row()` writes: the body, or the section last opened. */
+  /** The zone the panels are currently writing into — see `inspect-zone.ts`. */
+  private zone: Zone;
+  /** Where `row()` writes: the zone's body, or the section last opened. */
   private current: HTMLElement;
   private readonly store: DocStore;
   private readonly grid: Grid;
   private readonly callbacks: InspectorCallbacks;
   private selection: Selection = { kind: "none" };
-  /** Set while a drawing tool holds the pointer, so the panel can offer the
-   *  brush instead of an empty state nobody can act on. */
-  private drawingTool: DrawingTool | null = null;
+  /**
+   * What the pointer is holding, so the TOOL zone can offer its settings.
+   *
+   * The `ToolId` rather than the drawing engine's own name for it: Pixels and
+   * Rub are both the *pencil* as far as the engine is concerned — a brush and
+   * a stroke mode — and the panel has to tell them apart to know which of
+   * their controls mean anything.
+   */
+  private toolId: ToolId = "select";
   private strokeStyle: StrokeStyle | null = null;
   /** Carried between selections so the picker reopens where it was left. */
-  private lastColor = "#ec3013";
+  private lastColor = DEFAULT_FILL_COLOR;
   private suspended = false;
   /**
    * The layer list for the PSD currently being inspected, kept across
@@ -105,17 +180,14 @@ export class Inspector {
     this.callbacks = callbacks;
 
     this.body = h("div", { class: "panel-body scroll" });
-    this.current = this.body;
-    this.root = h(
-      "div",
-      { class: "side-panel right" },
-      h(
-        "div",
-        { class: "panel-head" },
-        h("div", { class: "panel-title m", text: "Inspector" }),
-      ),
-      this.body,
-    );
+    // Replaced on every render; made here so the field is never null and the
+    // panels never have to ask whether there is a zone to write into.
+    this.zone = createZone("OBJECT");
+    this.current = this.zone.body;
+    // No `panel-head`. The three zones carry their own headings, and a fourth
+    // heading over them saying "Inspector" would be a name for the furniture
+    // rather than for anything in it.
+    this.root = h("div", { class: "side-panel right" }, this.body);
 
     store.addEventListener("change", () => {
       if (!this.suspended) this.render();
@@ -171,9 +243,17 @@ export class Inspector {
     this.render();
   }
 
-  /** Which drawing tool is up, and the style it will draw with. */
-  setDrawingTool(tool: DrawingTool | null, style: StrokeStyle | null): void {
-    this.drawingTool = tool;
+  /**
+   * Which tool is up, and the style it will draw with.
+   *
+   * The `ToolId` rather than the drawing layer's own name for the tool, and
+   * that is the load-bearing half: Pixels and Rub are both the *pencil* as
+   * far as the engine is concerned — a brush and a stroke mode — so a panel
+   * told only what the engine was doing could not tell which of the three
+   * was in hand, or which of their controls meant anything.
+   */
+  setTool(tool: ToolId, style: StrokeStyle | null): void {
+    this.toolId = tool;
     this.strokeStyle = style;
     this.render();
   }
@@ -194,26 +274,98 @@ export class Inspector {
   render(): void {
     const editing = this.captureName();
     clear(this.body);
-    this.current = this.body;
-    switch (this.selection.kind) {
-      case "none":
-        if (this.drawingTool) this.renderBrush();
-        else this.renderEmpty();
-        break;
-      case "layer":
-        this.renderLayerPanel(this.selection.layerId);
-        break;
+    this.renderTool();
+    this.renderLayerZone();
+    const object = this.renderObject();
+    // The one thing the old empty state said that nothing else does: how to
+    // put something in the OBJECT zone. Kept as a quiet line under the two
+    // zones that are there rather than as a zone of its own, because an
+    // instruction is not an object.
+    if (!object) {
+      this.body.appendChild(
+        h("div", {
+          class: "inspect-empty",
+          text:
+            "Nothing selected. Hold on the canvas to select a run of grid " +
+            "spaces, or tap a placed image.",
+        }),
+      );
+    }
+    // Applied to the finished panel rather than threaded through the seven
+    // files that make sections — see `inspect-collapse.ts`. It reads which are
+    // folded from the heading each one already carries.
+    makeSectionsCollapsible(this.body);
+    this.restoreName(editing);
+  }
+
+  /**
+   * TOOL — what is in your hand, when it has anything to set.
+   *
+   * Nothing at all for Select, Pan, Point, Boundary, the Eraser and the
+   * Lasso: each does one thing with one gesture, and a heading over a
+   * sentence describing it would be the labelled-empty-box this panel was
+   * rearranged to stop. See `inspect-brush.ts`.
+   */
+  private renderTool(): void {
+    if (!this.strokeStyle) return;
+    const title = TOOL_TITLES[this.toolId];
+    if (!title) return;
+    this.open("TOOL", title);
+    const rows = toolPanel(this.toolId, this.strokeStyle, {
+      onStyle: (patch) => this.callbacks.onStrokeStyle(patch),
+      fillMode: this.callbacks.fillMode(),
+      onFillMode: (mode) => this.callbacks.onFillMode(mode),
+      fillPoints: this.callbacks.fillPoints(),
+      onFillShape: () => this.callbacks.onFillShape(),
+      onUndoFillPoint: () => this.callbacks.onUndoFillPoint(),
+      onClearFillPoints: () => this.callbacks.onClearFillPoints(),
+    });
+    if (rows) this.zone.body.append(...rows);
+    this.zone.mount(this.body);
+  }
+
+  /**
+   * LAYER — the one being worked on.
+   *
+   * The selection's own layer when the selection has one, and the active
+   * layer otherwise. That is not a fallback so much as the same rule read
+   * twice: the layer this zone is about is always the one the next thing you
+   * do will land on, and selecting something inside a layer is what makes
+   * that layer active in the first place.
+   */
+  private renderLayerZone(): void {
+    const layerId = layerOf(this.selection) || this.callbacks.activeLayerId();
+    const layer = this.store.layer(layerId);
+    if (!layer) return;
+    this.open("LAYER", layer.name);
+    if (layerKind(layer) === "pattern") {
+      renderPatternLayer(this.surface(), this.store, this.callbacks, layer);
+    } else {
+      renderLayer(this.surface(), this.store, this.callbacks, {
+        kind: "layer",
+        layerId: layer.id,
+      });
+    }
+    this.zone.mount(this.body);
+  }
+
+  /** OBJECT — what is selected on the canvas. False when nothing is. */
+  private renderObject(): boolean {
+    const selection = this.selection;
+    if (selection.kind === "none" || selection.kind === "layer") return false;
+    this.open("OBJECT");
+    switch (selection.kind) {
       case "region":
-        renderRegion(this.surface(), this.grid, this.callbacks, this.selection);
+        renderRegion(this.surface(), this.grid, this.callbacks, selection);
         break;
       case "fill":
-        this.renderFill(this.selection.layerId, this.selection.fillId);
+        this.renderFill(selection.layerId, selection.fillId);
         break;
       case "placement":
-        this.renderPlacement(this.selection.layerId, this.selection.placementId);
+        this.renderPlacement(selection.layerId, selection.placementId);
         break;
       case "placements":
-        renderPlacements(this.surface(), this.store, this.callbacks, this.selection);
+        renderPlacements(this.surface(), this.store, this.callbacks, selection);
         break;
       case "point":
         renderPoint(
@@ -221,24 +373,26 @@ export class Inspector {
           this.store,
           this.grid,
           this.callbacks,
-          this.selection,
+          selection,
         );
         break;
       case "zone":
-        renderZone(this.surface(), this.store, this.callbacks, this.selection);
+        renderZone(this.surface(), this.store, this.callbacks, selection);
         break;
       case "background":
-        renderBackground(this.surface(), this.store, this.callbacks, this.selection);
+        renderBackground(this.surface(), this.store, this.callbacks, selection);
         break;
       case "strokes":
-        renderStrokes(this.surface(), this.store, this.callbacks, this.selection);
+        renderStrokes(this.surface(), this.store, this.callbacks, selection);
         break;
     }
-    // Applied to the finished panel rather than threaded through the seven
-    // files that make sections — see `inspect-collapse.ts`. It reads which are
-    // folded from the heading each one already carries.
-    makeSectionsCollapsible(this.body);
-    this.restoreName(editing);
+    return this.zone.mount(this.body);
+  }
+
+  /** Start a zone. Everything written from here lands in it. */
+  private open(name: string, subject = ""): void {
+    this.zone = createZone(name, subject);
+    this.current = this.zone.body;
   }
 
   /**
@@ -280,7 +434,7 @@ export class Inspector {
    */
   private surface(): PanelSurface {
     return {
-      body: this.body,
+      body: this.zone.body,
       head: (kicker, title) => this.head(kicker, title),
       editableHead: (kicker, value, suffix, onCommit) =>
         this.editableHead(kicker, value, suffix, onCommit),
@@ -291,16 +445,24 @@ export class Inspector {
     };
   }
 
+  /**
+   * A panel's opening kicker and title, with the zone's heading carrying the
+   * kicker — `OBJECT : Boundary` over *Boundary 1*.
+   *
+   * A title the heading has already said is not said twice: the LAYER zone
+   * names itself after the layer, so `head("Layer", "Foreground")` there has
+   * nothing left to draw.
+   */
   private head(kicker: string, title: string): void {
-    this.body.appendChild(
+    this.current = this.zone.body;
+    if (this.zone.name(kicker) === title) return;
+    this.zone.body.appendChild(
       h(
         "div",
         { class: "inspect-head" },
-        h("div", { class: "inspect-kicker m", text: kicker }),
         h("div", { class: "inspect-title", text: title }),
       ),
     );
-    this.current = this.body;
   }
 
   /**
@@ -343,11 +505,11 @@ export class Inspector {
       },
     });
 
-    this.body.appendChild(
+    this.zone.name(kicker);
+    this.zone.body.appendChild(
       h(
         "div",
         { class: "inspect-head" },
-        h("div", { class: "inspect-kicker m", text: kicker }),
         h(
           "div",
           { class: "inspect-title inspect-name-row" },
@@ -356,7 +518,7 @@ export class Inspector {
         ),
       ),
     );
-    this.current = this.body;
+    this.current = this.zone.body;
   }
 
   /**
@@ -369,7 +531,7 @@ export class Inspector {
     if (title) {
       el.appendChild(h("div", { class: "inspect-section-title m", text: title }));
     }
-    this.body.appendChild(el);
+    this.zone.body.appendChild(el);
     this.current = el;
     return el;
   }
@@ -385,28 +547,20 @@ export class Inspector {
     );
   }
 
+  /**
+   * What a panel writes when the thing it is about has gone.
+   *
+   * Reached through `PanelSurface.empty` — a placement deleted under the
+   * panel, a layer that went with it. The zone stays, because saying the
+   * thing is gone is something to say; a zone with nothing in it at all is
+   * the one that never gets mounted.
+   */
   private renderEmpty(): void {
-    this.body.appendChild(
+    this.zone.body.appendChild(
       h("div", {
         class: "inspect-empty",
-        text:
-          "Nothing selected. Hold on the canvas to select a run of grid " +
-          "spaces, or tap a placed image.",
+        text: "That has gone from the document.",
       }),
-    );
-  }
-
-  /**
-   * The drawing tools' own panel — see `inspect-brush.ts`. It inspects
-   * nothing, so it is a function of what the tool rail last said rather than
-   * a method with the document behind it.
-   */
-  private renderBrush(): void {
-    if (!this.drawingTool || !this.strokeStyle) return this.renderEmpty();
-    this.body.append(
-      ...brushPanel(this.drawingTool, this.strokeStyle, (patch) =>
-        this.callbacks.onStrokeStyle(patch),
-      ),
     );
   }
 
@@ -425,13 +579,13 @@ export class Inspector {
     this.fillSection(fill);
 
     // What it stops, under the same heading a placed PSD's says it under.
-    this.body.appendChild(
+    this.zone.body.appendChild(
       fillColliderSection(fill, (walkable) =>
         this.callbacks.onToggleWalkable(walkable),
       ),
     );
 
-    this.body.appendChild(
+    this.zone.body.appendChild(
       h(
         "div",
         { class: "inspect-section" },
@@ -465,7 +619,7 @@ export class Inspector {
       },
     });
 
-    this.body.appendChild(
+    this.zone.body.appendChild(
       h(
         "div",
         { class: "inspect-section" },
@@ -478,20 +632,6 @@ export class Inspector {
         }),
       ),
     );
-  }
-
-  /** A document layer — the pattern one is its rule rather than a tally. */
-  private renderLayerPanel(layerId: string): void {
-    const layer = this.store.layer(layerId);
-    if (!layer) return this.renderEmpty();
-    if (layerKind(layer) === "pattern") {
-      renderPatternLayer(this.surface(), this.store, this.callbacks, layer);
-      return;
-    }
-    renderLayer(this.surface(), this.store, this.callbacks, {
-      kind: "layer",
-      layerId,
-    });
   }
 
   /**

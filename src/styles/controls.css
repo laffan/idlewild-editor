@@ -218,7 +218,7 @@
    it is, and a bar filling at a rate nobody measured would be a guess dressed
    as a measurement.
 
-   Shared rather than pen mode's own, because the wait is: a thirty-space
+   Shared rather than PSD Edit mode's own, because the wait is: a thirty-space
    backdrop is tens of megapixels to slice, and the sheet that asked for it
    has the same thing to say while it happens. Whoever uses it decides where
    it sits — `.mode-progress` pins it to the mode bar's bottom edge, a sheet

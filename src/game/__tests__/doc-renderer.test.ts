@@ -174,7 +174,7 @@ describe("suppressing a placed unit", () => {
 /**
  * A pattern layer's placements are the palette a rule scatters rather than
  * things standing anywhere, so nothing is drawn on the space a file is
- * anchored to — and pen mode frames exactly that space. Without the reveal it
+ * anchored to — and PSD Edit mode frames exactly that space. Without the reveal it
  * opens on an empty box with nothing to draw over, which is what happened.
  */
 describe("revealing a placed unit on a pattern layer", () => {
@@ -261,7 +261,7 @@ describe("revealing a placed unit on a pattern layer", () => {
  * take down — invisible while its textures lasted, and a throw inside the
  * renderer on every frame the moment they were evicted.
  *
- * That is not an exotic path. Pen mode's Apply derives the canvas state on
+ * That is not an exotic path. PSD Edit mode's Apply derives the canvas state on
  * every progress line the pipeline emits, so the same placement was being
  * placed a dozen times in a second while the file was written — and then its
  * textures were evicted out from under every orphan at once.

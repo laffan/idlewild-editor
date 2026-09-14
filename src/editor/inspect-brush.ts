@@ -1,12 +1,19 @@
 /**
- * The inspector's drawing-tool panel: what the pencil, the eraser and the
- * lasso show while one of them holds the pointer and nothing is selected.
+ * The inspector's TOOL section: what the tool in hand has to set.
  *
- * Split from the inspector because it is the one panel there that inspects
- * nothing — it has no selection behind it, reads neither the document nor the
- * grid, and only ever reports a style change back. That makes it a function
- * of its arguments rather than a method, and the inspector's own file
- * shorter by the length of the tool rail's whole half of the panel.
+ * Split from the inspector because it is the one part of that panel that
+ * inspects nothing — it has no selection behind it, reads neither the
+ * document nor the grid, and only ever reports a change back. That makes it a
+ * function of its arguments rather than a method, and the inspector's own
+ * file shorter by the length of the whole toolbar's half of the panel.
+ *
+ * **A tool with nothing to set gets no section at all.** Select, Pan, Point,
+ * Boundary, the Eraser and the Lasso each do one thing with one gesture and
+ * have no numbers behind them, so a heading over an explanatory sentence
+ * would be a labelled box that never changes — which is exactly what the
+ * three zones were introduced to stop. What those tools have to say, they say
+ * in their tooltip and in the line the console prints when they are picked
+ * up. So this returns null for them, and the inspector shows no TOOL zone.
  *
  * Hush puts these controls in four brush slots with an edit flyout each; here
  * there is one brush at a time, because the editor's pencil is for sketching
@@ -14,112 +21,300 @@
  */
 
 import { h } from "../lib/dom";
-import { BRUSHES, type DrawingTool, type StrokeStyle } from "../drawing";
+import { BRUSHES, brushStampUrl, type FillMode, type StrokeStyle } from "../drawing";
 import { createColorPicker } from "../lib/color-picker";
+import type { ToolId } from "../lib/types";
 
-/** The rows the inspector should append. Empty when there is nothing to show. */
-export function brushPanel(
-  tool: DrawingTool,
+/** What the TOOL section can change, beyond the style itself. */
+export interface ToolPanelActions {
+  onStyle: (patch: Partial<StrokeStyle>) => void;
+  /** Which half of the sweep fill is aimed, and the way to change it. */
+  fillMode: FillMode;
+  onFillMode: (mode: FillMode) => void;
+  /** How many corners the point-to-point fill has down. */
+  fillPoints: number;
+  /** Lay the tapped-out shape down, take the last corner off, throw it away. */
+  onFillShape: () => void;
+  onUndoFillPoint: () => void;
+  onClearFillPoints: () => void;
+}
+
+/** The name the section's heading carries after `TOOL : `. */
+export const TOOL_TITLES: Partial<Record<ToolId, string>> = {
+  pencil: "Pencil",
+  pixels: "Pixels",
+  rub: "Rub",
+  fill: "Fill",
+};
+
+/**
+ * The rows the inspector should put in its TOOL zone, or null for a tool
+ * with nothing to set.
+ */
+export function toolPanel(
+  tool: ToolId,
   style: StrokeStyle,
-  onStyle: (patch: Partial<StrokeStyle>) => void,
-): HTMLElement[] {
-  if (tool === "eraser") {
-    return note(
-      "Eraser",
-      "Slice",
-      "Drag across a stroke to cut it where the disc passes. A stroke cut " +
-        "through the middle becomes two.",
-    );
+  actions: ToolPanelActions,
+): HTMLElement[] | null {
+  if (tool === "fill") return fillPanel(style, actions);
+  if (tool === "pencil" || tool === "pixels" || tool === "rub") {
+    return inkPanel(tool, style, actions);
   }
-
-  if (tool === "lasso") {
-    return note(
-      "Lasso",
-      "Select strokes",
-      "Sweep a loop around a sketch to select it, then hand it to this layer " +
-        "as a PSD or as a boundary.",
-    );
-  }
-
-  if (tool === "fill") {
-    return note(
-      "Fill",
-      "Sweep a shape",
-      "Sweep a closed outline and the inside of it fills with the drawing " +
-        "colour. It lands as one thing you can erase or undo, like a stroke.",
-    );
-  }
-
-  const name = h("div", {
-    class: "inspect-title",
-    text: BRUSHES.find((b) => b.id === style.brushId)?.name ?? "Ink",
-  });
-
-  const brushes = h("div", { class: "brush-row" });
-  for (const brush of BRUSHES) {
-    const button = h("button", {
-      class: "brush-btn",
-      title: brush.name,
-      text: String(brush.id),
-      "aria-pressed": String(brush.id === style.brushId),
-      onClick: () => {
-        for (const other of brushes.children) {
-          other.setAttribute("aria-pressed", String(other === button));
-        }
-        name.textContent = brush.name;
-        onStyle({ brushId: brush.id });
-      },
-    });
-    brushes.appendChild(button);
-  }
-
-  const size = slider("Size", style.size, 1, 48, (next) => `${next} px`, (next) =>
-    onStyle({ size: next }),
-  );
-  // Straightening, not thickness: the two sliders are the same control and
-  // sit together, because between them they are the whole shape of a line.
-  const smoothing = slider(
-    "Smoothing",
-    style.smoothing,
-    0,
-    100,
-    (next) => (next === 100 ? "straight" : String(next)),
-    (next) => onStyle({ smoothing: next }),
-  );
-
-  const picker = createColorPicker({
-    value: style.color,
-    onChange: (hex) => onStyle({ color: hex }),
-    onCommit: (hex) => onStyle({ color: hex }),
-  });
-
-  return [
-    h(
-      "div",
-      { class: "inspect-head" },
-      h("div", { class: "inspect-kicker m", text: "Pencil" }),
-      name,
-    ),
-    h(
-      "div",
-      { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Brush" }),
-      brushes,
-      size,
-      smoothing,
-    ),
-    h(
-      "div",
-      { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Colour" }),
-      picker.root,
-    ),
-  ];
+  return null;
 }
 
 /**
- * One labelled range with its own readout, as both of the brush's numbers
- * want to be.
+ * The pencil and its two disguises.
+ *
+ * Pixels is the pencil with a hard checker for a tip, so the row of brushes
+ * is not offered — the tip *is* the tool, and a brush picked there would be
+ * a setting with no effect until you went back to the pencil. Rub is the
+ * pencil with the paint taken out, so the colour is not offered for the
+ * mirror-image reason: nothing it lays down has a colour.
+ */
+function inkPanel(
+  tool: "pencil" | "pixels" | "rub",
+  style: StrokeStyle,
+  actions: ToolPanelActions,
+): HTMLElement[] {
+  const rows: HTMLElement[] = [];
+
+  if (tool === "pencil") {
+    const name = h("div", {
+      class: "inspect-title",
+      text: BRUSHES.find((b) => b.id === style.brushId)?.name ?? "Ink",
+    });
+
+    // The tip itself on each button rather than its number. A brush is a
+    // shape you recognise, and "3" is not that shape — see `brushStampUrl`
+    // for why it is a mask rather than an image.
+    const brushes = h("div", { class: "brush-row" });
+    for (const brush of BRUSHES) {
+      const stamp = h("span", { class: "brush-stamp" });
+      const url = `url("${brushStampUrl(brush.id)}")`;
+      stamp.style.setProperty("-webkit-mask-image", url);
+      stamp.style.setProperty("mask-image", url);
+      const button = h(
+        "button",
+        {
+          class: "brush-btn",
+          title: brush.name,
+          "aria-label": brush.name,
+          "aria-pressed": String(brush.id === style.brushId),
+          onClick: () => {
+            for (const other of brushes.children) {
+              other.setAttribute("aria-pressed", String(other === button));
+            }
+            name.textContent = brush.name;
+            actions.onStyle({ brushId: brush.id });
+          },
+        },
+        stamp,
+      );
+      brushes.appendChild(button);
+    }
+
+    rows.push(h("div", { class: "inspect-head" }, name));
+    rows.push(
+      h(
+        "div",
+        { class: "inspect-section" },
+        h("div", { class: "inspect-section-title m", text: "Brush" }),
+        brushes,
+        sizeRow(style, actions),
+        smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
+      ),
+    );
+  } else {
+    rows.push(
+      h(
+        "div",
+        { class: "inspect-section" },
+        h("div", {
+          class: "inspect-section-title m",
+          text: tool === "pixels" ? "Pattern" : "Rubber",
+        }),
+        h("div", {
+          class: "field-hint",
+          text:
+            tool === "pixels"
+              ? "The pencil with a hard checker for a tip, so what it leaves " +
+                "is a dither rather than a smudge."
+              : "The pencil with the paint taken out. It rubs out ink drawn " +
+                "in this session, tip and pressure and all.",
+        }),
+        sizeRow(style, actions),
+        smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
+      ),
+    );
+  }
+
+  if (tool !== "rub") rows.push(colourSection(style, actions));
+  return rows;
+}
+
+/**
+ * The sweep fill, which is two tools sharing a colour.
+ *
+ * **Draw** is the gesture: sweep a closed outline and the inside of it fills.
+ * It takes the pencil's smoothing for the pencil's own reason — an outline is
+ * a line, and a fill shows the hand's wobble more plainly than a line does
+ * because there is a flat colour on one side of it.
+ *
+ * **Point to point** is the same shape tapped out a corner at a time, with
+ * every corner still draggable until the shape is laid down. A sweep commits
+ * on release and cannot be corrected; this is the half for a shape that has
+ * corners in it rather than a gesture behind it.
+ */
+function fillPanel(
+  style: StrokeStyle,
+  actions: ToolPanelActions,
+): HTMLElement[] {
+  const points = actions.fillMode === "points";
+  const rows: HTMLElement[] = [
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Mode" }),
+      h(
+        "div",
+        { class: "seg" },
+        segment("Draw", !points, () => actions.onFillMode("draw")),
+        segment("Point to point", points, () => actions.onFillMode("points")),
+      ),
+    ),
+  ];
+
+  if (points) {
+    const down = actions.fillPoints;
+    rows.push(
+      h(
+        "div",
+        { class: "inspect-section" },
+        h("div", { class: "inspect-section-title m", text: "Shape" }),
+        h("div", {
+          class: "field-hint",
+          text:
+            down === 0
+              ? "Tap the canvas to drop a corner. Drag any corner to move it."
+              : "Tap the first corner again to fill, or drag any of them to " +
+                "move it.",
+        }),
+        h(
+          "div",
+          { class: "inspect-row" },
+          h("div", { class: "inspect-key m", text: "Corners" }),
+          h("div", { class: "inspect-value", text: String(down) }),
+        ),
+        h("button", {
+          class: "panel-btn primary",
+          text: "Fill shape",
+          disabled: down >= 3 ? null : "true",
+          onClick: () => actions.onFillShape(),
+        }),
+        h("button", {
+          class: "panel-btn",
+          text: "Undo corner",
+          disabled: down > 0 ? null : "true",
+          onClick: () => actions.onUndoFillPoint(),
+        }),
+        h("button", {
+          class: "panel-btn",
+          text: "Clear",
+          disabled: down > 0 ? null : "true",
+          onClick: () => actions.onClearFillPoints(),
+        }),
+      ),
+    );
+  } else {
+    rows.push(
+      h(
+        "div",
+        { class: "inspect-section" },
+        h("div", { class: "inspect-section-title m", text: "Sweep" }),
+        h("div", {
+          class: "field-hint",
+          text:
+            "Sweep a closed outline and the inside of it fills. It lands as " +
+            "one thing you can erase or undo, like a stroke.",
+        }),
+        smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
+      ),
+    );
+  }
+
+  rows.push(colourSection(style, actions));
+  return rows;
+}
+
+/**
+ * One of a row of mutually exclusive choices, in the panel's own segmented
+ * control — the same one a backdrop's direction and a pattern's arrangement
+ * use, because this is the same kind of question.
+ */
+function segment(
+  label: string,
+  on: boolean,
+  onPick: () => void,
+): HTMLElement {
+  return h("button", {
+    class: "seg-opt",
+    text: label,
+    "aria-pressed": String(on),
+    onClick: onPick,
+  });
+}
+
+function colourSection(
+  style: StrokeStyle,
+  actions: ToolPanelActions,
+): HTMLElement {
+  const picker = createColorPicker({
+    value: style.color,
+    onChange: (hex) => actions.onStyle({ color: hex }),
+    onCommit: (hex) => actions.onStyle({ color: hex }),
+  });
+  return h(
+    "div",
+    { class: "inspect-section" },
+    h("div", { class: "inspect-section-title m", text: "Colour" }),
+    picker.root,
+  );
+}
+
+function sizeRow(style: StrokeStyle, actions: ToolPanelActions): HTMLElement {
+  return slider("Size", style.size, 1, 48, (next) => `${next} px`, (next) =>
+    actions.onStyle({ size: next }),
+  );
+}
+
+/**
+ * Straightening, not thickness.
+ *
+ * At 0 the line follows every tremor; turned up it takes the shake out
+ * without moving where the line goes; at 100 it draws nothing but perfectly
+ * straight lines, from where the pen went down to where it came up. The two
+ * sliders are the same control and sit together, because between them they
+ * are the whole shape of a line — and the sweep fill borrows this one on its
+ * own, because its outline is a line and nothing about it is a tip.
+ */
+function smoothingRow(
+  value: number,
+  onChange: (next: number) => void,
+): HTMLElement {
+  return slider(
+    "Smoothing",
+    value,
+    0,
+    100,
+    (next) => (next === 100 ? "straight" : String(next)),
+    onChange,
+  );
+}
+
+/**
+ * One labelled range with its own readout, as each of these numbers wants to
+ * be.
  *
  * `format` is what the readout says, which is not always the number: the top
  * of the smoothing range is a promise rather than a quantity, so it says
@@ -157,17 +352,4 @@ function slider(
     input,
     readout,
   );
-}
-
-/** A tool with nothing to set: a heading and a sentence saying what it does. */
-function note(kicker: string, title: string, body: string): HTMLElement[] {
-  return [
-    h(
-      "div",
-      { class: "inspect-head" },
-      h("div", { class: "inspect-kicker m", text: kicker }),
-      h("div", { class: "inspect-title", text: title }),
-    ),
-    h("div", { class: "inspect-empty", text: body }),
-  ];
 }

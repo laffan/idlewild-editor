@@ -1,5 +1,6 @@
 /* The bar a canvas mode puts along the bottom of the canvas — extrude,
-   collider, pen and mask — and what the canvas does around it while one is up.
+   collider, PSD Edit and mask — and what the canvas does around it while one
+   is up.
 
    Split out of editor.css when that file reached its 700 lines. The four
    modes share every rule in here, which is the point of them: a mode always
@@ -34,7 +35,7 @@
   font: 600 14px var(--font-heading);
   color: var(--chrome-text);
 }
-/* What is in hand. It carries the pipeline's own stage lines while pen mode
+/* What is in hand. It carries the pipeline's own stage lines while PSD Edit mode
    is writing — long, and longer on a long filename — so it gives way rather
    than pushing the two ways out off the end of the bar. */
 .mode-size {
@@ -82,7 +83,7 @@
   background: var(--chrome-rule);
   color: var(--chrome-dim);
 }
-/* Neither way out is available while pen mode is writing the file: the ink
+/* Neither way out is available while PSD Edit mode is writing the file: the ink
    Cancel would throw away is the ink being written. Placed after the two
    rules above so it wins the hover on either of them. */
 .mode-bar button[disabled] { color: var(--chrome-dim); }
@@ -100,7 +101,7 @@
 /* While a canvas mode is up, the selection that started it is gone and its
    action bar with it. The rail stays: the camera has to stay reachable,
    because a solid is built from more than one angle and a collider is drawn
-   by looking at the artwork it belongs to — and pen mode needs the rail most
+   by looking at the artwork it belongs to — and PSD Edit mode needs the rail most
    of all, since the thing it is a mode *for* is a tool on it.
 
    Mask mode is on the list for a sharper reason than the other three. The bar
@@ -111,7 +112,26 @@
 .editor-canvas-wrap.extruding .edge-toggle,
 .editor-canvas-wrap.colliding .selection-actions,
 .editor-canvas-wrap.colliding .edge-toggle,
-.editor-canvas-wrap.penning .selection-actions,
-.editor-canvas-wrap.penning .edge-toggle,
+.editor-canvas-wrap.psd-editing .selection-actions,
+.editor-canvas-wrap.psd-editing .edge-toggle,
 .editor-canvas-wrap.masking .selection-actions,
 .editor-canvas-wrap.masking .edge-toggle { display: none; }
+
+/* The bottom-left bars, which is where the mode bar now is too.
+
+   The bars stand clear of it rather than under it: the bar is 52px and the
+   docks keep their own 16px gap from the canvas edge, so they are lifted the
+   bar's height while one is up. Only the drawing toolbar is lifted *into* use
+   — the place bar goes down with the selection bar, because a mode owns the
+   canvas and there is nowhere for a point or a boundary to land while one
+   does.
+
+   PSD Edit mode is the exception that makes the lift worth having. Its whole
+   subject is drawing, so the pencil, the pattern brush and the sweep fill
+   have to stay reachable; the three other modes take the pointer outright and
+   the toolbar goes down with everything else. */
+.editor-canvas-wrap.extruding .canvas-docks,
+.editor-canvas-wrap.colliding .canvas-docks,
+.editor-canvas-wrap.masking .canvas-docks { display: none; }
+.editor-canvas-wrap.psd-editing .canvas-docks { bottom: 68px; }
+.editor-canvas-wrap.psd-editing .place-bar { display: none; }

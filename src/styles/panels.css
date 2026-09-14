@@ -158,10 +158,13 @@
    a reorder moves the whole thing. */
 .layer-group { display: block; }
 
-/* The drag handle. `touch-action: none` is what makes a drag on the iPad a
-   reorder rather than a scroll of the panel behind it. */
+/* The drag handle, at the far right of the row — past the eye and the lock,
+   so the edge a finger travels down to pick a layer up is not the edge those
+   two sit on. `touch-action: none` is what makes a drag on the iPad a reorder
+   rather than a scroll of the panel behind it. */
 .layer-grip {
   flex: none;
+  margin-left: 2px;
   width: 26px;
   min-height: 40px;
   border: 0;
@@ -192,6 +195,8 @@
 }
 .layer-group.dragging .layer-row { border-bottom-color: var(--color-accent); }
 
+/* The collapse arrow, first on the row: it is about the rows underneath, so
+   it stands at the left edge they are indented from. */
 .layer-disclose {
   flex: none;
   width: 22px;
@@ -217,8 +222,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Indented to sit under the layer's name, past the grip and disclosure
-     controls. */
+  /* Indented to sit under the layer's name, past the collapse arrow and the
+     kind glyph that now make up the row's left gutter. */
   padding: 0 10px 0 52px;
   border: 0;
   border-bottom: var(--rule-chrome);
@@ -331,193 +336,6 @@
 .layer-toggle.off { color: var(--color-neutral-600); }
 .layer-toggle.on { color: var(--color-accent); }
 
-/* Inspector */
-.inspect-head {
-  padding: 18px 16px 16px;
-  border-bottom: 1px solid var(--chrome-rule);
-}
-.inspect-kicker { font-size: 10px; color: var(--color-neutral-600); }
-.inspect-title {
-  font: 600 19px/1.2 var(--font-heading);
-  color: var(--chrome-text);
-  margin-top: 6px;
-}
-
-/* An editable title: the field carries no box until it is focused, so the
-   head still reads as a heading rather than as a form. The same treatment
-   the layer names in the left panel get, at the size a title is set in. */
-.inspect-name-row { display: flex; align-items: baseline; gap: 1px; }
-.inspect-name {
-  flex: 1;
-  min-width: 0;
-  padding: 0 2px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  outline: none;
-  /* The shell suppresses selection globally; a field being typed into has to
-     opt back in, or WebKit will not place a caret in it. */
-  -webkit-user-select: text;
-  user-select: text;
-}
-.inspect-name:focus { background: var(--chrome-bg); outline: 1px solid var(--color-accent); }
-.inspect-ext { flex: none; color: var(--chrome-dim); }
-
-.inspect-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  min-height: 28px;
-}
-.inspect-key {
-  font-size: 10px;
-  color: var(--color-neutral-600);
-  flex: none;
-  width: 106px;
-}
-/* Set at the label's size: a row is a label and its value, and the value
-   reading three sizes larger made every one of them look like a heading. */
-.inspect-value {
-  font: 500 10px var(--font-body);
-  color: var(--chrome-text);
-  text-align: right;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inspect-section {
-  padding: 18px 16px;
-  border-top: 1px solid var(--chrome-rule);
-}
-/* The head already draws a rule under itself. */
-.inspect-head + .inspect-section { border-top: 0; }
-.inspect-section-title {
-  font-size: 10px;
-  color: var(--chrome-dim);
-  margin-bottom: 12px;
-}
-
-/* A named section folds away, and its heading is the control that folds it.
-
-   Which sections are closed is state of the *panel* rather than of the
-   document, so it is per-install and shared by name: close Collider once and
-   it stays closed for the next PSD you select, which is the reason to close
-   it. See editor/inspect-collapse.ts, which applies this to the panel after it
-   is built rather than threading it through the seven files that make
-   sections.
-
-   The caret is two borders on a square turned 45°, so there is no asset and
-   nothing to line up: pointing down is open, and a quarter turn anticlockwise
-   is shut. */
-.inspect-section-fold {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  /* A 10px label is a small thing to hit; the row is the whole target. */
-  min-height: 14px;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.inspect-section-fold::after {
-  content: "";
-  flex: none;
-  width: 5px;
-  height: 5px;
-  border-right: 1px solid currentColor;
-  border-bottom: 1px solid currentColor;
-  transform: rotate(45deg);
-}
-.inspect-section-fold:hover { color: var(--chrome-text); }
-.inspect-section.collapsed > .inspect-section-fold::after {
-  transform: rotate(-45deg);
-}
-/* Closed, the heading is all there is, so the room under it goes as well. */
-.inspect-section.collapsed { padding-top: 13px; padding-bottom: 13px; }
-.inspect-section.collapsed > .inspect-section-fold { margin-bottom: 0; }
-.inspect-section.collapsed > *:not(.inspect-section-fold) { display: none; }
-/* Rows carry their own side padding for the panels that put them straight in
-   the body; inside a section that padding is the section's. */
-.inspect-section .inspect-row { padding: 0; }
-
-/* Editable values are set at the label's size, like the read-only ones they
-   sit among — a 16px field in a column of 10px rows reads as a heading. */
-.inspect-input {
-  flex: 1;
-  min-width: 0;
-  max-width: 96px;
-  min-height: 22px;
-  padding: 0 6px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
-  font: 500 10px var(--font-body);
-  color: var(--chrome-text);
-  text-align: right;
-}
-.inspect-input:focus { border-color: var(--color-accent); outline: none; }
-
-.swatches { display: flex; border: 1px solid var(--color-neutral-700); width: max-content; }
-.swatch {
-  width: 56px;
-  height: 48px;
-  border: 0;
-  border-left: 2px solid var(--color-neutral-700);
-  padding: 0;
-}
-.swatch:first-child { border-left: 0; }
-.swatch[aria-pressed="true"] { outline: 3px solid var(--chrome-text); outline-offset: -6px; }
-
-/* Half the height they were: these are inspector actions sitting under a
-   panel of 10px labels, and at 48px they outweighed everything they act on. */
-.panel-btn {
-  width: 100%;
-  min-height: 24px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
-  color: var(--chrome-text);
-  font: 600 11px var(--font-heading);
-  text-align: left;
-  padding: 0 8px;
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.panel-btn:hover { background: var(--chrome-rule); }
-/* Offered but refused — the last layer of a scene, which cannot go. The
-   hint beside it says why, so the button only has to look unavailable. */
-.panel-btn[disabled] { opacity: 0.4; }
-.panel-btn[disabled]:hover { background: transparent; }
-
-/* Two halves of one action — Open PSD and its way back — share a row. */
-.panel-btn-row { display: flex; gap: 6px; }
-.panel-btn-row .panel-btn { justify-content: center; text-align: center; }
-.panel-btn.primary {
-  background: var(--color-accent);
-  border-color: var(--chrome-bg);
-  color: #fff;
-}
-.panel-btn.primary:hover { background: var(--color-accent-600); }
-/* A panel button that is a switch rather than an action — Adjust layers,
-   which is on while the canvas has the PSD open. The rail's tools and the
-   mode bars' toggles read the same way, so this is the third of a set. */
-.panel-btn.pressed {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
-.panel-btn.pressed:hover { background: var(--color-accent-600); }
-
-.inspect-empty {
-  padding: 18px 16px;
-  font-size: 13px;
-  color: var(--chrome-dim);
-  line-height: 1.5;
-}
 
 /* Narrow windows: sidebars overlay the canvas instead of squeezing it. */
 @media (max-width: 900px) {
@@ -526,70 +344,6 @@
   .side-panel.right { right: 0; }
 }
 
-/* Brush controls — shown while a drawing tool holds the pointer and nothing
-   is selected, in place of the empty state nobody could act on. */
-.brush-row { display: flex; gap: 4px; margin-bottom: 10px; }
-.brush-btn {
-  flex: 1;
-  min-height: 28px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
-  color: var(--chrome-dim);
-  font: 600 11px var(--font-mono);
-  padding: 0;
-}
-.brush-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
-.brush-btn[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
-
-.brush-size {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--color-accent);
-}
-/* The slider takes the row's slack, so its readout is fixed rather than
-   flexible — the shared .inspect-value rule pushes values right instead. */
-.inspect-row.brush-row-size .inspect-value { flex: none; width: 40px; }
-
-/* A standing fact about the selection, above its properties — a placement
-   that shares its PSD with another, and what to do about it. */
-.inspect-note {
-  padding: 10px 16px 14px;
-  border-bottom: 1px solid var(--chrome-rule);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  font: 600 10px var(--font-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-accent-300);
-}
-.inspect-note .panel-btn { text-transform: none; letter-spacing: 0; }
-
-/* A standing fact that is not a warning: how many layers a placed PSD has,
-   and whether the canvas is treating them as one thing or as several. Drawn
-   in the panel's own neutrals until the PSD is actually opened up, at which
-   point it is a mode and says so in the accent. */
-.inspect-note.quiet {
-  background: transparent;
-  color: var(--chrome-dim);
-}
-.inspect-note.adjusting {
-  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
-  color: var(--color-accent-300);
-}
-
-/* One of several objects sharing a PSD: an *instance*. The canvas says the same
-   thing by outlining it with a dashed box rather than a solid one, and this note
-   is the half that can say what follows from it — that an edit to the artwork
-   reaches every one of them, and that Make Unique is the way out. Marked with a
-   dashed left edge, so the panel and the canvas are making the same gesture. */
-.inspect-note.instance {
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  border-left: 2px dashed var(--color-accent);
-  padding-left: 14px;
-}
 
 /* ── the three kinds of layer ───────────────────────────────────────────────
 
@@ -632,57 +386,4 @@
   font: 600 11px var(--font-label);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-/* A standing fact that is a problem: the same note, in the accent, without a
-   button beside it. */
-.inspect-note.warning {
-  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-  text-transform: none;
-  letter-spacing: 0;
-  font: 500 12px var(--font-body);
-  line-height: 1.45;
-  color: var(--color-accent-300);
-}
-
-/* A pattern's numbers: a row of one or two fields with a label or a × between
-   them. Narrow on purpose — these are counts of spaces, not measurements. */
-.field-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0;
-}
-.field-row .inspect-key { flex: 1; }
-.field-num {
-  flex: none;
-  width: 72px;
-  min-height: 32px;
-  padding: 0 8px;
-  font-size: 13px;
-}
-.field-x { color: var(--color-neutral-600); font-size: 12px; }
-
-/* One shape in the list of what a pattern is confined to. */
-.shape-row { gap: 8px; }
-.row-btn {
-  flex: none;
-  border: 0;
-  background: transparent;
-  color: var(--color-neutral-600);
-  font: 600 10px var(--font-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.row-btn:hover { color: var(--color-accent-300); }
-
-/* The inspector's segmented controls are the sheet's, at panel scale: the
-   column is 260px and the sheet's 15px/20px option would wrap after two. */
-.side-panel .seg { width: 100%; }
-.side-panel .seg-opt {
-  flex: 1;
-  min-height: 34px;
-  padding: 0 8px;
-  font-size: 13px;
-  text-align: center;
 }

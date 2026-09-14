@@ -1,5 +1,5 @@
 /**
- * Pen mode: the state the canvas is in while one layer of a PSD is being
+ * PSD Edit mode: the state the canvas is in while one layer of a PSD is being
  * drawn into.
  *
  * The third of the canvas modes, and modelled on extrude: the rest of the
@@ -30,7 +30,7 @@
  *
  * Nothing here touches the document either. The strokes are the document's,
  * drawn on the layer being worked on like any others; which of them belong to
- * this session, and what happens to them at the end, is `editor/pen.ts` —
+ * this session, and what happens to them at the end, is `editor/psd-edit.ts` —
  * this object could not write a PSD if it wanted to, because it has no idea
  * what a project is.
  */
@@ -38,7 +38,7 @@
 import type Phaser from "phaser";
 import type { Bounds } from "../drawing/types";
 import * as log from "../lib/log";
-import { PenRender } from "./pen-render";
+import { PsdEditRender } from "./psd-edit-render";
 
 /**
  * The layer a session is drawing into.
@@ -58,10 +58,10 @@ export interface PenTarget {
 /** What the mode needs from the scene around it. */
 export interface PenHost {
   readonly scene: Phaser.Scene;
-  /** The dim is cut out of what this can see — see `pen-render.ts`. */
+  /** The dim is cut out of what this can see — see `psd-edit-render.ts`. */
   camera(): Phaser.Cameras.Scene2D.Camera;
   /**
-   * Pen mode owns the canvas while it is up, so nothing stays chosen
+   * PSD Edit mode owns the canvas while it is up, so nothing stays chosen
    * underneath it — including the placement it was entered from, whose resize
    * handles would otherwise float over a dimmed canvas.
    */
@@ -70,16 +70,16 @@ export interface PenHost {
   onChange(): void;
 }
 
-export class PenMode {
+export class PsdEditMode {
   private readonly host: PenHost;
-  private readonly render: PenRender;
+  private readonly render: PsdEditRender;
 
   private session: { target: PenTarget; frame: Bounds; scale: number } | null =
     null;
 
   constructor(host: PenHost) {
     this.host = host;
-    this.render = new PenRender(host.scene);
+    this.render = new PsdEditRender(host.scene);
   }
 
   get active(): boolean {
@@ -118,7 +118,7 @@ export class PenMode {
     this.refresh();
     this.host.onChange();
     log.info(
-      `Pen mode — drawing into "${target.name}" in ${target.key}.psd; ` +
+      `PSD Edit mode — drawing into "${target.name}" in ${target.key}.psd; ` +
         "ink inside the frame goes into the file when you Apply",
     );
     return true;

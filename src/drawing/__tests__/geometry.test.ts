@@ -23,7 +23,7 @@ import {
   toPoints,
   type InkPoint,
 } from "../geometry";
-import { strokesToZonePoints } from "../to-zone";
+import { strokesToZonePoints, zonePoints } from "../to-zone";
 
 function line(from: number, to: number, y = 0): InkPoint[] {
   const out: InkPoint[] = [];
@@ -289,6 +289,28 @@ describe("strokes → boundary", () => {
   it("refuses a selection with no region in it", () => {
     expect(strokesToZonePoints([], 64)).toEqual([]);
     expect(strokesToZonePoints([stroke(line(0, 1))], 64)).toEqual([]);
+  });
+});
+
+/**
+ * The Boundary tool sweeps its outline on the drawing surface and hands the
+ * polygon straight out — no stroke is ever stored — so it reaches the same
+ * simplification as points rather than as ink. What matters is that it *is*
+ * the same one: a boundary swept with the tool and one converted from a
+ * sketch of the same shape have to block identically, or the two routes are
+ * two features wearing one name.
+ */
+describe("a swept outline → boundary", () => {
+  it("simplifies a sweep exactly as it simplifies the same shape drawn", () => {
+    const path = line(0, 200);
+    const swept = zonePoints(path, 64);
+    const drawn = strokesToZonePoints([stroke(path)], 64);
+    expect(swept).toEqual(drawn);
+  });
+
+  it("refuses a sweep with no region in it", () => {
+    expect(zonePoints([], 64)).toEqual([]);
+    expect(zonePoints(line(0, 1), 64)).toEqual([]);
   });
 });
 

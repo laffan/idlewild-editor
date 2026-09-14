@@ -501,7 +501,7 @@ fn add_psd_layer(app: tauri::AppHandle, id: String, key: String) -> Result<Strin
     psd_layers::add(&id, &key, logger(&app))
 }
 
-/// Lay ink into one layer of a PSD — what pen mode applies.
+/// Lay ink into one layer of a PSD — what PSD Edit mode applies.
 ///
 /// `index` and `name` together name the row, and both are checked: a paint
 /// against an index the file has since renumbered would put a drawing in the

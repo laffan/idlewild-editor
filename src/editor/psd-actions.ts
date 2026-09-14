@@ -316,7 +316,7 @@ export interface PsdLayersOptions {
   /** Re-open the solid behind an extruded PSD. */
   onExtrude: () => void;
   /** Draw into one sprite layer of a file. */
-  onPen: (key: string, layer: PsdLayerInfo) => void;
+  onEditPsd: (key: string, layer: PsdLayerInfo) => void;
 }
 
 export function createPsdLayersFactory(
@@ -344,7 +344,7 @@ export function createPsdLayersFactory(
         if (open.adjustingUnit) open.stopAdjusting();
         else open.startAdjusting();
       },
-      onPen: (layer) => options.onPen(key, layer),
+      onEditPsd: (layer) => options.onEditPsd(key, layer),
       openLabel: openPsdLabel(os),
       refreshLabel: refreshPsdLabel(os),
     });

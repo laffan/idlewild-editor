@@ -1,5 +1,5 @@
 /**
- * Pen mode as the editor shell sees it: a bar, a frame worked out from the
+ * PSD Edit mode as the editor shell sees it: a bar, a frame worked out from the
  * document, and the two ends of a session.
  *
  * The counterpart to `editor/extrude.ts` and `editor/collider.ts`, split the
@@ -10,7 +10,7 @@
  *
  * ## Which strokes are the session's
  *
- * Pen mode does not invent a place to draw. The ink goes onto the document
+ * PSD Edit mode does not invent a place to draw. The ink goes onto the document
  * layer being worked on, through the same drawing layer, with the same brush
  * and the same undo behind it — so what makes a stroke *this session's* is
  * simply that it was not there when the mode opened. The ids present at the
@@ -44,8 +44,7 @@ import type { Bounds } from "../drawing/types";
 import type { Stroke } from "../lib/types";
 import type { PsdLayerInfo } from "../lib/ipc";
 import type { WorldScene } from "../game/world-scene";
-import { PenBar } from "./pen-bar";
-import { PenRail, type PenTool } from "./pen-rail";
+import { PsdEditBar } from "./psd-edit-bar";
 import { watchPsdStages } from "./psd-progress";
 
 /**
@@ -60,7 +59,7 @@ import { watchPsdStages } from "./psd-progress";
  */
 const STRAIGHTEN_HOLD_MS = 1000;
 
-export interface PenUiOptions {
+export interface PsdEditUiOptions {
   projectId: string;
   store: DocStore;
   grid: Grid;
@@ -71,20 +70,23 @@ export interface PenUiOptions {
   /** Entering hands the pointer to the pencil, which is what draws here. */
   usePencil: () => void;
   /**
-   * One of the pen rail's three has been picked, or put back.
+   * Rub was pressed on the bar, or pressed again to put the pencil back.
    *
    * The shell owns the drawing layer's style, so what this reports is the
-   * choice; what it *means* — a brush, a stroke mode, a different gesture —
-   * is applied there. See `applyPenTool` in editor.ts.
+   * choice; what it *means* — the same brush stamping `destination-out` — is
+   * applied in `tool-routing.ts`, beside every other answer to "what is the
+   * pointer doing".
    */
-  onPenTool: (tool: PenTool) => void;
+  useRub: (rubbing: boolean) => void;
+  /** Whether the pointer is currently the rubber, so the bar can say so. */
+  isRubbing: () => boolean;
   /** The document layer new ink lands on, which is where a session's is. */
   inkLayerId: () => string;
   /** The file was rewritten and re-parsed; take the result back. */
   onWritten: (key: string, manifest: string) => Promise<void> | void;
 }
 
-export interface PenUi {
+export interface PsdEditUi {
   /** Enter the mode over one layer of the selected PSD. */
   open: (key: string, layer: PsdLayerInfo) => void;
   /** The scene or the document says something changed; put it in the bar. */
@@ -110,7 +112,7 @@ interface Session {
   before: Set<string>;
 }
 
-export function createPenUi(options: PenUiOptions): PenUi {
+export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
   let session: Session | null = null;
   /**
    * The placed unit the canvas has to show while this session is up.
@@ -143,14 +145,15 @@ export function createPenUi(options: PenUiOptions): PenUi {
   let stage: string | null = null;
   let unwatch: (() => void) | null = null;
 
-  const bar = new PenBar({
+  const bar = new PsdEditBar({
     onApply: () => void apply(),
     onCancel: () => cancel(),
+    onRub: (rubbing) => {
+      options.useRub(rubbing);
+      sync();
+    },
   });
-  // The three tools that only exist in this mode, in a column under the
-  // editor's own rail — see pen-rail.ts.
-  const rail = new PenRail((tool) => options.onPenTool(tool));
-  options.host.append(bar.root, rail.root);
+  options.host.append(bar.root);
 
   // The bar counts strokes, so it has to follow the document rather than
   // only the mode: every stroke drawn is a change here and nothing else
@@ -179,9 +182,9 @@ export function createPenUi(options: PenUiOptions): PenUi {
 
   function sync(): void {
     const scene = options.scene();
-    const mode = scene?.modes.pen;
+    const mode = scene?.modes.psdEdit;
     const active = mode?.active ?? false;
-    options.host.classList.toggle("penning", active);
+    options.host.classList.toggle("psd-editing", active);
     // On a pattern layer the file being drawn into is the palette a rule
     // scatters, so nothing is drawn on the space it is anchored to — and the
     // frame is around exactly that space. Without this the mode opens on an
@@ -195,10 +198,10 @@ export function createPenUi(options: PenUiOptions): PenUi {
     // mode and the other two canvas modes both do.
     const drawing = options.drawing();
     if (drawing) drawing.straightenHoldMs = active ? STRAIGHTEN_HOLD_MS : 0;
-    // Hiding the rail puts the pencil back, which is why the shell is told
-    // rather than left to notice: the mode ending is the tool ending.
-    if (rail.tool !== null && !active) options.onPenTool(null);
-    rail.setShown(active);
+    // The rubber is this mode's, so the mode ending is the rubber ending —
+    // said out loud rather than left to be noticed, because the pointer would
+    // otherwise still be erasing over a canvas that is no longer framed.
+    if (!active && options.isRubbing()) options.useRub(false);
     if (!active) {
       // The mode can be taken away rather than left: play mode stops all
       // three, and entering extrude or collider stops the other two. The ink
@@ -212,6 +215,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
         layer: "",
         summary: "",
         canApply: false,
+        rubbing: false,
         busy: false,
       });
       return;
@@ -231,6 +235,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
             ? `${strokes.length} ${strokes.length === 1 ? "stroke" : "strokes"}`
             : `${strokes.length} outside the frame`,
       canApply: inside,
+      rubbing: options.isRubbing(),
       busy: writing,
     });
   }
@@ -280,7 +285,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
     }
 
     options.usePencil();
-    const started = scene.modes.startPen(
+    const started = scene.modes.startPsdEdit(
       { key, index: layer.index, name: layer.name },
       frame,
       scale,
@@ -315,13 +320,13 @@ export function createPenUi(options: PenUiOptions): PenUi {
     if (held && strokes.length > 0) {
       discard(held.inkLayerId, strokes);
       log.info(
-        `Pen mode cancelled — ${strokes.length} ` +
+        `PSD Edit mode cancelled — ${strokes.length} ` +
           `${strokes.length === 1 ? "stroke" : "strokes"} discarded ` +
           "(⌘Z brings them back)",
       );
     }
     session = null;
-    options.scene()?.modes.pen.stop();
+    options.scene()?.modes.psdEdit.stop();
     reselect(held?.from ?? null);
     sync();
   }
@@ -387,7 +392,7 @@ export function createPenUi(options: PenUiOptions): PenUi {
   async function apply(): Promise<void> {
     if (writing) return;
     const scene = options.scene();
-    const mode = scene?.modes.pen;
+    const mode = scene?.modes.psdEdit;
     const target = mode?.target;
     const frame = mode?.frame;
     const held = session;
@@ -474,9 +479,8 @@ export function createPenUi(options: PenUiOptions): PenUi {
       options.store.removeEventListener("change", onDocChange);
       stopWatching();
       session = null;
-      options.scene()?.modes.pen.stop();
-      options.host.classList.remove("penning");
-      rail.root.remove();
+      options.scene()?.modes.psdEdit.stop();
+      options.host.classList.remove("psd-editing");
       bar.destroy();
     },
   };

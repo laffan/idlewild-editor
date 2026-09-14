@@ -65,8 +65,8 @@ export interface RowContext {
   onVisible: (row: Row, visible: boolean) => void;
   onGripDown: (event: PointerEvent) => void;
   onGripKey: (event: KeyboardEvent, row: Row) => void;
-  /** Draw into this layer. Only reached where `penable` says so. */
-  onPen: (layer: PsdLayerInfo) => void;
+  /** Draw into this layer. Only reached where `paintable` says so. */
+  onEditPsd: (layer: PsdLayerInfo) => void;
 }
 
 /** How far one level of nesting indents a row, in pixels. */
@@ -125,12 +125,12 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
     owner?.action
       ? actionEl(owner.action.icon, owner.action.label, owner.action.run)
       : null,
-    // The way into pen mode, on every row there is anything to draw in.
+    // The way into PSD Edit mode, on every row there is anything to draw in.
     // Beside the extrusion's cube rather than instead of it, and for the same
     // reason: a row that leads somewhere says so on the row.
-    penable(row.source, owner)
+    paintable(row.source, owner)
       ? actionEl(ICONS.pen, `Draw in "${row.source.name}"`, () =>
-          ctx.onPen(row.source),
+          ctx.onEditPsd(row.source),
         )
       : null,
     // The eye, last on the row, in a column of its own — it is on every row
@@ -142,7 +142,7 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
 }
 
 /**
- * Whether pen mode can draw into a row.
+ * Whether PSD Edit mode can draw into a row.
  *
  * A sprite, and one whose name is the author's. Groups are out because ink
  * goes into a layer rather than into a folder of them; the two marks are out
@@ -152,7 +152,7 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
  * was pulled. That last case is the one worth being firm about — it would
  * look like it worked, right up until it quietly did not.
  */
-export function penable(
+export function paintable(
   layer: PsdLayerInfo,
   owner: OwnedLayer | null,
 ): boolean {

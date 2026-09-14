@@ -72,8 +72,8 @@ export interface WorldSceneConfig {
   onExtrudeChange?: () => void;
   /** Collider mode has started, finished, or changed the spaces it holds. */
   onColliderChange?: () => void;
-  /** Pen mode has started or finished. */
-  onPenChange?: () => void;
+  /** PSD Edit mode has started or finished. */
+  onPsdEditChange?: () => void;
   /** Mask mode has started, finished, or changed the spaces it holds. */
   onMaskChange?: () => void;
   /**
@@ -197,7 +197,7 @@ export class WorldScene extends Phaser.Scene {
         ),
       onExtrudeChange: () => this.config.onExtrudeChange?.(),
       onColliderChange: () => this.config.onColliderChange?.(),
-      onPenChange: () => this.config.onPenChange?.(),
+      onPsdEditChange: () => this.config.onPsdEditChange?.(),
       onMaskChange: () => this.config.onMaskChange?.(),
     });
 
@@ -331,10 +331,10 @@ export class WorldScene extends Phaser.Scene {
     // leave the editor with no ground to build on. See `setBackdropDepth`.
     this.gridRenderer.setBackdropDepth(this.backgrounds.frontDepth());
     this.patterns.sync(this.gridRenderer.visibleRange(this.cameras.main));
-    // Pen mode's dim is cut out of what the camera can see, so it follows the
+    // PSD Edit mode's dim is cut out of what the camera can see, so it follows the
     // camera the way the lattice does — a pan moves it as surely as a zoom.
     // A no-op while the mode is down.
-    this.modes.pen.refresh();
+    this.modes.psdEdit.refresh();
     this.cam.publish();
   }
 
@@ -540,8 +540,8 @@ export class WorldScene extends Phaser.Scene {
    *
    * `suppress` keeps one off the canvas — extrude's, because a solid being
    * carried on with stands on exactly the ground its own flat artwork covers.
-   * `reveal` is the inverse and is pen mode's: on a pattern layer a placement
-   * is the palette a rule scatters and is drawn nowhere, and pen mode frames
+   * `reveal` is the inverse and is PSD Edit mode's: on a pattern layer a placement
+   * is the palette a rule scatters and is drawn nowhere, and PSD Edit mode frames
    * exactly the space it is anchored to. Both leave the document untouched,
    * so ending a mode is a matter of clearing them again.
    */
@@ -550,7 +550,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   revealInstance(instance: string | null): void {
-    // Only on a change, and that is not tidiness: pen mode derives this on
+    // Only on a change, and that is not tidiness: PSD Edit mode derives this on
     // every progress line the pipeline emits while a PSD is being written, so
     // being told the same thing again has to cost nothing. Revealing decides
     // that a unit *may* be drawn; `placeUnit` is what makes it, because on a

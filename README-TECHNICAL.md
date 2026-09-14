@@ -23,14 +23,14 @@ Extension of [README.md](README.md).
 │  ┌──────────────────────── header ─────────────────────────┐  │
 │  └─────────────────────────────────────────────────────────┘  │
 │  ┌─────────┐  ┌─────────────────────────────┐  ┌───────────┐  │
-│  │ Layers  │  │      Phaser 4 canvas        │  │ Inspector │  │
-│  │ panel   │  │   ┌─────────────────────┐   │  │           │  │
-│  │         │  │   │  drawing stage      │   │  │           │  │
-│  │         │  │   │  (baked ink, one    │   │  │           │  │
-│  │         │  │   │   CSS transform)    │   │  │           │  │
+│  │ Scenes  │  │ ▣▣  Phaser 4 canvas         │  │ TOOL      │  │
+│  │ Layers  │  │   ┌─────────────────────┐   │  ├───────────┤  │
+│  │ Minimap │  │   │  drawing stage      │   │  │ LAYER     │  │
+│  │         │  │   │  (baked ink, one    │   │  ├───────────┤  │
+│  │         │  │   │   CSS transform)    │   │  │ OBJECT    │  │
 │  │         │  │   └─────────────────────┘   │  │           │  │
-│  └─────────┘  │   grid · fills · zones ·    │  └───────────┘  │
-│               │   psd-to-phaser placements  │                 │
+│  └─────────┘  │ ▣▣  grid · fills · zones ·  │  └───────────┘  │
+│               │ ▣▣▣▣▣  placements           │                 │
 │               └─────────────────────────────┘                 │
 │  ┌─────────────────────── console drawer ──────────────────┐  │
 └──┴─────────────────────────┬───────────────────────────────┴──┘
@@ -469,7 +469,7 @@ So a caller can say three things about a write:
 | | What it means | Where |
 |---|---|---|
 | *(nothing)* | one step | every ordinary mutation |
-| `history.begin()` / `end()` | the writes between them are one step | `game/drag.ts`, either end of a gesture in extrude and collider mode, and pen mode's Apply |
+| `history.begin()` / `end()` | the writes between them are one step | `game/drag.ts`, either end of a gesture in extrude and collider mode, and PSD Edit mode's Apply |
 | `history.group(fn)` | the same, when the writes are in one place | placing a PSD, Apply, the two conversions |
 | `history.silence(fn)` | not the user's edit; leave no step | the migrations that run on open |
 
@@ -550,7 +550,7 @@ snapshot argument applies for the same reason, and collider mode's spaces were
 made replace-rather-than-mutate to earn it; mask mode's are the same set under
 a different name.
 
-**Pen mode is the exception, and for the same reason read the other way.** Its
+**PSD Edit mode is the exception, and for the same reason read the other way.** Its
 work is ordinary strokes on an ordinary document layer, so the document's
 history has everything to take back and ⌘Z inside the mode undoes a stroke at
 a time, which is exactly what it should do. That is also what makes its Cancel
@@ -781,6 +781,42 @@ for the mode first and the file second.
 
 ---
 
+## The tools, on three bars
+
+They were one column down the left edge of the canvas, split by a gap into
+"the game canvas's" and "the drawing layer's". The gap was carrying the whole
+distinction, and the column grew a *second* column under it whenever PSD Edit
+mode was up — a rail whose buttons moved under your hand.
+
+Three bars now, each where the thing it is about happens
+(`editor/tool-rail.ts` builds all three and keeps one pressed state across
+them, because only one tool is ever in hand):
+
+| Bar | Where | Tools | What they have in common |
+|---|---|---|---|
+| rail | top left | Select, Pan | the camera and the pointer, which is what the canvas does when nothing else is chosen |
+| place | bottom left | Point, Boundary | making something out of bare ground — nothing on the canvas can be promoted into either |
+| draw | bottom left, under it | Pencil, Pixels, Eraser, Lasso, Fill | the ink |
+
+The two bottom bars are one absolutely-positioned column (`.canvas-docks`),
+anchored by its **bottom** edge, and that is the load-bearing bit: a canvas
+mode puts a 52px bar along the bottom of the same column at a higher
+z-index, so without a lift the drawing toolbar sits behind it. PSD Edit
+mode — whose whole subject is drawing — lifts the column clear and takes the
+place bar down (there is nowhere for a point or a boundary to land while a
+mode owns the canvas); the other three modes take both bars down with
+everything else. Three rules in `modes.css`, asserted in `styles.test.ts`,
+because a toolbar hidden behind a bar is not an error anything reports.
+
+**Rub is the tool with no button on any bar.** It is the pencil with the paint
+taken out and what it rubs out is PSD Edit mode's own session ink, so it is a
+toggle on that mode's bar — but it is a `ToolId` like the rest, because the
+pointer is doing something of its own while it is up, and the label beside the
+canvas has to follow it. `OFF_BAR` is the one entry that says so, and
+`tool-bars.test.ts` asserts that every `ToolId` is either on a bar or in it:
+a tool that is in neither gets no button anywhere and a blank label the moment
+something puts it in your hand, and nothing else would say so.
+
 ## Gesture routing
 
 All pointer input over the canvas goes through one arbiter,
@@ -792,6 +828,7 @@ contract:
 | One finger down on the current selection | Drag it, snapped to the grid |
 | One finger, moved, under **Select** | Rubber-band a selection from where it went down |
 | One finger, moved, under **Pan** or **Point** | Pan |
+| One finger, moved, under **Boundary** | Sweep an outline; on release it becomes a blocking zone |
 | Space held | Borrow Pan until it is released |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |
 | Hold ~320 ms, still | Begin a grid selection where the finger is, with its action bar |
@@ -809,7 +846,7 @@ the tap *is* the gesture, so a pointer that went down and came up without
 becoming a pan is one. Pan reports none at all, which is what makes holding
 space safe over anything: the camera tool picks nothing up.
 
-**The rail's tool decides what a drag means**, through `rig.setMode`. It used
+**The tool in hand decides what a drag means**, through `rig.setMode`. It used
 to decide nothing: a drag always panned and only a hold started a selection,
 which made Select and Pan the same tool with a delay between them and left no
 way to rubber-band over several things at once. The mode takes effect on the
@@ -863,9 +900,25 @@ inputs, every frame.
 
 A point is a named place: psd-to-phaser's `P | name`, made by hand rather than
 found in a PSD. It has no size and nothing to fill, so it is a name and a
-position and nothing else, and it is the one thing on the canvas that a tap on
-*empty space* makes — which is why Point is a rail tool where Fill and
-Boundary are not. Nothing already on the canvas can be promoted into one.
+position and nothing else, and it is the one thing on the canvas that a **tap**
+on empty space makes — which is why Point is a tool where a region Fill is
+not. Nothing already on the canvas can be promoted into one, and that is the
+whole argument: Fill is an action on a patch of grid you have already
+selected, so a tool slot for it would only ever have done nothing.
+
+A **Boundary** is now a tool for the same reason read one step further. One
+could always be made from strokes already drawn and lassoed, which is the
+right gesture when there is a sketch to promote and no gesture at all when
+there is not — an empty patch of ground holds nothing to promote. So the two
+sit together on the place bar, and the two routes meet in the middle:
+`zonePoints` simplifies a swept outline exactly as `strokesToZonePoints`
+simplifies a drawn one, and both are named by the same counter, so a boundary
+swept with the tool and one converted from a sketch of the same shape are the
+same document object. The tool's own half is thin on purpose —
+`beginZone` is the lasso's sweep with a different ending, and it hands the
+raw polygon out rather than simplifying it, because how coarse a boundary may
+be is a fact about the *grid* and the drawing engine knows nothing about
+grids.
 
 **It is stored as a cell**, where a boundary is world pixels and a placement
 is both. A point is put down on a space and dragged a whole space at a time,
@@ -1320,7 +1373,7 @@ order goes back in reversed; the round trip is pinned by a test.
 
 ### A rewrite may not lose a row
 
-Apply, New layer and pen mode's Apply are all the same rebuild, and the
+Apply, New layer and PSD Edit mode's Apply are all the same rebuild, and the
 rebuild used to drop any layer with nothing left of it after the crop. That
 read as a rule about pixels and was really a rule about *rectangles*, which is
 how it came to delete a mark.
@@ -1443,7 +1496,7 @@ generated part is regenerated on purpose; its eye is the user's.
 Every other rewrite was already safe, for one reason: an edit that says
 nothing about visibility leaves it alone. `LayerEdit.visible` is an
 `Option<bool>`, `None` means keep, and `LayerEdit::keep` — which a rename, a
-reorder, an added layer and pen mode's paint all go through — sends `None`.
+reorder, an added layer and PSD Edit mode's paint all go through — sends `None`.
 
 ### What a merged group does instead
 
@@ -1857,8 +1910,8 @@ aimed.
 ### Four things a stroke can be
 
 `Stroke.mode` was Hush's two — "ink" paints and "highlight" multiplies — and
-pen mode's rail added two more, each of which *is* a tool rather than a
-variation on one. "erase" stamps the same brush with `destination-out`, so
+the drawing toolbar's Rub and Fill added two more, each of which *is* a tool
+rather than a variation on one. "erase" stamps the same brush with `destination-out`, so
 the tip's softness and the pressure taper are the eraser's too. "fill" is not
 stamped at all: its points are a closed outline and what is drawn is the
 inside of it.
@@ -1868,14 +1921,74 @@ small. A fill previews, undoes, slices, exports and applies through the code
 that was already there for a pencil line; a fill that was a new kind of object
 in the document would have needed all five written again.
 
+### The sweep fill is two tools sharing a colour
+
+**Draw** is the gesture it always was: press, run a closed outline, release,
+and the inside of it fills. It takes the pencil's smoothing now, for the
+pencil's own reason — an outline is a line, and a fill shows the hand's wobble
+more plainly than a line does because there is a flat colour on one side of
+it. One shared `smoothPoints`, memoised on the sample count the way
+`beginDraw` memoises its own.
+
+**Point to point** is the same shape tapped out a corner at a time
+(`drawing/fill-points.ts`), and it is the one thing in the drawing engine that
+**outlives a gesture**. Every other tool is a `ToolSession`: pointer down,
+record, pointer up, done. This one holds its corners between gestures — that
+is the whole feature — so the state lives on an object the layer keeps and
+each gesture is a thin session over it. A sweep commits on release and cannot
+be corrected, so a shape that came out nearly right had to be drawn again from
+scratch; this is the half for a shape with corners in it rather than a gesture
+behind it.
+
+One gesture, two readings, which is what saves it from being two gestures: a
+press near an existing corner takes hold of it, a press anywhere else drops a
+new one *and holds it*, so a tap places a corner and a press-drag places it
+where the finger settles. A tap on the **first** corner closes the shape and
+lays it down, which is how a polygon has been closed since the first drawing
+program — and only a corner that was already there, or the tap that starts a
+new shape would fill the nothing it landed on.
+
+**It survives a change of tool but stops being drawn.** Holding space borrows
+Pan, and every tool in this editor can be interrupted that way; losing four
+carefully placed corners to a thumb on the space bar would make the mode
+unusable. So `setTool` keeps the shape and only `setLayer` and `setFillMode`
+clear it — a half-built shape is about the layer it is being tapped out on,
+and switching aim mid-shape would leave corners nothing can commit. What it
+does not survive is being *shown* while something else has the pointer: a
+polygon hanging over the canvas while somebody draws with the pencil is a mark
+nothing explains.
+
+It lands as a `fill`-mode stroke, which is what the sweep lands as, so it
+reaches erase, undo, export and Apply through machinery that already exists
+and knows nothing about how it was aimed.
+
+**One `beginLive` per frame, and that is not tidiness.** `Surface.beginLive`
+clears the rectangle it last painted before handing the context back, so
+drawing the shape and then its corner handles through two calls erased the
+shape and left three dots floating over nothing. `fillPreview` therefore takes
+a **context** rather than the surface: opening the live canvas is the caller's
+job, once.
+
 ### Two brushes were wearing each other's names
 
 Brush 2 is the grainy tip and brush 5 the wet, even-edged one — Charcoal and
 Marker the other way round from how `atlas.ts` had them labelled. Only the
 *names* were swapped. A stroke records `brushId` and nothing else about its
 tip, so swapping the masks instead would have repainted every drawing already
-in every project; the numbers on the buttons stay where they are and the
-labels move.
+in every project; the ids stay where they are and the labels move.
+
+The buttons no longer carry the number at all. Each one shows **the tip it
+stamps with**, which is the reading that cannot be wrong about which brush is
+which — a brush is a shape you recognise, and "3" is not that shape. It is a
+CSS `mask-image` over the button's own colour rather than an `<img>`, and that
+is not decoration: the atlases are black with an alpha channel, because the
+renderer tints them `source-in`, so drawn as pictures on this editor's dark
+chrome they would be black on black. Masked, the tip takes the button's colour
+and goes white when the button is pressed, which is the state it has to read
+in. The atlas is four variants side by side, so the button windows the first
+of them with `mask-size: 400% 100%` — asserted in `styles.test.ts`, since a
+missing size there shows all four squeezed into one button and nothing
+throws.
 
 ### Why the ink is baked, not repainted
 
@@ -2533,6 +2646,17 @@ The grip in each layer row drags; the arrow keys do the same without a
 pointer. Pointer events rather than HTML5 drag-and-drop, because the iPad is
 a first-class target and `dragstart` never fires for touch.
 
+**The row's two handles are at its two ends.** They used to sit side by side
+in one gutter at the left: the grip, the kind glyph, then the collapse arrow,
+then the name. Two different questions in one place, and the more dangerous of
+the two — a drag that moves a layer through the draw order — was the one a
+finger travelling down that edge met first. So the collapse arrow is first on
+the row, indented over the contents it reveals and about the rows underneath
+it; the grip is last, past the eye and the lock, where the list ends rather
+than where it is read from. Nothing about the drag itself changed — the grip
+keeps `touch-action: none`, which is what makes a drag on the iPad a reorder
+rather than a scroll of the panel behind it.
+
 The gesture is followed on `window`, not through `setPointerCapture` on the
 grip. Capture is released the moment the capturing element leaves the
 document, and the row is moved through the list as the finger passes each
@@ -2570,6 +2694,57 @@ Only placements are carried: a fill is a run of grid spaces and a boundary is
 a polygon, both addressed in world coordinates no layer owns, so moving one
 between layers is a change of draw order and the reorder above already covers
 it.
+
+## Three zones, not one heading
+
+The right-hand panel used to be headed **Inspector** and show exactly one
+thing at a time: the brush while a drawing tool held the pointer, a layer
+while a layer was selected, a placed PSD while one was. Three unrelated
+subjects taking turns in one box, each hiding the last — picking a PSD took
+the layer's facts away, and picking up the pencil took both away.
+
+The heading was the fault. *Inspector* names the furniture rather than what is
+in it, so nothing on screen ever said which of the three you were looking at,
+and there was no reading of it under which you could look at two. So it is
+gone, and in its place are three zones, always in this order:
+
+| Zone | Subject | Shown when |
+|---|---|---|
+| **TOOL** | what the thing in your hand has to set | the tool has anything to set |
+| **LAYER** | the layer the next thing you do lands on | always — there is always one |
+| **OBJECT** | what is selected on the canvas | something is |
+
+The order is the answer the old panel could not give: what is in my hand,
+where is it going, what is it on top of. Read down the column and it is the
+same sentence every time.
+
+**A zone with nothing in it is never mounted.** `createZone` hands back an
+element and a `mount` that refuses when the body is empty, so a tool that does
+one thing with one gesture — Select, Pan, Point, Boundary, the Eraser, the
+Lasso — gets no TOOL zone rather than a heading over a sentence that never
+changes. That sentence is exactly what the single *Inspector* heading was, and
+reintroducing it once per tool would have been the same mistake nine times.
+
+**The zone's heading is the panel's head.** The panels in `inspect-panels.ts`
+and its neighbours open with a kicker and a title — *Boundary* over *Boundary
+1* — and the kicker is now what the heading carries: `OBJECT : Boundary`. The
+first namer wins, so the LAYER zone names itself after the layer before its
+panel can name it after the word "Layer", and a title the heading has already
+said is not drawn twice. That is one rule in `Zone.name` and one condition in
+`Inspector.head`, and it is what keeps the panels themselves ignorant of zones
+entirely: they still write a kicker, a title and sections, into whatever body
+the surface hands them.
+
+**The LAYER zone's subject is the selection's layer, falling through to the
+active one.** Not a fallback so much as the same rule read twice: a region
+selection is ground rather than a thing standing on a layer, and the layer it
+falls through to is the one a Fill over that region would land on anyway.
+
+`inspect-zone.ts` is the zone, `inspect-brush.ts` the TOOL zone's contents,
+`inspect-wiring.ts` what every control in the panel actually does, and
+`inspect.css` the whole panel's stylesheet — split out of `panels.css`, which
+had reached the line limit, along the split the panels themselves make: left
+sidebar there, right sidebar here.
 
 ## The inspector's sections fold
 
@@ -2979,11 +3154,11 @@ so the next frame tries the whole thing again. That is what makes the window
 self-healing rather than a handshake between two objects that have to be kept
 in step.
 
-**Pen mode is the one thing that draws a palette where it stands.** It frames
+**PSD Edit mode is the one thing that draws a palette where it stands.** It frames
 the PSD's own canvas at the space the file is anchored to, and on a pattern
 layer nothing is ever drawn there — so it opened on an empty box, which was
 correct and useless. `DocRenderer.revealInstance` puts the prototype back for
-the length of a session, derived in `pen.ts`'s `sync` the way extrude derives
+the length of a session, derived in `psd-edit.ts`'s `sync` the way extrude derives
 its own suppression, so that however the mode ends the canvas goes back to
 what it was. Revealing by itself was not enough either: nothing had ever
 *placed* that unit, so there was no object to show. `DocRenderer.draws` is the
@@ -3015,7 +3190,7 @@ anything has on a placed object — `detachKey` works from it, and so does the
 sweep — so an entry overwritten in place left a live Phaser object that
 nothing could ever take down. Invisible while its textures lasted, and a throw
 inside the renderer on every frame the moment they were evicted. That is not
-an exotic path: pen mode's Apply derives the canvas state on every progress
+an exotic path: PSD Edit mode's Apply derives the canvas state on every progress
 line the pipeline emits, so the same placement was placed a dozen times while
 the file was written and then had its textures pulled from under every orphan
 at once. The fix is in `attach` rather than at the caller, because the next
@@ -4148,14 +4323,14 @@ the export hands every scene the same map, and the backfill on open covers
 every scene's keys rather than the open scene's — a file standing somewhere
 nobody has looked at this session is still in the published game.
 
-## Pen mode
+## PSD Edit mode
 
 Drawing straight into one layer of a PSD, from the canvas, without a trip out
 to Photoshop. Entered from the pen on a sprite row of the inspector's layer
 list — the same place, and the same idea, as the cube on an extrusion's row.
 
-`game/pen-mode.ts` is the state, `game/pen-render.ts` the frame and the dim,
-`editor/pen.ts` the session, `editor/pen-bar.ts` the bar, and
+`game/psd-edit-mode.ts` is the state, `game/psd-edit-render.ts` the frame and the dim,
+`editor/psd-edit.ts` the session, `editor/psd-edit-bar.ts` the bar, and
 `src-tauri/src/psd_paint.rs` the pixels.
 
 ### The frame is the document, not the artwork
@@ -4179,20 +4354,21 @@ the document around it.
 ### It owns no pointer
 
 This is where it parts company with the other three canvas modes. Extrude,
-collider and mask are made of gestures; pen mode is made of a rectangle. What draws in
+collider and mask are made of gestures; PSD Edit mode is made of a rectangle. What draws in
 it is the drawing layer — a stack of 2D canvases over Phaser's, with a pencil,
 five brushes, an eraser and pressure already on it — so entering picks the
 Pencil and the ink goes where ink always goes.
 
 It still claims every gesture in `canvas-modes.ts`, and returns true without
-doing anything with them. That is not an oversight: the rail stays reachable
-while the mode is up, and a drag made with Select under the dim would move the
-very artwork being drawn on, sliding the file out from under a frame that was
-worked out when the mode opened.
+doing anything with them. That is not an oversight: the rail and the drawing
+toolbar both stay reachable while the mode is up — the camera has to be, and
+the toolbar *is* what this mode is for — and a drag made with Select under the
+dim would move the very artwork being drawn on, sliding the file out from
+under a frame that was worked out when the mode opened.
 
 ### Which strokes are the session's
 
-The ink that was not there when the mode opened. `editor/pen.ts` remembers the
+The ink that was not there when the mode opened. `editor/psd-edit.ts` remembers the
 stroke ids on the document layer at the start and takes everything else on it
 at the end. One honest edge: erase a stroke that was already there and its
 surviving halves are new strokes, so they count as the session's. Both
@@ -4329,21 +4505,32 @@ hold *instead of* a drag has to be decided before the drag gets going. This
 one interrupts something already happening, so it has to be longer than a
 pause for thought.
 
-Pen mode's, not the pencil's everywhere: `DrawingLayer.straightenHoldMs` is
-zero unless `editor/pen.ts` sets it, and it is set from `sync` rather than at
+PSD Edit mode's, not the pencil's everywhere: `DrawingLayer.straightenHoldMs` is
+zero unless `editor/psd-edit.ts` sets it, and it is set from `sync` rather than at
 the two ends of a session so it follows the mode however it was left —
 including being stopped from outside, which play mode and the other two canvas
 modes all do.
 
-### The second rail
+### Rub, and the second rail that went
 
-Three tools that only mean something inside the mode, in their own column
-under the editor's rail (`editor/pen-rail.ts`). Their own column rather than
-three more slots on that one, because a rail that grew and shrank with the
-mode would be a rail whose buttons moved under your hand.
+There used to be a second tool rail under the editor's own, up only while this
+mode was, carrying three tools: **Rub**, **Fill** and **Pixels**. Two of the
+three did not belong to the mode at all. A swept shape and a hard checker for
+a tip are useful on any layer, on any project, at any time — the only reason
+they were in here was that they arrived with the mode — and the column they
+were in appeared and disappeared under your hand, which is a rail whose
+buttons move.
 
-All three are the pencil with something changed about it, and only one of them
-needed the engine to learn anything:
+So Fill and Pixels are tools on the drawing toolbar (`editor/tool-rail.ts`),
+where the rest of the ink is, and this mode borrows them like everything else.
+What is left is Rub, which *is* the mode's: what it rubs out is this session's
+ink, which only exists while the session does. One tool does not want a
+column, so it is a toggle in the middle of the mode's own bar — where extrude
+puts Backfaces and Erase, and the collider puts its own. Same row, same
+pressed state, learned once.
+
+All three are still the pencil with something changed about it, and only one
+of them ever needed the engine to learn anything:
 
 | Tool | What it is | What it cost |
 |---|---|---|
@@ -4351,11 +4538,11 @@ needed the engine to learn anything:
 | **Pixels** | the same brush with a hard checker for a tip | a mask with no PNG behind it |
 | **Fill** | the lasso's gesture ending in a shape instead of a selection | a `mode`, and `beginFill` |
 
-`penToolEffect` says what picking one changes — a stroke mode, a brush, and
-which of the editor's tools takes the pointer — and the shell applies it,
-because the shell is what owns the drawing layer's style. Pressing the tool
-that is down puts the plain pencil back, which is what saves a fourth button
-saying "the pencil again".
+Being a brush and a stroke mode rather than a gesture is exactly what lets
+them be ordinary buttons: `tool-routing.ts` holds the one table that says what
+picking any tool means to the pointer, and Pixels and Rub differ from Pencil
+only in the two lines of style they patch in. Pixels remembers the brush it
+borrowed the slot from and the plain pencil gives it back.
 
 **A fill is a stroke.** `mode: "fill"` means the points are a closed outline
 and what is drawn is the inside of it, filled `nonzero` so a loop that crosses
@@ -4374,15 +4561,16 @@ on the file's own pixels, which is `psd_paint`'s side of the fence and later
 work.
 
 **The pixel brush is out of the numbered set** (`PIXEL_BRUSH = 90`). The five
-are the pencil's, chosen from the inspector's own panel; this is a tool, and
-giving it a sixth button beside them would put it in two places. Its mask is
+are the pencil's, chosen from the inspector's own TOOL section; this is a tool
+on the drawing toolbar, and giving it a sixth button beside them would put it
+in two places. Its mask is
 generated rather than drawn, because the whole of it is a rule and a PNG of a
 checkerboard is a file to keep in step with the rule.
 
 ### The dim follows the camera
 
 `extrude-render.ts` pins its scrim to the screen with `setScrollFactor(0)` and
-makes it big enough for any viewport. Pen mode's cannot: it has a hole in it,
+makes it big enough for any viewport. PSD Edit mode's cannot: it has a hole in it,
 the hole is in world space, and Phaser's Graphics has no even-odd fill — so
 the dim is four rectangles around the gap, in world units.
 
@@ -4401,7 +4589,7 @@ file and re-parses, through `psd_layers::add`.
 
 It is written **straight away** rather than held with the pending renames and
 reorders above it, because the point of the row is to have somewhere to draw
-and pen mode can only put ink in a layer the file really has. The file is read
+and PSD Edit mode can only put ink in a layer the file really has. The file is read
 again afterwards, so a half-typed rename waiting for Apply is lost — which is
 why the button goes quiet while the write is in flight rather than trying to
 merge the two.
@@ -4767,7 +4955,7 @@ it, because the document's save is what rewrites the config the game reads.
 
 **A rewritten PSD restarts it too**, for the same reason and it used to not.
 Code keeps both sidebars, so a file can be changed while its game runs beside
-it: ink applied in pen mode, a layer renamed or turned off, a re-parse, a file
+it: ink applied in PSD Edit mode, a layer renamed or turned off, a re-parse, a file
 replaced by a drop. Every one of those re-places the canvas from the new
 manifest and left the game holding the textures it loaded at start — the two
 halves of one window showing two versions of one file. `psdChanged` in
@@ -5134,9 +5322,22 @@ console is a record of what happened rather than a document.
   opens — has to do the same lookup, and `walkDepth` is exported into the
   scene for exactly that, but nothing does it for you.
 - A colour's opacity reaches the exported game and the PSD pipeline, but
-  **not** a PSD's own pixels: ink applied in pen mode is composited into the
+  **not** a PSD's own pixels: ink applied in PSD Edit mode is composited into the
   file at the opacity it was drawn with, which is correct, and there is no way
   to change a layer's opacity in the file afterwards.
+- The point-to-point fill's shape reaches no history. It is drawing-layer
+  state rather than a document object, so ⌘Z does not take a corner back —
+  Undo corner on the panel is the whole of it, and leaving the mode or the
+  layer throws the shape away without a way back. The thing it *becomes* is a
+  stroke, which undoes like any other.
+- The Boundary tool sweeps freehand and nothing else. There is no
+  point-to-point boundary the way there is a point-to-point fill, and the two
+  are the same shape of problem — a polygon tapped out and adjusted — so the
+  second one is a matter of reusing the first rather than of new thinking.
+- A boundary swept with the tool arrives blocking, and the only way to make it
+  passable is the inspector row afterwards. There is no modifier or toggle on
+  the tool itself, because a bar for one tool is chrome and the row is one tap
+  away.
 - Mask mode sweeps rectangles and nothing else. A boundary that is genuinely
   diagonal is a staircase of sweeps, and the obvious answer — dragging a
   freehand path that paints the spaces under it — is one method away. The

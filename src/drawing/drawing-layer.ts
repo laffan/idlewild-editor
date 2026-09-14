@@ -33,10 +33,17 @@ import {
   beginErase,
   beginFill,
   beginLasso,
+  beginZone,
   drawEraserCursor,
   type ToolSession,
 } from "./tools";
-import { DEFAULT_STYLE, type DrawingTool, type StrokeStyle } from "./types";
+import { PointFill } from "./fill-points";
+import {
+  DEFAULT_STYLE,
+  type DrawingTool,
+  type FillMode,
+  type StrokeStyle,
+} from "./types";
 
 export interface DrawingCallbacks {
   /** Two-finger navigation, in screen pixels, for the game camera. */
@@ -44,6 +51,18 @@ export interface DrawingCallbacks {
   onZoom: (factor: number, screenX: number, screenY: number) => void;
   /** The lasso settled on these strokes; an empty list is a dismissal. */
   onSelect: (ids: string[]) => void;
+  /**
+   * A boundary was swept. The polygon is in world pixels and unsimplified —
+   * how coarse a boundary may be is a fact about the grid, which this layer
+   * knows nothing about. An empty list is a tap, and means nothing was drawn.
+   */
+  onZone: (points: readonly { x: number; y: number }[]) => void;
+  /**
+   * The point-to-point fill's shape changed — a corner added, moved, taken
+   * back, or the lot laid down. What is passed is how many corners are down,
+   * which is all the inspector needs to offer or withhold its two buttons.
+   */
+  onFillPoints: (count: number) => void;
 }
 
 export class DrawingLayer {
@@ -52,7 +71,7 @@ export class DrawingLayer {
 
   /**
    * How long a still hold inside a stroke straightens the rest of it, in
-   * milliseconds. Zero is off, which is everywhere but pen mode — see
+   * milliseconds. Zero is off, which is everywhere but PSD Edit mode — see
    * `DrawOptions.straightenAfterMs`.
    */
   straightenHoldMs = 0;
@@ -67,6 +86,10 @@ export class DrawingLayer {
   private readonly unlistenAtlas: () => void;
 
   private tool: DrawingTool | null = null;
+  /** Which half of the sweep fill is in hand — see `types.ts`. */
+  private fill: FillMode = "draw";
+  /** The point-to-point fill's half-built shape, which outlives a gesture. */
+  private readonly pointFill: PointFill;
   private session: ToolSession | null = null;
   private sessionPointer: number | null = null;
   /** The erase drag's uncommitted stroke list; null outside one. */
@@ -83,6 +106,9 @@ export class DrawingLayer {
     this.store = new StrokeStore(doc, layerId);
     this.surface = new Surface(this.atlas);
     this.root = this.surface.root;
+    this.pointFill = new PointFill(this.surface, this.store, () =>
+      this.callbacks.onFillPoints(this.pointFill.count),
+    );
 
     // A brush's PNG replaces its procedural tip mid-session; the ink already
     // on screen was baked with the fallback and has to be laid again.
@@ -119,6 +145,8 @@ export class DrawingLayer {
    * old one's would otherwise be stamped on top of it.
    */
   setLayer(layerId: string): void {
+    // A shape half tapped out is about the layer it was being tapped out on.
+    this.pointFill.clear();
     this.store.setLayer(layerId);
     this.repaint();
   }
@@ -134,15 +162,65 @@ export class DrawingLayer {
     this.surface.clearLive();
     this.surface.setInteractive(tool !== null);
     this.root.classList.toggle("erasing", tool === "eraser");
+    // A shape half tapped out survives a change of tool but stops being
+    // *drawn*, which is not the same thing. It has to survive because holding
+    // space borrows Pan — every tool in this editor can be interrupted that
+    // way, and losing four carefully placed corners to a thumb on the space
+    // bar would make the mode unusable. It has to stop being drawn because a
+    // polygon left hanging over the canvas while somebody draws with the
+    // pencil is a mark nothing explains.
+    if (this.showsPointFill()) this.pointFill.repaint(this.style);
   }
 
   get activeTool(): DrawingTool | null {
     return this.tool;
   }
 
+  /** Which half of the sweep fill the pointer is aiming. */
+  get fillMode(): FillMode {
+    return this.fill;
+  }
+
+  setFillMode(mode: FillMode): void {
+    if (mode === this.fill) return;
+    this.endSession();
+    // Switching aim mid-shape would leave corners nothing can commit.
+    this.pointFill.clear();
+    this.fill = mode;
+  }
+
+  /** How many corners the point-to-point fill currently has down. */
+  get fillPointCount(): number {
+    return this.pointFill.count;
+  }
+
+  /** Lay the tapped-out shape down. False when there is no shape yet. */
+  fillPoints(): boolean {
+    return this.pointFill.fill(this.style);
+  }
+
+  /** Throw the tapped-out shape away. */
+  clearFillPoints(): void {
+    this.pointFill.clear();
+  }
+
+  /** Take the last corner back off, which is what a mis-tap needs. */
+  undoFillPoint(): void {
+    this.pointFill.undoPoint(this.style);
+  }
+
   /** Follow the game camera. Cheap unless the backing has to move. */
   sync(view: Viewport): void {
     this.surface.sync(view, this.strokes());
+    // A re-anchor clears the live canvas, and a shape half tapped out lives
+    // there rather than in the ink. Nothing else on that layer has to survive
+    // a pan, because nothing else on it outlives the gesture that drew it.
+    if (!this.session && this.showsPointFill()) this.pointFill.repaint(this.style);
+  }
+
+  /** Whether the half-built shape is the thing the live canvas is showing. */
+  private showsPointFill(): boolean {
+    return this.tool === "fill" && this.fill === "points";
   }
 
   /**
@@ -264,7 +342,12 @@ export class DrawingLayer {
       );
     }
     if (tool === "fill") {
-      return beginFill(this.store, this.surface, this.style, x, y);
+      return this.fill === "points"
+        ? this.pointFill.begin(x, y, this.style)
+        : beginFill(this.store, this.surface, this.style, x, y);
+    }
+    if (tool === "zone") {
+      return beginZone(this.surface, this.callbacks.onZone, x, y);
     }
     return beginLasso(this.store, this.surface, this.callbacks.onSelect, x, y);
   }

@@ -201,7 +201,7 @@
 .menu-item svg { flex: none; color: var(--chrome-dim); }
 .menu-item:hover svg { color: var(--chrome-text); }
 
-/* Tool rail */
+/* Tool rail — the camera's two, at the corner the eye starts from. */
 .tool-rail {
   position: absolute;
   left: 16px;
@@ -224,29 +224,40 @@
   justify-content: center;
 }
 .tool-btn:first-child { border-top: 0; }
-/* The break between the canvas's tools and the drawing layer's. */
-.tool-btn.divide { border-top: 3px solid var(--chrome-bg); margin-top: 8px; }
 .tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
 .tool-btn[disabled] { opacity: 0.45; }
 
-/* The second column, under the first, up only while pen mode is. Its own
-   block rather than more slots on the rail above, because these three mean
-   nothing outside the mode — and a rail that grew and shrank would be a rail
-   whose buttons moved under your hand. The gap is what says they are two
-   things; see editor/pen-rail.ts. */
-.pen-rail {
+/* The bottom-left corner: the place bar over the drawing toolbar.
+
+   Two rows rather than one, because they answer different questions — what
+   to put on bare ground, and what to draw with — and one long row of seven
+   would have been a row nobody could scan. They sit at the *bottom* corner
+   because both are about the canvas rather than about the camera, and a hand
+   resting on an iPad's glass is nearer that corner than the top one.
+
+   A column rather than two absolutely-positioned bars: the drawing toolbar is
+   the one that has to clear the mode bar, and anchoring the pair by their
+   bottom edge means only one rule has to know that. */
+.canvas-docks {
   position: absolute;
   left: 16px;
-  top: 372px;
-  border: 0;
-  background: var(--chrome-bg);
+  bottom: 16px;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
   z-index: 5;
 }
-.pen-rail.hidden { display: none; }
-.pen-rail .tool-btn:first-child { border-top: 0; }
+.tool-bar {
+  display: flex;
+  background: var(--chrome-bg);
+}
+.tool-bar .tool-btn {
+  border-top: 0;
+  border-left: 1px solid var(--chrome-rule);
+}
+.tool-bar .tool-btn:first-child { border-left: 0; }
 
 .tool-name {
   position: absolute;
@@ -293,12 +304,13 @@
 }
 
 /* Edge toggles.
-   Anchored below the tool rail rather than at dead centre: the rail is five
+   Anchored below the tool rail rather than at dead centre: the rail is two
    56px items starting 16px down, so a centred toggle collided with its last
-   button on anything short. */
+   button on anything short. The floor came down with the rail when Point and
+   the ink's tools moved to the bottom corner. */
 .edge-toggle {
   position: absolute;
-  top: max(50%, 340px);
+  top: max(50%, 190px);
   transform: translateY(-50%);
   width: 26px;
   height: 88px;
@@ -497,8 +509,8 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
    act on in either. What Code keeps is the editor *around* the canvas: both
    sidebars, so the scene can be switched and the document adjusted while the
    game runs, and the panel the code is in. */
-.editor.play-mode .pen-rail,
-.editor.code-mode .pen-rail,
+.editor.play-mode .canvas-docks,
+.editor.code-mode .canvas-docks,
 .editor.play-mode .tool-rail,
 .editor.play-mode .tool-name,
 .editor.play-mode .selection-actions,

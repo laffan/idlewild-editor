@@ -95,7 +95,11 @@ remaining pieces are wired to real slots rather than mocked.
   space borrows it from wherever you are
 - Press and hold to ask for a patch of grid, and get Fill, Add Image,
   Generate PSD and Extrude over it
-- Fill a selection with any colour, from a full picker with recent swatches
+- Fill a selection with any colour, from a full picker with recent swatches.
+  It starts grey rather than in the app's accent: a fill is usually a
+  block-out, and the accent is the colour the editor draws its *own* marks in
+  — selection outlines, the extrude plate, a blocking boundary — so a
+  block-out arriving in it was the one fill nobody could tell from chrome
 - Generate PSD makes an empty file the size and shape of the selected grid
   area, already marked and anchored — somewhere to go and paint
 - Extrude mode pulls a prototype solid out of the grid. The rest of the canvas
@@ -246,7 +250,11 @@ remaining pieces are wired to real slots rather than mocked.
 - Layers, under the scene they belong to: drag by the grip to reorder, rename,
   lock, hide, with live counts and an expandable list of what is on each one —
   selecting there selects on the canvas, and a placed PSD listed under a layer
-  has a grip of its own. Where you let go decides what it meant: over a
+  has a grip of its own. The row's two handles are at its two **ends**: the
+  arrow that opens a layer up is at the left, indented over the contents it
+  reveals, and the grip that carries the layer somewhere else is at the right,
+  past the eye and the lock — so the edge a finger travels down to pick a
+  layer up is not the edge those two sit on. Where you let go decides what it meant: over a
   different layer it is carried there, over its own it is **moved in the order
   that layer draws in**, on the canvas and in the game alike. An isometric
   **object** layer is the exception and says so by listing differently — it
@@ -276,8 +284,8 @@ remaining pieces are wired to real slots rather than mocked.
   height, like every other divider in the shell. It is **Draw's**: in Code and
   Play the canvas is behind a running game, and a frame drawn around a camera
   nobody is looking through says nothing
-- **Points**, from the rail: tap and a named place lands on that space, in
-  the layer palette and on the canvas. Rename it in the inspector, drag it a
+- **Points**, from the place bar at the bottom-left corner: tap and a named
+  place lands on that space, in the layer palette and on the canvas. Rename it in the inspector, drag it a
   space at a time, delete it. One point per scene can be its **start point** —
   the palette marks it with a flag and the canvas gives it a second ring — and
   that is where the character stands when the game opens, in Play and in an
@@ -285,8 +293,26 @@ remaining pieces are wired to real slots rather than mocked.
   the scene holds the designation rather than the point. Every point reaches
   the game in `config.layers[].points`, so a door or a trigger is a matter of
   reading back the one you named
+- **The tools are on three bars**, each where the thing it is about happens.
+  The **rail** at the top-left corner is the camera and the pointer: Select
+  and Pan, which is what the canvas does when nothing else is chosen. The
+  **place bar** at the bottom-left puts something new on bare ground — a Point
+  and a Boundary — because nothing already on the canvas can be promoted into
+  either. The **drawing toolbar** under it is the ink: Pencil, Pixels, Eraser,
+  Lasso and Fill. They were one column down the left edge with a gap in the
+  middle doing the work of saying that Select and Pencil answer to different
+  owners, and it grew a second column under it whenever PSD Edit mode was up
+- **Boundary**, beside Point: sweep an outline on bare grid and it becomes a
+  blocking zone, named, selected and listed under its layer. A boundary could
+  only be made from strokes you had already drawn and lassoed, which is the
+  right gesture when there is a sketch to promote and no gesture at all when
+  there is not. Both routes meet in the middle — the same simplification, the
+  same naming — so a boundary swept here and one converted from a sketch of
+  the same shape are the same thing
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
-  Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
+  Apple Pencil, a slice eraser, and a lasso. A brush's button shows **the tip
+  it stamps with** rather than a number, because a brush is a shape you
+  recognise and "3" is not that shape. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass. The ink is
   baked into a canvas that follows the camera, so a pan or a zoom is one
   compositor transform and touches no pixels; a stroke finished is stamped
@@ -306,7 +332,18 @@ remaining pieces are wired to real slots rather than mocked.
   but perfectly straight lines, from where the pen went down to where it came
   up. It is a property of the pen rather than of the stroke — what the
   document stores is the line that was on the screen, the way a ruler leaves
-  a straight line behind rather than a note saying one was used
+  a straight line behind rather than a note saying one was used. The sweep
+  fill borrows it on its own: its outline is a line, and a fill shows the
+  hand's wobble more plainly than a line does because there is a flat colour
+  on one side of it
+- **Fill has two modes.** **Draw** is the sweep: press, run a closed outline,
+  release, and the inside of it fills, landing as one thing you can erase or
+  undo like a stroke. **Point to point** is the same shape tapped out a corner
+  at a time, with every corner draggable until you lay it down — tap the first
+  corner again to close it, or press Fill shape in the panel. A sweep commits
+  on release and cannot be corrected, so a shape that came out nearly right
+  had to be drawn again; this is the half for a shape with corners in it
+  rather than a gesture behind it
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
   a blocking boundary play mode walks around. The PSD carries the same
   orienting marks an import does — the anchor dot and the grid the sketch was
@@ -316,10 +353,23 @@ remaining pieces are wired to real slots rather than mocked.
   file: it is the one row anybody would rename, and the marks are the
   editor's. The strokes are only consumed once the artwork is standing where
   they were — a conversion that is refused leaves the sketch where it is
-- Inspector for layers, selections, fills, placed images, points and
-  boundaries, in Info / Transform / Layers sections. A placed image's title is its filename,
-  and retyping the part before `.psd` renames the file, moves its assets with
-  it, and repoints every placement on it
+- **The properties sidebar is three zones, always in that order: TOOL, LAYER,
+  OBJECT.** It used to be one panel headed *Inspector* that showed exactly one
+  thing at a time — the brush while a drawing tool held the pointer, a layer
+  while a layer was selected, a placed PSD while one was — so picking a PSD
+  took the layer's facts away and picking up the pencil took both away. The
+  heading was the problem: *Inspector* names the furniture rather than what is
+  in it, so nothing on screen ever said which of the three you were looking
+  at, and there was no way to look at two. Now **TOOL** is whatever the thing
+  in your hand has to set, **LAYER** is the layer the next thing you do will
+  land on, and **OBJECT** is what is selected on the canvas — read down the
+  column and it is the same sentence every time. A zone with nothing to say is
+  not drawn at all: a tool that does one thing with one gesture gets no TOOL
+  zone, because a heading over a sentence that never changes is the thing the
+  single heading was doing wrong. Inside them, the sections are what they
+  were — Info, Transform, the collider, the file's own layer stack. A placed
+  image's title is its filename, and retyping the part before `.psd` renames
+  the file, moves its assets with it, and repoints every placement on it
 - **Every named section folds away.** A placed PSD carries Info, Transform, its
   collider, its own layer stack and — on a pattern layer — the rule and its
   shapes, and most of the time only one of those is being worked on. Click a
@@ -364,7 +414,7 @@ remaining pieces are wired to real slots rather than mocked.
   written into the file straight away and holds nothing but a single clear
   pixel, so it is a row to rename, reorder or draw into and nothing the game
   can see yet
-- **Pen mode**, from the pen on any sprite row of that list, the way the cube
+- **PSD Edit mode**, from the pen on any sprite row of that list, the way the cube
   on an extrusion's row reopens the solid. The rest of the canvas dims, the
   PSD's own canvas is framed where the file stands on the grid, and the
   pencil draws inside it — the same brushes, the same pressure, the same
@@ -388,17 +438,16 @@ remaining pieces are wired to real slots rather than mocked.
   started and where you are, and stays ruled until you lift. The next stroke
   is back to whatever the slider says. Pause at the end of a wobbly line and
   it straightens; pause before you draw and everything after it is ruled. It
-  is the same rule read from either end, and it is pen mode's, where a line
+  is the same rule read from either end, and it is PSD Edit mode's, where a line
   drawn against the edge of a building wants to be a line
-- A **second rail** under the first while pen mode is up, for the three
-  things that only mean something inside it. **Rub** is the same brush with
-  the paint taken out — it rubs out ink from this session, tip and pressure
-  and all. **Fill** sweeps a closed outline and fills it, landing as one
-  thing you can erase or undo like a stroke. **Pixels** swaps the tip for a
-  hard checker, so what it leaves is a dither rather than a smudge. Pressing
-  the one that is down puts the plain pencil back. All three are first cuts —
-  a bucket that floods the area under a tap, and an eraser that reaches the
-  artwork already inside the file, are the versions after these
+- **Rub**, a toggle on PSD Edit mode's own bar: the same brush with the paint
+  taken out, rubbing out ink from this session, tip and pressure and all.
+  Pressing it again puts the plain pencil back. It is the one thing in hand
+  that means nothing outside the mode, which is why it is the only one on that
+  bar — Fill and Pixels used to be beside it on a second tool rail that
+  appeared and disappeared with the mode, and both of those work anywhere, so
+  both are on the drawing toolbar now. It is still a first cut: an eraser that
+  reaches the artwork already inside the file is the version after it
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail
@@ -444,7 +493,7 @@ remaining pieces are wired to real slots rather than mocked.
   and placed PSD's collider is the ground it stands on rather than an obstacle
   to route around
 - **A file you change while the game is running restarts it**, the way saving
-  code does: ink applied in pen mode, a layer renamed or turned off, a
+  code does: ink applied in PSD Edit mode, a layer renamed or turned off, a
   re-parse, a PSD replaced by a drop. Code runs the game beside the canvas,
   and it was holding the artwork it loaded when it started
 - `js/game.config.json` — the document in the shape the project's code reads

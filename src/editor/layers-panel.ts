@@ -7,7 +7,9 @@
  * belong to the scene that is open — switching scenes is a different list,
  * not a filter over one.  Stored top-first, shown top-first.
  *
- * Reordering is a drag on the grip at the left of each row. Pointer events
+ * Reordering is a drag on the grip at the right-hand end of each row, with
+ * the collapse arrow at the other end — the two questions a row answers, put
+ * at the two edges rather than side by side in one gutter. Pointer events
  * rather than HTML5 drag-and-drop, because the iPad is a first-class target
  * and `dragstart` never fires for touch. The row being dragged is moved
  * through the DOM as the finger passes each neighbour, so the list shows the
@@ -414,18 +416,12 @@ export class LayersPanel {
         class: classes.join(" "),
         onClick: () => this.callbacks.onSelectLayer(layer.id),
       },
-      this.grip(layer),
-      // What kind of layer this is, before its name. A glyph rather than a
-      // word: the three read apart at a glance, the column is narrow, and the
-      // inspector says it in words for anyone who wants them.
-      h(
-        "span",
-        {
-          class: "layer-kind",
-          title: LAYER_KINDS.find((k) => k.kind === kind)?.label ?? "Layer",
-        },
-        icon(KIND_ICONS[kind], 14),
-      ),
+      // The collapse arrow is the first thing on the row and the grip the
+      // last. Opening a layer is a question about the row you are reading, so
+      // it sits at the edge the eye starts from, indented over the contents it
+      // reveals; carrying a layer somewhere else is a question about the list,
+      // so its handle sits at the edge the list ends on, clear of everything a
+      // finger means to tap on the way past.
       h(
         "button",
         {
@@ -442,6 +438,17 @@ export class LayersPanel {
           },
         },
         icon(ICONS.chevronRight, 13),
+      ),
+      // What kind of layer this is, before its name. A glyph rather than a
+      // word: the three read apart at a glance, the column is narrow, and the
+      // inspector says it in words for anyone who wants them.
+      h(
+        "span",
+        {
+          class: "layer-kind",
+          title: LAYER_KINDS.find((k) => k.kind === kind)?.label ?? "Layer",
+        },
+        icon(KIND_ICONS[kind], 14),
       ),
       h(
         "div",
@@ -473,6 +480,7 @@ export class LayersPanel {
         },
         icon(layer.locked ? ICONS.lock : ICONS.unlock, 15),
       ),
+      this.grip(layer),
     );
   }
 }

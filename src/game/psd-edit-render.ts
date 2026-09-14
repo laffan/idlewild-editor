@@ -1,5 +1,5 @@
 /**
- * What pen mode draws: the edge of the PSD's canvas, and the dim over
+ * What PSD Edit mode draws: the edge of the PSD's canvas, and the dim over
  * everything that is not inside it.
  *
  * The counterpart to `extrude-render.ts`, and deliberately the same idea —
@@ -42,7 +42,7 @@ const OVERDRAW = 256;
 /** How long the tick at each corner of the frame is, in screen pixels. */
 const CORNER_PX = 14;
 
-export class PenRender {
+export class PsdEditRender {
   private readonly dim: Phaser.GameObjects.Graphics;
   private readonly frame: Phaser.GameObjects.Graphics;
 

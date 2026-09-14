@@ -25,7 +25,9 @@ import { describe, expect, it } from "vitest";
 import css from "../editor.css?raw";
 import codeCss from "../code.css?raw";
 import docsCss from "../docs.css?raw";
+import modesCss from "../modes.css?raw";
 import panelsCss from "../panels.css?raw";
+import inspectCss from "../inspect.css?raw";
 
 /** The declarations of one rule, by property. Comments are stripped first. */
 function rule(selector: string): Record<string, string> {
@@ -179,7 +181,7 @@ describe("code mode", () => {
 describe("the inspector's folded sections", () => {
   it("hides everything but the heading", () => {
     const folded = ruleIn(
-      panelsCss,
+      inspectCss,
       ".inspect-section.collapsed > *:not(.inspect-section-fold)",
     );
     expect(folded.display).toBe("none");
@@ -188,13 +190,64 @@ describe("the inspector's folded sections", () => {
   it("gives the heading a caret that turns when it is shut", () => {
     // Two borders on a square turned 45°: down is open, and a quarter turn
     // anticlockwise is shut. No asset, and nothing to line up.
-    expect(ruleIn(panelsCss, ".inspect-section-fold::after").transform).toBe(
+    expect(ruleIn(inspectCss, ".inspect-section-fold::after").transform).toBe(
       "rotate(45deg)",
     );
     expect(
-      ruleIn(panelsCss, ".inspect-section.collapsed > .inspect-section-fold::after")
+      ruleIn(inspectCss, ".inspect-section.collapsed > .inspect-section-fold::after")
         .transform,
     ).toBe("rotate(-45deg)");
+  });
+});
+
+/**
+ * A brush button shows the tip it stamps with, and that is a *mask* rather
+ * than a picture: the atlas PNGs are black with an alpha channel, so drawn as
+ * images on this editor's dark chrome they would be black on black. The
+ * declarations that make it a mask are the whole of the feature, and there is
+ * no type checker over them — without the size the button shows all four
+ * variants squeezed into it, and without the background there is nothing for
+ * the mask to reveal.
+ */
+describe("the brush stamps", () => {
+  it("windows one variant out of the four-cell atlas", () => {
+    const stamp = ruleIn(inspectCss, ".brush-stamp");
+    expect(stamp.background).toBe("currentColor");
+    expect(stamp["mask-size"]).toBe("400% 100%");
+    expect(stamp["-webkit-mask-size"]).toBe("400% 100%");
+    expect(stamp["mask-repeat"]).toBe("no-repeat");
+  });
+});
+
+/**
+ * The bottom-left bars, and the one rule that keeps them reachable.
+ *
+ * A canvas mode puts a 52px bar along the bottom of the same column, at a
+ * higher z-index — so without the lift the drawing toolbar is *behind* it,
+ * which in PSD Edit mode means the pencil, the pattern brush and the sweep
+ * fill are unreachable inside the mode whose whole subject is drawing.
+ */
+describe("the canvas docks", () => {
+  it("anchors both bars to the bottom-left corner", () => {
+    const docks = rule(".canvas-docks");
+    expect(docks.position).toBe("absolute");
+    expect(docks.left).toBe("16px");
+    expect(docks.bottom).toBe("16px");
+  });
+
+  it("lifts them clear of PSD Edit mode's bar, and drops the place bar", () => {
+    expect(
+      ruleIn(modesCss, ".editor-canvas-wrap.psd-editing .canvas-docks").bottom,
+    ).toBe("68px");
+    expect(
+      ruleIn(modesCss, ".editor-canvas-wrap.psd-editing .place-bar").display,
+    ).toBe("none");
+  });
+
+  it("takes them down in the three modes that own the pointer outright", () => {
+    expect(
+      ruleIn(modesCss, ".editor-canvas-wrap.masking .canvas-docks").display,
+    ).toBe("none");
   });
 });
 

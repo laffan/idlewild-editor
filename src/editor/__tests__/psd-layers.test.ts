@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { manifestName, psdLayerOwner } from "../psd-layer-owner";
-import { penable } from "../psd-layer-row";
+import { paintable } from "../psd-layer-row";
 import type { PsdLayerInfo } from "../../lib/ipc";
 
 /**
@@ -99,7 +99,7 @@ describe("psdLayerOwner", () => {
  * a drawing painted into one would look like it had worked right up until the
  * next time the solid behind it was pulled, and then be gone.
  */
-describe("which rows pen mode can draw into", () => {
+describe("which rows PSD Edit mode can draw into", () => {
   function layer(
     name: string,
     category: PsdLayerInfo["category"],
@@ -115,7 +115,7 @@ describe("which rows pen mode can draw into", () => {
 
   it("offers it on an ordinary sprite", () => {
     const sprite = layer("S | tower", "sprite");
-    expect(penable(sprite, owner(sprite, false))).toBe(true);
+    expect(paintable(sprite, owner(sprite, false))).toBe(true);
   });
 
   it("keeps it off a tileset, a point and a zone", () => {
@@ -126,13 +126,13 @@ describe("which rows pen mode can draw into", () => {
       ["just a layer", "ignored"],
     ] as const) {
       const held = layer(name, category);
-      expect(penable(held, owner(held, false))).toBe(false);
+      expect(paintable(held, owner(held, false))).toBe(false);
     }
   });
 
   it("keeps it off a group, which is a folder rather than pixels", () => {
     const group = layer("G | enemies", "group");
-    expect(penable(group, owner(group, false))).toBe(false);
+    expect(paintable(group, owner(group, false))).toBe(false);
   });
 
   it("keeps it off the two marks and off an extrusion's own layers", () => {
@@ -145,7 +145,7 @@ describe("which rows pen mode can draw into", () => {
       "S | shading-abc",
     ]) {
       const held = layer(name, name.startsWith("S") ? "sprite" : "group");
-      expect(penable(held, owner(held))).toBe(false);
+      expect(paintable(held, owner(held))).toBe(false);
     }
   });
 
@@ -154,6 +154,6 @@ describe("which rows pen mode can draw into", () => {
     // a layer painted over a greybox survives every Apply, so it is a layer
     // worth drawing in.
     const mine = layer("S | brickwork", "sprite");
-    expect(penable(mine, owner(mine))).toBe(true);
+    expect(paintable(mine, owner(mine))).toBe(true);
   });
 });
