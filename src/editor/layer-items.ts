@@ -222,7 +222,12 @@ export function renderLayerItem(
       },
     },
     item.swatch
-      ? h("span", { class: "layer-item-swatch", style: { background: item.swatch } })
+      ? h("span", {
+          class: "layer-item-swatch",
+          // `background-color`, not the shorthand: the stylesheet's checker is
+          // a background *image*, and the shorthand would take it off.
+          style: { backgroundColor: item.swatch },
+        })
       : icon(item.path, 13),
     h("span", { class: "layer-item-label", text: item.label }),
     item.warning

@@ -13,6 +13,7 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid, fillShape } from "../lib/grid";
 import { fillAt } from "../lib/doc-shape";
 import { layerKind } from "../lib/layer-kinds";
+import { alphaOf, hexToNumber } from "../lib/color";
 import { ordersByHand } from "../lib/units";
 import { unitOf } from "./unit";
 import {
@@ -250,8 +251,13 @@ export class DocRenderer {
     // fills, a flat colour is what the grid shows.
     const shape = fillShape(this.grid, fill);
     if (!shape) return;
-    const colour = hexToNumber(fill.color ?? "#ec3013");
-    g.fillStyle(colour, fill.kind === "pattern" ? 0.35 : 1);
+    // The colour's own opacity, and a pattern fill's flat stand-in is dimmer
+    // still — a tint saying "a texture goes here" rather than the artwork.
+    const colour = fill.color ?? "#ec3013";
+    g.fillStyle(
+      hexToNumber(colour),
+      alphaOf(colour) * (fill.kind === "pattern" ? 0.35 : 1),
+    );
 
     for (const points of shape.polygons) {
       g.beginPath();
@@ -615,10 +621,6 @@ export function destroyPlaced(object: PlacedObject): void {
     return;
   }
   object.destroy();
-}
-
-export function hexToNumber(hex: string): number {
-  return Number.parseInt(hex.replace("#", ""), 16) || 0;
 }
 
 /**

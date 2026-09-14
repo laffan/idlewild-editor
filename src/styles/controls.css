@@ -58,9 +58,22 @@
 
 /* ── colour picker ───────────────────────────────────────────────────────── */
 
+/* The checker a partly transparent colour is shown against, used by the
+   opacity slider, the preview and the recent swatches. Two gradients rather
+   than an image: it is four rules and no file to keep in step with them. */
 .cp {
+  --cp-checker:
+    linear-gradient(45deg, var(--color-neutral-700) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--color-neutral-700) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--color-neutral-700) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--color-neutral-700) 75%);
+  --cp-checker-size: 8px 8px;
+  --cp-checker-pos: 0 0, 0 4px, 4px -4px, -4px 0;
+
   display: grid;
-  grid-template-columns: 1fr 24px;
+  /* Two tracks beside the field now: hue, then opacity. Narrower than the one
+     they replace, so the field keeps the width it had. */
+  grid-template-columns: 1fr 52px;
   grid-template-areas:
     "field hue"
     "row   row"
@@ -77,13 +90,22 @@
   cursor: crosshair;
 }
 
-.cp-side { grid-area: hue; }
+.cp-side {
+  grid-area: hue;
+  display: flex;
+  gap: 4px;
+}
 
-.cp-hue {
+.cp-hue,
+.cp-alpha {
   position: relative;
+  flex: 1;
   height: 132px;
   touch-action: none;
   cursor: ns-resize;
+}
+
+.cp-hue {
   background: linear-gradient(
     to bottom,
     #f00 0%,
@@ -94,6 +116,19 @@
     #f0f 83%,
     #f00 100%
   );
+}
+
+/* The checker is the track itself; the colour fades out over it. Two elements
+   because a background gradient cannot sit over a background image on one. */
+.cp-alpha {
+  background-image: var(--cp-checker);
+  background-size: var(--cp-checker-size);
+  background-position: var(--cp-checker-pos);
+}
+.cp-alpha-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .cp-thumb {
@@ -119,14 +154,21 @@
   align-items: stretch;
 }
 
+/* The swatch shows the colour *over* the checker, so a half-transparent one
+   reads as half-transparent rather than as a paler shade of itself. The
+   colour goes on the background layer in front, which `color-picker.ts` sets;
+   the checker is behind it here. */
 .cp-preview {
   flex: none;
-  width: 96px;
+  width: 108px;
   display: flex;
   align-items: center;
   padding: 0 10px;
   font: 500 11px var(--font-mono);
   letter-spacing: 0.04em;
+  background-image: var(--cp-checker);
+  background-size: var(--cp-checker-size);
+  background-position: var(--cp-checker-pos);
 }
 
 .cp-hex {
@@ -152,10 +194,20 @@
 .cp-recent:empty { display: none; }
 
 .cp-swatch {
+  position: relative;
   width: 26px;
   height: 26px;
   border: 1px solid var(--color-neutral-700);
   padding: 0;
+  background-image: var(--cp-checker);
+  background-size: var(--cp-checker-size);
+  background-position: var(--cp-checker-pos);
+}
+/* The colour itself, over the checker the button carries. */
+.cp-swatch-ink {
+  position: absolute;
+  inset: 0;
+  display: block;
 }
 .cp-swatch:hover { border-color: var(--color-accent); }
 

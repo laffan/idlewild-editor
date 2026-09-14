@@ -1,20 +1,30 @@
 /**
- * A full colour picker: saturation/value field, hue slider, hex entry and
- * recent colours.
+ * A full colour picker: saturation/value field, hue and opacity sliders, hex
+ * entry and recent colours.
  *
  * Hand-built rather than `<input type="color">` because that control is
  * unreliable in WKWebView on iPadOS, and this is a touch-first editor — the
- * field and slider read pointer events directly, so a finger and an Apple
+ * field and the sliders read pointer events directly, so a finger and an Apple
  * Pencil behave identically.
+ *
+ * **Opacity is a second slider beside hue, not a separate control.** It is
+ * part of the colour rather than a property of the thing wearing it: a
+ * half-transparent wash and a pale opaque one are two different answers to the
+ * same question, and putting them a panel apart makes the picker lie about
+ * what it is showing. So what this hands back is one string — `#rrggbb`, or
+ * `#rrggbbaa` once the slider leaves the top — and the opaque case is spelt
+ * exactly as it always was. See `color.ts`.
  */
 
 import { h } from "./dom";
 import {
+  alphaOf,
   contrastInk,
   hexToHsv,
   hsvToHex,
   isValidHex,
   normaliseHex,
+  withAlpha,
   type Hsv,
 } from "./color";
 
@@ -36,6 +46,10 @@ export interface ColorPicker {
 
 export function createColorPicker(options: ColorPickerOptions): ColorPicker {
   let hsv: Hsv = hexToHsv(options.value);
+  let alpha = alphaOf(options.value);
+
+  /** The value as the rest of the editor sees it: hue, tone and opacity. */
+  const current = (): string => withAlpha(hsvToHex(hsv), alpha);
 
   const field = h("div", { class: "cp-field" });
   const fieldThumb = h("div", { class: "cp-thumb" });
@@ -45,17 +59,27 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
   const hueThumb = h("div", { class: "cp-thumb cp-thumb-hue" });
   hue.appendChild(hueThumb);
 
+  // The opacity track is the colour itself fading out over a checker, so what
+  // the slider shows is what the slider does. The checker is the stylesheet's
+  // — `--cp-checker` — and the gradient is set here because it follows the
+  // colour the field and the hue slider are choosing.
+  const opacity = h("div", { class: "cp-alpha" });
+  const opacityFade = h("div", { class: "cp-alpha-fade" });
+  const opacityThumb = h("div", { class: "cp-thumb cp-thumb-hue" });
+  opacity.append(opacityFade, opacityThumb);
+
   const preview = h("div", { class: "cp-preview" });
   const hexInput = h("input", {
     class: "cp-hex",
     spellcheck: "false",
-    maxlength: "7",
+    maxlength: "9",
     "aria-label": "Hex colour",
   });
   const recentRow = h("div", { class: "cp-recent" });
 
   const paint = () => {
-    const hex = hsvToHex(hsv);
+    const solid = hsvToHex(hsv);
+    const hex = current();
     field.style.background = [
       "linear-gradient(to top, #000, transparent)",
       "linear-gradient(to right, #fff, transparent)",
@@ -63,17 +87,25 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
     ].join(", ");
     fieldThumb.style.left = `${hsv.s * 100}%`;
     fieldThumb.style.top = `${(1 - hsv.v) * 100}%`;
-    fieldThumb.style.background = hex;
+    fieldThumb.style.background = solid;
     hueThumb.style.top = `${(hsv.h / 360) * 100}%`;
-    preview.style.background = hex;
-    preview.style.color = contrastInk(hex);
+    // Top is opaque, so the thumb is where the colour has got to.
+    opacityFade.style.background =
+      `linear-gradient(to bottom, ${solid}, ${withAlpha(solid, 0)})`;
+    opacityThumb.style.top = `${(1 - alpha) * 100}%`;
+    opacityThumb.style.background = solid;
+    // `backgroundColor`, not the shorthand: the shorthand would take the
+    // stylesheet's checker off with it, and the checker is what makes a
+    // half-transparent colour look half transparent.
+    preview.style.backgroundColor = hex;
+    preview.style.color = contrastInk(solid);
     preview.textContent = hex.toUpperCase();
     if (document.activeElement !== hexInput) hexInput.value = hex;
   };
 
   const emit = () => {
     paint();
-    options.onChange(hsvToHex(hsv));
+    options.onChange(current());
   };
 
   // One drag handler for both surfaces; each maps the position differently.
@@ -104,7 +136,7 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
       if (!active) return;
       active = false;
       el.releasePointerCapture(event.pointerId);
-      const hex = hsvToHex(hsv);
+      const hex = current();
       rememberColor(hex);
       renderRecent();
       options.onCommit?.(hex);
@@ -119,19 +151,29 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
   track(hue, (_fx, fy) => {
     hsv = { ...hsv, h: fy * 360 };
   });
+  // Down the track is more transparent, so the two sliders read the same way:
+  // the top of each is the strong end.
+  track(opacity, (_fx, fy) => {
+    alpha = 1 - fy;
+  });
 
   hexInput.addEventListener("input", () => {
     if (!isValidHex(hexInput.value)) return;
-    hsv = hexToHsv(normaliseHex(hexInput.value));
+    const typed = normaliseHex(hexInput.value);
+    hsv = hexToHsv(typed);
+    // Only from a hex that *said* something about opacity. Typing six digits
+    // over an eight-digit value is a change of colour, not a request to make
+    // it opaque — and the slider is right there for that.
+    if (hexInput.value.replace("#", "").trim().length > 6) alpha = alphaOf(typed);
     paint();
-    options.onChange(hsvToHex(hsv));
+    options.onChange(current());
   });
   hexInput.addEventListener("change", () => {
     if (!isValidHex(hexInput.value)) {
       paint();
       return;
     }
-    const hex = normaliseHex(hexInput.value);
+    const hex = current();
     rememberColor(hex);
     renderRecent();
     options.onCommit?.(hex);
@@ -140,20 +182,24 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
   function renderRecent(): void {
     recentRow.replaceChildren();
     for (const hex of readRecent()) {
-      recentRow.appendChild(
-        h("button", {
-          class: "cp-swatch",
-          style: { background: hex },
-          title: hex,
-          type: "button",
-          onClick: () => {
-            hsv = hexToHsv(hex);
-            paint();
-            options.onChange(hex);
-            options.onCommit?.(hex);
-          },
-        }),
+      const swatch = h("button", {
+        // The checker is behind it rather than beside it, so a swatch that is
+        // half there looks half there instead of looking like a paler colour.
+        class: "cp-swatch",
+        title: hex,
+        type: "button",
+        onClick: () => {
+          hsv = hexToHsv(hex);
+          alpha = alphaOf(hex);
+          paint();
+          options.onChange(hex);
+          options.onCommit?.(hex);
+        },
+      });
+      swatch.appendChild(
+        h("span", { class: "cp-swatch-ink", style: { background: hex } }),
       );
+      recentRow.appendChild(swatch);
     }
   }
 
@@ -161,7 +207,7 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
     "div",
     { class: "cp" },
     field,
-    h("div", { class: "cp-side" }, hue),
+    h("div", { class: "cp-side" }, hue, opacity),
     h("div", { class: "cp-row" }, preview, hexInput),
     recentRow,
   );
@@ -171,9 +217,10 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
 
   return {
     root,
-    getValue: () => hsvToHex(hsv),
+    getValue: current,
     setValue: (hex: string) => {
       hsv = hexToHsv(hex);
+      alpha = alphaOf(hex);
       paint();
     },
   };
@@ -194,6 +241,10 @@ function readRecent(): string[] {
 }
 
 function rememberColor(hex: string): void {
+  // Not a colour nobody could tell from any other colour: at zero opacity
+  // every swatch is the same empty square, and a row of them is a row of
+  // buttons that all do nothing visible.
+  if (alphaOf(hex) === 0) return;
   try {
     const next = [hex, ...readRecent().filter((c) => c !== hex)].slice(
       0,

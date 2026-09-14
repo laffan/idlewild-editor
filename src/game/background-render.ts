@@ -21,6 +21,7 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
+import { alphaOf, hexToNumber } from "../lib/color";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { Background } from "../lib/types";
 
@@ -174,9 +175,14 @@ function paint(
   if (background.kind === "gradient" && background.gradient) {
     const { from, to, angle } = background.gradient;
     const [tl, tr, bl, br] = gradientCorners(from, to, angle);
-    g.fillGradientStyle(tl, tr, bl, br, 1);
+    // Per-corner alpha, which Phaser takes and which a gradient needs: the two
+    // stops can have different opacities, and a single number for the pair
+    // would make a fade to nothing into a flat wash at the average of the two.
+    const [al, ar, bll, brr] = gradientAlphas(from, to, angle);
+    g.fillGradientStyle(tl, tr, bl, br, al, ar, bll, brr);
   } else {
-    g.fillStyle(hexToNumber(background.color ?? "#2b3b4a"), 1);
+    const color = background.color ?? "#2b3b4a";
+    g.fillStyle(hexToNumber(color), alphaOf(color));
   }
   g.fillRect(view.x, view.y, view.width, view.height);
 }
@@ -196,6 +202,41 @@ export function gradientCorners(
   to: string,
   angle: number,
 ): [number, number, number, number] {
+  const a = hexToNumber(from);
+  const b = hexToNumber(to);
+  return cornerMix(angle, (t) => mix(a, b, t)) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+}
+
+/**
+ * The same projection over the two stops' **opacity**.
+ *
+ * Written beside the colours rather than folded into them because Phaser wants
+ * them apart, and because a gradient's opacity is a real thing to want: a sky
+ * that fades to nothing over the horizon is two stops of one colour where only
+ * the alpha moves.
+ */
+export function gradientAlphas(
+  from: string,
+  to: string,
+  angle: number,
+): [number, number, number, number] {
+  const a = alphaOf(from);
+  const b = alphaOf(to);
+  return cornerMix(angle, (t) => a + (b - a) * t) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+}
+
+/** Each corner's place along the gradient's axis, handed to `at`. */
+function cornerMix(angle: number, at: (t: number) => number): number[] {
   // The direction the gradient *runs*, written out rather than derived: zero
   // is down, ninety is right, and the arrows on the control say so. Screen
   // y counts downward, which is why this is sin/cos rather than cos/sin.
@@ -215,10 +256,7 @@ export function gradientCorners(
   const high = Math.max(...dots);
   const span = high - low || 1;
 
-  const a = hexToNumber(from);
-  const b = hexToNumber(to);
-  const mixed = dots.map((dot) => mix(a, b, (dot - low) / span));
-  return [mixed[0], mixed[1], mixed[2], mixed[3]];
+  return dots.map((dot) => at((dot - low) / span));
 }
 
 /** Two packed colours, channel by channel. */
@@ -232,8 +270,4 @@ function mix(a: number, b: number, t: number): number {
   return (channel(16) << 16) | (channel(8) << 8) | channel(0);
 }
 
-/** `#rrggbb`, or the accent for anything this cannot read. */
-function hexToNumber(hex: string): number {
-  const parsed = Number.parseInt(hex.replace("#", ""), 16);
-  return Number.isFinite(parsed) ? parsed : 0xec3013;
-}
+

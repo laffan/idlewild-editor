@@ -1,4 +1,18 @@
-/** Colour conversions for the picker. All hex values are `#rrggbb`. */
+/**
+ * Colour conversions for the picker.
+ *
+ * Hex values are `#rrggbb`, or `#rrggbbaa` when they carry an opacity. The
+ * eight-digit form is CSS Color 4's, which a Canvas 2D context understands as
+ * a `fillStyle` on its own — so everything drawn on a 2D canvas gets opacity
+ * for free, and only the two places that hand a colour to *Phaser* have to
+ * split it (`hexToNumber` and `alphaOf`), because Phaser takes a packed RGB
+ * number and an alpha as separate arguments.
+ *
+ * **Opaque is six digits.** `withAlpha` drops the pair back off at 1, so a
+ * colour nobody has made transparent is written exactly as it always was: no
+ * document changes shape, no older build reads a colour it cannot parse, and
+ * the diff of a project where nobody touched the slider is empty.
+ */
 
 export interface Hsv {
   h: number; // 0–360
@@ -12,21 +26,88 @@ export interface Rgb {
   b: number;
 }
 
-export function hexToRgb(hex: string): Rgb {
+/**
+ * The digits of a hex colour, shorthand expanded, as `rrggbb` and `aa`.
+ *
+ * One place that knows the four shapes a hex can arrive in — `rgb`, `rgba`,
+ * `rrggbb`, `rrggbbaa` — so nothing else has to count characters. An alpha
+ * that was not written is `"ff"`, because a colour with nothing to say about
+ * its opacity is opaque.
+ */
+function digits(hex: string): { rgb: string; alpha: string } {
   const clean = hex.replace("#", "").trim();
-  const full =
-    clean.length === 3
-      ? clean
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : clean.padEnd(6, "0").slice(0, 6);
-  const value = Number.parseInt(full, 16);
+  const short = clean.length === 3 || clean.length === 4;
+  const full = short
+    ? clean
+        .split("")
+        .map((c) => c + c)
+        .join("")
+    : clean;
+  return {
+    rgb: full.padEnd(6, "0").slice(0, 6),
+    alpha: full.length >= 8 ? full.slice(6, 8) : "ff",
+  };
+}
+
+export function hexToRgb(hex: string): Rgb {
+  const value = Number.parseInt(digits(hex).rgb, 16);
   return {
     r: (value >> 16) & 0xff,
     g: (value >> 8) & 0xff,
     b: value & 0xff,
   };
+}
+
+/**
+ * How opaque a colour is, 0–1. A six-digit hex is 1.
+ *
+ * The one question every consumer asks that `hexToRgb` cannot answer, and the
+ * reason it is a function rather than a second field on a record: a colour is
+ * a *string* everywhere in this document — on a fill, on a backdrop, on a
+ * stroke, in the config the exported game reads — and adding an `alpha`
+ * beside each of them would be five places to keep in step for a number that
+ * is already in the value.
+ */
+export function alphaOf(hex: string): number {
+  const parsed = Number.parseInt(digits(hex).alpha, 16);
+  return Number.isFinite(parsed) ? parsed / 255 : 1;
+}
+
+/**
+ * The same colour at a given opacity.
+ *
+ * Six digits at 1 — see the note at the top. Rounded to the byte the hex can
+ * actually hold, so `alphaOf(withAlpha(c, a))` is stable rather than drifting
+ * by a 255th every time a slider is touched.
+ */
+export function withAlpha(hex: string, alpha: number): string {
+  const byte = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+  const rgb = `#${digits(hex).rgb}`;
+  return byte >= 255 ? rgb : `${rgb}${byte.toString(16).padStart(2, "0")}`;
+}
+
+/** The colour with its opacity taken off — what Phaser's packed number is. */
+export function opaqueHex(hex: string): string {
+  return `#${digits(hex).rgb}`;
+}
+
+/**
+ * A colour as the packed `0xrrggbb` Phaser wants, opacity dropped.
+ *
+ * Phaser takes a colour and an alpha as two arguments, so every call site that
+ * uses this pairs it with `alphaOf` on the same string. It reads the *digits*
+ * rather than parsing the whole thing, which is the bug this replaced: a
+ * straight `parseInt` over an eight-digit hex comes back a thousand times too
+ * large and paints something nobody chose.
+ *
+ * The accent for anything unreadable, which only a hand-edited document can
+ * hold. It is the editor's own "here is a thing" colour, and a shape that came
+ * out loud and wrong is a shape somebody will look at — black would read as a
+ * decision.
+ */
+export function hexToNumber(hex: string): number {
+  const parsed = Number.parseInt(digits(hex).rgb, 16);
+  return Number.isFinite(parsed) ? parsed : 0xec3013;
 }
 
 export function rgbToHex({ r, g, b }: Rgb): string {
@@ -86,11 +167,12 @@ export function hsvToHex(hsv: Hsv): string {
 }
 
 export function isValidHex(value: string): boolean {
-  return /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim());
+  return /^#?([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value.trim());
 }
 
+/** Shorthand expanded and the case settled, opacity carried through. */
 export function normaliseHex(value: string): string {
-  return rgbToHex(hexToRgb(value));
+  return withAlpha(rgbToHex(hexToRgb(value)), alphaOf(value));
 }
 
 /** Readable ink over a given ground — for the swatch's own label. */

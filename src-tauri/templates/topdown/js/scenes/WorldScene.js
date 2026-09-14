@@ -210,9 +210,13 @@ export class WorldScene extends Phaser.Scene {
         if (background.kind === "gradient" && background.gradient) {
           const { from, to, angle } = background.gradient;
           const c = gradientCorners(from, to, angle ?? 0);
-          g.fillGradientStyle(c[0], c[1], c[2], c[3], 1);
+          const a = gradientAlphas(from, to, angle ?? 0);
+          g.fillGradientStyle(c[0], c[1], c[2], c[3], a[0], a[1], a[2], a[3]);
         } else {
-          g.fillStyle(colorOf(background.color ?? "#2b3b4a"), 1);
+          g.fillStyle(
+            colorOf(background.color ?? "#2b3b4a"),
+            alphaOf(background.color),
+          );
         }
         g.fillRect(view.x, view.y, view.width, view.height);
       }
@@ -303,10 +307,9 @@ export class WorldScene extends Phaser.Scene {
   // idlewild:begin paintFill
   paintFill(fill, depth) {
     const g = this.add.graphics().setDepth(depth * 1000);
-    const color = Phaser.Display.Color.HexStringToColor(
-      fill.color ?? "#ec3013",
-    ).color;
-    g.fillStyle(color, 1);
+    // A colour may carry its own opacity as `#rrggbbaa`, which Phaser takes
+    // as a second argument rather than as part of the number — see `colorOf`.
+    g.fillStyle(colorOf(fill.color ?? "#ec3013"), alphaOf(fill.color));
 
     if (fill.rect) {
       g.fillRect(fill.rect.x, fill.rect.y, fill.rect.width, fill.rect.height);
@@ -595,12 +598,40 @@ function gradientCorners(from, to, angle) {
     [-0.5, 0.5],
     [0.5, 0.5],
   ];
+  return cornerFractions(angle).map((t) =>
+    mixColor(colorOf(from), colorOf(to), t),
+  );
+}
+
+/**
+ * The same projection over the two stops' opacity.
+ *
+ * Phaser takes a colour and an alpha as separate arguments, so a gradient
+ * whose stops differ in opacity — a sky fading to nothing over the horizon is
+ * exactly that — needs its four corners' alphas worked out the same way its
+ * four corners' colours are.
+ */
+function gradientAlphas(from, to, angle) {
+  const a = alphaOf(from);
+  const b = alphaOf(to);
+  return cornerFractions(angle).map((t) => a + (b - a) * t);
+}
+
+/** Where each corner of a unit square sits along the gradient's own axis. */
+function cornerFractions(angle) {
+  const radians = (angle * Math.PI) / 180;
+  const dx = Math.sin(radians);
+  const dy = Math.cos(radians);
+  const box = [
+    [-0.5, -0.5],
+    [0.5, -0.5],
+    [-0.5, 0.5],
+    [0.5, 0.5],
+  ];
   const dots = box.map(([x, y]) => x * dx + y * dy);
   const low = Math.min(...dots);
   const span = Math.max(...dots) - low || 1;
-  const a = colorOf(from);
-  const b = colorOf(to);
-  return dots.map((dot) => mixColor(a, b, (dot - low) / span));
+  return dots.map((dot) => (dot - low) / span);
 }
 
 function mixColor(a, b, t) {
@@ -613,8 +644,24 @@ function mixColor(a, b, t) {
   return (channel(16) << 16) | (channel(8) << 8) | channel(0);
 }
 
+/**
+ * A colour from the editor, as Phaser's packed `0xrrggbb`.
+ *
+ * The editor writes `#rrggbb`, or `#rrggbbaa` when somebody has moved the
+ * opacity slider off the top. `HexStringToColor` only reads the six-digit
+ * form, so the pair is taken off here and `alphaOf` is what reads it.
+ */
 function colorOf(hex) {
-  return Phaser.Display.Color.HexStringToColor(hex ?? "#2b3b4a").color;
+  const clean = String(hex ?? "#2b3b4a").replace("#", "");
+  return Phaser.Display.Color.HexStringToColor(`#${clean.slice(0, 6)}`).color;
+}
+
+/** How opaque a colour is, 0–1. A colour that does not say is opaque. */
+function alphaOf(hex) {
+  const clean = String(hex ?? "").replace("#", "");
+  if (clean.length !== 8) return 1;
+  const parsed = Number.parseInt(clean.slice(6, 8), 16);
+  return Number.isFinite(parsed) ? parsed / 255 : 1;
 }
 // idlewild:end gradientCorners
 
