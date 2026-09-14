@@ -217,6 +217,41 @@ describe("the brush stamps", () => {
     expect(stamp["-webkit-mask-size"]).toBe("400% 100%");
     expect(stamp["mask-repeat"]).toBe("no-repeat");
   });
+
+  it("keeps the box square, so a square tip is not stretched", () => {
+    // The atlas cells are square and the buttons are flexible, so a stamp
+    // that filled its button distorted the tip it is there to show — which is
+    // the one thing a picture of a brush must not do. Paired with the 400%
+    // mask above: both together are what puts one whole cell in the box at
+    // its own proportions.
+    const stamp = ruleIn(inspectCss, ".brush-stamp");
+    expect(stamp.width).toBe(stamp.height);
+    expect(stamp.flex).toBe("none");
+  });
+});
+
+/**
+ * The bar that floats beside a shape being tapped out.
+ *
+ * It looks like the action bar over a grid selection and is placed by the
+ * same code, but it is deliberately *not* that class: `modes.css` takes
+ * `.selection-actions` down while a canvas mode owns the canvas, and this one
+ * must stay up — the fill works inside PSD Edit mode, which is the mode whose
+ * whole subject is drawing.
+ */
+describe("the floating fill bar", () => {
+  it("floats over the canvas column", () => {
+    const bar = rule(".canvas-float");
+    expect(bar.position).toBe("absolute");
+    // Over the canvas, under the mode bars — the same layer the selection
+    // bar sits on.
+    expect(bar["z-index"]).toBe("6");
+  });
+
+  it("is not swept away with the selection bar by a canvas mode", () => {
+    const body = withoutComments(modesCss);
+    expect(body).not.toContain(".canvas-float");
+  });
 });
 
 /**

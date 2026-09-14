@@ -262,6 +262,25 @@ export class Surface {
     };
   }
 
+  /**
+   * The other direction, for chrome that has to stand beside something drawn
+   * in world units — the floating bar over a half-built fill.
+   *
+   * Relative to this surface's own top-left, which is the canvas column's:
+   * the surface is `inset: 0` inside it, so the two agree.
+   */
+  worldToScreen(worldX: number, worldY: number): { x: number; y: number } {
+    return {
+      x: (worldX - this.view.originX) * this.view.zoom,
+      y: (worldY - this.view.originY) * this.view.zoom,
+    };
+  }
+
+  /** How many CSS pixels one world unit covers. */
+  get screenPerWorldUnit(): number {
+    return this.view.zoom;
+  }
+
   destroy(): void {
     this.root.remove();
   }

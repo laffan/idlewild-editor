@@ -28,7 +28,7 @@ import type { StrokeStore } from "./stroke-store";
 import type { Surface } from "./surface";
 import { toFlat, type InkPoint } from "./geometry";
 import { boundsOf, fillPreview, type ToolSession } from "./tools";
-import type { StrokeStyle } from "./types";
+import type { Bounds, StrokeStyle } from "./types";
 
 const ACCENT = "#ec3013";
 
@@ -65,6 +65,18 @@ export class PointFill {
   /** Whether there is a shape to fill. */
   get canFill(): boolean {
     return this.points.length >= MIN_POINTS;
+  }
+
+  /**
+   * The box the corners cover, in world units, or null for no shape.
+   *
+   * What the floating Fill / Cancel bar stands over. The handles are not
+   * counted into it: they are drawn at a fixed screen size, so growing the box
+   * by them would make the bar drift away from the shape as you zoom out.
+   */
+  box(): Bounds | null {
+    if (this.points.length === 0) return null;
+    return boundsOf(this.points, 0);
   }
 
   /**

@@ -31,12 +31,14 @@ export interface ToolPanelActions {
   /** Which half of the sweep fill is aimed, and the way to change it. */
   fillMode: FillMode;
   onFillMode: (mode: FillMode) => void;
-  /** How many corners the point-to-point fill has down. */
+  /**
+   * How many corners the point-to-point fill has down.
+   *
+   * A readout and nothing more: laying the shape down, taking a corner back
+   * off and throwing it away are all on the bar that floats beside the shape,
+   * where they are in front of the thing they are about.
+   */
   fillPoints: number;
-  /** Lay the tapped-out shape down, take the last corner off, throw it away. */
-  onFillShape: () => void;
-  onUndoFillPoint: () => void;
-  onClearFillPoints: () => void;
 }
 
 /** The name the section's heading carries after `TOOL : `. */
@@ -187,6 +189,11 @@ function fillPanel(
 
   if (points) {
     const down = actions.fillPoints;
+    // No buttons. Fill, Undo corner and Cancel are on the bar that floats
+    // beside the shape — see `fill-bar.ts` — because a shape is built by
+    // looking at the canvas, and a button that finishes it three hundred
+    // pixels away in this panel is a button nobody looks at. What is left
+    // here is what the panel is for: saying how the tool is aimed.
     rows.push(
       h(
         "div",
@@ -196,7 +203,8 @@ function fillPanel(
           class: "field-hint",
           text:
             down === 0
-              ? "Tap the canvas to drop a corner. Drag any corner to move it."
+              ? "Tap the canvas to drop a corner, and drag any corner to move " +
+                "it. Fill and Cancel appear beside the shape."
               : "Tap the first corner again to fill, or drag any of them to " +
                 "move it.",
         }),
@@ -206,24 +214,6 @@ function fillPanel(
           h("div", { class: "inspect-key m", text: "Corners" }),
           h("div", { class: "inspect-value", text: String(down) }),
         ),
-        h("button", {
-          class: "panel-btn primary",
-          text: "Fill shape",
-          disabled: down >= 3 ? null : "true",
-          onClick: () => actions.onFillShape(),
-        }),
-        h("button", {
-          class: "panel-btn",
-          text: "Undo corner",
-          disabled: down > 0 ? null : "true",
-          onClick: () => actions.onUndoFillPoint(),
-        }),
-        h("button", {
-          class: "panel-btn",
-          text: "Clear",
-          disabled: down > 0 ? null : "true",
-          onClick: () => actions.onClearFillPoints(),
-        }),
       ),
     );
   } else {

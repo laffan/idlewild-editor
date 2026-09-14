@@ -15,17 +15,11 @@
 
 import { h } from "../lib/dom";
 import { describeRange, type Grid } from "../lib/grid";
+import { placeFloating, type FloatAnchor } from "./float-bar";
 import type { Selection } from "../lib/types";
 
 /** Where the selection is on screen, in viewport coordinates. */
-export interface SelectionAnchor {
-  /** Its left edge. */
-  x: number;
-  /** Its top edge. */
-  y: number;
-  /** How wide it is, so the bar can be centred over it. */
-  width: number;
-}
+export type SelectionAnchor = FloatAnchor;
 
 export interface SelectionActionCallbacks {
   onFill: () => void;
@@ -42,13 +36,6 @@ export interface SelectionActionCallbacks {
    */
   onPatternShape: () => void;
 }
-
-function clamp(value: number, low: number, high: number): number {
-  return Math.max(low, Math.min(value, high));
-}
-
-/** Kept this far clear of the edges of the column it floats in. */
-const MARGIN = 12;
 
 export class SelectionActions {
   readonly root: HTMLElement;
@@ -96,37 +83,8 @@ export class SelectionActions {
 
     this.size.textContent = describeRange(this.grid, selection.from, selection.to);
     this.root.classList.remove("hidden");
-
-    // Measured after un-hiding, because a hidden element has no width to
-    // centre on.
-    const rect = this.root.getBoundingClientRect();
-
-    // The anchor is in viewport coordinates, and the bar is positioned inside
-    // whatever it is absolutely positioned against — the canvas column, not
-    // the viewport. That column is also what it has to stay inside: bounding
-    // it by the window instead let it slide under the layers panel, where the
-    // column's own overflow clipped the first button off.
-    const host = this.root.offsetParent?.getBoundingClientRect() ?? {
-      left: 0,
-      top: 0,
-      right: window.innerWidth,
-      bottom: window.innerHeight,
-    };
-
-    const left = clamp(
-      anchor.x + anchor.width / 2 - rect.width / 2,
-      host.left + MARGIN,
-      host.right - rect.width - MARGIN,
-    );
-    // Above the selection where it fits, below it where it does not.
-    const above = anchor.y - rect.height - MARGIN;
-    const top = clamp(
-      above < host.top + MARGIN ? anchor.y + MARGIN : above,
-      host.top + MARGIN,
-      host.bottom - rect.height - MARGIN,
-    );
-
-    this.root.style.left = `${left - host.left}px`;
-    this.root.style.top = `${top - host.top}px`;
+    // After un-hiding, because a hidden element has no width to centre on —
+    // see `float-bar.ts` for the rest of what the placement has to get right.
+    placeFloating(this.root, anchor);
   }
 }

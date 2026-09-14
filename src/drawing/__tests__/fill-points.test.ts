@@ -148,6 +148,29 @@ describe("laying it down", () => {
   });
 });
 
+/**
+ * The box the bar floating over the shape stands on.
+ *
+ * The corners and nothing else: the handles are drawn at a fixed *screen*
+ * size, so counting them in would make the bar drift away from the shape as
+ * you zoom out, which is the one thing a bar that is meant to stand beside
+ * something must not do.
+ */
+describe("where the shape is", () => {
+  it("is the corners' own box, with no room left for the handles", () => {
+    const { shape } = setup();
+    tap(shape, 10, 20, STYLE);
+    tap(shape, 110, 20, STYLE);
+    tap(shape, 110, 70, STYLE);
+    expect(shape.box()).toEqual({ x: 10, y: 20, width: 100, height: 50 });
+  });
+
+  it("has none before the first corner is down", () => {
+    const { shape } = setup();
+    expect(shape.box()).toBeNull();
+  });
+});
+
 describe("taking it back", () => {
   it("drops the last corner, and says so", () => {
     const { shape, changes } = setup();

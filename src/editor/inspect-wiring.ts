@@ -128,28 +128,17 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
 
     // ── the sweep fill's two halves ──────────────────────────────────────
     //
-    // State of the drawing layer rather than of the document: a shape half
-    // tapped out is about where you are pointing and nothing in the project,
-    // so it is never saved and never undone. Each of these re-renders the
-    // panel by hand, because nothing in the document changed for the panel to
-    // hear about.
+    // State of the drawing layer rather than of the document: a half-built
+    // shape is about where you are pointing and nothing in the project, so it
+    // is never saved and never undone. Changing the mode re-renders the panel
+    // by hand, because nothing in the document changed for it to hear about;
+    // the corner count is a readout, and the three things you can do about a
+    // shape are on the bar floating beside it.
     fillMode: () => deps.drawing()?.fillMode ?? "draw",
     onFillMode: (mode) => {
       deps.drawing()?.setFillMode(mode);
       deps.inspector().render();
     },
     fillPoints: () => deps.drawing()?.fillPointCount ?? 0,
-    onFillShape: () => {
-      deps.drawing()?.fillPoints();
-      deps.inspector().render();
-    },
-    onUndoFillPoint: () => {
-      deps.drawing()?.undoFillPoint();
-      deps.inspector().render();
-    },
-    onClearFillPoints: () => {
-      deps.drawing()?.clearFillPoints();
-      deps.inspector().render();
-    },
   };
 }

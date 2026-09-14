@@ -133,8 +133,25 @@ export class DrawingLayer {
     el.addEventListener("wheel", this.onWheel, { passive: false });
   }
 
+  /**
+   * The pointer left the surface — for the eraser's disc, which is painted on
+   * the live canvas rather than being a cursor, that means stop painting it.
+   *
+   * **Unless a shape is half tapped out.** That also lives on the live canvas,
+   * and it is the one thing there that is meant to outlive the pointer: the
+   * whole point of the point-to-point fill is that you can go and do something
+   * else — reach for the panel, pan with a finger — and come back to it. A
+   * blanket clear here made the shape vanish every time the pointer crossed
+   * into the sidebar and come back on the next camera move, which is exactly
+   * the flicker it looked like.
+   */
   private onLeave = (): void => {
-    if (!this.session) this.surface.clearLive();
+    if (this.session) return;
+    if (this.showsPointFill() && this.pointFill.count > 0) {
+      this.pointFill.repaint(this.style);
+      return;
+    }
+    this.surface.clearLive();
   };
 
   /**
@@ -170,6 +187,9 @@ export class DrawingLayer {
     // polygon left hanging over the canvas while somebody draws with the
     // pencil is a mark nothing explains.
     if (this.showsPointFill()) this.pointFill.repaint(this.style);
+    // The count has not changed, but whether it is *shown* has — and the bar
+    // floating over the shape follows the second of those, not the first.
+    this.callbacks.onFillPoints(this.pointFill.count);
   }
 
   get activeTool(): DrawingTool | null {
@@ -187,6 +207,7 @@ export class DrawingLayer {
     // Switching aim mid-shape would leave corners nothing can commit.
     this.pointFill.clear();
     this.fill = mode;
+    this.callbacks.onFillPoints(this.pointFill.count);
   }
 
   /** How many corners the point-to-point fill currently has down. */
@@ -221,6 +242,22 @@ export class DrawingLayer {
   /** Whether the half-built shape is the thing the live canvas is showing. */
   private showsPointFill(): boolean {
     return this.tool === "fill" && this.fill === "points";
+  }
+
+  /**
+   * Where the half-built shape is on screen, for the bar that floats over it.
+   *
+   * Null when there is no shape or when it is not being shown — it survives a
+   * change of tool but stops being drawn, and a bar offering to fill something
+   * invisible would be a bar about nothing. In the canvas column's own
+   * coordinates, which are the surface's: it is `inset: 0` inside it.
+   */
+  fillPointsAnchor(): { x: number; y: number; width: number } | null {
+    if (!this.showsPointFill()) return null;
+    const box = this.pointFill.box();
+    if (!box) return null;
+    const at = this.surface.worldToScreen(box.x, box.y);
+    return { x: at.x, y: at.y, width: box.width * this.surface.screenPerWorldUnit };
   }
 
   /**

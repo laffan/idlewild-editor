@@ -1954,6 +1954,28 @@ lays it down, which is how a polygon has been closed since the first drawing
 program — and only a corner that was already there, or the tap that starts a
 new shape would fill the nothing it landed on.
 
+**Fill, Undo corner and Cancel float beside the shape**, not in the side
+panel. They were rows in the inspector's TOOL zone first, and that was wrong
+twice over: a shape is built by looking at the canvas, so a button that
+finishes it three hundred pixels away reads as one more setting and is never
+pressed; and the closing gesture is the kind of thing you only find once
+somebody tells you. The bar standing over the shape is what tells you.
+`editor/fill-bar.ts` is the bar and its wiring; it shares its placement with
+the action bar over a grid selection through `editor/float-bar.ts`, which is
+also where the traps in placing chrome over a canvas are written down —
+including the one this added, that the tool columns are inside the column the
+bar is bounded by, so a bar centred on something near the left edge landed on
+top of the very buttons you reach for.
+
+**It stays on the live canvas through everything but a clear.** The wipe that
+made it flicker was the drawing layer's `pointerleave` handler, which exists
+for the eraser's disc — that is painted on the live canvas rather than being a
+cursor, so it has to stop when the pointer leaves. A blanket clear there took
+the half-built shape with it every time the pointer crossed into the sidebar,
+and the next camera move brought it back, which is exactly what it looked
+like. The shape is the one thing on that canvas meant to outlive the pointer,
+so it is repainted there instead.
+
 **It survives a change of tool but stops being drawn.** Holding space borrows
 Pan, and every tool in this editor can be interrupted that way; losing four
 carefully placed corners to a thumb on the space bar would make the mode
@@ -1966,7 +1988,9 @@ nothing explains.
 
 It lands as a `fill`-mode stroke, which is what the sweep lands as, so it
 reaches erase, undo, export and Apply through machinery that already exists
-and knows nothing about how it was aimed.
+and knows nothing about how it was aimed. Until then it is nowhere in the
+document at all, which is why both the panel's corner count and the floating
+bar are told by hand: nothing fires a `change` for them to hear.
 
 **One `beginLive` per frame, and that is not tidiness.** `Surface.beginLive`
 clears the rectangle it last painted before handing the context back, so
@@ -1991,10 +2015,13 @@ is not decoration: the atlases are black with an alpha channel, because the
 renderer tints them `source-in`, so drawn as pictures on this editor's dark
 chrome they would be black on black. Masked, the tip takes the button's colour
 and goes white when the button is pressed, which is the state it has to read
-in. The atlas is four variants side by side, so the button windows the first
-of them with `mask-size: 400% 100%` — asserted in `styles.test.ts`, since a
-missing size there shows all four squeezed into one button and nothing
-throws.
+in. The atlas is four **square** variants side by side, so the stamp is a
+square box with the mask at four times its width — `mask-size: 400% 100%` —
+putting the first variant in it at its own proportions. Both halves are
+asserted in `styles.test.ts`: without the size all four variants are squeezed
+into one button, and without the square the buttons' own flexible width
+stretches the tip, which is the one thing a picture of a brush must not do.
+Neither throws.
 
 ### Why the ink is baked, not repainted
 
@@ -5343,9 +5370,14 @@ console is a record of what happened rather than a document.
   to change a layer's opacity in the file afterwards.
 - The point-to-point fill's shape reaches no history. It is drawing-layer
   state rather than a document object, so ⌘Z does not take a corner back —
-  Undo corner on the panel is the whole of it, and leaving the mode or the
-  layer throws the shape away without a way back. The thing it *becomes* is a
+  Undo corner on the floating bar is the whole of it, and leaving the layer
+  throws the shape away without a way back. The thing it *becomes* is a
   stroke, which undoes like any other.
+- The floating bars keep a fixed left gutter rather than one that knows where
+  the tool columns actually are. The rail hangs from the top and the drawing
+  toolbar stands on the bottom, so between them they cover most of that edge
+  and a constant is honest most of the time — but a bar over something in the
+  vertical middle of the canvas is pushed right by 88px for nothing.
 - The Boundary tool sweeps freehand and nothing else. There is no
   point-to-point boundary the way there is a point-to-point fill, and the two
   are the same shape of problem — a polygon tapped out and adjusted — so the

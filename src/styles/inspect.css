@@ -252,7 +252,7 @@
 .brush-row { display: flex; gap: 4px; margin-bottom: 10px; }
 .brush-btn {
   flex: 1;
-  min-height: 34px;
+  min-height: 38px;
   border: 1px solid var(--color-neutral-700);
   background: transparent;
   color: var(--chrome-dim);
@@ -270,15 +270,21 @@
 
 /* The tip itself on the button, rather than the brush's number.
 
-   The atlas is 512×128 — four variants of one tip side by side — so the mask
-   is scaled to four times the button's width and the first of them is what
-   shows. It is a mask rather than a picture because the PNGs are black with
-   an alpha channel: drawn as images on this chrome they would be black on
-   black, and masked they take the button's colour and go white when it is
-   pressed. See drawing/atlas.ts. */
+   The atlas is 512×128 — four **square** variants of one tip side by side —
+   so the stamp is a square box with the mask at four times its width, putting
+   the first variant in it at its own proportions. The square matters: the
+   buttons are flexible and end up wider than they are tall, and a stamp that
+   filled one distorted the tip it was there to show, which is the one thing a
+   picture of a brush must not do.
+
+   It is a mask rather than a picture because the PNGs are black with an alpha
+   channel: drawn as images on this chrome they would be black on black, and
+   masked they take the button's colour and go white when it is pressed. See
+   drawing/atlas.ts. */
 .brush-stamp {
-  width: 100%;
-  height: 24px;
+  flex: none;
+  width: 26px;
+  height: 26px;
   background: currentColor;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;

@@ -286,6 +286,54 @@
   color: var(--chrome-dim);
 }
 
+/* The other bar that floats beside its subject: Fill / Undo corner / Cancel
+   over a shape being tapped out with the point-to-point fill.
+
+   Its own class rather than `.selection-actions`, for one load-bearing
+   reason: that one goes down while a canvas mode owns the canvas, and this
+   one must not — the fill works inside PSD Edit mode, which is the mode whose
+   whole subject is drawing. Both are placed by `editor/float-bar.ts`; what
+   they look like is deliberately the same, because they are the same kind of
+   thing standing beside two different subjects. */
+.canvas-float {
+  position: absolute;
+  display: flex;
+  border: 0;
+  background: var(--chrome-bg);
+  box-shadow: var(--shadow-md);
+  z-index: 6;
+}
+.canvas-float.hidden { display: none; }
+.canvas-float button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-left: var(--rule-chrome);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 13px var(--font-heading);
+}
+.canvas-float button:first-child { border-left: 0; }
+.canvas-float button:hover { background: var(--chrome-rule); }
+.canvas-float .float-go { background: var(--color-accent); color: #fff; }
+.canvas-float .float-go:hover { background: var(--color-accent-600); }
+/* Two corners are a line, and the button is about to be useful again — so it
+   greys out where it stands rather than appearing at the third tap and moving
+   the other two under your finger. */
+.canvas-float .float-go[disabled] {
+  background: var(--chrome-rule);
+  color: var(--chrome-dim);
+}
+.canvas-float .float-go[disabled]:hover { background: var(--chrome-rule); }
+.canvas-float .float-note {
+  border-left: var(--rule-chrome);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 10px;
+  color: var(--chrome-dim);
+}
+
 /* Edge toggles.
    Anchored below the tool rail rather than at dead centre: the rail is four
    56px items starting 16px down, so a centred toggle collided with its last

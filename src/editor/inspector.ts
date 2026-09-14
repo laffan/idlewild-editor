@@ -109,11 +109,13 @@ export interface InspectorCallbacks
   /** Which half of the sweep fill is aimed, and the way to change it. */
   fillMode: () => FillMode;
   onFillMode: (mode: FillMode) => void;
-  /** The point-to-point fill: how many corners are down, and what to do. */
+  /**
+   * How many corners the point-to-point fill has down.
+   *
+   * A readout: what to *do* about them is on the bar floating beside the
+   * shape — see `fill-bar.ts`.
+   */
   fillPoints: () => number;
-  onFillShape: () => void;
-  onUndoFillPoint: () => void;
-  onClearFillPoints: () => void;
 }
 
 /**
@@ -316,9 +318,6 @@ export class Inspector {
       fillMode: this.callbacks.fillMode(),
       onFillMode: (mode) => this.callbacks.onFillMode(mode),
       fillPoints: this.callbacks.fillPoints(),
-      onFillShape: () => this.callbacks.onFillShape(),
-      onUndoFillPoint: () => this.callbacks.onUndoFillPoint(),
-      onClearFillPoints: () => this.callbacks.onClearFillPoints(),
     });
     if (rows) this.zone.body.append(...rows);
     this.zone.mount(this.body);

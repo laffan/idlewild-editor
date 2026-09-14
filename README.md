@@ -312,8 +312,8 @@ remaining pieces are wired to real slots rather than mocked.
   the same shape are the same thing
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. A brush's button shows **the tip
-  it stamps with** rather than a number, because a brush is a shape you
-  recognise and "3" is not that shape. Fingers never draw — they pan
+  it stamps with** rather than a number, at the tip's own proportions, because
+  a brush is a shape you recognise and "3" is not that shape. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass. The ink is
   baked into a canvas that follows the camera, so a pan or a zoom is one
   compositor transform and touches no pixels; a stroke finished is stamped
@@ -340,11 +340,16 @@ remaining pieces are wired to real slots rather than mocked.
 - **Fill has two modes.** **Draw** is the sweep: press, run a closed outline,
   release, and the inside of it fills, landing as one thing you can erase or
   undo like a stroke. **Point to point** is the same shape tapped out a corner
-  at a time, with every corner draggable until you lay it down — tap the first
-  corner again to close it, or press Fill shape in the panel. A sweep commits
-  on release and cannot be corrected, so a shape that came out nearly right
-  had to be drawn again; this is the half for a shape with corners in it
+  at a time, with every corner draggable until you lay it down. A sweep
+  commits on release and cannot be corrected, so a shape that came out nearly
+  right had to be drawn again; this is the half for a shape with corners in it
   rather than a gesture behind it
+- **Fill, Undo corner and Cancel float beside the shape** while one is being
+  tapped out, with the corner count beside them — a shape is built by looking
+  at the canvas, and the same three buttons in the side panel were three
+  hundred pixels away from the thing they were about. Tapping the first corner
+  again still closes the shape, which is how a polygon has always been closed;
+  the bar is what tells you so
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
   a blocking boundary play mode walks around. The PSD carries the same
   orienting marks an import does — the anchor dot and the grid the sketch was

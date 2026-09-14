@@ -40,6 +40,7 @@ import { openAddImage, openPublish } from "./sheets";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
 import { addSweptZone } from "./zone-actions";
+import { createFillBarUi } from "./fill-bar";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
@@ -322,6 +323,15 @@ export async function mountEditor(
     },
   );
 
+  // Fill / Undo corner / Cancel, floating beside a shape being tapped out with
+  // the point-to-point fill. Chrome beside the work rather than rows in the
+  // side panel, because a shape is built by looking at the canvas — see
+  // `fill-bar.ts`, which also holds the wiring.
+  const fillBar = createFillBarUi({
+    drawing: () => drawing,
+    onChanged: () => inspector.render(),
+  });
+
   // What Play runs: the project's own `game/` tree, in a frame over the
   // canvas. Built for every project and shown only in play mode — see
   // setMode, and `editor/game-frame.ts` for why Play is the program rather
@@ -338,6 +348,7 @@ export async function mountEditor(
     rail.drawBar,
     rail.label,
     actions.root,
+    fillBar.root,
     gameFrame.root,
   );
 
@@ -443,6 +454,9 @@ export async function mountEditor(
       onViewport: (view) => {
         drawing?.sync(view);
         minimap.setViewport(view);
+        // The shape is in world units and the bar is chrome, so the bar has to
+        // be moved every time the camera does.
+        fillBar.sync();
       },
       onDetachCopy: (layerId, placementId, key) =>
         void psdFile.detach(layerId, placementId, key),
@@ -486,10 +500,14 @@ export async function mountEditor(
     // so what arrives is the raw outline and the simplification is here.
     onZone: (points) =>
       addSweptZone(store, handle?.scene ?? null, activeLayerId, points),
-    // The point-to-point fill gained or lost a corner. Nothing in the
-    // document moved, so only the panel that offers Fill and Clear has to
-    // hear about it.
-    onFillPoints: () => inspector.render(),
+    // The point-to-point fill gained or lost a corner, or stopped being shown
+    // at all. Nothing in the document moved, so the two things looking at it
+    // are told by hand: the panel, which counts the corners, and the bar
+    // floating over the shape.
+    onFillPoints: () => {
+      inspector.render();
+      fillBar.sync();
+    },
   });
   canvasWrap.appendChild(drawing.root);
   drawing.sync(handle.scene.viewport());
