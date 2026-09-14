@@ -59,12 +59,16 @@ export interface PanelActions {
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
   /**
-   * The pattern layer waiting for a drawn shape, if Add Shape — draw asked
-   * for one, and the button that hands the ink over.
+   * The pattern layer a lassoed sketch would become a shape on, or null.
    *
-   * Only offered once something has asked: "Convert to pattern shape" beside
-   * a sketch on a project with no pattern layer would be a button with
-   * nowhere to put its answer.
+   * The layer the ink is *on*, which is the only reading that needs nothing
+   * remembered: draw the outline on the pattern layer, sweep it up with the
+   * lasso, and this button says which layer it is about because there is only
+   * one layer involved. Absent on an ordinary layer, where it would be a
+   * button with nowhere to put its answer.
+   *
+   * It is the one route that keeps the *line* — mask mode sweeps rectangles,
+   * so a shape adjusted there is spaces and nothing else.
    */
   patternShapeTarget: () => string | null;
   onStrokesToPatternShape: () => void;

@@ -196,11 +196,22 @@ remaining pieces are wired to real slots rather than mocked.
   placements are the *palette* the pattern is made of rather than things
   standing anywhere, so resizing the file resizes every copy of it
 - **Shapes**, under the pattern's numbers, confine it. An empty list is the
-  default and means everywhere. A shape is added two ways: press and hold for
-  a patch of grid and the floating bar offers **Pattern Shape**, or draw the
-  outline with the pencil, lasso it, and hand it over. A drawn one is baked
-  down to the spaces it covers and keeps its line, so the canvas shows what
-  you drew and the pattern asks a set rather than walking a polygon
+  default and means everywhere. **Add shape** opens the shape editor — the
+  fourth of the canvas modes, beside extrude, collider and pen: the rest of
+  the canvas dims, and a bar along the bottom offers **Add** and **Remove**,
+  **Clear**, **Reset** and the two ways out. The gesture is a sweep: press,
+  drag a rectangle over the ground the pattern may use, release. The layer's
+  other shapes are outlined behind the one in hand, and **Edit** on any row
+  reopens it. Nothing reaches the document until Apply, so Cancel means
+  nothing happened. A patch of grid you have already selected has **Pattern
+  Shape** on the bar over it, which opens the editor started from those
+  spaces; and an outline drawn with the pencil and lassoed can still be
+  handed over from the sketch panel, which is the one route that keeps the
+  line you actually drew. A shape is stored as the spaces it covers, so the
+  pattern asks a set rather than walking a polygon every frame
+- The shapes are drawn on the canvas while their layer is the one selected
+  and not otherwise, the way a placed image's outline is — a boundary is a
+  thing you are working on, not a feature of the ground
 - A **background layer** is the backdrop, and **New Background** at the foot
   of its list offers three things. **Colour** and **gradient** are
   camera-locked and have no extent — a backdrop is wherever you are looking,
@@ -257,7 +268,12 @@ remaining pieces are wired to real slots rather than mocked.
   reading back the one you named
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
   Apple Pencil, a slice eraser, and a lasso. Fingers never draw — they pan
-  and pinch the game camera, so a hand can rest on the glass
+  and pinch the game camera, so a hand can rest on the glass. The ink is
+  baked into a canvas that follows the camera, so a pan or a zoom is one
+  compositor transform and touches no pixels; a stroke finished is stamped
+  onto that canvas rather than the layer being re-laid, and the line under
+  the pointer is redrawn once a frame however many samples a 120 Hz Pencil
+  hands over in one
 - **Smoothing**, beside Size: how much of the hand's wobble comes out of a
   line as it is drawn. At 0 the ink follows every tremor; turned up it takes
   the shake out without moving where the line goes; at 100 it draws nothing

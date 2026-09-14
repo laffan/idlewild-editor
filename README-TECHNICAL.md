@@ -535,18 +535,19 @@ the thing that removes an object clears the selection on its way out.
 
 ### A canvas mode is a session of its own
 
-Extrude and collider mode hold their work in their own objects and touch the
-document only at Apply. That is the whole point of them — Cancel is dropping
-what is in the object — and it means the document's history has *nothing* to
-take back between one pull and the next. A stack that skipped over that would
-be a stack with a hole in it exactly where the work is: pull a wall up ten,
-pull an arm out of it, and ⌘Z would offer to undo whatever you did before you
-entered the mode.
+Extrude, collider and mask mode hold their work in their own objects and touch
+the document only at Apply. That is the whole point of them — Cancel is
+dropping what is in the object — and it means the document's history has
+*nothing* to take back between one pull and the next. A stack that skipped over
+that would be a stack with a hole in it exactly where the work is: pull a wall
+up ten, pull an arm out of it, and ⌘Z would offer to undo whatever you did
+before you entered the mode.
 
 So each mode holds an `UndoHistory` of its own, over the value it is editing —
-`ExtrudeState` for one, the collider's set of grid spaces for the other. The
-same snapshot argument applies for the same reason, and collider mode's spaces
-were made replace-rather-than-mutate to earn it.
+`ExtrudeState` for one, a set of grid spaces for the other two. The same
+snapshot argument applies for the same reason, and collider mode's spaces were
+made replace-rather-than-mutate to earn it; mask mode's are the same set under
+a different name.
 
 **Pen mode is the exception, and for the same reason read the other way.** Its
 work is ordinary strokes on an ordinary document layer, so the document's
@@ -1813,6 +1814,7 @@ selection out.
 | `engine/stroke.js`, `engine/selection.js` | `tools.ts` — draw, slice-erase and lasso sessions |
 | `drawing-layer*.ts`, `re-anchor.ts` | `surface.ts`, `drawing-layer.ts` |
 | `stroke-paint.ts` | `rasterise.ts` — strokes → RGBA → PSD |
+| `engine/stroke.js`'s rAF batching (delta #24) | `frame.ts` — one repaint a frame |
 
 Not coming across, because none of it is drawing: the shelf, the pocket,
 splits, proof pages, flowcharts, markdown, text and image shapes, brush slots
@@ -1896,6 +1898,130 @@ user has gone without the backing growing without bound when they go out.
 Hush's blit-forward re-anchor (its delta #25) — slide the baked pixels by the
 same delta and repaint only the newly exposed strips — is the next increment.
 This one re-bakes what is visible.
+
+### What a stroke costs, and the five things that were paying for it
+
+The engine came across from Hush; several of Hush's cost model did not, and
+each of the five gaps below was on its own enough to make drawing degrade. The
+reported symptom was one sentence — *after the first few strokes it begins to
+lag badly, and quick strokes crash the app* — and it is two different
+quadratics plus an allocation storm plus a texture upload, which is why it is
+worth writing out rather than summarising.
+
+Hush tags every one of its own modifications (`grep -rn "Hush delta #"` in
+`hush/src/notebook/drawing/engine/`) and its `README-DRAWING.md` lists them
+with the measurements behind them. The numbers quoted here are Hush's.
+
+**1. A repaint per coalesced sample, not per frame.** `getCoalescedEvents` is
+drained on every `pointermove` — it is the difference between a curve and a
+polyline on a 120 Hz Pencil against a 60 Hz frame — so one event hands the tool
+four to eight samples. Each of them called `paint()`, and a paint of an
+in-flight stroke is: a smoothing pass over *every sample so far*, a streamline
+over the result, a clear, and one `drawImage` per stamp along the whole length
+of it. So the work inside one frame was the length of the stroke times the
+number of samples in that frame, and every repaint but the last was thrown away
+unlooked at, because the browser composites once. That is the quadratic people
+feel as *a long line gets slower the longer it gets*.
+
+`drawing/frame.ts` is the fix and it is Hush's delta #24 applied to the ink: a
+move records its sample and marks the session dirty, and one
+`requestAnimationFrame` does the drawing. Nothing is dropped — the samples are
+all recorded before the frame runs and the repaint reads the whole list — so
+the line under the pointer is the same line, drawn once. Two escapes, both
+needed: `flush` for the hold timer that straightens a stroke (nothing is
+moving, so nothing else would ask for a frame) and for a gesture ending, and
+`cancel` for a session whose ink is about to be handed to the document.
+
+The erase drag goes through the same gate, and it needed it more: every sample
+of it re-baked the whole layer.
+
+**2. Every document change re-laid every stroke.** The store fires `change` for
+every edit anywhere in the project — a placement dragged, a density typed, a
+layer renamed, a scene switched — and the drawing layer answered every one of
+them by repainting its whole stroke list. So did finishing a stroke, which is
+the one case that *is* about ink: N strokes on the layer meant N re-laid to add
+the Nth, which is the other quadratic and the one that reads as *it gets slow
+after the first few*.
+
+Hush's first sync-shim invariant is that unrelated mutations cost the engine
+nothing, and it is kept the same way here: **by identity**. The hard rule at
+the top of this document — document objects are immutable once stored — means
+the strokes array is replaced on every edit to it and on no other edit, so
+`Surface.apply` can tell three cases apart with reference compares and does the
+cheapest one that is correct:
+
+- the **same array**: nothing happened to the ink. Return.
+- an array that **extends** the painted one: stamp the new strokes onto the
+  backing, over ink that is already there. No clear, no re-lay.
+- **anything else** — an erase, an undo, a stroke restyled, a layer switched:
+  re-bake.
+
+The append test is a reference walk over the shared prefix and nothing deeper,
+which is exactly as deep as immutability lets it be. `setLayer` and the atlas's
+own load event call `repaint` rather than `apply` on purpose: the first changes
+which strokes there are and the second changes what all of them look like, and
+neither is describable as a diff against what is on the backing.
+
+**3. The tinted atlas was a canvas.** `atlas.ts` already cached one tinted
+atlas per brush and colour, and the comment over it already said why a canvas
+source is expensive — and then cached a canvas. A canvas used as a `drawImage`
+**source** is a mutable object, so WebKit cannot keep the texture it uploaded
+for it and re-converts the whole 512 × 128 surface on *every stamp*. A stroke
+is hundreds of stamps and a repaint is every stroke. Hush's delta #30 is the
+answer: promote each tint to an `ImageBitmap`, which is immutable, so repeated
+stamps stay on the GPU. Hush measured the difference on a few hundred stamps as
+a ~220 ms commit stall. The promotion is asynchronous, so the canvas stays the
+fallback for the millisecond before it resolves and for ever on an engine
+without `createImageBitmap`; a tint dropped while its promise is in flight
+closes the bitmap rather than keeping it.
+
+**4. The streamline was recomputed for every stroke on every bake.** Hush's
+delta #26. It is a pure function of the points and the streamline value, and a
+stored stroke's points never change — so `streamlineFor` caches on the points
+array's **identity**. A `WeakMap` keyed on that array rather than a field on
+the stroke, which is where this parts company with Hush: Hush keeps
+engine-private copies it can hang a `_streamCache` on, and here a stroke *is*
+the document's record and is serialised to `doc.json` as it stands, so a cache
+field on it would be written to disk. Keyed on the array, nothing leaks and
+nothing has to be cleaned up. The stroke **in flight** is never cached — its
+points array grows in place while its identity stays the same, so a cached
+answer would freeze the live line at the length it had when the first sample
+landed.
+
+Beside it, `relax` was allocating two objects per point per pass. Fourteen
+passes over a few hundred samples, on every repaint of a stroke being drawn, is
+tens of thousands of short-lived objects a frame — a garbage collector running
+inside the gesture, which on an iPad is the half of this that shows up as the
+app going away rather than as lag. It ping-pongs two `Float64Array`s now and
+builds the objects once at the end. The arithmetic is unchanged and the
+existing smoothing tests say so.
+
+**5. The live canvas held 67 MB while nobody was drawing, and cleared all of
+it.** It is sized with the done canvas — up to 4096 a side — and it is empty
+except during a gesture. Hush's delta #39: it stays 1 × 1 until a drawing tool
+is picked and is handed back when one is put down. Keyed on the **tool** rather
+than on the first stamp, which is Hush's own warning: assigning `canvas.width`
+reallocates the backing store, and doing that inside a gesture drops the
+gesture outright on a third of attempts. Picking a tool is a button press,
+which is nowhere near one. `beginLive` re-backs as a safety net, and every
+other site that touches the live context is a clear — which on a 1 × 1 canvas
+is a correct no-op, which is what keeps that from needing a guard anywhere.
+
+And the clear is now the rectangle that was painted rather than the whole
+surface. That is Hush's delta #31 read from the other end: what gets uploaded
+is the region dirtied, so fully dirtying a 4096² canvas is a couple of hundred
+milliseconds of upload however cheap the drawing that dirtied it was. Each tool
+tells `endLive` where it painted — a stroke's box grown by the brush, the
+eraser's disc, a lasso's polygon — and the next `beginLive` clears that and
+nothing else. Omitting the bounds means "clear the lot", which is what a
+re-anchor leaves behind: the rectangle is remembered in *backing* pixels, and
+re-anchoring is the world-to-backing mapping changing under it.
+
+**Still outstanding**, and named so it is not mistaken for done: Hush's
+blit-forward re-anchor (#25), its opacity-swap double buffer (#29/#31) and its
+tile index. The first two are about panning and re-anchoring rather than about
+drawing; the third pays off on a layer with thousands of strokes, where a
+re-bake's bbox cull is currently the only thing narrowing the work.
 
 ### Fingers never draw
 
@@ -2595,7 +2721,11 @@ re-import.
 **Double-tapping opens a unit up.** In that mode — `adjusting`, holding the
 unit id — a drag moves the one layer under the finger, the overlay
 outlines it with filled handles and draws its siblings faintly, and the
-inspector says so and offers a way out. Selecting anything outside the unit
+inspector says so and offers a way out. The scene keeps the field; what it
+*means* at the four places it is read is `game/adjusting.ts`, which is a rule
+about the document rather than a piece of scene state — nothing in it touches
+Phaser, the camera or the display list, and the split is what keeps
+`world-scene.ts` about the canvas. Selecting anything outside the unit
 closes the mode, so it never outlives what it is about: `setSelection` clears
 `adjusting` unless the new selection is a member of it. A double-tap has to
 survive a *tap that was offered to the drag controller first*, which is why
@@ -2693,7 +2823,30 @@ anchor space, underneath the pattern made of them.
 
 `game/pattern-render.ts` makes copies as they come into view and destroys them
 as they leave, keyed by tile and index, so panning back over ground you have
-already crossed re-uses what is there. `MAX_ON_SCREEN` is a ceiling rather
+already crossed re-uses what is there.
+
+**The exported game has to wait for the same load the document waits for, and
+it did not.** `placeDocument` has always held off until `psdLoadComplete` —
+`loadMultiple` queues its images from a promise callback that lands one
+microtask after Phaser has called `create`, so a placement made from `create`
+is a placement against textures that have not arrived. `syncPatterns` looked
+like it needed no such care, because it runs every frame and could simply try
+again. It cannot, and the reason is the cache that makes it cheap: a copy is
+**kept**, keyed by the tile it belongs to. psd-to-phaser's `place` against a
+parsed manifest whose textures are missing does not fail — it warns, and hands
+back a group with no sprites in it — so the first call cached an empty group
+for every tile on screen and nothing ever revisited them. `create` is exactly
+that moment, and the tiles on screen then are the ones you are looking at. The
+symptom was a pattern layer that never appeared in the exported game while the
+editor drew it perfectly, which is about as far from its cause as a bug gets.
+Both templates now read `psdsReady` at the top of `syncPatterns`, and
+`both_scenes_hold_their_patterns_until_the_psds_are_in` pins the guard ahead of
+the place on both genres.
+
+The editor's own renderer was never exposed to this: `canPlace` asks
+`PsdPlacements` whether the *texture* is in, not just the manifest, and a range
+with anything missing from it is not remembered. The templates cannot ask that
+question — they have no `PsdPlacements` — so they ask the one they can. `MAX_ON_SCREEN` is a ceiling rather
 than a budget: a density typed one digit too long is four thousand Phaser
 groups, and the difference between a slow pan and an editor that has stopped
 answering is whether anything said no. The console says when it bites, because
@@ -2818,39 +2971,115 @@ An empty shape list means everywhere, which is the default and the whole of
 what makes a fresh pattern layer infinite. A shape in it confines the pattern
 to the spaces it covers.
 
-Two ways to make one, because there are two ways to say "here". The long-press
-selection every other part of this editor asks space with gives a run of grid
-spaces, and the floating bar grows a **Pattern Shape** button while the active
-layer is a pattern layer — the one button there that is not about turning
-space into content. The pencil gives an outline, through the same
-`strokesToZonePoints` a boundary is made from, because a shape only has to be
-accurate to the space it confines.
+A shape is **the spaces it covers**, and a drawn one keeps its outline beside
+them. What a pattern asks of a shape is *is this space inside*, once per
+element per frame, and a point-in-polygon walk over a few hundred vertices at
+that rate is the difference between a pan and a stall — so a drawn outline is
+baked down to cells the moment it is made (`cellsInPolygon`), and the line is
+kept only so the canvas can draw what somebody actually drew. A shape carrying
+only an outline — which only a hand-edited document could hold — confines the
+pattern to **nothing** rather than to everything, since the alternative is a
+shape list that silently stops confining anything.
 
-A drawn shape is **baked down to cells** when it is made — `cellsInPolygon` —
-and keeps its outline beside them. What a pattern asks of a shape is *is this
-space inside*, once per element per frame, and a point-in-polygon walk over a
-few hundred vertices at that rate is the difference between a pan and a stall.
-The outline is kept so the canvas can draw the line somebody actually drew.
-A shape carrying only an outline — which only a hand-edited document could
-hold — confines the pattern to **nothing** rather than to everything, since
-the alternative is a shape list that silently stops confining anything.
+**They are drawn while their layer is the selection's, and not otherwise.**
+That is the rule every other mark this editor makes about the document already
+keeps — a placement's box, a fill's outline, a zone's wash all appear when the
+thing is chosen and go when it is not — and a shape had been exempt from it.
+Left up unconditionally it does not read as a boundary; it reads as a patch of
+grid that has been highlighted and cannot be un-highlighted, which is exactly
+how it was reported. `PatternRender.drawShapes` takes the layer the selection
+names — `selectionLayer` in `lib/selection.ts`, which is every kind but
+`none` and `region` — and the focus is part of the signature `sync` compares,
+because a selection moving from one layer to another changes what is drawn
+without moving the camera a pixel. Mask mode draws its own, so there is always
+a way to look at one on purpose.
 
-Both halves are two gestures rather than one control, so the request is held
-in `editor/pattern-actions.ts`: which layer asked, cleared the moment an
-answer arrives. That held request is also what decides whether the *finishing*
-controls appear at all — on a project with no pattern layer they would be
-buttons with nowhere to put their answer.
+### Mask mode
 
-The drawn half finishes on **everything drawn on the layer**, not on a lasso.
-Sweeping the ink is the right gesture for a sketch becoming a boundary, where
-a layer may hold several sketches and one of them is meant; it is the wrong
-one here, because somebody who has just pressed Add Shape and drawn one
-outline has already said which strokes they mean — and it put the only way to
-finish in a panel they had no reason to open. So Add Shape — draw leaves the
-layer selected, which keeps its own panel in front of the person now holding a
-pencil, and the Shapes section becomes Finish / Cancel until one of them is
-pressed. The lasso route still works through the sketch panel, for a layer
-that has other ink on it.
+The fourth canvas mode, and the one that replaced a mechanism rather than
+adding a feature.
+
+**What it replaced.** Making a shape used to be a *request*: press Add Shape
+and the editor remembered which layer had asked while you went and made a
+gesture somewhere else. Two buttons set that request and two other buttons, in
+two other panels, consumed it. The **select** half worked — long-press a patch
+of grid, press *Pattern Shape* on the floating bar. The **draw** half was
+wrong in three ways at once, and each of them was silent:
+
+- the pencil was left loose over the whole editor, with nothing on the canvas
+  saying anything was waiting for it;
+- *Finish shape* took **every stroke on the layer**, including ink that had
+  been there for an hour, and deleted it;
+- and it concatenated all of them into one path before simplifying, so two
+  separate loops came back as a single polygon with a corridor running between
+  them.
+
+The answer is not a better Finish button. A boundary drawn on the grid is the
+same kind of work as a collider drawn on the grid, and this editor already
+knows what that looks like: a mode that owns the canvas, dims what is not the
+subject, says what the pointer does, and has one way in and two ways out.
+
+`game/mask-mode.ts` is the state, `game/mask-render.ts` the dim and the
+shapes, `editor/mask.ts` the session, `editor/mask-bar.ts` the bar — the same
+four-file shape collider mode has, and mostly the same code: a set of grid
+spaces in absolute coordinates, an add tool and a remove tool, its own
+`UndoHistory`, and nothing reaching the document until Apply.
+
+**One shape, not the mask.** The mode edits one of a layer's shapes rather
+than the union of them. The union is simpler to hold and it would collapse a
+layer's named shapes into one anonymous blob the first time anybody opened it
+— so the panel's rows keep their Remove and grow an **Edit**, and *Add shape*
+opens the mode on one that does not exist yet. Apply on a new shape adds it;
+Apply on an existing one rewrites its cells in place, keeping its id, its name
+and its place in the list, because everything else refers to it by id and rows
+that reshuffled under the user's hand would be worse than any of this.
+
+**And it loses its outline when the spaces move.** `writePatternShape` drops
+`points` on a shape whose cells changed, which is the honest answer rather
+than a convenience: the line is kept so the canvas can draw what somebody
+drew, and once the spaces are not the ones that line enclosed, the line is a
+drawing of a shape that no longer exists. Cells that come back unchanged mean
+nothing was swept, so the line still describes them and stays.
+
+**The gesture is a sweep, not a paint.** Press, drag a rectangle, release, and
+every space it covered is added — or taken away, with Remove up. That is where
+it parts company with collider mode, which paints space by space. A collider
+is a handful of spaces under one file and painting them one at a time is the
+whole job; a pattern's boundary is tens or hundreds of spaces and it is the
+shape of a *region*. It is also the gesture the working half of the old route
+already used, so the one that worked is the one that survived — it simply
+happens inside a mode now. A press that never travels is a 1 × 1 sweep, so a
+tap paints one space without a rule of its own, and `tap` claims the gesture
+and does nothing else because the rig reports a press that did not move as a
+tap *as well as* a drag.
+
+**The release is where the step is.** One entry in the mode's undo stack per
+sweep, however many spaces it covered — `record` rather than a `begin`/`end`
+bracket, because unlike a paint drag there is exactly one write and it is the
+one at the end.
+
+**Reset is not Clear.** Reset goes back to the shape as the mode found it,
+which on a shape somebody made last week is that shape; a Reset that emptied
+would be a delete key wearing another name. Clear is the one that empties, and
+it is there because emptying is sometimes the point — but **Apply refuses an
+empty shape**, since an empty shape *list* is what makes a pattern layer
+infinite and a shape holding no spaces would confine the pattern to nowhere.
+So the way to get rid of one is Clear, then Cancel, then Remove on its row.
+
+**The layer's other shapes are outlined behind the one in hand**, faintly, in
+the same accent. Editing one boundary without seeing the ones it sits beside
+is editing blind, and this is the one place in the editor where that would
+happen. `pattern-render.ts` draws nothing at all while the mode is up, for the
+other half of the same reason: it would draw the document's copy of the shape
+being edited, which is by then the version before the edit.
+
+**The two shortcuts survive.** *Pattern Shape* on the floating bar over a grid
+selection **seeds** the mode rather than writing a shape — so the spaces can
+still be trimmed and Cancel still means nothing happened. And a lassoed sketch
+can still be handed over from the sketch panel, which is the one route that
+keeps the line that was drawn; it is offered when the *ink's own layer* is a
+pattern layer, which needs nothing remembered. `editor/pattern-actions.ts` is
+what is left of the held request, and it is a quarter of what it was.
 
 ### A background layer is the backdrop
 
@@ -2868,6 +3097,23 @@ the world view is the same answer with none of that. Gradients go in as
 Phaser's four corner colours, each corner sampled off the gradient's own axis
 — which is what makes an angle mean anything at all through an API that only
 takes four colours.
+
+**The lattice floats over them.** A backdrop is a flat colour across the whole
+view, and a backdrop over the grid is a canvas with nothing left to build on —
+which is what it did, because a backdrop sits inside its layer's own depth slot
+and the lattice was pinned at −10,000, under everything. The fix moves the
+*grid* rather than the backdrops, and which of the two moves is the whole
+decision. Where a background layer sits among the others is something somebody
+chose and the exported game honours it, so pushing every backdrop under the
+document would make Play show a different world from the one you built. The
+lattice is the other kind of thing entirely: it is scaffolding for building on,
+it is what a selection is measured in, and **it does not exist in the game at
+all** — no template draws it. So `GridRenderer.setBackdropDepth` takes the
+front-most backdrop's depth from `BackgroundRender.frontDepth` and sits half a
+step above it, which is still below anything standing on that layer: the
+lattice never covers a fill, a point or a placed file, on that layer or any
+layer in front of it. With no visible backdrop it goes back under everything,
+where it has always been.
 
 **An image background is a placement, not a record.** A picture painted in
 Photoshop is a thing of a certain size standing in a certain place, which is
@@ -3742,12 +3988,13 @@ The mode is refused where the grid does not snap, as extrude mode is, and the
 inspector replaces the button with the reason rather than offering it and
 declining.
 
-**`game/canvas-modes.ts` is what asks them.** Two modes that own the canvas
+**`game/canvas-modes.ts` is what asks them.** Four modes that own the canvas
 now, entered from places that have no reason to know about each other — the
-floating action bar, and a row of the inspector — so entering one leaves the
-other there rather than by convention. It is also the one place the scene asks
-"has a mode claimed this gesture": three call sites deciding for themselves is
-how a mode ends up owning drags but not taps.
+floating action bar, a row of the inspector, a row of a PSD's layer list, a
+pattern layer's own panel — so entering one leaves the others there rather than
+by convention. It is also the one place the scene asks "has a mode claimed this
+gesture": call sites deciding for themselves is how a mode ends up owning drags
+but not taps.
 
 ### What reads it
 
@@ -3810,8 +4057,8 @@ the document around it.
 
 ### It owns no pointer
 
-This is where it parts company with the other two canvas modes. Extrude and
-collider are made of gestures; pen mode is made of a rectangle. What draws in
+This is where it parts company with the other three canvas modes. Extrude,
+collider and mask are made of gestures; pen mode is made of a rectangle. What draws in
 it is the drawing layer — a stack of 2D canvases over Phaser's, with a pencil,
 five brushes, an eraser and pressure already on it — so entering picks the
 Pencil and the ink goes where ink always goes.
@@ -4587,6 +4834,25 @@ console is a record of what happened rather than a document.
 - A pattern shape drawn with the pencil is baked to cells when it is made and
   never re-baked. Changing the grid size afterwards leaves the spaces where
   they were rather than following the line that produced them.
+- Mask mode sweeps rectangles and nothing else. A boundary that is genuinely
+  diagonal is a staircase of sweeps, and the obvious answer — dragging a
+  freehand path that paints the spaces under it — is one method away. The
+  rectangle is what the working half of the old route did, so it is what
+  shipped first.
+- A pattern shape edited in mask mode loses the outline a pencil gave it, and
+  that is deliberate rather than pending: the line described spaces that are
+  no longer the shape's. What is missing is the other direction — no way to
+  take a drawn line *into* the mode and adjust it as a line.
+- The drawing layer's re-anchor still re-bakes what is visible rather than
+  sliding the baked pixels and repainting the newly exposed strips (Hush's
+  delta #25), and its done canvas is a single buffer rather than the
+  opacity-swap pair (#29/#31). Both are about panning and re-anchoring; the
+  stroke path itself has been through the rest of Hush's deltas — see **What a
+  stroke costs**.
+- There is no tile index over the strokes on a layer. A re-bake culls on each
+  stroke's bounding box against the backing, which is enough at the sizes a
+  sketch reaches and is not the same thing as knowing which strokes touch a
+  dirty rectangle.
 - Two PSDs with a same-named **mask** still collide in Phaser's texture cache.
   Artwork no longer does — every load goes through `loadMultiple`, which keys a
   texture on the PSD as well as the layer — but `place` looks a mask up as

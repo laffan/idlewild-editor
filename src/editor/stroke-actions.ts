@@ -142,8 +142,9 @@ export function convertStrokesToZone(
 /**
  * Strokes → an area a pattern is confined to.
  *
- * The pencil's half of Add Shape, and the same outline a boundary would have
- * been: `strokesToZonePoints` simplifies the path the same way, because a
+ * The one route into a pattern shape that keeps the line somebody drew — mask
+ * mode sweeps rectangles, so a shape adjusted there is spaces and nothing
+ * else. The same outline a boundary would have been: `strokesToZonePoints` simplifies the path the same way, because a
  * shape only has to be accurate to the space it confines. What is stored is
  * the outline *and* the spaces under it — see `addPatternShapePoints` — so the
  * canvas can draw the line somebody drew and the pattern can ask a set rather
