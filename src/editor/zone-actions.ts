@@ -5,7 +5,7 @@
  * `stroke-actions.ts`, and it exists because a boundary is often the outline
  * of something you have already drawn. This is the case that route cannot
  * cover: an empty patch of ground with nothing on it to promote. So the
- * Boundary tool on the place bar sweeps the outline itself, and nothing is
+ * Boundary tool on the rail sweeps the outline itself, and nothing is
  * ever stored as ink on the way.
  *
  * Both ends meet in the middle deliberately. The polygon is simplified by the

@@ -1,31 +1,33 @@
 /**
- * The tools, on three bars around the canvas.
+ * The tools, on two columns down the left edge of the canvas.
  *
- * They were one column down the left edge, split by a gap into "the game
- * canvas's" and "the drawing layer's". The gap was doing too much work: it
- * was the only thing saying that Pencil and Select answer to different
- * owners, and the column grew a second column under it whenever PSD Edit mode
- * was up. So the three groups are three bars, each where the thing it is
- * about happens.
+ * They were one column, split by a gap into "the game canvas's" and "the
+ * drawing layer's". The gap was doing too much work: it was the only thing
+ * saying that Pencil and Select answer to different owners, and the column
+ * grew a *second* column under it whenever PSD Edit mode was up — a rail
+ * whose buttons moved under your hand.
  *
- * **The rail**, top left, is the camera and the pointer: Select and Pan.
- * They are what the canvas does when nothing else is chosen, and they belong
- * at the corner the eye starts from.
+ * Two columns now, and which end of the screen a column hangs from is the
+ * distinction the gap was carrying:
  *
- * **The place bar**, bottom left, puts something new on empty ground: a
- * Point and a Boundary. Both are here for the same reason — nothing already
- * on the canvas can be promoted into either, so making one has to be a thing
- * you do to a bare patch of grid. The Point tool leaves the game canvas
- * holding the pointer (a drag still pans, and only the tap means anything
- * new); the boundary hands it to the drawing layer, because its gesture is a
- * swept outline.
+ * **The rail**, from the top, is what you do *to* the canvas: Select, Pan,
+ * Point and Boundary. The first two are the camera and the pointer, which is
+ * what the canvas does when nothing else is chosen. The other two make
+ * something out of bare ground — nothing already on the canvas can be
+ * promoted into either, so putting one down has to be a thing you do to a
+ * patch of empty grid.
  *
- * **The drawing toolbar**, under it, is the ink: Pencil, Pixels, Eraser,
- * Lasso and Fill. Fill and Pixels used to be reachable only inside PSD Edit
- * mode, from a second rail that appeared and disappeared under your hand.
- * They are the same tools everywhere — a swept shape, and the pencil with a
- * hard checker for a tip — so they are on the toolbar with the rest of the
- * ink and PSD Edit mode borrows them rather than owning them.
+ * **The drawing toolbar**, from the bottom, is the ink: Pencil, Pixels,
+ * Eraser, Lasso and Fill. Fill and Pixels used to be reachable only inside
+ * PSD Edit mode, from that second rail. They are the same tools everywhere —
+ * a swept shape, and the pencil with a hard checker for a tip — so they are
+ * on the toolbar with the rest of the ink, and PSD Edit mode borrows them
+ * rather than owning them.
+ *
+ * Both are columns, and both are 56px buttons, so the two read as one
+ * vocabulary held apart rather than as two kinds of chrome. A hand resting on
+ * an iPad's glass is nearer the bottom corner than the top one, which is the
+ * right way round: the ink is what a hand is doing most of the time.
  *
  * There is still no Fill *region* tool and no Boundary-from-strokes tool.
  * Both of those are actions on something already selected — a run of grid
@@ -35,8 +37,8 @@
 import { h, ICONS, icon } from "../lib/dom";
 import type { ToolId } from "../lib/types";
 
-/** Which bar a tool sits on. */
-export type Bar = "rail" | "place" | "draw";
+/** Which column a tool sits in. */
+export type Bar = "rail" | "draw";
 
 export interface ToolSpec {
   id: ToolId;
@@ -54,14 +56,14 @@ export const TOOLS: ToolSpec[] = [
     id: "point",
     name: "Point",
     hint: "Tap to put a named place down; a drag still pans",
-    bar: "place",
+    bar: "rail",
     path: ICONS.point,
   },
   {
     id: "zone",
     name: "Boundary",
     hint: "Sweep an outline and it becomes a blocking zone",
-    bar: "place",
+    bar: "rail",
     path: ICONS.boundary,
   },
   { id: "pencil", name: "Pencil", bar: "draw", path: ICONS.pencil },
@@ -90,7 +92,8 @@ export const TOOLS: ToolSpec[] = [
 ];
 
 /**
- * What the label beside the rail says, for tools with no button on any bar.
+ * What the label beside the rail says, for tools with no button on either
+ * column.
  *
  * Rub is PSD Edit mode's alone — it is the pencil with the paint taken out,
  * and it rubs out ink from that session — so its button is a toggle on that
@@ -111,10 +114,10 @@ export function toolName(tool: ToolId): string {
 }
 
 export class ToolRail {
-  /** The camera's two, top left. */
+  /** What you do to the canvas, hanging from the top-left corner. */
   readonly root: HTMLElement;
-  /** The two bottom-left bars, in one column: place over draw. */
-  readonly dock: HTMLElement;
+  /** The ink, standing on the bottom-left corner. */
+  readonly drawBar: HTMLElement;
   readonly label: HTMLElement;
   private readonly buttons = new Map<ToolId, HTMLButtonElement>();
   private current: ToolId = "select";
@@ -122,15 +125,11 @@ export class ToolRail {
   constructor(onPick: (tool: ToolId) => void) {
     this.root = h("div", { class: "tool-rail" });
     this.label = h("div", { class: "tool-name m", text: "Select" });
-
-    const place = h("div", { class: "tool-bar place-bar" });
-    const draw = h("div", { class: "tool-bar draw-bar" });
-    this.dock = h("div", { class: "canvas-docks" }, place, draw);
+    this.drawBar = h("div", { class: "tool-rail draw-bar" });
 
     const hosts: Record<Bar, HTMLElement> = {
       rail: this.root,
-      place,
-      draw,
+      draw: this.drawBar,
     };
 
     for (const tool of TOOLS) {

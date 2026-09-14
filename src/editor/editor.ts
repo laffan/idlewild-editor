@@ -329,12 +329,13 @@ export async function mountEditor(
   const gameFrame = new GameFrame(meta.id);
 
   // The header is a row of the shell, not chrome floating over the canvas, so
-  // only the tools and the selection bar are inside the canvas wrapper —
-  // `rail.root` at the top left corner and `rail.dock` at the bottom one. The
-  // two edge toggles go in too, from `createShell` — they are layout.
+  // only the tools and the selection bar are inside the canvas wrapper — the
+  // rail hanging from the top-left corner and the drawing toolbar standing on
+  // the bottom-left one. The two edge toggles go in too, from `createShell` —
+  // they are layout.
   canvasWrap.append(
     rail.root,
-    rail.dock,
+    rail.drawBar,
     rail.label,
     actions.root,
     gameFrame.root,

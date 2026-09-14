@@ -781,41 +781,47 @@ for the mode first and the file second.
 
 ---
 
-## The tools, on three bars
+## The tools, on two columns
 
 They were one column down the left edge of the canvas, split by a gap into
 "the game canvas's" and "the drawing layer's". The gap was carrying the whole
 distinction, and the column grew a *second* column under it whenever PSD Edit
 mode was up — a rail whose buttons moved under your hand.
 
-Three bars now, each where the thing it is about happens
-(`editor/tool-rail.ts` builds all three and keeps one pressed state across
-them, because only one tool is ever in hand):
+Two columns now, and **which end of the screen a column hangs from** is the
+distinction the gap was carrying (`editor/tool-rail.ts` builds both and keeps
+one pressed state across them, because only one tool is ever in hand):
 
-| Bar | Where | Tools | What they have in common |
+| Column | Where | Tools | What they have in common |
 |---|---|---|---|
-| rail | top left | Select, Pan | the camera and the pointer, which is what the canvas does when nothing else is chosen |
-| place | bottom left | Point, Boundary | making something out of bare ground — nothing on the canvas can be promoted into either |
-| draw | bottom left, under it | Pencil, Pixels, Eraser, Lasso, Fill | the ink |
+| rail | hangs from the top left | Select, Pan, Point, Boundary | what you do *to* the canvas: the camera and the pointer, then the two that make something out of bare ground — nothing already on it can be promoted into either |
+| draw | stands on the bottom left | Pencil, Pixels, Eraser, Lasso, Fill | the ink |
 
-The two bottom bars are one absolutely-positioned column (`.canvas-docks`),
-anchored by its **bottom** edge, and that is the load-bearing bit: a canvas
-mode puts a 52px bar along the bottom of the same column at a higher
-z-index, so without a lift the drawing toolbar sits behind it. PSD Edit
-mode — whose whole subject is drawing — lifts the column clear and takes the
-place bar down (there is nowhere for a point or a boundary to land while a
-mode owns the canvas); the other three modes take both bars down with
-everything else. Three rules in `modes.css`, asserted in `styles.test.ts`,
-because a toolbar hidden behind a bar is not an error anything reports.
+Same class, same 56px buttons, same width: `.tool-rail.draw-bar` is the rail
+turned the other way up, and `top: auto; bottom: 16px` is the whole of the
+difference. Keeping them the same shape is deliberate — they are one
+vocabulary held apart, not two kinds of chrome — and putting the ink at the
+bottom corner is the right way round on an iPad, where a hand resting on the
+glass is nearer that corner than the top one.
 
-**Rub is the tool with no button on any bar.** It is the pencil with the paint
+Anchoring the toolbar by its **bottom** edge is the load-bearing bit: a canvas
+mode puts a 52px bar along that same edge at a higher z-index, so without a
+lift the toolbar sits behind it. PSD Edit mode — whose whole subject is
+drawing — lifts it clear; the other three take the pointer outright and it
+goes down with everything else. The rail needs none of this, because nothing a
+mode puts up reaches the top of the canvas. Two rules in `modes.css`, asserted
+in `styles.test.ts`, because a toolbar hidden behind a bar is not an error
+anything reports — and so is the `top: auto` itself, since dropping it leaves
+the toolbar hanging from the top *over* the rail.
+
+**Rub is the tool with no button in either.** It is the pencil with the paint
 taken out and what it rubs out is PSD Edit mode's own session ink, so it is a
 toggle on that mode's bar — but it is a `ToolId` like the rest, because the
 pointer is doing something of its own while it is up, and the label beside the
 canvas has to follow it. `OFF_BAR` is the one entry that says so, and
-`tool-bars.test.ts` asserts that every `ToolId` is either on a bar or in it:
-a tool that is in neither gets no button anywhere and a blank label the moment
-something puts it in your hand, and nothing else would say so.
+`tool-bars.test.ts` asserts that every `ToolId` is either in a column or in
+it: a tool that is in neither gets no button anywhere and a blank label the
+moment something puts it in your hand, and nothing else would say so.
 
 ## Gesture routing
 
@@ -910,7 +916,7 @@ A **Boundary** is now a tool for the same reason read one step further. One
 could always be made from strokes already drawn and lassoed, which is the
 right gesture when there is a sketch to promote and no gesture at all when
 there is not — an empty patch of ground holds nothing to promote. So the two
-sit together on the place bar, and the two routes meet in the middle:
+sit together at the foot of the rail, and the two routes meet in the middle:
 `zonePoints` simplifies a swept outline exactly as `strokesToZonePoints`
 simplifies a drawn one, and both are named by the same counter, so a boundary
 swept with the tool and one converted from a sketch of the same shape are the
@@ -2734,6 +2740,16 @@ said is not drawn twice. That is one rule in `Zone.name` and one condition in
 `Inspector.head`, and it is what keeps the panels themselves ignorant of zones
 entirely: they still write a kicker, a title and sections, into whatever body
 the surface hands them.
+
+**The name is the quiet half of its own heading.** `TOOL` never changes —
+that is what makes it a zone name — so it is set thin and at half opacity, and
+the subject beside it, which is the part that answers *which one*, carries the
+panel's full text colour. The first version drew the heading as a tinted band,
+which put the emphasis on the label rather than on the thing the label is
+about and made three of them in a narrow column read as three headings rather
+than as one sentence you scan down. What separates the zones is the rule
+between them, and that is enough: these are the only 10px labels in the panel
+with a subject after them, so they do not need a background to be found.
 
 **The LAYER zone's subject is the selection's layer, falling through to the
 active one.** Not a fallback so much as the same rule read twice: a region

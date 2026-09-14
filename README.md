@@ -284,8 +284,8 @@ remaining pieces are wired to real slots rather than mocked.
   height, like every other divider in the shell. It is **Draw's**: in Code and
   Play the canvas is behind a running game, and a frame drawn around a camera
   nobody is looking through says nothing
-- **Points**, from the place bar at the bottom-left corner: tap and a named
-  place lands on that space, in the layer palette and on the canvas. Rename it in the inspector, drag it a
+- **Points**, from the rail: tap and a named place lands on that space, in
+  the layer palette and on the canvas. Rename it in the inspector, drag it a
   space at a time, delete it. One point per scene can be its **start point** —
   the palette marks it with a flag and the canvas gives it a second ring — and
   that is where the character stands when the game opens, in Play and in an
@@ -293,15 +293,16 @@ remaining pieces are wired to real slots rather than mocked.
   the scene holds the designation rather than the point. Every point reaches
   the game in `config.layers[].points`, so a door or a trigger is a matter of
   reading back the one you named
-- **The tools are on three bars**, each where the thing it is about happens.
-  The **rail** at the top-left corner is the camera and the pointer: Select
-  and Pan, which is what the canvas does when nothing else is chosen. The
-  **place bar** at the bottom-left puts something new on bare ground — a Point
-  and a Boundary — because nothing already on the canvas can be promoted into
-  either. The **drawing toolbar** under it is the ink: Pencil, Pixels, Eraser,
-  Lasso and Fill. They were one column down the left edge with a gap in the
-  middle doing the work of saying that Select and Pencil answer to different
-  owners, and it grew a second column under it whenever PSD Edit mode was up
+- **The tools are two columns down the left edge.** The **rail** hangs from
+  the top corner and is what you do *to* the canvas: Select, Pan, Point and
+  Boundary — the camera and the pointer, then the two that make something out
+  of bare ground. The **drawing toolbar** stands on the bottom corner and is
+  the ink: Pencil, Pixels, Eraser, Lasso and Fill. They were one column with a
+  gap in the middle doing the work of saying that Select and Pencil answer to
+  different owners, and it grew a second column under it whenever PSD Edit
+  mode was up. Which end a column hangs from carries that now — and the ink is
+  at the corner a hand resting on an iPad's glass is nearest, which is the
+  right way round for the thing a hand is doing most often
 - **Boundary**, beside Point: sweep an outline on bare grid and it becomes a
   blocking zone, named, selected and listed under its layer. A boundary could
   only be made from strokes you had already drawn and lassoed, which is the

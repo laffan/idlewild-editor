@@ -13,42 +13,49 @@
 /* ── the properties sidebar's three zones ───────────────────────────────────
 
    TOOL, LAYER, OBJECT, always in that order and never a heading over an
-   empty box — see editor/inspect-zone.ts. The heading is the panel's whole
-   navigation, so it is drawn as a band rather than as one more 10px label
-   among the section titles under it: a reader scrolling this column has to be
-   able to find where one subject ends and the next begins without reading
-   anything.
+   empty box — see editor/inspect-zone.ts.
 
-   The zone name is the accent and the subject is the panel's ordinary text,
-   because the name is the fixed part — TOOL is always TOOL — and the subject
-   is the part that answers "which one". */
-.inspect-zone + .inspect-zone { border-top: 2px solid var(--chrome-rule); }
+   **The zone name is the quiet half.** It is the part that never changes —
+   TOOL is always TOOL — so it is set thin and at half opacity, and the
+   subject beside it, which is the part that answers *which one*, carries the
+   panel's full text colour. A heading drawn as a tinted band instead put the
+   emphasis on the label rather than on the thing the label is about, and made
+   three of them in a narrow column read as three headings rather than as one
+   sentence you scan down.
+
+   What separates the zones is the rule between them, which is enough: the
+   headings are the only 10px labels in this panel that carry a subject after
+   them, so they do not need a background to be found. */
+.inspect-zone + .inspect-zone { border-top: 1px solid var(--chrome-rule); }
 .inspect-zone-head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 14px 16px 12px;
-  background: var(--chrome-rule);
+  gap: 6px;
+  padding: 16px 16px 10px;
   font-size: 10px;
 }
 .inspect-zone-name {
   flex: none;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.12em;
-  color: var(--color-accent-300);
+  color: var(--chrome-text);
+  opacity: 0.5;
 }
 .inspect-zone-subject {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 600;
   color: var(--chrome-text);
 }
 /* Nothing after the colon means no colon: a zone whose panel never named a
-   subject reads as its own name rather than as a name with a gap after it. */
+   subject reads as its own name rather than as a name with a gap after it.
+   The colon goes with the name, not with the subject. */
 .inspect-zone-subject:not(:empty)::before {
   content: ": ";
-  color: var(--color-neutral-600);
+  font-weight: 400;
+  opacity: 0.5;
 }
 
 /* Inspector */

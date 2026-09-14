@@ -117,21 +117,18 @@
 .editor-canvas-wrap.masking .selection-actions,
 .editor-canvas-wrap.masking .edge-toggle { display: none; }
 
-/* The bottom-left bars, which is where the mode bar now is too.
+/* The drawing toolbar, which stands on the same edge the mode bar covers.
 
-   The bars stand clear of it rather than under it: the bar is 52px and the
-   docks keep their own 16px gap from the canvas edge, so they are lifted the
-   bar's height while one is up. Only the drawing toolbar is lifted *into* use
-   — the place bar goes down with the selection bar, because a mode owns the
-   canvas and there is nowhere for a point or a boundary to land while one
-   does.
+   It stands *clear* of it rather than behind it: the bar is 52px and the
+   toolbar keeps its own 16px gap from the canvas edge, so it is lifted the
+   bar's height while one is up. The rail needs none of this — it hangs from
+   the top, where nothing a mode puts up ever reaches.
 
-   PSD Edit mode is the exception that makes the lift worth having. Its whole
+   PSD Edit mode is the one that makes the lift worth having. Its whole
    subject is drawing, so the pencil, the pattern brush and the sweep fill
    have to stay reachable; the three other modes take the pointer outright and
    the toolbar goes down with everything else. */
-.editor-canvas-wrap.extruding .canvas-docks,
-.editor-canvas-wrap.colliding .canvas-docks,
-.editor-canvas-wrap.masking .canvas-docks { display: none; }
-.editor-canvas-wrap.psd-editing .canvas-docks { bottom: 68px; }
-.editor-canvas-wrap.psd-editing .place-bar { display: none; }
+.editor-canvas-wrap.extruding .draw-bar,
+.editor-canvas-wrap.colliding .draw-bar,
+.editor-canvas-wrap.masking .draw-bar { display: none; }
+.editor-canvas-wrap.psd-editing .draw-bar { bottom: 68px; }

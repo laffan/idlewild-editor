@@ -1,37 +1,35 @@
 /**
- * Which bar each tool is on, and that every tool has a name.
+ * Which column each tool is in, and that every tool has a name.
  *
  * There is no DOM in this suite, so the class that builds the buttons is not
  * exercised — what is asserted is the table it reads, which is where the
  * layout actually lives. Two things go quietly wrong otherwise and neither
  * throws: a tool added to `ToolId` and forgotten in the table gets no button
  * anywhere and a blank label when something else puts it in your hand, and a
- * tool put on the wrong bar reads as belonging to a group it does not.
+ * tool put in the wrong column reads as belonging to a group it does not.
  *
- * The three groups are the whole point of the rearrangement, so they are
- * written out rather than derived: the camera's two at the top corner, the
- * two that make something out of bare ground below, and the ink under them.
+ * The split is the whole point of the rearrangement, so both halves are
+ * written out rather than derived: what you do *to* the canvas hangs from the
+ * top, and the ink stands on the bottom.
  */
 
 import { describe, expect, it } from "vitest";
 import { OFF_BAR, TOOLS, toolName } from "../tool-rail";
 import { TOOL_IDS, type ToolId } from "../../lib/types";
 
-/** The ids on one bar, in the order they are drawn. */
-function bar(name: "rail" | "place" | "draw"): ToolId[] {
+/** The ids in one column, in the order they are drawn. */
+function bar(name: "rail" | "draw"): ToolId[] {
   return TOOLS.filter((tool) => tool.bar === name).map((tool) => tool.id);
 }
 
-describe("the three bars", () => {
-  it("keeps the camera's two on the rail", () => {
-    expect(bar("rail")).toEqual(["select", "pan"]);
+describe("the two columns", () => {
+  it("hangs what you do to the canvas from the top", () => {
+    // The camera's two, then the two that make something out of bare ground —
+    // nothing already on the canvas can be promoted into either.
+    expect(bar("rail")).toEqual(["select", "pan", "point", "zone"]);
   });
 
-  it("puts the two that make something out of bare ground together", () => {
-    expect(bar("place")).toEqual(["point", "zone"]);
-  });
-
-  it("gathers the ink on the drawing toolbar", () => {
+  it("stands the ink on the bottom", () => {
     // Pixels and Fill are here rather than inside PSD Edit mode, which is the
     // move: both work anywhere, and a rail that appeared with a mode was a
     // rail whose buttons moved under your hand.
@@ -41,10 +39,10 @@ describe("the three bars", () => {
   it("gives every tool exactly one home", () => {
     const seen = new Set<string>();
     for (const tool of TOOLS) {
-      expect(seen.has(tool.id), `${tool.id} is on two bars`).toBe(false);
+      expect(seen.has(tool.id), `${tool.id} is in two columns`).toBe(false);
       seen.add(tool.id);
     }
-    // Rub is the one with no button on any bar: it is a toggle on PSD Edit
+    // Rub is the one with no button in either: it is a toggle on PSD Edit
     // mode's own bar, because it means nothing outside that mode.
     expect(Object.keys(OFF_BAR)).toEqual(["rub"]);
     expect(seen.has("rub")).toBe(false);

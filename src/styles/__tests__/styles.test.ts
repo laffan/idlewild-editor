@@ -220,33 +220,38 @@ describe("the brush stamps", () => {
 });
 
 /**
- * The bottom-left bars, and the one rule that keeps them reachable.
+ * The drawing toolbar, and the one rule that keeps it reachable.
  *
- * A canvas mode puts a 52px bar along the bottom of the same column, at a
- * higher z-index — so without the lift the drawing toolbar is *behind* it,
- * which in PSD Edit mode means the pencil, the pattern brush and the sweep
- * fill are unreachable inside the mode whose whole subject is drawing.
+ * It is the same column as the rail — same class, same 56px buttons — turned
+ * the other way up: `top: auto; bottom: 16px` is the whole difference, and
+ * dropping either half leaves it hanging from the top *over* the rail, which
+ * is a stack of nine buttons where there should be four.
+ *
+ * A canvas mode then puts a 52px bar along the bottom edge it stands on, at a
+ * higher z-index — so without the lift the toolbar is *behind* it, which in
+ * PSD Edit mode means the pencil, the pattern brush and the sweep fill are
+ * unreachable inside the mode whose whole subject is drawing.
  */
-describe("the canvas docks", () => {
-  it("anchors both bars to the bottom-left corner", () => {
-    const docks = rule(".canvas-docks");
-    expect(docks.position).toBe("absolute");
-    expect(docks.left).toBe("16px");
-    expect(docks.bottom).toBe("16px");
+describe("the drawing toolbar", () => {
+  it("stands on the bottom-left corner rather than hanging from the top", () => {
+    const rail = rule(".tool-rail");
+    expect(rail.position).toBe("absolute");
+    expect(rail.left).toBe("16px");
+    expect(rail["flex-direction"]).toBe("column");
+    const draw = rule(".tool-rail.draw-bar");
+    expect(draw.top).toBe("auto");
+    expect(draw.bottom).toBe("16px");
   });
 
-  it("lifts them clear of PSD Edit mode's bar, and drops the place bar", () => {
+  it("lifts clear of PSD Edit mode's bar", () => {
     expect(
-      ruleIn(modesCss, ".editor-canvas-wrap.psd-editing .canvas-docks").bottom,
+      ruleIn(modesCss, ".editor-canvas-wrap.psd-editing .draw-bar").bottom,
     ).toBe("68px");
-    expect(
-      ruleIn(modesCss, ".editor-canvas-wrap.psd-editing .place-bar").display,
-    ).toBe("none");
   });
 
-  it("takes them down in the three modes that own the pointer outright", () => {
+  it("goes down in the three modes that own the pointer outright", () => {
     expect(
-      ruleIn(modesCss, ".editor-canvas-wrap.masking .canvas-docks").display,
+      ruleIn(modesCss, ".editor-canvas-wrap.masking .draw-bar").display,
     ).toBe("none");
   });
 });
