@@ -22,16 +22,25 @@ export function createCharacter(scene, { grid, nav, start, isWalkable }) {
   const world = nav.cellToWorld(start.cx, start.cy);
   const sprite = scene.add
     .rectangle(world.x, world.y, grid.size * 0.3, grid.size * 0.5, 0x201e1d)
+    // In front of everything, which is the right answer on a flat projection
+    // and a placeholder on an isometric one: there the scene re-sorts it as it
+    // walks, so it goes behind what it is standing behind. See
+    // `sortCharacter` in the scene.
     .setDepth(1e6);
-
-  let cell = { ...start };
 
   return {
     sprite,
 
-    /** The space it is standing on, or walking to. */
+    /**
+     * The space it is standing on **now**, read off the sprite.
+     *
+     * Not a field holding where it is walking to. The two are the same only
+     * when it is not walking, and the difference is visible: a second tap
+     * mid-walk would path from the destination rather than from the character,
+     * so it would set off diagonally towards a route it was not on.
+     */
     get cell() {
-      return cell;
+      return nav.worldToCell(sprite.x, sprite.y);
     },
 
     /**
@@ -39,10 +48,11 @@ export function createCharacter(scene, { grid, nav, start, isWalkable }) {
      *
      * A\* over the navigation lattice, then one tween per step so the walk
      * follows the path rather than sliding through the corner of a wall. A
-     * second call replaces the first: the tweens are killed, not queued.
+     * second call replaces the first: the tweens are killed, not queued, and
+     * the new path starts from wherever the first one had got to.
      */
     moveTo(goal) {
-      const path = findPath(isWalkable, cell, goal);
+      const path = findPath(isWalkable, this.cell, goal);
       if (!path || path.length < 2) return;
 
       scene.tweens.killTweensOf(sprite);
@@ -51,7 +61,6 @@ export function createCharacter(scene, { grid, nav, start, isWalkable }) {
         return { x: at.x, y: at.y, duration: 180 };
       });
       scene.tweens.chain({ targets: sprite, tweens: steps });
-      cell = path[path.length - 1];
     },
   };
 }

@@ -392,13 +392,24 @@ describe("pickPlacementsIn", () => {
  * PSD was drawn upside down, with its background over its foreground.
  */
 describe("drawOrder", () => {
-  /** One PSD's worth: ground at the back, then walls, then the roof. */
-  function unit(id: string, y: number): Placement[] {
-    return [
-      { ...placement(`${id}-roof`, 0, y), instance: id, order: 2 },
-      { ...placement(`${id}-walls`, 0, y + 30), instance: id, order: 1 },
-      { ...placement(`${id}-ground`, 0, y + 70), instance: id, order: 0 },
-    ];
+  /**
+   * One PSD's worth: ground at the back, then walls, then the roof.
+   *
+   * `row` is the space it stands on — `cx + cy` on an isometric grid, which
+   * counts rows away from the camera. The artwork's own Y follows it, the way
+   * a real placement's does, and the three parts sit at different heights up
+   * the screen: the roof is *above* the ground it belongs to, which is the
+   * whole reason a unit sorts as one thing rather than layer by layer.
+   */
+  function unit(id: string, row: number): Placement[] {
+    const y = row * 16;
+    const at = (name: string, dy: number, order: number): Placement => ({
+      ...placement(name, 0, y + dy),
+      anchor: { cx: row, cy: 0 },
+      instance: id,
+      order,
+    });
+    return [at(`${id}-roof`, 0, 2), at(`${id}-walls`, 30, 1), at(`${id}-ground`, 70, 0)];
   }
 
   it("draws a PSD's layers in the order its author stacked them", () => {
@@ -421,16 +432,43 @@ describe("drawOrder", () => {
     ]);
   });
 
-  it("sorts separate PSDs on their own Y, nearer in front", () => {
+  it("sorts separate PSDs on the row they stand on, nearer in front", () => {
     const far = unit("far", 0);
-    const near = unit("near", 200);
+    const near = unit("near", 12);
     const order = drawOrder([...near, ...far], true).map((p) => p.id);
     expect(order.slice(0, 3)).toEqual(["far-ground", "far-walls", "far-roof"]);
     expect(order.slice(3)).toEqual(["near-ground", "near-walls", "near-roof"]);
   });
 
+  /**
+   * The bug the row key exists for. A tower's roof is high up the screen and
+   * a bush in front of it is not, so sorting on the top of the artwork put
+   * the tower — which is standing further back — in front of the bush.
+   */
+  it("does not put a tall thing in front because its roof is tall", () => {
+    const tower: Placement[] = [
+      { ...placement("tower", 0, -400), anchor: { cx: 0, cy: 0 }, instance: "t", order: 0 },
+    ];
+    const bush: Placement[] = [
+      { ...placement("bush", 0, 90), anchor: { cx: 3, cy: 0 }, instance: "b", order: 0 },
+    ];
+    expect(drawOrder([...bush, ...tower], true).map((p) => p.id)).toEqual([
+      "tower",
+      "bush",
+    ]);
+  });
+
+  /** Two things on the same row: neither is nearer, so placement order wins. */
+  it("leaves a tie in the order it was given", () => {
+    const a = unit("a", 5);
+    const b = unit("b", 5);
+    const order = drawOrder([...a, ...b], true).map((p) => p.id);
+    expect(order[0]).toBe("a-ground");
+    expect(order[3]).toBe("b-ground");
+  });
+
   it("leaves separate PSDs in the order they were placed where nothing snaps", () => {
-    const first = unit("first", 300);
+    const first = unit("first", 18);
     const second = unit("second", 0);
     const order = drawOrder([...first, ...second], false).map((p) => p.id);
     expect(order[0]).toBe("first-ground");

@@ -287,7 +287,11 @@ export class WorldScene extends Phaser.Scene {
 
   // idlewild:begin paintFill
   paintFill(fill, depth) {
-    const g = this.add.graphics().setDepth(depth * 1000);
+    // A step *under* the layer's own slot rather than on it. A fill is the
+    // ground of its layer and everything placed on that layer stands on it, so
+    // it has no business tying with the first placement and settling the tie
+    // by which was created first.
+    const g = this.add.graphics().setDepth(depth * 1000 - 1);
     // A colour may carry its own opacity as `#rrggbbaa`, which Phaser takes
     // as a second argument rather than as part of the number — see `colorOf`.
     g.fillStyle(colorOf(fill.color ?? "#ec3013"), alphaOf(fill.color));
@@ -328,14 +332,15 @@ export class WorldScene extends Phaser.Scene {
  *
  * Two orderings, one inside the other.
  *
- * **Between placed PSDs.** An isometric scene sorts them on screen Y, so a
- * thing standing nearer the viewer draws in front of one behind it. A unit
- * sorts on its *own* Y rather than each of its layers separately: a roof sits
- * higher up the screen than the tower under it, and sorting the two against
- * each other would put the roof behind the building every time. Otherwise
- * they are left in the order they were placed, which is what `isometric`
- * false means — a flat projection, or a layer holding nothing that stands in
- * the space for the sort to answer about. The caller decides.
+ * **Between placed PSDs.** An isometric scene sorts them on the *space each
+ * one stands on* — `cx + cy`, which counts rows away from the camera — so a
+ * thing standing nearer the viewer draws in front of one behind it. The whole
+ * unit sorts on its shared anchor rather than each of its layers separately: a
+ * roof sits higher up the screen than the tower under it, and sorting the two
+ * against each other would put the roof behind the building every time.
+ * Otherwise they are left in the order they were placed, which is what
+ * `isometric` false means — a flat projection, or a layer holding nothing that
+ * stands in the space for the sort to answer about. The caller decides.
  *
  * **Within one placed PSD.** The author's stack, and nothing else — that is
  * what `order` is, counting up from the back of the file.
@@ -365,8 +370,28 @@ function drawOrder(placements, isometric) {
   }
 
   if (isometric) {
-    const top = (unit) => Math.min(...unit.map((p) => p.y));
-    units.sort((a, b) => top(a) - top(b));
+    // The space a unit *stands on*, not the top of its artwork.
+    //
+    // On an isometric grid `cx + cy` counts rows away from the camera, so it
+    // is the whole of "which of these two is nearer" — and it is a fact about
+    // the ground rather than about how tall a thing is. Sorting on the
+    // artwork's top edge put a tower behind a bush it was standing in front
+    // of, because the tower's roof is high up the screen and the bush is not.
+    // It is also the key anything that *walks* can compute for itself, which
+    // is what lets a character sort into this order; see `sortCharacter`.
+    //
+    // The old key is the fallback for a placement with no anchor, which no
+    // document the editor writes has.
+    const row = (unit) => {
+      const anchor = unit[0].anchor;
+      return anchor
+        ? anchor.cx + anchor.cy
+        : Math.min(...unit.map((p) => p.y));
+    };
+    // A stable sort, so two units standing on the same row keep the order
+    // they were placed in — which is the only answer available and the one
+    // the editor's panel shows.
+    units.sort((a, b) => row(a) - row(b));
   }
 
   return units.flatMap((unit) =>

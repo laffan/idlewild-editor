@@ -114,6 +114,10 @@ export class WorldScene extends Phaser.Scene {
   update() {
     this.drawBackdrops();
     this.syncPatterns();
+    // Where the character is decides what it draws in front of, so it is
+    // re-sorted as it walks. A no-op on a flat projection and on a project
+    // that scaffolded no character.
+    if (this.character) this.sortCharacter();
   }
   // idlewild:end patternUpdate
 
@@ -141,6 +145,14 @@ export class WorldScene extends Phaser.Scene {
     // Layers are stored top-first; Phaser depth counts upward, so the last
     // layer in the list is the furthest back.
     const layers = config.layers ?? [];
+    // Which layer anything that walks sorts among, and the rows of what is
+    // standing on it — see `sortCharacter`. The front-most object layer,
+    // because that is where the scenery a character moves through normally
+    // is; change this line to put it on another one.
+    const walkLayer = layers.findIndex(
+      (layer) => (layer.kind ?? "object") === "object" && layer.visible !== false,
+    );
+    this.walkAmong = null;
     layers.forEach((layer, index) => {
       const depth = layers.length - index;
       if (layer.visible === false) return;
@@ -155,11 +167,11 @@ export class WorldScene extends Phaser.Scene {
       // next depth up, so what is above what is decided here rather than by
       // the order Phaser happened to be handed the objects in.
       //
-      // Screen Y only on an *object* layer. Sorting on Y answers which of two
-      // things standing in the space is nearer, and a layer of backdrops holds
-      // no such things — they are behind everything and often behind each
-      // other at the same Y — so it keeps the order it was given. The editor
-      // lists and reorders it the same way; see `ordersByHand` there.
+      // Sorted only on an *object* layer. The sort answers which of two things
+      // standing in the space is nearer, and a layer of backdrops holds no
+      // such things — they are behind everything and often on the same row —
+      // so it keeps the order it was given. The editor lists and reorders it
+      // the same way; see `ordersByHand` there.
       const sortOnY =
         config.projection === "isometric" && (layer.kind ?? "object") === "object";
       const order = drawOrder(layer.placements ?? [], sortOnY);
@@ -172,6 +184,14 @@ export class WorldScene extends Phaser.Scene {
           applyHidden(object, placement);
         }
       });
+      // The same list, as rows: one number per step, already in order, so a
+      // character can find its own place in it without re-sorting anything.
+      if (sortOnY && index === walkLayer) {
+        this.walkAmong = {
+          base: depth * 1000,
+          rows: order.map((p) => (p.anchor ? p.anchor.cx + p.anchor.cy : 0)),
+        };
+      }
     });
   }
   // idlewild:end placeDocument
@@ -306,7 +326,12 @@ export class WorldScene extends Phaser.Scene {
 
   // idlewild:begin paintFill
   paintFill(fill, depth) {
-    const g = this.add.graphics().setDepth(depth * 1000);
+    // A step *under* the layer's own slot rather than on it. A fill is the
+    // ground of its layer and everything placed on that layer stands on it, so
+    // it has no business tying with the first placement and settling the tie
+    // by which was created first — and the gap is where a character that is
+    // behind everything on the layer goes. See `sortCharacter`.
+    const g = this.add.graphics().setDepth(depth * 1000 - 1);
     // A colour may carry its own opacity as `#rrggbbaa`, which Phaser takes
     // as a second argument rather than as part of the number — see `colorOf`.
     g.fillStyle(colorOf(fill.color ?? "#ec3013"), alphaOf(fill.color));
@@ -347,6 +372,23 @@ export class WorldScene extends Phaser.Scene {
       isWalkable: (cx, cy) => this.isWalkable(cx, cy),
     });
     this.cameras.main.startFollow(this.character.sprite, true, 0.12, 0.12);
+    this.sortCharacter();
+  }
+
+  /**
+   * Put the character where it belongs in the isometric ordering.
+   *
+   * Nothing happens on a flat projection: the placements there are in the
+   * order they were put down rather than in any order a position could be
+   * compared against, so the character keeps the depth the prefab gave it and
+   * draws in front of everything. Sorting a flat top-down game on Y is a real
+   * thing to want, and it is a change to `drawOrder` as much as to this.
+   */
+  sortCharacter() {
+    if (!this.walkAmong || !this.character) return;
+    this.character.sprite.setDepth(
+      walkDepth(this.walkAmong, this.character.sprite.y, this.grid.tileHeight / 2),
+    );
   }
   // idlewild:end if
 
@@ -423,18 +465,69 @@ function contains(box, p) {
 }
 
 /**
+ * Where something standing at screen `y` sorts among a layer's placements.
+ *
+ * On an isometric grid the thing further down the screen is the thing nearer
+ * the camera, and a cell's `cx + cy` counts exactly that — so everything on
+ * the walk layer is already in a list ordered by it (`placeDocument` records
+ * the rows as it places), and finding a character's place in that order is
+ * finding where its own row belongs in that list.
+ *
+ * **The row comes from a screen position, not from a cell.** A character's
+ * `cell` is as much where it is walking *to* as where it is, and one taking
+ * its depth from its destination would pop behind the tree it is about to pass
+ * the moment you tapped. On an isometric grid `y` is `(cx + cy) × half a
+ * tile`, so dividing that back out gives a row that moves continuously as the
+ * tween does: it slides through the ordering rather than snapping through it a
+ * space at a time.
+ *
+ * A binary search rather than a scan, because this runs every frame and the
+ * list is everything on the layer. `<=` puts the character *in front of*
+ * whatever shares its row, which is the right way round — you are standing at
+ * that space, not behind it.
+ *
+ * The sliver it is nudged down by is what keeps it out of anybody else's
+ * slot, and it has to be a sliver rather than a half. Placement `k` sits at
+ * `base + k`, and `applyDepth` spaces the parts of a multi-layer PSD across
+ * the *whole* interval above it — `(rank + 1) / (parts + 1)`, which for a
+ * three-layer building is 0.25, 0.5 and 0.75. So half a step down from
+ * `base + k` is not the gap between two placements, it is the gap between
+ * somebody's walls and their roof, and a character put there is drawn inside
+ * the building. A thousandth clears the highest part any PSD short of a
+ * thousand layers can have, and at `k = 0` it lands just under `base`, which
+ * is why a fill sits a whole step below at `base - 1`.
+ */
+// idlewild:begin walkDepth
+function walkDepth(among, y, halfTile) {
+  const row = halfTile > 0 ? y / halfTile : 0;
+  const rows = among.rows;
+  let low = 0;
+  let high = rows.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (rows[mid] <= row) low = mid + 1;
+    else high = mid;
+  }
+  // Just under the placement it goes behind, which is just over everything of
+  // the placement it goes in front of.
+  return among.base + low - 0.001;
+}
+// idlewild:end walkDepth
+
+/**
  * Everything on one document layer, back to front.
  *
  * Two orderings, one inside the other.
  *
- * **Between placed PSDs.** An isometric scene sorts them on screen Y, so a
- * thing standing nearer the viewer draws in front of one behind it. A unit
- * sorts on its *own* Y rather than each of its layers separately: a roof sits
- * higher up the screen than the tower under it, and sorting the two against
- * each other would put the roof behind the building every time. Otherwise
- * they are left in the order they were placed, which is what `isometric`
- * false means — a flat projection, or a layer holding nothing that stands in
- * the space for the sort to answer about. The caller decides.
+ * **Between placed PSDs.** An isometric scene sorts them on the *space each
+ * one stands on* — `cx + cy`, which counts rows away from the camera — so a
+ * thing standing nearer the viewer draws in front of one behind it. The whole
+ * unit sorts on its shared anchor rather than each of its layers separately: a
+ * roof sits higher up the screen than the tower under it, and sorting the two
+ * against each other would put the roof behind the building every time.
+ * Otherwise they are left in the order they were placed, which is what
+ * `isometric` false means — a flat projection, or a layer holding nothing that
+ * stands in the space for the sort to answer about. The caller decides.
  *
  * **Within one placed PSD.** The author's stack, and nothing else — that is
  * what `order` is, counting up from the back of the file.
@@ -464,8 +557,28 @@ function drawOrder(placements, isometric) {
   }
 
   if (isometric) {
-    const top = (unit) => Math.min(...unit.map((p) => p.y));
-    units.sort((a, b) => top(a) - top(b));
+    // The space a unit *stands on*, not the top of its artwork.
+    //
+    // On an isometric grid `cx + cy` counts rows away from the camera, so it
+    // is the whole of "which of these two is nearer" — and it is a fact about
+    // the ground rather than about how tall a thing is. Sorting on the
+    // artwork's top edge put a tower behind a bush it was standing in front
+    // of, because the tower's roof is high up the screen and the bush is not.
+    // It is also the key anything that *walks* can compute for itself, which
+    // is what lets a character sort into this order; see `sortCharacter`.
+    //
+    // The old key is the fallback for a placement with no anchor, which no
+    // document the editor writes has.
+    const row = (unit) => {
+      const anchor = unit[0].anchor;
+      return anchor
+        ? anchor.cx + anchor.cy
+        : Math.min(...unit.map((p) => p.y));
+    };
+    // A stable sort, so two units standing on the same row keep the order
+    // they were placed in — which is the only answer available and the one
+    // the editor's panel shows.
+    units.sort((a, b) => row(a) - row(b));
   }
 
   return units.flatMap((unit) =>

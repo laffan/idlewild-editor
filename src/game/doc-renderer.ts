@@ -628,15 +628,16 @@ export function destroyPlaced(object: PlacedObject): void {
  *
  * Two orderings, one inside the other.
  *
- * **Between placed PSDs.** Sort on screen Y and a thing standing nearer the
+ * **Between placed PSDs.** Sort on the space each one stands on — `cx + cy`,
+ * which counts rows away from the camera — and a thing standing nearer the
  * viewer draws in front of one behind it, which is what an isometric object
- * layer wants. A unit sorts on its *own* Y rather than each of its layers
- * separately: a roof sits higher up the screen than the tower under it, and
- * sorting the two against each other would put the roof behind the building
- * every time. Otherwise they are left in the order they were placed — every
- * layer of a flat projection, and a pattern or background layer of either,
- * neither of which holds things standing anywhere. The caller decides; see
- * `ordersByHand` in `lib/units.ts`.
+ * layer wants. The whole unit sorts on its shared anchor rather than each of
+ * its layers separately: a roof sits higher up the screen than the tower under
+ * it, and sorting the two against each other would put the roof behind the
+ * building every time. Otherwise they are left in the order they were placed —
+ * every layer of a flat projection, and a pattern or background layer of
+ * either, neither of which holds things standing anywhere. The caller decides;
+ * see `ordersByHand` in `lib/units.ts`.
  *
  * **Within one placed PSD.** The author's stack, and nothing else. A PSD is a
  * stack of layers and the order is the artwork — psd-to-json reports it,
@@ -658,9 +659,22 @@ export function drawOrder(
 
   const sorted = [...units.values()];
   if (isometric) {
-    // The top edge of the unit, which for a single-layer PSD is the one
-    // placement's own Y — so nothing about how separate things sort changes.
-    const key = (unit: Placement[]) => Math.min(...unit.map((p) => p.y));
+    // The space a unit *stands on*, not the top of its artwork. On an
+    // isometric grid `cx + cy` counts rows away from the camera, so it is the
+    // whole of "which of these two is nearer" — and unlike the artwork's top
+    // edge it says nothing about how tall a thing is, which is what put a
+    // tower behind a bush it was standing in front of. It is also the key
+    // anything that walks can compute for itself, which is what lets the
+    // exported game's character sort into this order.
+    //
+    // The old key survives as the fallback for a placement carrying no
+    // anchor, which no document this editor writes has.
+    const key = (unit: Placement[]) =>
+      unit[0].anchor
+        ? unit[0].anchor.cx + unit[0].anchor.cy
+        : Math.min(...unit.map((p) => p.y));
+    // Stable, so two units on the same row keep the order they were placed
+    // in — which is the only answer available and the one the panel lists.
     sorted.sort((a, b) => key(a) - key(b));
   }
 

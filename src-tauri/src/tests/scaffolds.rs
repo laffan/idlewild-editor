@@ -470,12 +470,49 @@ fn both_scenes_hold_their_patterns_until_the_psds_are_in() {
     }
 }
 
-/// Every marked block in a scaffolded scene closes, and both genres carry the
-/// same set — the code modal finds a block by id, so a template that renamed
-/// one on one side would silently stop offering its Reset on that side.
+/// Every marked block in a scaffolded scene closes, and each genre carries the
+/// set it is meant to — the code modal finds a block by id, so a template that
+/// renamed one on one side would silently stop offering its Reset on that
+/// side.
+///
+/// The two lists are written out rather than compared to each other, because
+/// they are allowed to differ and one of them does: `walkDepth` is where a
+/// character sorts itself into an isometric ordering, and a platformer is seen
+/// from the side, where nothing sorts on Y at all. What the assertion is for is
+/// drift — a rename, a block left open, a block quietly dropped — and a list
+/// per genre catches all three on both sides.
 #[test]
-fn both_scenes_mark_the_same_blocks_and_close_every_one() {
-    for genre in [Genre::Topdown, Genre::Platformer] {
+fn each_scene_marks_the_blocks_it_should_and_closes_every_one() {
+    let shared = [
+        "preload",
+        "patternUpdate",
+        "applyCamera",
+        "placeDocument",
+        "paintBackgrounds",
+        "placePatterns",
+        "paintFill",
+    ];
+    let rest = [
+        "drawOrder",
+        "applyDepth",
+        "applyScale",
+        "applyHidden",
+        "pointsToVectors",
+        "gradientCorners",
+        "patternRule",
+    ];
+    let topdown: Vec<&str> = shared
+        .iter()
+        .copied()
+        .chain(["walkDepth"])
+        .chain(rest.iter().copied())
+        .collect();
+    let platformer: Vec<&str> = shared.iter().copied().chain(rest.iter().copied()).collect();
+
+    for (genre, expected) in [
+        (Genre::Topdown, &topdown),
+        (Genre::Platformer, &platformer),
+    ] {
         let scene = templates::template_file(
             "js/scenes/WorldScene.js",
             &seed(Projection::Orthogonal, genre, 32, GameOptions::default()),
@@ -492,25 +529,6 @@ fn both_scenes_mark_the_same_blocks_and_close_every_one() {
             }
         }
         assert_eq!(open, closed, "{genre:?} has a marker without its pair");
-        assert_eq!(
-            open,
-            [
-                "preload",
-                "patternUpdate",
-                "applyCamera",
-                "placeDocument",
-                "paintBackgrounds",
-                "placePatterns",
-                "paintFill",
-                "drawOrder",
-                "applyDepth",
-                "applyScale",
-                "applyHidden",
-                "pointsToVectors",
-                "gradientCorners",
-                "patternRule",
-            ],
-            "{genre:?} marks a different set of blocks",
-        );
+        assert_eq!(&open, expected, "{genre:?} marks a different set of blocks");
     }
 }

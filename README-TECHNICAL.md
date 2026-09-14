@@ -2606,6 +2606,77 @@ The pass is idempotent — a section it has been over carries
 `data-collapsible` — which matters because the PSD layer list is built once and
 kept across re-renders, so the same element comes back round.
 
+## A colour carries its own opacity
+
+The picker grew a second slider beside hue, and what it hands back is still one
+string: `#rrggbb`, or **`#rrggbbaa`** once the slider leaves the top. That is
+CSS Color 4's eight-digit form, and choosing it over an `alpha` field beside
+every `color` is most of the story.
+
+**Opaque is six digits.** `withAlpha` drops the pair back off at 1, so a colour
+nobody has made transparent is spelt exactly as it always was. No document
+changes shape, nothing already on disk has to be migrated, an older build still
+reads a project, and a project where nobody touched the slider has an empty
+diff. The alternative — a number beside each colour — would have been five
+records to widen (`Fill`, `Background`, `Background.gradient` twice, `Stroke`,
+`StrokeStyle`), five readers to teach, and a second field to keep in step for
+something already inside the value.
+
+**A 2D canvas reads it for free**, which is most of the editor: the minimap,
+the export raster, a fill's preview, the ink itself. Phaser does not — it takes
+a packed `0xrrggbb` and an alpha as separate arguments — so `hexToNumber` and
+`alphaOf` are the pair every Phaser call site now uses. `hexToNumber` also
+replaced two copies of itself that disagreed about what to do with a colour
+they could not read, and a straight `parseInt` over eight digits comes back a
+thousand times too large and paints something nobody chose.
+
+**Opacity is part of the colour, not a property of the thing wearing it.** A
+half-transparent wash and a pale opaque one are two different answers to the
+same question, and putting them a panel apart makes the picker lie about what
+it is showing. The track is the colour itself fading out over a checker, so
+what the slider shows is what the slider does — and the preview and the recent
+swatches sit over the same checker, because otherwise a colour that is half
+there reads as a paler colour that is not.
+
+### Why ink needed more than a number
+
+A brush stamps at 0.15 of its width, so about seven stamps land on any given
+pixel. `globalAlpha` applies to each `drawImage` separately — so a 50 % pen
+compounds into a solid core and is honest only at the tips.
+
+That is Hush's delta #38, and porting it fixed two things that were already
+wrong before opacity existed: a **highlighter** darkened wherever it crossed
+itself, and the **rub** ate further every time it passed, because both were
+compositing per stamp too. `render.ts` now stamps the stroke into a scratch
+canvas at full strength and lays the result down once, with the mode's
+composite and the stroke's alpha:
+
+| mode | composite | alpha |
+|---|---|---|
+| ink | `source-over` | the colour's |
+| highlight | `multiply` | half the colour's |
+| erase | `destination-out` | the colour's |
+| fill | — a path, not stamps — | in the `fillStyle` |
+
+The atlas is tinted with the colour at **full** opacity and the alpha applied
+to the finished stroke, which is the same decision read from the other end:
+tinting it in would put the alpha on every stamp. It also keeps the tint cache
+keyed on six digits, so a colour used at four opacities is one tinted atlas
+rather than four.
+
+Plain opaque ink skips all of it — no composite to apply and nothing to hold
+back, so the stamps go straight onto the target, which is the common case and
+the cheap one. The scratch is **grow-only**: the three things this renders into
+are different sizes (the surface's two backings and whatever `rasterise.ts`
+asks for), and letting it shrink would reallocate a backing store twice per
+Apply for no benefit.
+
+The two scaffolded scenes read the eight-digit form too — `colorOf` takes the
+pair off and `alphaOf` reads it, and a gradient gets **per-corner** alpha,
+because a sky fading to nothing over the horizon is two stops where only the
+opacity moves. An existing project picks that up with Reset on `paintFill` and
+`gradientCorners`.
+
 ## Selection
 
 Hit-testing reads the **document**, not the rendered Phaser objects
@@ -3285,14 +3356,23 @@ So depth is now assigned from an explicit order. `drawOrder` sorts one
 document layer's placements back to front, and each takes the next depth up
 from the layer's base:
 
-- **Between placed PSDs**, an isometric *object* layer sorts on screen Y, so
-  nearer things draw in front. A unit sorts on its *own* Y — the topmost of
-  its members — rather than each layer separately, which for a single-layer
-  PSD is the same number it used before. Everything else leaves units in the
-  order they were placed: every layer of a flat projection, and a pattern or
-  background layer of either. `drawOrder` itself takes a plain boolean; the
-  rule that decides it is `ordersByHand`, above.
+- **Between placed PSDs**, an isometric *object* layer sorts on **the space
+  each unit stands on** — its shared anchor's `cx + cy`, which is what counts
+  rows away from the camera on an isometric grid. Everything else leaves units
+  in the order they were placed: every layer of a flat projection, and a
+  pattern or background layer of either. `drawOrder` itself takes a plain
+  boolean; the rule that decides it is `ordersByHand`, above.
 - **Within one placed PSD**, the author's stack and nothing else.
+
+**The key used to be the top edge of the artwork**, and that is a fact about
+how *tall* a thing is rather than about where it stands. A tower's roof is high
+up the screen and a bush in front of it is not, so a tower standing further
+back sorted in front of the bush — and a unit sorted on `min(p.y)` moved
+through the ordering whenever anybody redrew its roof. The anchor is the space
+the file hangs from, it does not move when the artwork changes, and it is the
+one key a thing that *walks* can compute for itself: see **A character sorts
+itself in**. The old key survives as the fallback for a placement carrying no
+anchor, which no document this editor writes has.
 
 The stack is recorded on each placement as `order`, because once a placement
 is in the document nothing in it says which of two layers was above — and it
@@ -4470,6 +4550,74 @@ holds them to the same fixtures by pulling the template's functions out
 between their markers and running both, the same arrangement the console
 bridge's snapshot is under.
 
+### A character sorts itself in
+
+The character was pinned at depth `1e6`, which is in front of the whole
+document and every layer of it. On a flat projection that is the right answer
+and on an isometric one it is the bug: an isometric world is a world you walk
+*behind* things in, and a character that is always in front is a cut-out held
+over the picture.
+
+**Sorting it needs one key everything shares.** The placements' depths are
+ranks in an ordering worked out once, not world coordinates — see *What is
+drawn over what* — so there is no number a character can compute from its own
+position that slots between two of them. Two ways out of that: make every
+depth a function of position, or let the character find its rank in the
+ordering that already exists. The second is what this does, and it is the one
+that leaves the document renderer alone.
+
+So `placeDocument` keeps the rows it sorted by. One number per step, already
+in order, on the layer the character walks:
+
+```js
+this.walkAmong = { base: depth * 1000, rows: order.map(rowOf) };
+```
+
+and `walkDepth` is a binary search for the character's own row in that list —
+`base + low − 0.001`, where `low` is the first placement standing nearer the
+camera than the character is.
+
+**The row comes off the sprite, not off the character's cell.** `cell` is as
+much where it is walking *to* as where it is — `moveTo` picks a path and the
+destination is known from the first frame of the walk — so a depth taken from
+it would put the character behind the tree it is about to pass the moment you
+tapped, and leave it there for the length of the walk. On an isometric grid a
+screen `y` is `(cx + cy) × half a tile`, so dividing that back out gives a row
+that moves *continuously* as the tween does: the character slides through the
+ordering rather than snapping through it a space at a time. (Reading the
+sprite fixed a second thing on the way. `cell` was a field holding the
+destination, and `moveTo` pathed from it — so a second tap mid-walk searched
+from somewhere the character was not, and it set off diagonally towards a
+route it had never been on. It is a getter over the sprite now.)
+
+**A thousandth, not a half.** This is the number that has to be right, and the
+obvious one is wrong. Placement `k` sits at `base + k`, and `applyDepth`
+spaces the parts of a multi-layer PSD across the *whole* interval above it —
+`(rank + 1) / (parts + 1)`, which for a three-layer building is 0.25, 0.5 and
+0.75. So half a step down from `base + k` is not the gap between two
+placements; it is the gap between somebody's walls and their roof, and a
+character put there is drawn inside the building. The sliver clears the
+topmost part of any PSD short of a thousand layers.
+
+At `k = 0` it lands just under `base`, which is where a **fill** used to be.
+Fills moved down a whole step to `base − 1`, which they wanted anyway: a fill
+is the ground of its layer and everything placed on that layer stands on it,
+so tying with the first placement and settling the tie by which Phaser was
+handed first was never an answer.
+
+**Which layer it walks on** is the front-most visible object layer, and that is
+one line to change — scenery the character should sort against goes on the
+same layer, and a layer in front of that one draws over it always, which is how
+you get a canopy. A flat projection sets nothing, so the character keeps the
+depth the prefab gave it and draws in front of everything; sorting a flat
+top-down game on Y is a real thing to want, and it is a change to `drawOrder`
+as much as to this.
+
+`walkDepth` is a marked block and the only one the two genres do not share: a
+platformer is seen from the side, where nothing sorts on Y at all. Its test
+pulls the block out of the template and runs it, the way the `drawOrder` test
+does — and it is the test that caught the half step.
+
 ### Saving applies
 
 `CodeModal.save` reports the path it wrote; the shell reloads the frame if a
@@ -4834,6 +4982,22 @@ console is a record of what happened rather than a document.
 - A pattern shape drawn with the pencil is baked to cells when it is made and
   never re-baked. Changing the grid size afterwards leaves the spaces where
   they were rather than following the line that produced them.
+- A character sorts into the isometric ordering of **one** layer — the
+  front-most object layer — so scenery on another object layer is either
+  always in front of it or always behind. That is a useful thing to be able to
+  say and a limitation where it was not meant.
+- Nothing sorts on Y under a flat projection, in the editor or in the game, so
+  a top-down orthogonal character is always in front. The sort key exists and
+  the machinery is the same; what is missing is a reading of `cy` that a
+  square grid's placements agree with.
+- Only the character sorts itself in. Anything else the project's own code
+  adds to an isometric scene — a second walker, a projectile, a door that
+  opens — has to do the same lookup, and `walkDepth` is exported into the
+  scene for exactly that, but nothing does it for you.
+- A colour's opacity reaches the exported game and the PSD pipeline, but
+  **not** a PSD's own pixels: ink applied in pen mode is composited into the
+  file at the opacity it was drawn with, which is correct, and there is no way
+  to change a layer's opacity in the file afterwards.
 - Mask mode sweeps rectangles and nothing else. A boundary that is genuinely
   diagonal is a staircase of sweeps, and the obvious answer — dragging a
   freehand path that paints the spaces under it — is one method away. The

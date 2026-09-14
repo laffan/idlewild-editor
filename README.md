@@ -61,6 +61,13 @@ remaining pieces are wired to real slots rather than mocked.
   neither is written, and the project places the document and waits for yours.
   It is the one choice Project Options reports rather than offers, because it
   was lines in a file and the file is yours from the moment it is written
+- On an **isometric** project the character sorts itself into the scene as it
+  walks, so it goes behind a tree it is standing behind and in front of one it
+  is standing in front of — the same ordering everything placed on the layer
+  is already in, which is the space each thing stands on rather than how tall
+  its artwork is. It walks among the front-most object layer, which is one
+  line in the scene to change: anything on a layer in front of that draws over
+  it always, which is how you get a canopy to walk under
 - A full-width header carrying the project, undo and redo, and the
   **Draw / Code / Play** toggle, with Publish, Export Assets and Project Options
   behind its menu. It insets itself out of the iPad's status bar, as the console drawer
@@ -274,6 +281,13 @@ remaining pieces are wired to real slots rather than mocked.
   onto that canvas rather than the layer being re-laid, and the line under
   the pointer is redrawn once a frame however many samples a 120 Hz Pencil
   hands over in one
+- Every colour the editor picks carries its **opacity**, on a second slider
+  beside the hue one: the track is the colour itself fading out over a
+  checker, and what it hands back is one value — `#rrggbb`, or `#rrggbbaa`
+  once the slider leaves the top. It works the same everywhere a colour is
+  picked: a fill, a backdrop, either stop of a gradient, and the pen. A
+  translucent stroke is composited once rather than per stamp, so a half-there
+  line is half there along its whole length instead of solid down the middle
 - **Smoothing**, beside Size: how much of the hand's wobble comes out of a
   line as it is drawn. At 0 the ink follows every tremor; turned up it takes
   the shake out without moving where the line goes; at 100 it draws nothing
@@ -520,6 +534,9 @@ remaining pieces are wired to real slots rather than mocked.
 
 - Hush's blit-forward re-anchor, so panning a stroke-heavy layer past the
   drawing backing's edge slides its pixels instead of re-baking them
+- A flat top-down project sorts nothing on Y, so its character draws in front
+  of everything. The machinery is the isometric one and the missing half is a
+  reading of the row that a square grid's placements agree with
 - A pattern layer on the minimap. Its placements are a palette standing
   nowhere and the pattern made of them has no edges to frame, so the map
   skips it rather than showing a heap of elements on one space

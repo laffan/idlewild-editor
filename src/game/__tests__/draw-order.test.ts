@@ -22,11 +22,18 @@ const templateDrawOrder = blockFrom<
   (placements: readonly Placement[], isometric: boolean) => Placement[]
 >(topdownSource, "drawOrder");
 
+/**
+ * `row` is the space it stands on, which is what the isometric ordering sorts
+ * on — `cx + cy` counts rows away from the camera. `y` is where the artwork
+ * happens to sit up the screen, which is a different question and, for a tall
+ * thing, a misleading one.
+ */
 function placement(
   id: string,
   y: number,
   order?: number,
   instance?: string,
+  row = 0,
 ): Placement {
   return {
     id,
@@ -36,7 +43,7 @@ function placement(
     y,
     width: 32,
     height: 32,
-    anchor: { cx: 0, cy: 0 },
+    anchor: { cx: row, cy: 0 },
     ...(order === undefined ? {} : { order }),
     ...(instance ? { instance } : {}),
   };
@@ -58,15 +65,26 @@ const FIXTURES: Array<[string, Placement[]]> = [
   [
     "two units, one nearer the viewer",
     [
-      placement("far-base", 0, 0, "unit-far"),
-      placement("far-roof", -40, 1, "unit-far"),
-      placement("near-base", 200, 0, "unit-near"),
-      placement("near-roof", 160, 1, "unit-near"),
+      placement("far-base", 0, 0, "unit-far", 0),
+      placement("far-roof", -40, 1, "unit-far", 0),
+      placement("near-base", 200, 0, "unit-near", 12),
+      placement("near-roof", 160, 1, "unit-near", 12),
+    ],
+  ],
+  [
+    "a tall thing standing behind a short one",
+    [
+      placement("bush", 90, 0, "unit-bush", 3),
+      placement("tower", -400, 0, "unit-tower", 0),
     ],
   ],
   [
     "single-layer placements, which are units of one",
-    [placement("a", 90), placement("b", 10), placement("c", 50)],
+    [placement("a", 90, undefined, undefined, 5), placement("b", 10, undefined, undefined, 1), placement("c", 50, undefined, undefined, 3)],
+  ],
+  [
+    "two units on the same row, which is a tie",
+    [placement("first", 30, undefined, undefined, 4), placement("second", 20, undefined, undefined, 4)],
   ],
   [
     "a document written before order and units existed",
@@ -101,13 +119,26 @@ describe("what the order actually is", () => {
     }
   });
 
-  it("sorts a unit on its own top edge, not on each layer separately", () => {
+  it("sorts a unit as one thing, not layer by layer", () => {
     const [, , [, twoUnits]] = FIXTURES;
     const order = templateDrawOrder(twoUnits, true).map((p) => p.id);
     // The far building and everything of it, then the near one — rather than
-    // both roofs behind both bases, which is what sorting layer by layer on Y
+    // both roofs behind both bases, which is what sorting layer by layer
     // would give.
     expect(order).toEqual(["far-base", "far-roof", "near-base", "near-roof"]);
+  });
+
+  /**
+   * The key is the space a thing stands on, not the top of its artwork. A
+   * tower's roof is high up the screen and a bush in front of it is not, so
+   * the old key put the tower — standing further back — in front of the bush.
+   */
+  it("sorts on the row a unit stands on, not on how tall it is", () => {
+    const [, , , [, tall]] = FIXTURES;
+    expect(templateDrawOrder(tall, true).map((p) => p.id)).toEqual([
+      "tower",
+      "bush",
+    ]);
   });
 
   it("leaves a flat projection in the order things were placed", () => {
