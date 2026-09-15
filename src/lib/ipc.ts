@@ -86,6 +86,11 @@ export interface OutputFile {
  * `P | anchor` and `Z | grid` marks. Omitted when there was no grid
  * selection behind it — a pasted screenshot, a rasterised sketch — and the
  * PSD then carries no marks. See `editor/import-anchor.ts`.
+ *
+ * Both marks go **under** the artwork and arrive turned off, whatever the
+ * conversion: they are the editor's rows rather than the artist's picture,
+ * and a file opened anywhere that draws a PSD's flattened composite would
+ * otherwise have a red dot and a lattice over it. See `psd_marks.rs`.
  */
 export interface AnchorMarks {
   /** The selection's outline in world pixels, relative to the anchor cell. */
@@ -112,16 +117,6 @@ export interface AnchorMarks {
    * the grid — see `editor/import-anchor.ts`.
    */
   margin?: { x: number; y: number };
-  /**
-   * Whether the artwork goes *above* the two marks in the file's stack.
-   *
-   * Absent is marks over artwork, where they stay visible while somebody
-   * paints underneath them — what an import or a converted fill wants. A
-   * sketch asks for the other way round, because its artwork is the one row
-   * in the file anybody would rename and the marks are read-only rows the
-   * editor owns. See `art_on_top` in src-tauri/src/psd_write.rs.
-   */
-  artOnTop?: boolean;
   cols: number;
   rows: number;
 }

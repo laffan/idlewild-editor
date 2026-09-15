@@ -1471,6 +1471,12 @@ your own code turns it on — and it is why `psd_pipeline.rs` asks psd-to-json
 for `hiddenLayers: "include"`. Skipping would put the file and the document
 out of step: a layer the inspector still lists, with no asset behind it.
 
+It is also what lets the two orienting marks be written **off**. The anchor is
+read back out of a hidden layer on every import and every re-import — see
+**The marks arrive turned off** — which only works because a hidden layer is
+still processed, still in the manifest, and still reported at the position it
+really holds.
+
 ### Four places it has to be carried
 
 - **psd-to-json writes `"visible": false`,** and only when false — beside
@@ -1524,6 +1530,13 @@ carrying the shape further out used to switch them back on. `parts_group`
 reads the eye off the file it is replacing, by name, the same way the marks
 and the parts themselves are found on every re-parse. Everything else about a
 generated part is regenerated on purpose; its eye is the user's.
+
+The two marks are regenerated on a second Apply too, and they take the same
+rule with one difference: `mark_lit` reads the file's own answer and falls back
+to `MARKS_LIT` — **off** — rather than to lit, because that is what a file
+written from scratch gets. It matches by predicate rather than by name, since
+the footprint carries its size in its own name (`Z | grid-4x2`) and a second
+Apply over more spaces renames it.
 
 Every other rewrite was already safe, for one reason: an edit that says
 nothing about visibility leaves it alone. `LayerEdit.visible` is an
@@ -1836,16 +1849,22 @@ A converted image gets two more layers, which is `src-tauri/src/psd_marks.rs`:
 
 ```
 S | <key>    the artwork, centred on the anchor
-P | anchor   a red dot on the grid space it is anchored to
-Z | grid     the outline of the grid selection it was dropped into
+P | anchor   a red dot on the grid space it is anchored to     — under it, off
+Z | grid     the outline of the grid selection it was dropped into  — under it, off
 ```
 
 Neither mark reaches the game. psd-to-json exports pixels only for sprites
 and tilesets — a point becomes the centre of its layer, a zone its bounds —
-so both are visible to whoever opens the PSD to work on the artwork and
-invisible in the running game. That is what makes them safe to draw *over*
-it. `placeableLayers` drops both for the same reason from the other end:
-placing a point yields an empty group nobody asked for.
+so both are metadata in the running game whatever they are in the file.
+`placeableLayers` drops both for the same reason from the other end: placing a
+point yields an empty group nobody asked for.
+
+Both go **under** the artwork in the stack and both arrive with their eye
+**off** — see **Which way up a conversion's stack goes** and **The marks
+arrive turned off**. Neither changes what the editor reads back, because
+nothing downstream of here reads a mark as pixels; what they change is the
+file's flattened composite, which is the picture Photoshop and the Finder show
+for it.
 
 The point is the useful half, because it is recorded in **canvas
 coordinates**. `placedPosition` puts it on the grid space's world point and
@@ -4271,22 +4290,65 @@ it off the bottom of the file.
 
 ### Which way up a conversion's stack goes
 
-`AnchorMarks.art_on_top` decides whether the artwork sits above the two marks
-or below them, and the two answers are both right for their own case.
+One way up, now, for every file this editor writes: the footprint at the
+bottom, the anchor over it, the artwork over both. `add_layer` stacks
+bottom-up, so the marks go in first and the artwork last, and
+`psd_from_rgba_marked`, `psd_from_parts_marked` and `psd_background`'s empty
+backdrop all do it in that order.
 
-An import or a converted fill puts the marks **over** the artwork, where they
-stay visible while somebody paints underneath them — that is what they are
-for. A sketch puts the artwork over the marks, because its artwork is the one
-row in the file anybody would ever rename and the marks are read-only rows the
-editor owns: a layer list that buried the author's layer under both of them
-read backwards. Nothing is hidden by the swap, because a sketch is a few
-percent ink on a clear ground.
+It used to be a choice. `AnchorMarks.art_on_top` put the artwork over the
+marks for a sketch and under them for everything else, on the reading that a
+mark is *for* being painted under. The reading that won is the other one: the
+artwork is the row the author cares about and the one row in the file anybody
+would rename, and the marks are read-only rows the editor owns and regenerates
+by name. A list that buried the author's layer under both of them read
+backwards for a sketch, and it read backwards for an import too. The flag is
+gone rather than defaulted, because a flag with one reachable value is a trap
+for whoever reads it next.
 
-It travels on `AnchorMarks`, which is not quite what that struct is named for.
-It rides there because it is the same kind of fact from the same builders —
-something the editor knows about this conversion that Rust cannot work out for
-itself — and a second parameter on a command that already takes six would be
-worse.
+Nothing is lost by the move, which is the part that had to be checked. A mark
+is never *drawn over* the artwork in this editor — the canvas places neither,
+`placeableLayers` drops both, and psd-to-json exports pixels for neither — so
+the only place the order was ever visible is Photoshop's own canvas, and there
+the marks are turned off anyway.
+
+### The marks arrive turned off
+
+`psd_marks::MARKS_LIT` is false. A mark is the editor's drawing rather than
+the artist's, and every program that opens a PSD draws the file's **flattened
+composite** — so a red dot and a lattice printed over the artwork was what a
+finished import looked like everywhere except in the editor that wrote it. In
+Photoshop the eye is the way back in: turn the grid on to line something up,
+and off again.
+
+It costs the anchor nothing, which is the only reason it is safe to do at all.
+The anchor is what tells this editor where on the grid a file belongs, so a
+pipeline that skipped hidden layers, or reported one at the origin, would
+break every re-import silently. Four things make it true, and the round trip in
+`tests/marks.rs` holds all four down at once:
+
+- `psd_pipeline` asks psd-to-json for `hiddenLayers: "include"`, so a hidden
+  layer is processed and written into the manifest like any other — see
+  **Layer visibility**.
+- A point's position comes off the layer's own rectangle, not out of its
+  pixels: `process_point` reads `x + width / 2`.
+- Neither `manifest.anchor` nor `hasRootAnchor` — the rule an object layer
+  enforces — asks whether the mark is lit.
+- `placeableLayers` drops both marks before anything is placed, so `hidden`
+  and `hiddenParts` never see them either.
+
+A **rewrite** hands the eye back rather than forcing it: `rewrite_parts_marked`
+reads whatever the file being rewritten says, by predicate rather than by name
+because the footprint carries its size in its own name and a second Apply can
+rename it. That is the same trade `parts_group` makes for an extrusion's
+layers — everything else about a mark is regenerated on purpose, its eye is
+the user's — with the one difference that a file which has no such mark yet
+gets a dark one rather than a lit one. Every other rewrite was already safe:
+`LayerEdit.visible` is an `Option<bool>` and `None` means keep.
+
+The one visible consequence elsewhere is `preview_data_url`, which composites a
+PSD for an inspector preview and, like every compositor, skips hidden layers.
+Nothing in the frontend calls it.
 
 ### A conversion keeps its ink until the artwork is standing
 

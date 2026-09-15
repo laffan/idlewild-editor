@@ -188,6 +188,14 @@ remaining pieces are wired to real slots rather than mocked.
   file that comes back **without** the dot — flattened on save, or brought
   home through Photos as a picture — is held where it is instead of being
   re-centred on its canvas, and the console says the mark has gone
+- Both marks sit at the **bottom** of the stack and arrive **turned off**.
+  They are the editor's rows rather than the artist's picture, and every
+  program that opens a PSD draws its flattened composite — so a finished
+  import used to open with a red dot and a lattice printed over the artwork
+  everywhere except in the editor that wrote it, which draws neither. The eye
+  is the way back: turn the grid on to line something up, and off again. It
+  costs the anchor nothing, and a rewrite hands the eye back rather than
+  forcing it
 - **Scenes**, the way Phaser means them: a set of layers and a canvas of its
   own. A project is several places — a title screen, a cave, the overworld —
   sharing a grid, a genre and a pile of PSDs but not a single thing standing

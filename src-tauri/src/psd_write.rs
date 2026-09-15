@@ -53,21 +53,6 @@ pub struct AnchorMarks {
     /// buys is somewhere to paint past the edge of what is already there.
     #[serde(default)]
     pub margin: Option<MarkPoint>,
-    /// Whether the artwork goes *above* the two marks in the stack.
-    ///
-    /// Not a mark, and here anyway: it rides the same struct from the same
-    /// builders, and it is the same kind of fact — something the editor knows
-    /// about this conversion that Rust cannot work out for itself.
-    ///
-    /// The default is false, which is marks over artwork: they stay visible
-    /// while somebody paints underneath them, which is what an import or a
-    /// converted fill wants. A sketch asks for the other way round, because
-    /// its artwork is the one row in the file anybody would rename and the
-    /// marks are read-only rows the editor owns — a list that buried it under
-    /// both of them read backwards. Nothing is hidden by the swap: a sketch is
-    /// a few percent ink on a clear ground.
-    #[serde(default)]
-    pub art_on_top: bool,
     /// How many grid spaces it covers, which names the zone layer.
     #[serde(default)]
     pub cols: u32,
@@ -103,25 +88,20 @@ pub fn psd_from_rgba_marked(
 
     let layout = psd_marks::layout(width, height, marks);
     let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
-    let mut art = Some(
+
+    // `add_layer` stacks bottom-up, so what goes in first is underneath.
+    // Marks first: they are the editor's rows and the artwork is the one
+    // anybody would rename, so a list that buried it under both of them read
+    // backwards — and they are written dark, which only means anything under
+    // the picture they would otherwise be printed over. See `psd_marks`.
+    for layer in psd_marks::layers(&layout, marks) {
+        builder.add_layer(layer);
+    }
+    builder.add_layer(
         LayerBuilder::new(format!("S | {name}"))
             .rgba(width, height, rgba)
             .at(layout.art_left, layout.art_top),
     );
-
-    // `add_layer` stacks bottom-up, so what goes in first is underneath.
-    // Artwork first — marks over it, staying visible while somebody paints
-    // underneath — unless the conversion asked for the other way round; see
-    // `art_on_top`.
-    if !marks.art_on_top {
-        builder.add_layer(art.take().expect("the artwork is put in once"));
-    }
-    for layer in psd_marks::layers(&layout, marks) {
-        builder.add_layer(layer);
-    }
-    if let Some(on_top) = art.take() {
-        builder.add_layer(on_top);
-    }
     builder
         .to_bytes()
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
@@ -159,12 +139,13 @@ pub fn psd_from_parts_marked(
 ) -> Result<Vec<u8>, String> {
     let layout = psd_marks::layout(width, height, marks);
     let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
-    // Nothing to carry over: this is the file being written for the first
-    // time, and everything in it starts lit.
-    builder.add_group(parts_group(name, width, height, parts, &layout, None)?);
+    // Marks under the artwork, as every file this editor writes has them.
     for layer in psd_marks::layers(&layout, marks) {
         builder.add_layer(layer);
     }
+    // Nothing to carry over: this is the file being written for the first
+    // time, and everything in the group starts lit.
+    builder.add_group(parts_group(name, width, height, parts, &layout, None)?);
     builder
         .to_bytes()
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
@@ -286,21 +267,44 @@ pub fn rewrite_parts_marked(
     };
 
     let mut group = Some(parts_group(key, width, height, parts, &layout, Some(&doc))?);
-    let mut anchor = Some(psd_marks::anchor_layer(&layout));
-    let mut zone = psd_marks::zone_layer(&layout, marks);
+    // Regenerated, eye and all: what a mark *is* comes from the solid being
+    // rewritten, and whether it is lit is the user's — the same trade
+    // `parts_group` makes for an extrusion's own layers. A file that has
+    // neither mark gets the pair a new file gets, which is dark.
+    let mut anchor = Some(psd_marks::anchor_layer(
+        &layout,
+        mark_lit(&doc, &|name| is_named(name, "anchor")),
+    ));
+    let mut zone = psd_marks::zone_layer(&layout, marks, mark_lit(&doc, &is_grid));
 
+    let root = rebuild.items(None);
     let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
-    // A file with no artwork of ours is not one we wrote. Put the group at the
-    // bottom, where a generated file has it, rather than over work that was
-    // there first.
-    if !rebuild.items(None).iter().any(|item| rebuild.is_ours(item)) {
+
+    // `add_*` stacks bottom-up, so the bottom of the file is written first.
+    // A mark the old file does not carry goes there, where a generated file
+    // puts both of them; one it does carry is put back where it was by the
+    // walk below, so it is left alone here.
+    if !root_layer(&doc, &root, &is_grid) {
+        if let Some(built) = zone.take() {
+            builder.add_layer(built);
+        }
+    }
+    if !root_layer(&doc, &root, &|name| is_named(name, "anchor")) {
+        if let Some(built) = anchor.take() {
+            builder.add_layer(built);
+        }
+    }
+    // A file with no artwork of ours is not one we wrote. Put the group over
+    // the marks and under everything else, where a generated file has it,
+    // rather than over work that was there first.
+    if !root.iter().any(|item| rebuild.is_ours(item)) {
         if let Some(built) = group.take() {
             builder.add_group(built);
         }
     }
 
     // Top-first as the panel reads, and `add_*` stacks bottom-up.
-    for item in rebuild.items(None).into_iter().rev() {
+    for item in root.into_iter().rev() {
         match item {
             Item::Group(id) if rebuild.is_ours(&Item::Group(id)) => {
                 if let Some(built) = group.take() {
@@ -333,18 +337,34 @@ pub fn rewrite_parts_marked(
         }
     }
 
-    // Anything the old file did not have goes on top, where a generated file
-    // puts its marks.
-    if let Some(built) = zone.take() {
-        builder.add_layer(built);
-    }
-    if let Some(built) = anchor.take() {
-        builder.add_layer(built);
-    }
-
     builder
         .to_bytes()
         .map_err(|e| format!("Failed to write PSD: {e:?}"))
+}
+
+/// Whether any **root** layer of a file answers to `is`.
+///
+/// Root only, because that is the only place the walk above puts a
+/// regenerated mark back: one an author tucked inside a folder is left where
+/// they put it, and the pair this file writes goes under everything.
+fn root_layer(doc: &Psd, root: &[Item], is: &dyn Fn(&str) -> bool) -> bool {
+    root.iter().any(|item| match item {
+        Item::Layer(idx) => is(doc.layer_by_idx(*idx).name()),
+        Item::Group(_) => false,
+    })
+}
+
+/// The eye a regenerated mark comes back with.
+///
+/// Whatever the file being rewritten says, falling back to `MARKS_LIT` — off
+/// — for a file that has no such mark yet. By a predicate rather than by name
+/// because the footprint carries its size in its own name, and a rewrite that
+/// changes how many spaces are covered renames it.
+fn mark_lit(doc: &Psd, is: &dyn Fn(&str) -> bool) -> bool {
+    doc.layers()
+        .iter()
+        .find(|layer| is(layer.name()))
+        .map_or(psd_marks::MARKS_LIT, |layer| layer.visible())
 }
 
 /// Carrying an existing file's layers across into a new one.

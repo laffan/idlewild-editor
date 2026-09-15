@@ -121,7 +121,6 @@ fn psd_bytes_pass_through_instead_of_being_decoded() {
         margin: None,
         cols: 1,
         rows: 1,
-        art_on_top: false,
     };
     let marked = psd_write::psd_from_image_bytes_marked("pasted", &original, Some(&marks))
         .expect("a PSD should still be taken as it is");
@@ -542,7 +541,6 @@ fn psd_layers_can_be_reordered_and_renamed() {
             margin: None,
             cols: 1,
             rows: 1,
-            art_on_top: false,
         };
         let bytes = psd_write::psd_from_rgba_marked(
             "hut",
@@ -561,16 +559,19 @@ fn psd_layers_can_be_reordered_and_renamed() {
         assert!(before.writable, "a flat PSD should be writable");
         assert_eq!(before.blocked_by, None);
         let names: Vec<&str> = before.layers.iter().map(|l| l.name.as_str()).collect();
-        assert_eq!(names, ["P | anchor", "Z | grid", "S | hut"]);
+        // The artwork on top and the two marks under it, which is how every
+        // file this editor writes is stacked — see `psd_marks`.
+        assert_eq!(names, ["S | hut", "P | anchor", "Z | grid"]);
         let categories: Vec<&str> =
             before.layers.iter().map(|l| l.category.as_str()).collect();
-        assert_eq!(categories, ["point", "zone", "sprite"]);
+        assert_eq!(categories, ["sprite", "point", "zone"]);
 
-        // Write: put the sprite on top and rename it, leaving the rest alone.
+        // Write: put the sprite at the bottom and rename it, leaving the
+        // rest alone — a real reorder, which is what the round trip is for.
         let edits = vec![
-            LayerEdit::keep(2, "T | hut".into(), 0),
-            LayerEdit::keep(0, "P | anchor".into(), 0),
-            LayerEdit::keep(1, "Z | grid".into(), 0),
+            LayerEdit::keep(1, "P | anchor".into(), 0),
+            LayerEdit::keep(2, "Z | grid".into(), 0),
+            LayerEdit::keep(0, "T | hut".into(), 0),
         ];
         let manifest = psd_layers::write(id, "hut", &edits, |_| {})
             .expect("rewrite should succeed");
@@ -579,14 +580,14 @@ fn psd_layers_can_be_reordered_and_renamed() {
         let names: Vec<&str> = after.layers.iter().map(|l| l.name.as_str()).collect();
         assert_eq!(
             names,
-            ["T | hut", "P | anchor", "Z | grid"],
+            ["P | anchor", "Z | grid", "T | hut"],
             "the order asked for is the order stored"
         );
 
         // The canvas and each layer's geometry survive the rebuild.
         assert_eq!((after.width, after.height), (before.width, before.height));
-        let sprite = &after.layers[0];
-        let was = &before.layers[2];
+        let sprite = &after.layers[2];
+        let was = &before.layers[0];
         assert_eq!((sprite.x, sprite.y), (was.x, was.y));
         assert_eq!((sprite.width, sprite.height), (was.width, was.height));
 

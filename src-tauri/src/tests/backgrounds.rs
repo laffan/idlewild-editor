@@ -42,7 +42,6 @@ fn marks(size: f32) -> AnchorMarks {
         margin: None,
         cols: 1,
         rows: 1,
-        art_on_top: false,
     }
 }
 

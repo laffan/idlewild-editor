@@ -80,6 +80,12 @@ pub fn psd_from_empty_tiles_marked(
     let mut builder = PsdBuilder::new(layout.canvas_width, layout.canvas_height);
     // Clear, so what the artist paints is the whole of what the backdrop is.
     let rgba = vec![0u8; (pixels as usize) * 4];
+    // The anchor under the artwork and turned off, as every file this editor
+    // writes carries it — see `psd_marks`. `add_*` stacks bottom-up, so the
+    // marks go in first.
+    for layer in psd_marks::layers(&layout, marks) {
+        builder.add_layer(layer);
+    }
     builder.add_group(
         GroupBuilder::new(BACKGROUND_GROUP).add_layer(
             LayerBuilder::new(BACKGROUND_SPRITE)
@@ -87,11 +93,6 @@ pub fn psd_from_empty_tiles_marked(
                 .at(layout.art_left, layout.art_top),
         ),
     );
-    // The anchor over the artwork, as every import has it: the mark stays
-    // visible while somebody paints underneath it.
-    for layer in psd_marks::layers(&layout, marks) {
-        builder.add_layer(layer);
-    }
     builder
         .to_bytes()
         .map_err(|e| format!("Failed to write PSD: {e:?}"))

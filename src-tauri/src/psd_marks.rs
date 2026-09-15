@@ -10,8 +10,15 @@
 //!
 //! Neither reaches the game as pixels. psd-to-json exports images only for
 //! sprites and tilesets — a point becomes its centre, a zone its bounds —
-//! so both are visible while editing the PSD and invisible in the running
-//! game. That is what makes them safe to draw over the artwork.
+//! so both are metadata in the running game whatever they are in the file.
+//!
+//! **They go under the artwork, and they arrive turned off.** Both are the
+//! editor's marks rather than the artist's picture, and a file that opens in
+//! Photoshop — or anywhere that shows a PSD's flattened composite — with a
+//! red dot and a lattice printed over the artwork is a file whose first
+//! gesture is always the same two clicks. Under the artwork and dark is what
+//! that gesture leaves behind, and the eye is the way back: turn the grid on
+//! to line something up, turn it off again. See `MARKS_LIT`.
 //!
 //! The point is what the editor reads back. It is recorded in canvas
 //! coordinates, so an artist can resize the canvas, move the artwork, or
@@ -100,13 +107,29 @@ pub fn layout(image_width: u32, image_height: u32, marks: &AnchorMarks) -> Layou
     }
 }
 
-/// The two marker layers, ready to add above the artwork.
+/// Whether a freshly written mark arrives with its eye on.
+///
+/// Off. A mark is the editor's drawing rather than the artist's, and every
+/// program that opens a PSD draws the file's flattened composite — so a red
+/// dot and a lattice over the artwork is what a finished import looked like
+/// everywhere except in this editor, which never draws either.
+///
+/// It costs the anchor nothing, which is the part that had to be true before
+/// this could change. `psd_pipeline` asks psd-to-json for
+/// `hiddenLayers: "include"`, so a hidden mark is still in the manifest; a
+/// point's position is read off the layer's own rectangle rather than out of
+/// its pixels; and neither `manifest.anchor` nor the root-anchor rule an
+/// object layer enforces asks whether the mark is lit. The eye is the way
+/// back in: turn the grid on to line something up, and off again.
+pub const MARKS_LIT: bool = false;
+
+/// The two marker layers, ready to go **under** the artwork.
 pub fn layers(layout: &Layout, marks: &AnchorMarks) -> Vec<LayerBuilder> {
     let mut out = Vec::new();
-    if let Some(zone) = zone_layer(layout, marks) {
+    if let Some(zone) = zone_layer(layout, marks, MARKS_LIT) {
         out.push(zone);
     }
-    out.push(anchor_layer(layout));
+    out.push(anchor_layer(layout, MARKS_LIT));
     out
 }
 
@@ -116,23 +139,30 @@ pub fn layers(layout: &Layout, marks: &AnchorMarks) -> Vec<LayerBuilder> {
 /// was* in the stack rather than both on top — see `psd_write::rewrite_marked`
 /// — and picking them out of a vector by position would be a sharp edge
 /// waiting for whoever adds a third mark.
-pub fn zone_layer(layout: &Layout, marks: &AnchorMarks) -> Option<LayerBuilder> {
+///
+/// `lit` is the eye it comes back with. A new file writes both marks dark —
+/// see `MARKS_LIT` — and a rewrite hands back whatever the file being
+/// rewritten said, because everything else about a mark is regenerated on
+/// purpose and its eye is the user's.
+pub fn zone_layer(layout: &Layout, marks: &AnchorMarks, lit: bool) -> Option<LayerBuilder> {
     let pixels = zone_pixels(layout, marks)?;
     Some(
         LayerBuilder::new(format!("Z | {}", zone_name(marks)))
             .rgba(layout.zone_width, layout.zone_height, pixels)
-            .at(layout.zone_left, layout.zone_top),
+            .at(layout.zone_left, layout.zone_top)
+            .visible(lit),
     )
 }
 
-/// The anchor dot on its own.
-pub fn anchor_layer(layout: &Layout) -> LayerBuilder {
+/// The anchor dot on its own. `lit` is its eye, as in `zone_layer`.
+pub fn anchor_layer(layout: &Layout, lit: bool) -> LayerBuilder {
     LayerBuilder::new("P | anchor")
         .rgba(DOT, DOT, dot_pixels())
         .at(
             layout.anchor_x - DOT as i32 / 2,
             layout.anchor_y - DOT as i32 / 2,
         )
+        .visible(lit)
 }
 
 fn zone_name(marks: &AnchorMarks) -> String {

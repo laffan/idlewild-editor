@@ -83,12 +83,6 @@ export async function convertStrokesToPsd(
           }),
           EXPORT_SCALE,
         ),
-        // The ink on top of the marks rather than under them. It is the one
-        // row in this file anybody would rename — the other two are the
-        // editor's and read-only in the inspector's list — so burying it
-        // under both read backwards. Nothing is hidden by the swap: a sketch
-        // is a few percent ink on a clear ground.
-        artOnTop: true,
       }),
     });
     if (!result) return;

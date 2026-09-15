@@ -159,7 +159,6 @@ fn rewriting_refuses_a_file_it_would_flatten() {
         margin: None,
         cols: 1,
         rows: 1,
-        art_on_top: false,
     };
     let err = psd_write::rewrite_parts_marked(b"not a psd at all", "k", 8, 8, &parts(8, 8), &marks)
         .expect_err("nonsense should not be rewritten");
@@ -285,7 +284,6 @@ fn square(side: f32) -> psd_write::AnchorMarks {
         margin: None,
         cols: 1,
         rows: 1,
-        art_on_top: false,
     }
 }
 
@@ -349,15 +347,17 @@ fn the_layer_list_reads_a_grouped_file_as_a_tree() {
         })
         .collect();
 
+    // Top-first, so the artwork leads and the two marks are the floor under
+    // it — see `psd_marks`.
     assert_eq!(
         shown,
         vec![
-            ("P | anchor".to_string(), 0, false),
-            ("Z | grid".to_string(), 0, false),
             ("G | extrude-abc".to_string(), 0, true),
             ("S | lines-abc".to_string(), 1, false),
             ("S | shading-abc".to_string(), 1, false),
             ("S | shape-abc".to_string(), 1, false),
+            ("P | anchor".to_string(), 0, false),
+            ("Z | grid".to_string(), 0, false),
         ]
     );
 }
@@ -393,15 +393,15 @@ fn a_grouped_file_round_trips_through_the_layer_list() {
         let list = psd_layers::read(id, "extrude-abc").expect("the list should read");
         assert!(list.writable, "a grouped file is editable now: {:?}", list.blocked_by);
         assert_eq!(list.layers.len(), 6);
-        assert!(list.layers[2].is_group);
-        assert_eq!(list.layers[3].depth, 1);
+        assert!(list.layers[0].is_group);
+        assert_eq!(list.layers[1].depth, 1);
 
         // Swap two of the parts inside the group and rename one, leaving the
         // tree's shape alone.
-        let edits: Vec<LayerEdit> = [0usize, 1, 2, 4, 3, 5]
+        let edits: Vec<LayerEdit> = [0usize, 2, 1, 3, 4, 5]
             .iter()
             .map(|&at| {
-                let name = if at == 5 {
+                let name = if at == 3 {
                     "S | base-abc".to_string()
                 } else {
                     list.layers[at].name.clone()
@@ -416,12 +416,12 @@ fn a_grouped_file_round_trips_through_the_layer_list() {
         assert_eq!(
             names,
             vec![
-                "P | anchor",
-                "Z | grid",
                 "G | extrude-abc",
                 "S | shading-abc",
                 "S | lines-abc",
                 "S | base-abc",
+                "P | anchor",
+                "Z | grid",
             ]
         );
         // Still one group, still holding three.
@@ -469,13 +469,20 @@ fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
             .expect("the file should save");
 
         let list = psd_layers::read(id, "extrude-abc").expect("the list should read");
-        assert!(
-            list.layers.iter().all(|l| l.visible),
-            "a file this editor wrote starts with every eye on",
+        assert_eq!(
+            list.layers
+                .iter()
+                .filter(|l| !l.visible)
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["P | anchor", "Z | grid"],
+            "a file this editor wrote starts with its artwork lit and its \
+             marks dark",
         );
 
-        // Hide the group's lines, and the group holding the marks' artwork.
-        let hide = |name: &str| name == "S | lines-abc" || name == "Z | grid";
+        // Turn the group's lines off, and the footprint on — the two
+        // directions, in the one edit.
+        let keep_lit = |name: &str| name != "S | lines-abc";
         let edits: Vec<LayerEdit> = list
             .layers
             .iter()
@@ -483,7 +490,7 @@ fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
                 index: Some(row.index),
                 name: row.name.clone(),
                 depth: row.depth,
-                visible: Some(!hide(&row.name)),
+                visible: Some(keep_lit(&row.name)),
                 paint: None,
             })
             .collect();
@@ -499,12 +506,12 @@ fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
         assert_eq!(
             eyes,
             vec![
-                ("P | anchor", true),
-                ("Z | grid", false),
                 ("G | extrude-abc", true),
                 ("S | lines-abc", false),
                 ("S | shading-abc", true),
                 ("S | shape-abc", true),
+                ("P | anchor", true),
+                ("Z | grid", true),
             ]
         );
 
@@ -531,7 +538,7 @@ fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
                 .filter(|l| !l.visible)
                 .map(|l| l.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["Z | grid", "S | lines-abc"],
+            vec!["S | lines-abc"],
         );
 
         // And the way back on.

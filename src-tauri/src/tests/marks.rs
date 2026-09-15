@@ -51,7 +51,6 @@ fn a_pasted_image_carries_its_anchor_and_footprint() {
             margin: None,
             cols: 2,
             rows: 2,
-            art_on_top: false,
         };
 
         let bytes = psd_write::psd_from_rgba_marked(
@@ -118,6 +117,14 @@ fn a_pasted_image_carries_its_anchor_and_footprint() {
 /// exactly the spot the editor put it, the grid footprint as a zone with the
 /// selection's bounds — and neither as an image, or the game would render a
 /// red dot and a tile outline over every imported sprite.
+///
+/// **And all of that has to be true of a mark whose eye is off**, which is
+/// how they are written — see `psd_marks::MARKS_LIT`. That is the whole risk
+/// in turning them off: the anchor is what the editor reads to put artwork
+/// back on its space, so a pipeline that skipped a hidden layer, or reported
+/// one at the origin, would break every re-import quietly. `psd_pipeline`
+/// asks for `hiddenLayers: "include"` and a point is read off its layer's own
+/// rectangle, so it does not — and this is where that stays true.
 #[test]
 fn an_import_marks_its_anchor_and_grid_footprint() {
     use crate::psd_write::{AnchorMarks, MarkPoint};
@@ -148,7 +155,6 @@ fn an_import_marks_its_anchor_and_grid_footprint() {
             margin: None,
             cols: 1,
             rows: 1,
-            art_on_top: false,
         };
 
         let bytes = psd_write::psd_from_rgba_marked(
@@ -201,6 +207,17 @@ fn an_import_marks_its_anchor_and_grid_footprint() {
         assert_eq!(zone["width"], 32);
         assert_eq!(zone["height"], 32);
 
+        // Both are in the manifest and both say they are off — which is the
+        // point: the position above was read out of a hidden layer.
+        assert_eq!(point["visible"], false, "the anchor is written dark");
+        assert_eq!(zone["visible"], false, "the footprint is written dark");
+        // And the artwork is not, so `visible` is absent on it: psd-to-json
+        // writes the flag only when it is false.
+        assert!(
+            find("sprite")["visible"].is_null(),
+            "the artwork is left lit",
+        );
+
         // And only the artwork becomes pixels.
         let sprite = find("sprite");
         assert_eq!(sprite["name"], "hut");
@@ -246,7 +263,6 @@ fn a_multi_space_footprint_draws_its_divisions() {
         margin: None,
         cols: 2,
         rows: 1,
-        art_on_top: false,
     };
 
     let bytes = psd_write::psd_from_rgba_marked(
@@ -317,7 +333,6 @@ fn a_margin_grows_the_canvas_without_moving_the_artwork() {
         margin: None,
         cols: 1,
         rows: 1,
-        art_on_top: false,
     };
     let roomy = AnchorMarks {
         margin: Some(at(32.0, 16.0)),
@@ -328,7 +343,6 @@ fn a_margin_grows_the_canvas_without_moving_the_artwork() {
             margin: None,
             cols: 1,
             rows: 1,
-            art_on_top: false,
         }
     };
 
