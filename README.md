@@ -383,8 +383,9 @@ remaining pieces are wired to real slots rather than mocked.
   than one per stamp, which is the whole of why a donut's hole is not taken out
   along with its body and a run that crosses itself does not bite deeper where
   it does. While you drag, what is about to come off is shown as a translucent
-  wash — the live canvas sits over the baked one and holds nothing of its own,
-  so an eraser that composited into it would show nothing at all
+  hole: an erase in progress is cut into the baked canvas itself, over the
+  pixels it is taking, and put back before the stroke lands for real — so what
+  you watch while you drag is what the release leaves behind
 - **Slice** is the knife, and it used to be called Eraser. It never rubbed
   anything out: it cuts a stroke in two where the disc passes and leaves both
   halves, which is what makes it useful on a sketch. Beside four brushes that
@@ -543,16 +544,20 @@ remaining pieces are wired to real slots rather than mocked.
   disappeared with the mode, and both of those work anywhere, so both are on
   the drawing toolbar now
 - **Erasing in PSD Edit mode reaches the artwork in the file**, not just the
-  ink from this session. It did not, and that was the wrong answer for a tool
-  whose whole promise is that what it would draw is what it takes out: the
-  pixels Apply sends are drawn on a clear ground, so a rub somewhere you had
-  not already drawn did nothing at all. Apply now sends a second buffer — the
-  coverage the erasers would have laid down — and Rust takes it out of the
-  layer's own pixels before the ink goes over what is left, which is the order
-  the strokes were drawn in. Rub a hole and draw into it and the new ink lands
-  on bare canvas. The one thing it cannot do is show you before you press
-  Apply: the PSD is drawn underneath the ink layer, so the wash marks where the
-  cut will land and the hole appears when the file comes back
+  ink from this session — and you can see it happen. It did neither, and both
+  were the wrong answer for a tool whose whole promise is that what it would
+  draw is what it takes out. The pixels Apply sends are drawn on a clear
+  ground, so a rub somewhere you had not already drawn did nothing at all; and
+  the PSD is drawn underneath the ink, so even a correct cut was invisible
+  until the file had been written and re-parsed. Apply now sends a second
+  buffer — the coverage the erasers would have laid down — and Rust takes it
+  out of the layer's own pixels before the ink goes over what is left, which is
+  the order the strokes were drawn in: rub a hole, draw into it, and the new
+  ink lands on bare canvas. And for as long as the mode is up, **the layer
+  being drawn into moves into the drawing surface**, baked under the ink, with
+  the canvas's own copy turned off. So the hole opens under the pointer as you
+  drag it, and what you are looking at while you work is the composite Apply is
+  going to make rather than a picture of the intention
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail

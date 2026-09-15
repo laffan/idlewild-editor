@@ -38,7 +38,7 @@ export { strokesToZonePoints, zonePoints } from "./to-zone";
 // `STRIDE` with it: a stroke's points are flat — x, y, pressure — and anything
 // reading them back, the minimap included, has to know the step.
 export { STRIDE, strokesBox } from "./geometry";
-export type { Viewport } from "./surface";
+export type { Backdrop, Viewport } from "./surface";
 export { BRUSHES, PIXEL_BRUSH, brushStampUrl } from "./atlas";
 export type { StampBox, StampBoxAt } from "./tools-stamp";
 export {

@@ -26,6 +26,7 @@ import { Marquee } from "./marquee";
 import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
+import { layerImage, type LayerImage } from "./psd-loader";
 import { fillRegion } from "./fill-region";
 import type { Paint } from "../lib/paint";
 import { selectionLayer } from "../lib/selection";
@@ -296,9 +297,8 @@ export class WorldScene extends Phaser.Scene {
    * Nothing half-done survives the move — a drag, a marquee, a solid being
    * pulled or a collider being painted, and an opened-up PSD are all about
    * objects on their way out. Then `render()` does the demolition for free:
-   * the renderer keys placements by id and destroys every one it no longer
-   * finds in the document, which after a switch is all of them. `loadAll` puts
-   * the new scene's up, loading any PSD this session has not needed yet.
+   * it keys placements by id and destroys every one it no longer finds in the
+   * document, which after a switch is all of them.
    */
   reloadScene(): void {
     this.drag.cancel();
@@ -541,10 +541,9 @@ export class WorldScene extends Phaser.Scene {
    *
    * `suppress` keeps one off the canvas — extrude's, because a solid being
    * carried on with stands on exactly the ground its own flat artwork covers.
-   * `reveal` is the inverse and is PSD Edit mode's: on a pattern layer a placement
-   * is the palette a rule scatters and is drawn nowhere, and PSD Edit mode frames
-   * exactly the space it is anchored to. Both leave the document untouched,
-   * so ending a mode is a matter of clearing them again.
+   * `reveal` is the inverse and is PSD Edit mode's: on a pattern layer a
+   * placement is a palette drawn nowhere, and the mode frames exactly the
+   * space it is anchored to. Both leave the document untouched.
    */
   suppressInstance(instance: string | null): void {
     this.docRenderer.suppressInstance(instance);
@@ -610,6 +609,15 @@ export class WorldScene extends Phaser.Scene {
 
   previewPsdVisibility(key: string | null, names: readonly string[]): void {
     this.docRenderer.previewVisibility(key, names);
+  }
+
+  drawIntoPsdLayer(key: string | null, name = ""): void {
+    this.docRenderer.drawIntoPsdLayer(key, name);
+  }
+
+  /** One layer of a placed PSD as a picture — see `psd-loader.ts`. */
+  psdLayerImage(key: string, name: string): LayerImage | null {
+    return layerImage(this, key, name);
   }
 
   reloadPsd(

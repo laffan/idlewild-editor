@@ -48,7 +48,12 @@ import {
 } from "./geometry";
 import { onFrame } from "./frame";
 import { paintRegion } from "./paint-render";
-import { ERASE_PREVIEW, renderLive, STREAMLINE } from "./render";
+import {
+  renderErase,
+  renderEraseRegion,
+  renderLive,
+  STREAMLINE,
+} from "./render";
 import { patternScaleOf } from "../lib/paint";
 import type { AtlasCache } from "./atlas";
 import { ERASER_RADIUS, type Bounds, type StrokeStyle } from "./types";
@@ -163,11 +168,22 @@ export function beginDraw(
     style.size +
     (style.paint.kind === "pattern" ? patternScaleOf(style.paint) : 0);
 
+  // An erase is previewed on the **baked** canvas rather than the live one,
+  // because a hole has to be cut out of the pixels it is taking away — see
+  // `Surface.beginErase`. Everything else about the gesture is the same, down
+  // to re-laying the whole mark every frame.
   const paint = (): void => {
     const held = shaped();
+    const stream = streamlinePoints(held, STREAMLINE);
+    const box = boundsOf(held, reach);
+    if (style.erase) {
+      renderErase(surface.beginErase(box), stream, style, atlas);
+      surface.endEraseFrame();
+      return;
+    }
     const ctx = surface.beginLive();
-    renderLive(ctx, streamlinePoints(held, STREAMLINE), style, atlas);
-    surface.endLive(boundsOf(held, reach));
+    renderLive(ctx, stream, style, atlas);
+    surface.endLive(box);
   };
   const frame = onFrame(paint);
   paint();
@@ -212,6 +228,10 @@ export function beginDraw(
       disarm();
       frame.cancel();
       surface.clearLive();
+      // The preview goes back before the stroke goes in: what `apply` stamps
+      // is the mark for real, and leaving the preview under it would take the
+      // same pixels out twice.
+      surface.endErase();
       if (points.length < 2) {
         // A tap is not a stroke. Two points is the minimum the streamline
         // needs before it draws anything but a single stamp.
@@ -384,7 +404,7 @@ export function beginFill(
     // a fill that previewed as a line would be a fill you had to imagine.
     const held = shaped();
     const ctx = surface.beginLive();
-    fillPreview(ctx, held, style, surface.worldPerScreenPixel * 1.5);
+    fillPreview(ctx, held, style, surface.worldPerScreenPixel * 1.5, surface);
     surface.endLive(boundsOf(held, surface.worldPerScreenPixel * 2));
   };
   const frame = onFrame(paint);
@@ -399,6 +419,7 @@ export function beginFill(
     end() {
       frame.cancel();
       surface.clearLive();
+      surface.endErase();
       // Three points is the least that encloses anything; a tap is a miss.
       if (points.length < 3) return;
       store.add(toFlat(shaped()), { ...style, mode: "fill" });
@@ -427,38 +448,46 @@ export function fillPreview(
   points: readonly { x: number; y: number }[],
   style: Pick<StrokeStyle, "color" | "paint" | "stamp"> & { erase?: boolean },
   lineWidth: number,
+  /**
+   * The surface, when there is one to cut into.
+   *
+   * Only an erasing fill wants it: the hole goes into the **baked** canvas
+   * rather than onto the live one, because a hole drawn on a layer above only
+   * reveals the layer below. The outline stays here on the live canvas either
+   * way, so the shape is still marked out while it is being built.
+   */
+  surface?: Surface,
 ): void {
   if (points.length === 0) return;
 
-  // An erasing fill previews in the wash the brushes use, for the reason in
-  // `renderLive`: the shape is what is coming *off*, and previewing it in the
-  // paint it would have been filled with says the opposite. The paint itself
-  // is kept, so a patterned erase still shows which cells go.
-  const color = style.erase ? ERASE_PREVIEW : style.color;
-
-  // The inside, in whatever the fill is made of. A pattern previews as the
-  // pattern rather than as its colour: the whole question a preview answers
-  // is "is this the shape I want filled with the thing I chose", and half of
-  // that was missing while a dither previewed as a flat wash.
-  ctx.globalAlpha = 0.7;
-  const painted =
-    style.paint.kind !== "color" &&
-    paintRegion(
-      ctx,
-      points.map((p) => ({ point: [p.x, p.y] as [number, number], pressure: 1 })),
-      color,
-      style.paint,
-      style.stamp,
-    );
-  if (!painted) {
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill("nonzero");
+  if (style.erase && surface) {
+    renderEraseRegion(surface.beginErase(boundsOf(points, 2)), points, style);
+    surface.endEraseFrame();
+  } else {
+    // The inside, in whatever the fill is made of. A pattern previews as the
+    // pattern rather than as its colour: the whole question a preview answers
+    // is "is this the shape I want filled with the thing I chose", and half of
+    // that was missing while a dither previewed as a flat wash.
+    ctx.globalAlpha = 0.7;
+    const painted =
+      style.paint.kind !== "color" &&
+      paintRegion(
+        ctx,
+        points.map((p) => ({ point: [p.x, p.y] as [number, number], pressure: 1 })),
+        style.color,
+        style.paint,
+        style.stamp,
+      );
+    if (!painted) {
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+      ctx.closePath();
+      ctx.fillStyle = style.color;
+      ctx.fill("nonzero");
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
   ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);

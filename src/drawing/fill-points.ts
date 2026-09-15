@@ -125,6 +125,10 @@ export class PointFill {
    */
   fill(style: StrokeStyle): boolean {
     if (!this.canFill) return false;
+    // Before the stroke, not after: an erasing shape has been previewed by
+    // cutting the baked canvas, and stamping the real one over a preview that
+    // is still there would take the same pixels out twice.
+    this.surface.endErase();
     this.store.add(toFlat(this.points), { ...style, mode: "fill" });
     this.clear();
     return true;
@@ -135,6 +139,7 @@ export class PointFill {
     if (this.points.length === 0) return;
     this.points = [];
     this.surface.clearLive();
+    this.surface.endErase();
     this.onChange();
   }
 
@@ -142,8 +147,10 @@ export class PointFill {
   undoPoint(style: StrokeStyle): void {
     if (this.points.length === 0) return;
     this.points.pop();
-    if (this.points.length === 0) this.surface.clearLive();
-    else this.repaint(style);
+    if (this.points.length === 0) {
+      this.surface.clearLive();
+      this.surface.endErase();
+    } else this.repaint(style);
     this.onChange();
   }
 
@@ -164,7 +171,7 @@ export class PointFill {
     const ctx = this.surface.beginLive();
 
     if (this.canFill) {
-      fillPreview(ctx, this.points, style, this.slop(1.5));
+      fillPreview(ctx, this.points, style, this.slop(1.5), this.surface);
     } else {
       // Two points are a line and one is a dot: there is nothing to fill yet,
       // so what is drawn is the edge so far rather than a shape it is not.

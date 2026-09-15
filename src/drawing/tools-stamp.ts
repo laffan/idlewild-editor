@@ -23,7 +23,7 @@
 
 import { toFlat, type InkPoint } from "./geometry";
 import { onFrame } from "./frame";
-import { renderLive } from "./render";
+import { renderErase, renderLive } from "./render";
 import type { StrokeStore } from "./stroke-store";
 import type { Surface } from "./surface";
 import { boundsOf, type ToolSession } from "./tools";
@@ -77,16 +77,23 @@ export function beginShapeStamp(
   };
 
   const paint = (): void => {
-    const ctx = surface.beginLive();
-    renderLive(
-      ctx,
-      points.map((p) => ({ point: [p.x, p.y] as [number, number], pressure: 1 })),
-      { ...style, mode: "shape", stamp },
-      atlas,
-    );
+    const stream = points.map((p) => ({
+      point: [p.x, p.y] as [number, number],
+      pressure: 1,
+    }));
+    const shaped = { ...style, mode: "shape" as const, stamp };
     // A stamp hangs *down and right* from its corner, so the box it covers
     // reaches a whole cell past the furthest point rather than half of one.
-    surface.endLive(growBy(boundsOf(points, 0), stamp));
+    const box = growBy(boundsOf(points, 0), stamp);
+    // An erase is cut into the baked canvas rather than drawn on the live one
+    // — see `Surface.beginErase`.
+    if (style.erase) {
+      renderErase(surface.beginErase(box), stream, shaped, atlas);
+      surface.endEraseFrame();
+      return;
+    }
+    renderLive(surface.beginLive(), stream, shaped, atlas);
+    surface.endLive(box);
   };
   const frame = onFrame(paint);
 
@@ -100,6 +107,7 @@ export function beginShapeStamp(
     end() {
       frame.cancel();
       surface.clearLive();
+      surface.endErase();
       if (points.length === 0) return;
       store.add(toFlat(points), { ...style, mode: "shape", stamp });
     },

@@ -32,12 +32,18 @@
  * wrong button.
  */
 
-import { rasteriseStrokes, strokesBox, type DrawingLayer } from "../drawing";
+import {
+  rasteriseStrokes,
+  strokesBox,
+  type Backdrop,
+  type DrawingLayer,
+} from "../drawing";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
 import * as log from "../lib/log";
-import { canvasBox, parseManifest } from "../lib/manifest";
+import { canvasBox, parseManifest, type Manifest } from "../lib/manifest";
+import { manifestName } from "./psd-layer-owner";
 import { layerKind } from "../lib/layer-kinds";
 import { unitOf } from "../game/unit";
 import type { Bounds } from "../drawing/types";
@@ -123,6 +129,24 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
    */
   let revealing: string | null = null;
   /**
+   * The layer being drawn into, moved out of the canvas and under the ink.
+   *
+   * The whole of what makes an eraser work here. A brush turned round
+   * composites `destination-out` on the drawing surface, and a surface
+   * holding only this session's marks has only this session's marks to take —
+   * so rubbing over artwork you had not already drawn on did nothing at all,
+   * and the hole appeared only when Apply had written and re-parsed the file.
+   * With the artwork baked *under* the ink, the same stroke cuts it where it
+   * passes, the moment it lands, and what you are looking at is the composite
+   * Apply is going to make rather than a picture of the intention.
+   *
+   * One record for the life of a session, so `sync` can push it on every
+   * document change and the surface can answer "still that one" by identity.
+   * `key` and `name` are the file and the manifest spelling of the layer,
+   * which together are what the canvas has to be told to stop drawing.
+   */
+  let backdrop: { art: Backdrop; key: string; name: string } | null = null;
+  /**
    * Whether Apply's write is still in flight.
    *
    * It is not quick: the file is rebuilt and the whole psd-to-json pipeline
@@ -198,6 +222,12 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     // mode and the other two canvas modes both do.
     const drawing = options.drawing();
     if (drawing) drawing.straightenHoldMs = active ? STRAIGHTEN_HOLD_MS : 0;
+    // And the artwork the surface has taken over, here for the same reason:
+    // however the mode ends, and whatever ended it, the layer goes back to
+    // the canvas and the ink stops being laid over a copy of it.
+    const art = active ? backdrop : null;
+    drawing?.setBackdrop(art?.art ?? null);
+    scene?.drawIntoPsdLayer(art?.key ?? null, art?.name);
     // The rubber is this mode's, so the mode ending is the rubber ending —
     // said out loud rather than left to be noticed, because the pointer would
     // otherwise still be erasing over a canvas that is no longer framed.
@@ -209,6 +239,7 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
       // over, so a later Apply cannot write strokes nobody is still framing.
       session = null;
       revealing = null;
+      backdrop = null;
       bar.update({
         active,
         key: "",
@@ -262,6 +293,7 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
 
     let frame: Bounds;
     let scale: number;
+    let art: { art: Backdrop; key: string; name: string } | null = null;
     try {
       const manifest = parseManifest(
         await psd.manifest(options.projectId, key),
@@ -272,6 +304,7 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
         manifest,
         scale,
       );
+      art = artworkUnderTheInk(scene, key, layer, manifest, frame, scale);
     } catch (err) {
       log.error(`Could not work out where ${key}.psd's canvas is:`, err);
       return;
@@ -300,6 +333,10 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
       layerKind(options.store.layer(selection.layerId)) === "pattern"
         ? unitOf(placement)
         : null;
+    // Null is not a failure worth refusing over: a layer with no texture is a
+    // blank one somebody just added, and a session on it draws on nothing,
+    // which is exactly what it did before any of this existed.
+    backdrop = art;
     session = {
       key,
       inkLayerId,
@@ -483,6 +520,52 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
       options.scene()?.modes.psdEdit.stop();
       options.host.classList.remove("psd-editing");
       bar.destroy();
+    },
+  };
+}
+
+/**
+ * The layer being drawn into, as a picture to bake under the ink.
+ *
+ * Null when there is nothing to bake — a layer psd-to-json exported no sprite
+ * for, which is any freshly added one, or a name the manifest does not carry.
+ * That is not a refusal: a session on a blank layer draws on nothing, which
+ * is what it has always done.
+ *
+ * The picture is **Phaser's own**, taken off the texture the plugin loaded
+ * when the file was placed rather than fetched and decoded a second time — so
+ * what the surface bakes is pixel for pixel what the canvas was showing a
+ * moment ago, and the swap is invisible.
+ *
+ * The box is the same arithmetic `apply` does in reverse: a manifest layer's
+ * position is in the file's own pixels from the canvas corner, and the frame
+ * is where that corner sits in the world.
+ */
+function artworkUnderTheInk(
+  scene: WorldScene,
+  key: string,
+  layer: PsdLayerInfo,
+  manifest: Manifest,
+  frame: Bounds,
+  scale: number,
+): { art: Backdrop; key: string; name: string } | null {
+  const name = manifestName(layer.name);
+  if (!name) return null;
+  const row = manifest.all.find((entry) => entry.name === name);
+  if (!row || row.width <= 0 || row.height <= 0) return null;
+  const picture = scene.psdLayerImage(key, name);
+  if (!picture) return null;
+  return {
+    key,
+    name,
+    art: {
+      ...picture,
+      box: {
+        x: frame.x + row.x * scale,
+        y: frame.y + row.y * scale,
+        width: row.width * scale,
+        height: row.height * scale,
+      },
     },
   };
 }

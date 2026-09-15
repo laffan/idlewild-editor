@@ -2078,12 +2078,22 @@ would have drawn, and an eraser fatter than its own pen is a more surprising
 defect than a faint edge. A hard-edged mark — the Pattern brush's lattice
 cells — has no antialiasing to leave behind and comes out clean.
 
-**An eraser previews as a wash, not as a hole.** The live canvas sits *over*
-the baked one and holds nothing of its own, so compositing `destination-out`
-into it takes away nothing and shows nothing — you would drag an eraser across
-the canvas and watch it behave exactly like a broken tool. `renderLive` draws
-the same geometry in `ERASE_PREVIEW` instead, a translucent accent, and the
-release subtracts it for real.
+**An eraser previews on the baked canvas, not on the live one.** Every other
+tool draws its in-flight mark on the live canvas, which sits *over* the baked
+one. An eraser cannot: `destination-out` into a canvas holding nothing takes
+nothing out, and a hole in an upper layer only reveals the layer below it. So
+an erase in progress is cut into `done` itself, over the pixels it is actually
+taking — `Surface.beginErase` — against a backup of the rectangle the mark
+covers rather than a clear. Every frame restores what the last one took and
+re-lays the whole mark, which is the same "re-lay it every frame" the live
+canvas's callers already do; `endErase` puts it back before the stroke itself
+lands, or `apply` would stamp the same subtraction a second time.
+
+The backup is the mark's own rectangle in backing pixels, grown in 256-pixel
+steps: a stroke covers a few hundred pixels of a canvas four thousand across,
+and assigning `canvas.width` reallocates. `repaint` drops it rather than
+restoring it — a re-bake writes the baked state from the strokes themselves,
+so a backup taken before it describes nothing.
 
 Which tools are turned round is kept per tool, in `editor/tool-routing.ts`,
 not on the style: a Pattern brush left set to erase is still an eraser when
@@ -4953,15 +4963,38 @@ floods the area under a tap is the version after this one, and it needs a
 raster of the session to flood — which is the thing this deliberately does not
 build yet.
 
-**The eraser reaches the artwork, and needed a second buffer to do it.** On
-screen, `destination-out` clears what is on the layer being drawn on, which is
-the session's own ink — the PSD itself is drawn by Phaser underneath and a 2D
-canvas above it cannot punch a hole in it. That was the whole of what erasing
-here did: the raster Apply sends is drawn on a *clear ground*, so an erasing
-stroke in it takes out the ink laid before it and there is nothing else in
-there to take, and then the result was composited **over** the layer. Rubbing
-somewhere the session had not drawn therefore did nothing whatever, which is
-not what "the same brush with the paint taken out" means on raster data.
+**The eraser reaches the artwork, in the file and on the screen.** Two halves,
+and they were broken separately.
+
+*In the file*: the raster Apply sends is drawn on a **clear ground**, so an
+erasing stroke in it takes out the ink laid before it and there is nothing else
+in there to take — and the result was then composited *over* the layer. Rubbing
+somewhere the session had not drawn produced a buffer of nothing and changed
+nothing.
+
+*On the screen*: the PSD is drawn by Phaser underneath the drawing surface, and
+a 2D canvas above it cannot punch a hole in one. So even when the file was
+being cut correctly, you could not see it until Apply had written and re-parsed
+the whole thing.
+
+**The layer moves into the drawing surface for the duration of the mode.** That
+is the answer to the second half and it makes the first half honest as well.
+`psd-edit.ts` takes the layer's own texture — Phaser's, the one already on
+screen, so the swap is invisible — and hands it to `Surface.setBackdrop`, which
+bakes it under the ink on every re-bake; `DocRenderer.drawIntoPsdLayer` turns
+the canvas's own copy off, because two of them would be seeing double. An
+eraser then has something to erase, the hole appears under the pointer as it is
+dragged, and what you are looking at while you work is the composite Apply is
+going to make rather than a picture of the intention. `sync` pushes and clears
+it beside `revealInstance` and the straighten hold, for their reason: however
+the mode ends, and whatever ended it, the layer goes back to the canvas.
+
+The one thing it costs is stacking. While the mode is up, that layer draws
+above everything Phaser does, so a *sibling layer above it in the same file*
+appears underneath it. The ink already had that property — it has always drawn
+over the whole canvas until Apply — and for a file this editor wrote there is
+one sprite layer, so the case is rare; a foredrop canvas over the live one is
+what would fix it.
 
 So Apply sends two buffers over the same rectangle. `rasteriseStrokes` with
 `eraseMask` renders the erasing strokes a second time as the marks they *would
@@ -4979,10 +5012,9 @@ silent when wrong: a rub outside the layer does not drag its rectangle out to
 meet it, and a session that only rubbed sends blank ink which is not laid on at
 all.
 
-**What it still cannot do is preview.** The wash shows exactly where the cut
-will land, and the hole appears when Apply re-parses the file — the same delay
-as every other thing Apply does, but the only one where the *canvas* is what
-changes rather than something being added to it.
+What Apply sends is unchanged by any of that: the strokes and the mask, not the
+backdrop. The preview and the file are two runs of the same arithmetic over the
+same strokes rather than two descriptions of it.
 
 **The pixel brush is out of the numbered set** (`PIXEL_BRUSH = 90`). The five
 are the pencil's, chosen from the inspector's own TOOL section; this is a tool

@@ -50,6 +50,18 @@ import { boxesOverlap, strokeBox } from "./geometry";
 import { renderStroke } from "./render";
 import type { Bounds } from "./types";
 
+/**
+ * Artwork to bake under the ink: the picture, and where it goes in the world.
+ *
+ * See `Surface.backdrop` for what it is for.
+ */
+export interface Backdrop {
+  image: CanvasImageSource;
+  box: Bounds;
+  /** False for a pixel-art project, where a smoothed enlargement is a smudge. */
+  smooth: boolean;
+}
+
 /** How the world maps onto the screen: `screen = (world − origin) × zoom`. */
 export interface Viewport {
   originX: number;
@@ -111,6 +123,38 @@ export class Surface {
    */
   private liveDirty: Bounds | null = null;
 
+  /**
+   * Artwork baked **under** the ink, in world units.
+   *
+   * One user: PSD Edit mode, which puts the layer being drawn into here and
+   * turns the canvas's own copy of it off. Two reasons, and the second is the
+   * one that matters. It stops the mode showing a picture the ink is merely
+   * *over* — and it means an eraser has something to erase. A brush turned
+   * round composites `destination-out`, which against a canvas holding only
+   * this session's ink takes out this session's ink and nothing else; with
+   * the artwork underneath, the same stroke cuts the artwork, exactly as the
+   * cut `psd_paint::cut` will make when Apply lands. The preview and the
+   * result are then the same arithmetic rather than two descriptions of it.
+   */
+  private backdrop: Backdrop | null = null;
+  /**
+   * An erase gesture in flight, previewed on the **baked** canvas.
+   *
+   * Every other tool previews on the live canvas, which sits over the baked
+   * one. An eraser cannot: `destination-out` into a canvas that holds nothing
+   * takes nothing out and shows nothing, and a hole in an upper layer only
+   * reveals the layer below it. So an erase in progress is drawn into `done`
+   * itself, over the pixels it is actually taking away, and what it took is
+   * put back before the next frame re-lays it — the same "re-lay the whole
+   * mark every frame" the live canvas's callers already do, against a backup
+   * of the rectangle the mark covers rather than a clear.
+   *
+   * The backup is the mark's own rectangle, not the backing: a stroke covers
+   * a few hundred pixels of a canvas that is four thousand across.
+   */
+  private erasing: { canvas: HTMLCanvasElement; rect: Bounds | null } | null =
+    null;
+
   private view: Viewport = {
     originX: 0,
     originY: 0,
@@ -134,6 +178,22 @@ export class Surface {
 
     this.doneCtx = context(this.done);
     this.liveCtx = context(this.live);
+  }
+
+  /**
+   * Put artwork under the ink, or take it away.
+   *
+   * A re-bake either way, because what is baked is wrong the moment this
+   * changes — and it is a mode opening or closing, which is nowhere near a
+   * gesture.
+   */
+  setBackdrop(backdrop: Backdrop | null, strokes: readonly Stroke[]): void {
+    // By identity, and that is what makes it safe to push on every document
+    // change: the mode holds one record for the life of a session, so the
+    // common call is "still that one" and costs a comparison.
+    if (backdrop === this.backdrop) return;
+    this.backdrop = backdrop;
+    this.repaint(strokes);
   }
 
   /**
@@ -211,8 +271,12 @@ export class Surface {
       return;
     }
 
+    // A re-bake is the baked state, so any backup taken before it describes
+    // nothing — see `restoreErased`.
+    if (this.erasing) this.erasing.rect = null;
     this.clearAll(this.doneCtx);
     this.applyWorldTransform(this.doneCtx);
+    this.layBackdrop();
     const visible = this.backingBounds();
     for (const stroke of strokes) {
       const box = strokeBox(stroke);
@@ -221,6 +285,84 @@ export class Surface {
     }
     this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
     this.painted = strokes;
+  }
+
+  /**
+   * Show an in-flight erase on the baked canvas.
+   *
+   * `box` is the mark's world bounds, and what comes back is a context
+   * carrying the world transform — `beginLive`'s shape, so a caller swaps one
+   * for the other and draws the same mark.
+   *
+   * Everything laid into it is put back at the start of the next frame and by
+   * `endErase`, so a caller re-lays its whole mark every frame exactly as it
+   * would on the live canvas. What lands for real is the stroke going into the
+   * document afterwards, through `apply`.
+   */
+  beginErase(box: Bounds): CanvasRenderingContext2D {
+    this.restoreErased();
+    if (this.pixels === 0) return this.doneCtx;
+    const held = this.erasing ?? { canvas: document.createElement("canvas"), rect: null };
+    this.erasing = held;
+
+    // The mark's rectangle in backing pixels, clamped to the backing: a stroke
+    // run off the edge has nothing out there to put back.
+    const want = this.toBacking(box);
+    const x = Math.max(0, Math.floor(want.x));
+    const y = Math.max(0, Math.floor(want.y));
+    const right = Math.min(this.pixels, Math.ceil(want.x + want.width));
+    const bottom = Math.min(this.pixels, Math.ceil(want.y + want.height));
+    const width = right - x;
+    const height = bottom - y;
+
+    if (width > 0 && height > 0) {
+      // Grown in steps, because the rectangle grows with the stroke and
+      // assigning `canvas.width` reallocates the backing store every time.
+      const step = (n: number) => Math.min(this.pixels, Math.ceil(n / 256) * 256);
+      if (held.canvas.width < width || held.canvas.height < height) {
+        held.canvas.width = Math.max(held.canvas.width, step(width));
+        held.canvas.height = Math.max(held.canvas.height, step(height));
+      }
+      const backup = held.canvas.getContext("2d");
+      if (backup) {
+        backup.clearRect(0, 0, width, height);
+        backup.drawImage(this.done, x, y, width, height, 0, 0, width, height);
+        held.rect = { x, y, width, height };
+      }
+    } else {
+      held.rect = null;
+    }
+
+    this.applyWorldTransform(this.doneCtx);
+    return this.doneCtx;
+  }
+
+  /** Done laying this frame's mark — the counterpart to `endLive`. */
+  endEraseFrame(): void {
+    this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /** Put the baked canvas back as it was, and forget the gesture. */
+  endErase(): void {
+    this.restoreErased();
+    this.erasing = null;
+  }
+
+  /**
+   * Undo the last previewed frame, if there is one to undo.
+   *
+   * Also what `repaint` calls: a re-bake writes the baked state from the
+   * strokes themselves, so a backup taken before it is not a backup of
+   * anything any more and putting it back would restore ink that has gone.
+   */
+  private restoreErased(): void {
+    const held = this.erasing;
+    if (!held?.rect) return;
+    const { x, y, width, height } = held.rect;
+    this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
+    this.doneCtx.clearRect(x, y, width, height);
+    this.doneCtx.drawImage(held.canvas, 0, 0, width, height, x, y, width, height);
+    held.rect = null;
   }
 
   /** Put the live context into world coordinates, cleared and ready. */
@@ -360,6 +502,25 @@ export class Surface {
     this.liveDirty = null;
 
     this.repaint(strokes);
+  }
+
+  /**
+   * The artwork, under everything, in the world transform already applied.
+   *
+   * Nothing is clipped to the backing here: `drawImage` with a destination
+   * rectangle does its own clipping, and the whole point of the backing is
+   * that it covers rather more world than fits on the screen.
+   */
+  private layBackdrop(): void {
+    if (!this.backdrop) return;
+    const { image, box, smooth } = this.backdrop;
+    const held = this.doneCtx.imageSmoothingEnabled;
+    // A pixel-art project's artwork is pixels, and a smoothed one is a smudge
+    // that happens to be the right size — the same call `paint-render.ts`
+    // makes about a pattern.
+    this.doneCtx.imageSmoothingEnabled = smooth;
+    this.doneCtx.drawImage(image, box.x, box.y, box.width, box.height);
+    this.doneCtx.imageSmoothingEnabled = held;
   }
 
   private size(el: HTMLCanvasElement, pixels: number, dpr: number): void {

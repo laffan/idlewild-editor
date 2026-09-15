@@ -25,17 +25,27 @@ vi.mock("../render", () => ({
   STREAMLINE: 0.42,
   renderStroke: (_ctx: unknown, stroke: Stroke) => {
     drawn.push(stroke);
+    calls.push(`stroke:${stroke.id}`);
   },
   renderLive: () => undefined,
 }));
 
 const { Surface } = await import("../surface");
 
+/**
+ * Everything drawn anywhere, in order, so a test can say what happened before
+ * what — which is the whole of what the backdrop and the erase preview are
+ * about. Entries are `"stroke:<id>"`, `"image"` and `"clear"`.
+ */
+const calls: string[] = [];
+
 /** A 2D context with the handful of methods the surface calls. */
 function fakeContext(): Record<string, unknown> {
   return {
     setTransform: vi.fn(),
-    clearRect: vi.fn(),
+    clearRect: vi.fn(() => void calls.push("clear")),
+    drawImage: vi.fn(() => void calls.push("image")),
+    imageSmoothingEnabled: true,
     canvas: null,
   };
 }
@@ -66,6 +76,7 @@ function fakeDiv(): Record<string, unknown> {
 
 beforeEach(() => {
   drawn.length = 0;
+  calls.length = 0;
   (globalThis as Record<string, unknown>).document = {
     createElement: (tag: string) => (tag === "canvas" ? fakeCanvas() : fakeDiv()),
   };
@@ -102,8 +113,16 @@ function ready(strokes: readonly Stroke[] = []) {
   const surface = new Surface(atlas);
   surface.sync(view, strokes);
   drawn.length = 0;
+  calls.length = 0;
   return surface;
 }
+
+/** Artwork to put under the ink — PSD Edit mode's layer, as far as this goes. */
+const backdrop = {
+  image: {} as CanvasImageSource,
+  box: { x: 0, y: 0, width: 64, height: 64 },
+  smooth: true,
+};
 
 describe("the backing, when the ink changes", () => {
   it("does nothing at all for a change that is not about ink", () => {
@@ -172,5 +191,94 @@ describe("the backing, when the ink changes", () => {
     const surface = ready(held);
     surface.repaint(held);
     expect(drawn.map((s) => s.id)).toEqual(["a", "b"]);
+  });
+});
+
+/**
+ * Artwork baked under the ink, which is how an eraser in PSD Edit mode has
+ * anything to erase. See `Surface.backdrop`.
+ */
+describe("a backdrop", () => {
+  it("goes down before the ink, so the ink is over it", () => {
+    const held = [stroke("a")];
+    const surface = ready(held);
+    surface.setBackdrop(backdrop, held);
+    // The clear, the picture, then the stroke — in that order and once each.
+    expect(calls).toEqual(["clear", "image", "stroke:a"]);
+  });
+
+  it("stays down across a re-bake, and goes when it is taken away", () => {
+    const held = [stroke("a")];
+    const surface = ready(held);
+    surface.setBackdrop(backdrop, held);
+    calls.length = 0;
+    surface.repaint(held);
+    expect(calls).toEqual(["clear", "image", "stroke:a"]);
+
+    calls.length = 0;
+    surface.setBackdrop(null, held);
+    expect(calls).toEqual(["clear", "stroke:a"]);
+  });
+
+  /** Pushed on every document change while the mode is up — see `psd-edit.ts`. */
+  it("costs nothing when it is the one already down", () => {
+    const held = [stroke("a")];
+    const surface = ready(held);
+    surface.setBackdrop(backdrop, held);
+    calls.length = 0;
+    surface.setBackdrop(backdrop, held);
+    expect(calls).toEqual([]);
+  });
+});
+
+/**
+ * An in-flight erase is previewed on the **baked** canvas rather than the live
+ * one, because a hole in a layer above only reveals the layer below. What it
+ * takes has to go back before the stroke itself lands, or the same pixels come
+ * out twice.
+ */
+describe("an erase in flight", () => {
+  const box = { x: 0, y: 0, width: 32, height: 32 };
+
+  it("keeps a copy of what it is about to take, and puts it back", () => {
+    const surface = ready([stroke("a")]);
+    surface.beginErase(box);
+    // The copy out of the baked canvas and into the backup.
+    expect(calls).toEqual(["clear", "image"]);
+
+    calls.length = 0;
+    surface.endErase();
+    // And back the other way: the rectangle cleared, then the copy over it.
+    expect(calls).toEqual(["clear", "image"]);
+  });
+
+  it("restores before it re-lays, so re-laying every frame is free of history", () => {
+    const surface = ready([stroke("a")]);
+    surface.beginErase(box);
+    calls.length = 0;
+    surface.beginErase(box);
+    // Restore (clear + image), then snapshot again (clear + image).
+    expect(calls).toEqual(["clear", "image", "clear", "image"]);
+  });
+
+  /**
+   * A re-bake writes the baked state from the strokes themselves, so a backup
+   * taken before it describes nothing — putting it back would restore ink that
+   * has gone.
+   */
+  it("drops the copy when the backing is re-baked under it", () => {
+    const held = [stroke("a")];
+    const surface = ready(held);
+    surface.beginErase(box);
+    surface.repaint(held);
+    calls.length = 0;
+    surface.endErase();
+    expect(calls).toEqual([]);
+  });
+
+  it("is over when there was nothing in flight", () => {
+    const surface = ready([stroke("a")]);
+    surface.endErase();
+    expect(calls).toEqual([]);
   });
 });

@@ -11,7 +11,7 @@
 
 import Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
-import { maskKey, scopeKeys, textureNeeds } from "../lib/manifest";
+import { maskKey, scopeKeys, textureKey, textureNeeds } from "../lib/manifest";
 import * as log from "../lib/log";
 
 /** How long to wait on psd-to-phaser before placing anyway. */
@@ -358,4 +358,35 @@ function walk(layers: unknown, visit: (node: ManifestNode) => void): void {
     visit(node);
     walk(node.children, visit);
   }
+}
+
+/** One layer's picture, and how it should be drawn. */
+export interface LayerImage {
+  image: CanvasImageSource;
+  /** False on a pixel-art project, where a smoothed enlargement is a smudge. */
+  smooth: boolean;
+}
+
+/**
+ * The decoded picture behind one layer of a loaded PSD, or null.
+ *
+ * Phaser has it already — the plugin loaded it when the file was placed — so
+ * what comes back is the picture that is **on screen** rather than a second
+ * copy fetched and decoded again. PSD Edit mode's one caller relies on that:
+ * it bakes the layer into the drawing surface and turns the canvas's own copy
+ * off, and the swap has to be invisible. See `textureKey` for the scoping.
+ *
+ * Null for a layer with no texture at all, which is any freshly added one —
+ * psd-to-json exports nothing for a single transparent pixel.
+ */
+export function layerImage(
+  scene: Phaser.Scene,
+  key: string,
+  name: string,
+): LayerImage | null {
+  const scoped = textureKey(key, name);
+  if (!scene.textures.exists(scoped)) return null;
+  const image = scene.textures.get(scoped).getSourceImage() as CanvasImageSource;
+  if (!image) return null;
+  return { image, smooth: scene.game.config.pixelArt !== true };
 }

@@ -27,7 +27,7 @@ import type { DocStore } from "../lib/doc-store";
 import type { Stroke } from "../lib/types";
 import { createAtlasCache, type AtlasCache } from "./atlas";
 import { StrokeStore } from "./stroke-store";
-import { Surface, type Viewport } from "./surface";
+import { Surface, type Backdrop, type Viewport } from "./surface";
 import {
   beginDraw,
   beginErase,
@@ -212,6 +212,11 @@ export class DrawingLayer {
     this.endSession();
     this.tool = tool;
     this.surface.clearLive();
+    // A half-built erasing shape has a hole cut into the baked canvas rather
+    // than a preview on the live one, and the line below only puts it back if
+    // the shape is still being shown. Putting it back first costs nothing —
+    // `repaint` re-cuts it — and is what stops a hole outliving the tool.
+    this.surface.endErase();
     this.surface.setInteractive(tool !== null);
     this.root.classList.toggle("erasing", tool === "eraser");
     // A shape half tapped out survives a change of tool but stops being
@@ -303,6 +308,17 @@ export class DrawingLayer {
    * change of layer changes which strokes there are — neither is describable
    * as a diff against what is on the backing.
    */
+  /**
+   * Put artwork under the ink, or take it away — see `Surface.backdrop`.
+   *
+   * PSD Edit mode's alone. It is here rather than on the surface's own face
+   * because the surface is private to this layer, and because the strokes to
+   * re-bake with are this layer's business.
+   */
+  setBackdrop(backdrop: Backdrop | null): void {
+    this.surface.setBackdrop(backdrop, this.strokes());
+  }
+
   repaint(): void {
     this.surface.repaint(this.strokes());
   }

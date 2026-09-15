@@ -44,6 +44,12 @@ function fakeSurface(): Surface {
     beginLive: () => ctx,
     endLive: vi.fn(),
     clearLive: vi.fn(),
+    // An erasing shape is previewed by cutting the *baked* canvas rather than
+    // drawing on the live one — see `Surface.beginErase`. Nothing in this
+    // suite erases, so both ends are here only to be called and do nothing.
+    beginErase: () => ctx,
+    endEraseFrame: vi.fn(),
+    endErase: vi.fn(),
     // One world unit per screen pixel, so every radius in the shape is in the
     // same numbers the tests are written in.
     worldPerScreenPixel: 1,

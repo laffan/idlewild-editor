@@ -127,6 +127,17 @@ export class DocRenderer {
    */
   private revealed: string | null = null;
   /**
+   * The one PSD layer the *drawing surface* has taken over.
+   *
+   * PSD Edit mode's, and the reason is erasing. The surface bakes that layer's
+   * pixels under the ink so a brush turned round cuts the artwork rather than
+   * only this session's marks — see `Surface.backdrop`. Two copies of it on
+   * screen would be seeing double, so the canvas's own goes dark for as long
+   * as the mode is up. Like `hidden` above it is about what is on screen this
+   * second, and a cancelled session leaves no trace of it in the document.
+   */
+  private drawnInto: { key: string; name: string } | null = null;
+  /**
    * How to make an object for a placement that has none — see `setPlacer`.
    */
   private placer: ((layerId: string, placement: Placement) => void) | null = null;
@@ -166,6 +177,21 @@ export class DocRenderer {
    */
   previewVisibility(key: string | null, names: readonly string[] = []): void {
     this.preview = key ? { key, names: new Set(names) } : null;
+    this.syncPlacements();
+  }
+
+  /**
+   * Keep one layer of one PSD off the canvas while the drawing surface has it.
+   *
+   * `name` is the manifest name — what psd-to-phaser called the object it
+   * made — not the file's own `S | ` spelling.
+   */
+  drawIntoPsdLayer(key: string | null, name = ""): void {
+    const next = key ? { key, name } : null;
+    if (next?.key === this.drawnInto?.key && next?.name === this.drawnInto?.name) {
+      return;
+    }
+    this.drawnInto = next;
     this.syncPlacements();
   }
 
@@ -457,15 +483,26 @@ export class DocRenderer {
     whole: boolean;
     parts: readonly string[] | undefined;
   } {
-    const preview =
-      this.preview?.key === placement.psdKey ? this.preview.names : null;
-    if (!preview) {
-      return { whole: !!placement.hidden, parts: placement.hiddenParts };
-    }
     // A placement points at a layer by path; what the objects carry is the
     // last step of it, which is the name psd-to-phaser gave them.
     const leaf = placement.layerPath.split("/").pop() ?? placement.layerPath;
-    return { whole: preview.has(leaf), parts: [...preview] };
+    const preview =
+      this.preview?.key === placement.psdKey ? this.preview.names : null;
+    const answer = preview
+      ? { whole: preview.has(leaf), parts: [...preview] as readonly string[] }
+      : { whole: !!placement.hidden, parts: placement.hiddenParts };
+
+    // And one more on top of whichever of those answered: the layer the
+    // drawing surface is holding. It is *added* rather than instead, because
+    // it is a different question — what is on screen this second, against
+    // what the file or the panel says is turned on.
+    const taken =
+      this.drawnInto?.key === placement.psdKey ? this.drawnInto.name : null;
+    if (!taken) return answer;
+    return {
+      whole: answer.whole || leaf === taken,
+      parts: [...(answer.parts ?? []), taken],
+    };
   }
 
   /**

@@ -146,24 +146,14 @@ function asStream(points: readonly number[]): StreamPoint[] {
 }
 
 /**
- * What an eraser's live preview is drawn in.
- *
- * The accent, at a bit over a third. It has to read as *marking out* rather
- * than as painting — which is why it is one flat translucent colour and not
- * the stroke's own — and it has to be visible over both bare paper and a
- * dark sketch, which neither a white nor a black wash is.
- */
-export const ERASE_PREVIEW = "#ec301366";
-
-/**
  * Lay an in-flight stroke, which has a style but no record yet.
  *
- * **An eraser previews as a wash, not as a hole.** The live canvas sits over
- * the baked one and holds nothing of its own, so compositing `destination-out`
- * into it would take away nothing and show nothing — you would drag an eraser
- * across the canvas and watch it behave exactly like a broken tool. What goes
- * up instead is the mark that is about to come off, in `ERASE_PREVIEW`: the
- * same geometry the release will subtract, in a colour that says so.
+ * **An eraser is not previewed here.** The live canvas sits over the baked one
+ * and holds nothing of its own, so compositing `destination-out` into it takes
+ * nothing away and shows nothing — and a hole in an upper layer would only
+ * reveal the layer below it. An in-flight erase is cut into the *baked* canvas
+ * instead, over the pixels it is actually taking: `Surface.beginErase`, and
+ * `renderErase` below for the mark itself.
  */
 export function renderLive(
   ctx: CanvasRenderingContext2D,
@@ -171,16 +161,41 @@ export function renderLive(
   style: StrokeStyle,
   atlas: AtlasCache,
 ): void {
-  const erasing = style.erase || style.mode === "erase";
   paint(
     ctx,
     stream,
     style.size,
-    erasing ? ERASE_PREVIEW : style.color,
-    erasing && style.mode === "erase" ? "ink" : style.mode,
+    style.color,
+    style.mode === "erase" ? "ink" : style.mode,
     style.brushId,
     atlas,
     { paint: style.paint, stamp: style.stamp, erase: false },
+  );
+}
+
+/**
+ * The same stroke as the hole it is going to make.
+ *
+ * For `Surface.beginErase`: the real subtraction, laid into the baked canvas
+ * so what you watch while you drag is what the release leaves behind. The
+ * legacy "erase" mode reads as ink for the reason in `paint` — what is being
+ * asked for here is the mark, and the flag says what to do with it.
+ */
+export function renderErase(
+  ctx: CanvasRenderingContext2D,
+  stream: readonly StreamPoint[],
+  style: StrokeStyle,
+  atlas: AtlasCache,
+): void {
+  paint(
+    ctx,
+    stream,
+    style.size,
+    style.color,
+    style.mode === "erase" ? "ink" : style.mode,
+    style.brushId,
+    atlas,
+    { paint: style.paint, stamp: style.stamp, erase: true },
   );
 }
 
@@ -339,12 +354,7 @@ function paintMark(
   // leaves the loop below entirely — and a 2D context reads `#rrggbbaa` on
   // its own, so opacity needs nothing said about it here.
   if (mode === "fill") {
-    ctx.save();
-    const painted =
-      spec.kind !== "color" &&
-      paintRegion(ctx, stream, color, spec, options.stamp ?? { width: 32, height: 32 });
-    if (!painted) fillRegion(ctx, stream, color);
-    ctx.restore();
+    fillMark(ctx, stream, color, spec, options.stamp);
     return;
   }
 
@@ -373,6 +383,51 @@ function paintMark(
     return;
   }
   flattened(ctx, stream, size, tinted, composite, strokeAlpha);
+}
+
+/** The inside of a closed outline, in whatever the fill is made of. */
+function fillMark(
+  ctx: CanvasRenderingContext2D,
+  stream: readonly StreamPoint[],
+  color: string,
+  spec: PaintSpec,
+  stamp: { width: number; height: number; diamond?: boolean } | undefined,
+): void {
+  ctx.save();
+  const painted =
+    spec.kind !== "color" &&
+    paintRegion(ctx, stream, color, spec, stamp ?? { width: 32, height: 32 });
+  if (!painted) fillRegion(ctx, stream, color);
+  ctx.restore();
+}
+
+/**
+ * A filled region as the hole it is going to make.
+ *
+ * Its own entry point rather than `renderErase` with a "fill" mode, because a
+ * region is not stamped and so has no brush: the two fill tools hold no atlas
+ * and should not have to grow one in order to rub something out.
+ *
+ * One composite over the finished region, for the reason in `paint`: a field
+ * of shapes cuts its own holes, and subtracting those separately would take
+ * them out of the canvas as well.
+ */
+export function renderEraseRegion(
+  ctx: CanvasRenderingContext2D,
+  points: readonly { x: number; y: number }[],
+  style: Pick<StrokeStyle, "color" | "paint" | "stamp">,
+): void {
+  if (points.length < 3) return;
+  const stream: StreamPoint[] = points.map((p) => ({
+    point: [p.x, p.y],
+    pressure: 1,
+  }));
+  const options: PaintOptions = { paint: style.paint, stamp: style.stamp };
+  const box = markBox(stream, 0, "fill", options);
+  if (!box) return;
+  composited(ctx, box, "destination-out", alphaOf(style.color), (target) => {
+    fillMark(target, stream, opaqueHex(style.color), style.paint, style.stamp);
+  });
 }
 
 /**
