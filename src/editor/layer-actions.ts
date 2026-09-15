@@ -122,3 +122,51 @@ function describeContents(layer: Layer): string {
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
+
+/** What the shell's two delete entry points need from around them. */
+export interface DeleteWiring extends DeleteDeps {
+  /** The selection as it stands, or null when the canvas is not up. */
+  selection: () => Selection | null;
+  setSelection: (selection: Selection) => void;
+  /** Make this the layer new work lands on. */
+  setActiveLayer: (layerId: string) => void;
+  /** Redraw the left panel, which both of these change. */
+  redrawLayers: () => void;
+}
+
+/**
+ * The two ways something is deleted, as the shell offers them.
+ *
+ * Both are thin — a guard, the question above, and what has to happen
+ * *afterwards* — and both were in the middle of `editor.ts` between things
+ * they have nothing to do with. They belong beside the answers they call.
+ */
+export function createDeletes(wiring: DeleteWiring): {
+  deleteSelection: () => void;
+  deleteLayer: (layerId: string) => Promise<void>;
+} {
+  return {
+    /** Delete removes whatever is selected — see `deleteSelected`. */
+    deleteSelection() {
+      const selection = wiring.selection();
+      if (selection) deleteSelected(selection, wiring);
+    },
+
+    /**
+     * Get rid of a whole document layer, once the sheet above has asked.
+     *
+     * The layer that was being worked on may be the one that has gone, and a
+     * selection pointing into it certainly has, so both land on whatever
+     * remains.
+     */
+    async deleteLayer(layerId: string): Promise<void> {
+      if (!(await confirmDeleteLayer(wiring.store, layerId))) return;
+      const next = wiring.store.layers[0]?.id ?? "";
+      wiring.setActiveLayer(next);
+      wiring.setSelection(
+        next ? { kind: "layer", layerId: next } : { kind: "none" },
+      );
+      wiring.redrawLayers();
+    },
+  };
+}

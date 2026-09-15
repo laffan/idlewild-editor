@@ -33,9 +33,20 @@
 
 import { clear, h } from "../lib/dom";
 import type { FillMode, StrokeStyle } from "../drawing";
-import { makeSectionsCollapsible, sectionTitle } from "./inspect-collapse";
+import {
+  makeSectionsCollapsible,
+  revealSection,
+  sectionTitle,
+} from "./inspect-collapse";
 import { toolPanel, TOOL_HINTS, TOOL_TITLES } from "./inspect-brush";
-import { createZone, type Zone, type ZoneOptions } from "./inspect-zone";
+import {
+  createZone,
+  layerOf,
+  layerZoneApplies,
+  ZONE_HINTS,
+  type Zone,
+  type ZoneOptions,
+} from "./inspect-zone";
 import { renderBackground } from "./inspect-background";
 import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
 import { layerKind } from "../lib/layer-kinds";
@@ -134,42 +145,13 @@ export interface InspectorCallbacks
 }
 
 /**
- * What each zone heading says on hover.
+ * The heading the file's own layer list carries — `psd-layers.ts` writes it.
  *
- * The three answers the panel's order is there to give, in the order it
- * gives them: what is in my hand, where it is going, what it is on top of.
- * The TOOL zone prefers the tool's own line when it has one — see
- * `TOOL_HINTS` — because by then there is something more specific to say.
+ * Named here as well because `revealPsdLayers` folds the panel down to it, and
+ * a section found by a string that has drifted is a fold that quietly closes
+ * everything.
  */
-const ZONE_HINTS: Record<string, string> = {
-  TOOL: "What the thing in your hand has to set.",
-  LAYER: "The layer the next thing you do lands on.",
-  OBJECT: "What is selected on the canvas.",
-};
-
-/**
- * Which layer a selection belongs to, or "" for one that belongs to none.
- *
- * A region is the case that has none: a run of grid spaces is ground rather
- * than a thing standing on a layer, and it is what the *next* Fill or Add
- * Image will put something on. So the LAYER zone falls through to the active
- * layer there, which is the layer that fill would land on anyway.
- */
-function layerOf(selection: Selection): string {
-  switch (selection.kind) {
-    case "layer":
-    case "placement":
-    case "placements":
-    case "fill":
-    case "point":
-    case "zone":
-    case "background":
-    case "strokes":
-      return selection.layerId;
-    default:
-      return "";
-  }
-}
+const PSD_SECTION = "PSD";
 
 export class Inspector {
   readonly root: HTMLElement;
@@ -211,6 +193,8 @@ export class Inspector {
   private psdLayers: PsdLayerEditor | null = null;
   /** The placed PSD opened up into its layers, if any — see `game/unit.ts`. */
   private adjusting: string | null = null;
+  /** Set by `revealPsdLayers`, and cleared by the render that acts on it. */
+  private revealPsd = false;
 
   constructor(store: DocStore, grid: Grid, callbacks: InspectorCallbacks) {
     this.lastPaint.patternScale = defaultPatternScale(grid);
@@ -221,7 +205,7 @@ export class Inspector {
     this.body = h("div", { class: "panel-body scroll" });
     // Replaced on every render; made here so the field is never null and the
     // panels never have to ask whether there is a zone to write into.
-    this.zone = createZone("OBJECT", { hint: ZONE_HINTS.OBJECT });
+    this.zone = createZone("OBJECT");
     this.current = this.zone.body;
     // No `panel-head`. The three zones carry their own headings, and a fourth
     // heading over them saying "Inspector" would be a name for the furniture
@@ -272,6 +256,26 @@ export class Inspector {
 
   setSelection(selection: Selection): void {
     this.selection = selection;
+    this.render();
+  }
+
+  /**
+   * A PSD has just been created — show the part of the panel that is about
+   * painting it.
+   *
+   * Generate PSD, both Convert to PSDs, an extrude Apply and a new image
+   * backdrop all end the same way: an empty file selected on the canvas, whose
+   * one useful next move is four sections down a panel that opens on Info. So
+   * the layer list is opened, the rest of the OBJECT zone folded, and the
+   * panel scrolled to it.
+   *
+   * Refused unless a placement is really selected, which is what makes it safe
+   * to call without checking whether the conversion worked: one that was
+   * refused leaves the old selection, or none, and this does nothing.
+   */
+  revealPsdLayers(): void {
+    if (this.selection.kind !== "placement") return;
+    this.revealPsd = true;
     this.render();
   }
 
@@ -335,6 +339,21 @@ export class Inspector {
     // folded from the heading each one already carries.
     makeSectionsCollapsible(this.body);
     this.restoreName(editing);
+    if (this.revealPsd) {
+      this.revealPsd = false;
+      this.showPsdSection();
+    }
+  }
+
+  /**
+   * Fold the OBJECT zone down to the file's own layer list and scroll to it.
+   *
+   * That zone rather than the whole panel: the TOOL zone is about what is in
+   * your hand, which the file just written has nothing to do with.
+   */
+  private showPsdSection(): void {
+    const zone = this.body.querySelector<HTMLElement>(".inspect-zone.zone-object");
+    if (zone) revealSection(zone, PSD_SECTION, this.body);
   }
 
   /**
@@ -374,17 +393,17 @@ export class Inspector {
   /**
    * LAYER — the one being worked on.
    *
-   * The selection's own layer when the selection has one, and the active
-   * layer otherwise. That is not a fallback so much as the same rule read
-   * twice: the layer this zone is about is always the one the next thing you
-   * do will land on, and selecting something inside a layer is what makes
-   * that layer active in the first place.
+   * Only when the layer is what there is to talk about: a layer selected, or
+   * nothing selected, or a region — ground, which is what the next Fill would
+   * land on. Something standing *on* a layer takes the panel for itself; see
+   * `layerZoneApplies`.
    */
   private renderLayerZone(): void {
+    if (!layerZoneApplies(this.selection)) return;
     const layerId = layerOf(this.selection) || this.callbacks.activeLayerId();
     const layer = this.store.layer(layerId);
     if (!layer) return;
-    this.open("LAYER", { subject: layer.name, hint: ZONE_HINTS.LAYER });
+    this.open("LAYER", { subject: layer.name });
     if (layerKind(layer) === "pattern") {
       renderPatternLayer(this.surface(), this.store, this.callbacks, layer);
     } else {
@@ -400,7 +419,7 @@ export class Inspector {
   private renderObject(): boolean {
     const selection = this.selection;
     if (selection.kind === "none" || selection.kind === "layer") return false;
-    this.open("OBJECT", { hint: ZONE_HINTS.OBJECT });
+    this.open("OBJECT");
     switch (selection.kind) {
       case "region":
         renderRegion(this.surface(), this.grid, this.callbacks, selection);

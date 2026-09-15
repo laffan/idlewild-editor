@@ -35,7 +35,7 @@ import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
 import { libraryPointer, libraryStyle } from "./stamp-box";
 import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
-import { confirmDeleteLayer, deleteSelected } from "./layer-actions";
+import { createDeletes } from "./layer-actions";
 import { openExportAssets } from "./export-assets";
 import { openAddImage, openPublish } from "./sheets";
 import { createRenderSettings } from "./render-settings";
@@ -166,6 +166,7 @@ export async function mountEditor(
       setActiveLayer(layerId);
       layers.render();
     },
+    onPsdCreated: () => inspector.revealPsdLayers(),
   };
 
   // Every control in the properties sidebar, wired in `inspect-wiring.ts`.
@@ -259,7 +260,8 @@ export async function mountEditor(
       const selection = handle?.scene.getSelection();
       const scene = handle?.scene;
       if (selection?.kind !== "region" || !scene) return;
-      void generatePsdForRegion(meta.id, grid, scene, selection.from, selection.to);
+      void generatePsdForRegion(meta.id, grid, scene, selection.from, selection.to)
+        .then(() => inspector.revealPsdLayers());
     },
     onExtrude: () => extrude.open(),
     onPatternShape: () => shapes.fromSelection(),
@@ -289,6 +291,9 @@ export async function mountEditor(
       inspector.reloadPsdLayers(key);
       psdChanged();
     },
+    // An extrusion is a greybox to paint over, so Apply opens the file's own
+    // layer list the way every other Create PSD does.
+    onPsdCreated: () => inspector.revealPsdLayers(),
     // Back to the layer's own panel, where the shape list is.
     onMaskDone: (layerId) => handle?.scene.setSelection({ kind: "layer", layerId }),
   });
@@ -517,8 +522,13 @@ export async function mountEditor(
   canvasWrap.appendChild(drawing.root);
   drawing.sync(handle.scene.viewport());
   if (import.meta.env.DEV) {
-    // Handle for the browser harness in harness/; dev builds only.
-    (window as unknown as Record<string, unknown>).__idlewildScene = handle.scene;
+    // Handles for the browser harness in harness/; dev builds only. The panel
+    // is here as well as the scene because some of what it does is reached
+    // from nowhere else — `revealPsdLayers` fires at the end of a conversion
+    // that needs the Rust side to have written a file.
+    const hooks = window as unknown as Record<string, unknown>;
+    hooks.__idlewildScene = handle.scene;
+    hooks.__idlewildInspector = inspector;
   }
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
   // Not awaited: it is a loopback request that says whether images can arrive
@@ -573,34 +583,18 @@ export async function mountEditor(
     layers.render();
   }
 
-  /** Delete removes whatever is selected — see `layer-actions.ts`. */
-  function deleteSelection(): void {
-    const selection = handle?.scene.getSelection();
-    if (!selection) return;
-    deleteSelected(selection, {
-      store,
-      removeSelectedPlacement: () => handle?.scene.removeSelectedPlacement(),
-      removeStrokes: (ids) => drawing?.removeStrokes(ids),
-      clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
-    });
-  }
-
-  /**
-   * Get rid of a whole document layer, once `layer-actions.ts` has asked.
-   *
-   * What is left here is the shell's half: the layer that was being worked on
-   * may be the one that has gone, and a selection pointing into it certainly
-   * has, so both land on whatever remains.
-   */
-  async function deleteLayer(layerId: string): Promise<void> {
-    if (!(await confirmDeleteLayer(store, layerId))) return;
-    const next = store.layers[0]?.id ?? "";
-    setActiveLayer(next);
-    handle?.scene.setSelection(
-      next ? { kind: "layer", layerId: next } : { kind: "none" },
-    );
-    layers.render();
-  }
+  // Deleting a selection and deleting a layer, in `layer-actions.ts` beside
+  // the sheet one of them puts up and the switch the other walks.
+  const { deleteSelection, deleteLayer } = createDeletes({
+    store,
+    selection: () => handle?.scene.getSelection() ?? null,
+    setSelection: (selection) => handle?.scene.setSelection(selection),
+    setActiveLayer,
+    redrawLayers: () => layers.render(),
+    removeSelectedPlacement: () => handle?.scene.removeSelectedPlacement(),
+    removeStrokes: (ids) => drawing?.removeStrokes(ids),
+    clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
+  });
 
   /**
    * Draw, Code or Play.

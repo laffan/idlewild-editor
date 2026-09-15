@@ -38,6 +38,13 @@ export interface ExtrudeUiOptions {
    * between one pull and the next.
    */
   defaultZoom: () => number;
+  /**
+   * Apply wrote a PSD and put it on the grid.
+   *
+   * What comes out is a greybox to paint over, so the panel opens on the
+   * file's own layer list — see `Inspector.revealPsdLayers`.
+   */
+  onPsdCreated?: () => void;
 }
 
 export interface ExtrudeUi {
@@ -186,6 +193,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
     if (!written) return;
     scene.modes.extrude.stop();
     sync();
+    options.onPsdCreated?.();
   }
 
   return {

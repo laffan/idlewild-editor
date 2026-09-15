@@ -76,7 +76,11 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     onRenamePsd: (key, name) => void deps.psdFile().rename(key, name),
     onToggleCollider: (key, blocking) => deps.collider().setBlocking(key, blocking),
     onEditCollider: () => deps.collider().open(),
-    onStrokesToPsd: () => void deps.convert().strokesToPsd(),
+    // A conversion ends with the new file selected, and what anybody wants
+    // next is its layer list — see `Inspector.revealPsdLayers`, which refuses
+    // when the conversion was the one that got refused.
+    onStrokesToPsd: () =>
+      void deps.convert().strokesToPsd().then(() => deps.inspector().revealPsdLayers()),
     onStrokesToZone: () => deps.convert().strokesToZone(),
     isAnchored: (key) => deps.scene()?.psdAnchored(key) ?? true,
     // A pattern shape is drawn in mask mode — `editor/mask.ts`. The panel's
@@ -85,7 +89,8 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     patternShapeTarget: () => deps.shapes.strokeTarget(),
     onStrokesToPatternShape: () => deps.shapes.fromStrokes(),
     onEditShape: (layerId, shapeId) => deps.openShape(layerId, shapeId),
-    onFillToPsd: () => void deps.convert().fillToPsd(),
+    onFillToPsd: () =>
+      void deps.convert().fillToPsd().then(() => deps.inspector().revealPsdLayers()),
     onMakeUnique: (key) => void deps.convert().makeUnique(key),
     // Renaming a layer changes the path a placement reads, so the rename map
     // travels with the manifest — see reconcilePlacements.

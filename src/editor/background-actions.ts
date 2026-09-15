@@ -77,6 +77,14 @@ export interface BackgroundDeps {
    * a box of zeros, which is a menu in the corner of the app.
    */
   focusLayer: (layerId: string) => void;
+  /**
+   * A backdrop has been written and placed.
+   *
+   * The file is empty by definition — a canvas the size of the ground it
+   * covers, with one clear sprite layer to paint into — so the panel opens on
+   * its layer list rather than on its dimensions.
+   */
+  onPsdCreated?: () => void;
 }
 
 /** The menu the New Background button opens. */
@@ -293,6 +301,7 @@ async function writeBackground(
     // It lands on the active layer, which the panel made this one on the way
     // into the menu — the same rule Fill and Add Image follow.
     await scene.placePsd(result.key, result.manifest, from, IMPORT_SCALE);
+    deps.onPsdCreated?.();
     log.info(
       `${result.key}.psd — ${cols} × ${rows} spaces ` +
         `(${result.width}×${result.height}) — Open PSD to paint it`,

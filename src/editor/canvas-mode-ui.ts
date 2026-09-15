@@ -52,6 +52,8 @@ export interface CanvasModeUiOptions {
   isRubbing: () => boolean;
   /** A PSD was rewritten and re-parsed; take the result back. */
   onPsdWritten: (key: string, manifest: string) => Promise<void> | void;
+  /** An extrude Apply wrote a new one and placed it — see `ExtrudeUiOptions`. */
+  onPsdCreated: () => void;
   /**
    * Mask mode is over, either way out.
    *
@@ -86,6 +88,7 @@ export function createCanvasModeUis(
     projectId: options.projectId,
     useSelectTool: options.useSelectTool,
     defaultZoom: options.defaultZoom,
+    onPsdCreated: options.onPsdCreated,
   });
 
   // Painted on the grid, from the inspector's Collider section — a collider

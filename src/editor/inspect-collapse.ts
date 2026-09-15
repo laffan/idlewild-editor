@@ -183,6 +183,70 @@ export function makeSectionsCollapsible(body: HTMLElement): void {
   }
 }
 
+/**
+ * The named sections inside `within`, paired with the name each folds under.
+ *
+ * The same reading `makeSectionsCollapsible` does — first child, and
+ * `data-fold-name` in preference to the heading's text, because a heading can
+ * carry a subject after a colon — so the two cannot disagree about what a
+ * section is called.
+ */
+export function namedSections(
+  within: HTMLElement,
+): Array<{ section: HTMLElement; title: HTMLElement; name: string }> {
+  const out: Array<{ section: HTMLElement; title: HTMLElement; name: string }> = [];
+  for (const section of within.querySelectorAll<HTMLElement>(".inspect-section")) {
+    const title = section.firstElementChild;
+    if (!(title instanceof HTMLElement)) continue;
+    if (!title.classList.contains("inspect-section-title")) continue;
+    const name = title.dataset.foldName || sectionName(title.textContent ?? "");
+    if (name) out.push({ section, title, name });
+  }
+  return out;
+}
+
+/**
+ * Open one section and fold every other named section in `within` away.
+ *
+ * For the moment after a PSD is made, when the one thing anybody wants is the
+ * file's own layer list and everything above it is in the way — see
+ * `Inspector.revealPsdLayers`.
+ *
+ * It writes the fold store rather than only the DOM, on purpose and for the
+ * reason the fold is per-install in the first place: what you were shown the
+ * last time is what you get the next time. A panel that sprang back open on
+ * the next selection would have said something about this PSD rather than
+ * about how you are working.
+ */
+export function isolateSection(within: HTMLElement, keep: string): void {
+  for (const { section, title, name } of namedSections(within)) {
+    const collapse = name !== keep;
+    setCollapsed(name, collapse);
+    apply(section, title, name, collapse);
+  }
+}
+
+/**
+ * Open one section, fold the rest of `within` away, and scroll `scroller` to
+ * it.
+ *
+ * The scroll is measured rather than delegated to `scrollIntoView`, which
+ * walks every scrollable ancestor — in this panel that would take the shell's
+ * own column with it.
+ */
+export function revealSection(
+  within: HTMLElement,
+  name: string,
+  scroller: HTMLElement,
+): void {
+  isolateSection(within, name);
+  const row = namedSections(within).find((s) => s.name === name);
+  if (!row) return;
+  scroller.scrollTop +=
+    row.section.getBoundingClientRect().top -
+    scroller.getBoundingClientRect().top;
+}
+
 function apply(
   section: HTMLElement,
   title: HTMLElement,

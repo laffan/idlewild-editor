@@ -31,6 +31,7 @@
 
 import { h, ICONS, icon } from "../lib/dom";
 import { isCollapsed, setCollapsed } from "./inspect-collapse";
+import type { Selection } from "../lib/types";
 
 /**
  * The chip each zone carries, by name.
@@ -45,6 +46,62 @@ const ZONE_ICONS: Record<string, readonly string[]> = {
   LAYER: ICONS.zoneLayer,
   OBJECT: ICONS.zoneObject,
 };
+
+/**
+ * What each heading says on hover, when its panel has nothing better.
+ *
+ * The three answers the panel's order exists to give, in the order it gives
+ * them: what is in my hand, where it is going, what it is on top of. The TOOL
+ * zone overrides it with the tool's own line — see `TOOL_HINTS` — because by
+ * then there is something more specific to say.
+ */
+export const ZONE_HINTS: Record<string, string> = {
+  TOOL: "What the thing in your hand has to set.",
+  LAYER: "The layer the next thing you do lands on.",
+  OBJECT: "What is selected on the canvas.",
+};
+
+/**
+ * Which layer a selection belongs to, or "" for one that belongs to none.
+ *
+ * A region is the case that has none: a run of grid spaces is ground rather
+ * than a thing standing on a layer, and it is what the *next* Fill or Add
+ * Image will put something on.
+ */
+export function layerOf(selection: Selection): string {
+  switch (selection.kind) {
+    case "layer":
+    case "placement":
+    case "placements":
+    case "fill":
+    case "point":
+    case "zone":
+    case "background":
+    case "strokes":
+      return selection.layerId;
+    default:
+      return "";
+  }
+}
+
+/**
+ * Whether the LAYER zone has anything to be about.
+ *
+ * It does when the layer itself is the subject — a layer selected, or nothing
+ * selected at all — and it does over a **region**, which is ground rather than
+ * a thing standing on a layer: there the zone answers "where would the next
+ * Fill land", which is a question the selection raises and does not settle.
+ *
+ * It does **not** when something standing on a layer is selected. Picking a
+ * placed PSD used to draw its layer's whole panel above it, so selecting one
+ * thing looked like selecting two and the object you had just tapped started a
+ * screen down. The layer is still what the object belongs to, and the left
+ * panel still reveals it there; what it is not is a second subject.
+ */
+export function layerZoneApplies(selection: Selection): boolean {
+  if (selection.kind === "layer") return true;
+  return layerOf(selection) === "";
+}
 
 export interface Zone {
   /** The whole zone, heading included. Only in the document once mounted. */
@@ -69,7 +126,7 @@ export interface ZoneOptions {
    * What the heading says on hover: what this zone is for, or what the tool
    * in hand does. The panel's explanations live here and on the section
    * headings rather than as a line of prose under each one — see
-   * `inspect-brush.ts`.
+   * `inspect-brush.ts`. Omitted, the zone's own line from `ZONE_HINTS`.
    */
   hint?: string;
 }
@@ -92,7 +149,7 @@ export function createZone(name: string, options: ZoneOptions = {}): Zone {
       class: "inspect-zone-head m",
       role: "button",
       tabindex: "0",
-      title: options.hint ?? null,
+      title: options.hint ?? ZONE_HINTS[name] ?? null,
     },
     glyph ? icon(glyph, 14) : null,
     h("span", { class: "inspect-zone-name", text: name }),

@@ -172,27 +172,10 @@ export function renderPlacement(
   panel.row("Position", `${Math.round(placement.x)}, ${Math.round(placement.y)}`);
   panel.row("Anchor cell", `${placement.anchor.cx}, ${placement.anchor.cy}`);
 
-  // What the file stops, straight after what it is: a collider is a fact about
-  // the thing standing on the grid, and the way into the mode that draws it
-  // should be where someone goes looking for it rather than below the file's own
-  // layer stack.
-  panel.body.appendChild(
-    colliderSection({
-      psdKey: placement.psdKey,
-      panel: colliderPanel(
-        host.grid,
-        store.allLayers,
-        store.colliders,
-        placement.psdKey,
-        store.extrusion(placement.psdKey),
-      ),
-      onToggle: (key, blocking) => actions.onToggleCollider(key, blocking),
-      onEdit: () => actions.onEditCollider(),
-    }),
-  );
-
   // Size is the one property you change rather than read, so it sits with the
-  // controls that change it rather than among the facts above.
+  // controls that change it rather than among the facts above — and directly
+  // under Info, because between them they are what the thing *is*: where it
+  // sits, and how big it is.
   const transform = panel.section("Transform");
   transform.appendChild(
     sizeControls(placement, (patch) => {
@@ -216,6 +199,26 @@ export function renderPlacement(
   const psdLayers = host.psdLayers(placement.psdKey);
   panel.body.appendChild(psdLayers.root);
   psdLayers.setAdjust({ members: members.length, adjusting: open });
+
+  // Last of the named sections. A collider is the one thing here that is not
+  // about the picture — it is what the picture *stops*, which is a question
+  // you come to after the file, its size and its layers rather than in the
+  // middle of them. It was second, above Transform, which put the least-read
+  // section where the most-changed one belongs.
+  panel.body.appendChild(
+    colliderSection({
+      psdKey: placement.psdKey,
+      panel: colliderPanel(
+        host.grid,
+        store.allLayers,
+        store.colliders,
+        placement.psdKey,
+        store.extrusion(placement.psdKey),
+      ),
+      onToggle: (key, blocking) => actions.onToggleCollider(key, blocking),
+      onEdit: () => actions.onEditCollider(),
+    }),
+  );
 
   // What is left down here is about the placement rather than the file.
   //
