@@ -8,7 +8,7 @@
  * file shorter by the length of the whole toolbar's half of the panel.
  *
  * **A tool with nothing to set gets no section at all.** Select, Pan, Point,
- * Boundary, the Eraser and the Lasso each do one thing with one gesture and
+ * Boundary, Slice and the Lasso each do one thing with one gesture and
  * have no numbers behind them, so a heading over an explanatory sentence
  * would be a labelled box that never changes — which is exactly what the
  * three zones were introduced to stop. What those tools have to say, they say

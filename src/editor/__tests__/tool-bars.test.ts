@@ -79,8 +79,11 @@ describe("the brushes that can be turned round", () => {
     }
   });
 
-  it("leaves out the Eraser, which cuts strokes rather than pixels", () => {
+  it("leaves out Slice, which cuts strokes rather than pixels", () => {
     expect(canErase("eraser")).toBe(false);
+    // And it is called Slice now: a tool called Eraser beside four brushes
+    // that erase was the name doing the wrong job.
+    expect(toolName("eraser")).toBe("Slice");
   });
 
   /** It is an eraser already, so there is nothing to toggle. */

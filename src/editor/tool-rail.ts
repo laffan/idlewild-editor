@@ -18,7 +18,7 @@
  * patch of empty grid.
  *
  * **The drawing toolbar**, from the bottom, is the ink: Pencil, Pattern,
- * Shape, Eraser, Lasso and Fill. Fill and Pattern used to be reachable only
+ * Shape, Slice, Lasso and Fill. Fill and Pattern used to be reachable only
  * inside PSD Edit mode, from that second rail. They are the same tools
  * everywhere, so they are on the toolbar with the rest of the ink, and PSD
  * Edit mode borrows them rather than owning them.
@@ -85,7 +85,15 @@ export const TOOLS: ToolSpec[] = [
     bar: "draw",
     path: ICONS.shape,
   },
-  { id: "eraser", name: "Eraser", bar: "draw", path: ICONS.eraser },
+  {
+    // Its id is still "eraser" — a document says nothing about tools, but the
+    // type and the routing do, and renaming those would be churn for a label.
+    id: "eraser",
+    name: "Slice",
+    hint: "Drag across a stroke to cut it in two where the blade passes",
+    bar: "draw",
+    path: ICONS.slice,
+  },
   {
     id: "lasso",
     name: "Lasso",
@@ -108,9 +116,9 @@ export const TOOLS: ToolSpec[] = [
  * Every tool that *makes a mark*, which is the whole of the rule: what the
  * tool would have drawn is what it takes out instead, so a Pattern brush set
  * to erase removes exactly the lattice cells it would have revealed and a
- * Shape brush takes back the tiles it would have stamped. The Eraser itself
- * is not here — it cuts strokes rather than pixels, which is a different
- * thing that happens to share a name — and neither are Lasso, Select, Pan,
+ * Shape brush takes back the tiles it would have stamped. Slice is not here —
+ * it cuts a stroke in two and leaves both halves, which is a different thing
+ * that used to share the name Eraser — and neither are Lasso, Select, Pan,
  * Point or Boundary, none of which draw anything.
  *
  * Rub is not here either, for the opposite reason: it is the pencil with

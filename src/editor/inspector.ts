@@ -325,8 +325,8 @@ export class Inspector {
   /**
    * TOOL — what is in your hand, when it has anything to set.
    *
-   * Nothing at all for Select, Pan, Point, Boundary, the Eraser and the
-   * Lasso: each does one thing with one gesture, and a heading over a
+   * Nothing at all for Select, Pan, Point, Boundary, Slice and the Lasso:
+   * each does one thing with one gesture, and a heading over a
    * sentence describing it would be the labelled-empty-box this panel was
    * rearranged to stop. See `inspect-brush.ts`.
    */

@@ -102,7 +102,7 @@ const ANNOUNCE: Partial<Record<ToolId, string>> = {
   pencil: "Pencil — draw with a pencil or a mouse; fingers pan",
   pattern: "Pattern — sweep to reveal a pattern pinned to the world",
   shape: "Shape — every grid space you cross takes a copy of the shape",
-  eraser: "Eraser — drag across a stroke to cut it where the disc passes",
+  eraser: "Slice — drag across a stroke to cut it in two where the blade passes",
   lasso: "Lasso — sweep around strokes to select them",
   fill: "Fill — sweep a closed shape, or tap its corners out",
   rub: "Rub — the pencil with the paint taken out",

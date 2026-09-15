@@ -120,7 +120,11 @@ export const ICONS = {
   unlock: ["M5 11h14v10H5z", "M8 11V7a4 4 0 0 1 7.6-1.6"],
   select: "M4 4l7 16 2.2-6.4L20 11.6 4 4Z",
   pencil: "M4 20l4-1 10-10-3-3L5 16l-1 4Z",
-  eraser: "M8 20h11M6 16l7-7 5 5-4 4H8l-2-2Z",
+  /* A craft knife, for the tool that *cuts* a stroke rather than rubbing
+     pixels out. It was a rubber block, and that became a lie the moment every
+     brush grew an eraser of its own: this one slices a line in two and leaves
+     both halves, which is a different thing that happened to share a name. */
+  slice: ["M3 19l10-12 5 5-13 8Z", "M16 10l5-5"],
   /* A nib: the barrel, the slit down the middle, and the point it writes
      from. Its own glyph rather than the rail's pencil, because the two mean
      different things — that one picks up a tool, this one opens a mode. */
