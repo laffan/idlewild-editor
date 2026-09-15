@@ -62,9 +62,30 @@ export function watchPsdStages(onStage: (stage: string) => void): () => void {
 
 /** A sheet that says what is happening, until it is told to go. */
 export interface PsdProgress {
-  /** Say what is being waited on now, in the app's own words. */
-  stage: (line: string) => void;
+  /**
+   * Say what is being waited on now, in the app's own words.
+   *
+   * It resolves once the line has actually been **painted**, which is the
+   * half that matters when the next thing the caller does is seconds of
+   * synchronous work on this same thread — rasterising a sketch, or turning
+   * ten megabytes of pixels into base64. Setting the text and going straight
+   * into that work puts the words up after the wait they describe.
+   */
+  stage: (line: string) => Promise<void>;
   close: () => void;
+}
+
+/**
+ * Resolve after the browser has painted.
+ *
+ * Two frames deep on purpose: one `requestAnimationFrame` runs *before* the
+ * frame it is scheduled in is drawn, so work started there still lands in
+ * front of the paint. The second one runs after it.
+ */
+export function painted(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
 }
 
 /**
@@ -97,6 +118,7 @@ export function openPsdProgress(
   return {
     stage: (said: string) => {
       line.textContent = said;
+      return painted();
     },
     close: () => {
       unwatch();

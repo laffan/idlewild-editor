@@ -360,3 +360,43 @@ fn anchor_in(manifest: &str) -> Option<(f64, f64)> {
         .find(|l| l["name"] == "anchor")?;
     Some((mark["x"].as_f64()?, mark["y"].as_f64()?))
 }
+
+/// The file's size is read from its **header** rather than by parsing it.
+///
+/// Twenty-six bytes at the front of every PSD, with a fixed layout: `8BPS`, a
+/// version, six reserved bytes, the channel count, then the height and the
+/// width as big-endian `u32`s. Height before width, which is the one thing
+/// about it that is easy to write down backwards — and a transposed pair
+/// would go unnoticed on the square test images everything else here uses, so
+/// this one is deliberately not square.
+///
+/// Pinned against a full parse, because that is what it replaced: every
+/// conversion used to read the whole file and decode it to ask two questions
+/// the first twenty-six bytes already answer, and then hand the same file to
+/// the pipeline to be parsed again.
+#[test]
+fn dimensions_come_from_the_header() {
+    let bytes = psd_write::psd_from_rgba_marked("sized", 37, 11, swatch(37, 11, [1, 2, 3, 255]), None)
+        .expect("PSD should be written");
+    let dir = std::env::temp_dir().join(format!("idlewild-dims-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let path = dir.join("sized.psd");
+    std::fs::write(&path, &bytes).expect("PSD should save");
+
+    let parsed = psd::Psd::from_bytes(&bytes).expect("PSD should parse back");
+    assert_eq!(
+        psd_pipeline::psd_dimensions(&path).expect("header should read"),
+        (parsed.width(), parsed.height()),
+    );
+    assert_eq!(
+        psd_pipeline::psd_dimensions(&path).expect("header should read"),
+        (37, 11),
+    );
+
+    // Something that is not a PSD is refused rather than measured.
+    let not_psd = dir.join("not.psd");
+    std::fs::write(&not_psd, vec![0u8; 64]).expect("save");
+    assert!(psd_pipeline::psd_dimensions(&not_psd).is_err());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

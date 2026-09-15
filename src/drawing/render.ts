@@ -9,7 +9,7 @@
  */
 
 import type { Stroke } from "../lib/types";
-import { DEFAULT_PAINT_SPEC, type PaintSpec } from "../lib/paint";
+import { DEFAULT_PAINT_SPEC, patternScaleOf, type PaintSpec } from "../lib/paint";
 import { paintPatternStroke, paintRegion, paintShapeStroke } from "./paint-render";
 import type { AtlasCache } from "./atlas";
 import { STRIDE, streamlineFor, type StreamPoint } from "./geometry";
@@ -299,7 +299,9 @@ function markBox(
   const pad =
     mode === "fill" || mode === "shape"
       ? 2
-      : size + 2 + (options.paint?.patternScale ?? 0);
+      : size +
+        2 +
+        (options.paint?.kind === "pattern" ? patternScaleOf(options.paint) : 0);
   // A shape stamp hangs down and right from its point — the points recorded
   // are the corners of the boxes, not their centres.
   const stampW = mode === "shape" ? Math.max(1, options.stamp?.width ?? 32) : 0;

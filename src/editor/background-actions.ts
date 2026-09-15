@@ -289,7 +289,7 @@ async function writeBackground(
         EXPORT_SCALE,
       ),
     );
-    progress.stage("Loading the artwork…");
+    await progress.stage("Loading the artwork…");
     // It lands on the active layer, which the panel made this one on the way
     // into the menu — the same rule Fill and Add Image follow.
     await scene.placePsd(result.key, result.manifest, from, IMPORT_SCALE);

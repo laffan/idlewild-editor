@@ -297,7 +297,7 @@ remaining pieces are wired to real slots rather than mocked.
   the top corner and is what you do *to* the canvas: Select, Pan, Point and
   Boundary — the camera and the pointer, then the two that make something out
   of bare ground. The **drawing toolbar** stands on the bottom corner and is
-  the ink: Pencil, Pattern, Shape, Eraser, Lasso and Fill. They were one column with a
+  the ink: Pencil, Pattern, Shape, Slice, Lasso and Fill. They were one column with a
   gap in the middle doing the work of saying that Select and Pencil answer to
   different owners, and it grew a second column under it whenever PSD Edit
   mode was up. Which end a column hangs from carries that now — and the ink is
@@ -311,7 +311,7 @@ remaining pieces are wired to real slots rather than mocked.
   same naming — so a boundary swept here and one converted from a sketch of
   the same shape are the same thing
 - Draw on any layer with Hush's stroke engine: five brushes, pressure and
-  Apple Pencil, a slice eraser, and a lasso. A brush's button shows **the tip
+  Apple Pencil, a knife that slices strokes, and a lasso. A brush's button shows **the tip
   it stamps with** rather than a number, at the tip's own proportions, because
   a brush is a shape you recognise and "3" is not that shape. Fingers never draw — they pan
   and pinch the game camera, so a hand can rest on the glass. The ink is
@@ -372,6 +372,23 @@ remaining pieces are wired to real slots rather than mocked.
   space below, and a run of quarter circles rounds a corner along the lattice.
   That is what the shapes are for: they come from a tileset generator, where
   the tile is the unit
+- **Every brush can be turned round and used as an eraser.** Pencil, Pattern,
+  Shape and Fill: what the tool *would have drawn* is what it takes out
+  instead, so a Pattern brush set to erase removes exactly the lattice cells it
+  would have revealed and a Shape brush takes back the tiles it would have
+  stamped. Two ways in — **Use as Eraser** at the top of the tool's own panel,
+  and a **long press** on its button in the toolbar — and a turned-round tool
+  carries a slash across its icon, in the accent when it is not in hand and in
+  white when it is. Erasing is one composite over the *finished* mark rather
+  than one per stamp, which is the whole of why a donut's hole is not taken out
+  along with its body and a run that crosses itself does not bite deeper where
+  it does. While you drag, what is about to come off is shown as a translucent
+  wash — the live canvas sits over the baked one and holds nothing of its own,
+  so an eraser that composited into it would show nothing at all
+- **Slice** is the knife, and it used to be called Eraser. It never rubbed
+  anything out: it cuts a stroke in two where the disc passes and leaves both
+  halves, which is what makes it useful on a sketch. Beside four brushes that
+  genuinely erase, the old name was the wrong word for it
 - **The patterns and the shapes are a library, and it is the app's rather than
   the project's.** Fourteen patterns and twenty-nine shapes come from
   [simple-tileset-generator](https://github.com/laffan/simple-tileset-generator)
@@ -516,17 +533,37 @@ remaining pieces are wired to real slots rather than mocked.
   it straightens; pause before you draw and everything after it is ruled. It
   is the same rule read from either end, and it is PSD Edit mode's, where a line
   drawn against the edge of a building wants to be a line
-- **Rub**, a toggle on PSD Edit mode's own bar: the same brush with the paint
-  taken out, rubbing out ink from this session, tip and pressure and all.
-  Pressing it again puts the plain pencil back. It is the one thing in hand
-  that means nothing outside the mode, which is why it is the only one on that
-  bar — Fill and Pattern used to be beside it on a second tool rail that
-  appeared and disappeared with the mode, and both of those work anywhere, so
-  both are on the drawing toolbar now. It is still a first cut: an eraser that
-  reaches the artwork already inside the file is the version after it
+- **Rub**, a toggle on PSD Edit mode's own bar: the pencil turned round,
+  rubbing out ink from this session, tip and pressure and all. Pressing it
+  again puts the plain pencil back. It is the same erasing every brush does
+  now — a flag on the mark rather than a mode of its own — so Rub is simply the
+  tool that has it on and nothing to toggle. It is the one thing in hand that
+  means nothing outside the mode, which is why it is the only one on that bar:
+  Fill and Pattern used to be beside it on a second tool rail that appeared and
+  disappeared with the mode, and both of those work anywhere, so both are on
+  the drawing toolbar now. It is still a first cut: an eraser that reaches the
+  artwork already inside the file is the version after it
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail
+- **Converting says so while it happens, and it is a great deal faster.** A
+  sheet holds the screen from the tap, with the pipeline's own words moving
+  under a bar: *drawing the strokes*, *packing the pixels*, *parsing the PSD*,
+  *placing the artwork*. Before it there was nothing at all — you pressed
+  Convert to PSD and the app looked asleep for ten seconds. Three things were
+  taking that long, and all three are measured rather than guessed at. The
+  pixels were turned into base64 as one string the size of the whole buffer,
+  which for a lassoed scribble is ten megabytes of rope concatenation: **435 ms
+  → 96 ms** on the same raster, encoded in pieces instead, and every import,
+  paste and drop in the editor takes the same route so all of them got it. The
+  file's size was read by parsing the whole PSD back, when the first
+  twenty-six bytes of it are the header that says so: **17.6 ms → 0.075 ms**,
+  and a multi-megabyte read off the disk goes with it. And the iPad build is a
+  debug build, so every crate underneath the app — the PSD writer, the
+  psd-to-json pipeline, the PNG encoder — was compiled unoptimised; they are
+  optimised now while this crate stays debuggable, which on the same sketch
+  takes writing the file from **2.16 s to 0.86 s** and running the pipeline
+  over it from **2.34 s to 0.13 s**
 - A fill or an extrusion written out as a PSD gets a **grid space of clear
   canvas** around it, so there is somewhere to paint the eaves that hang past
   the wall. It is the canvas that grows and nothing else: the artwork keeps

@@ -14,6 +14,7 @@
  */
 
 import type { Stroke } from "../lib/types";
+import { patternScaleOf } from "../lib/paint";
 import type { Bounds } from "./types";
 
 export interface InkPoint {
@@ -292,7 +293,10 @@ export function strokeBox(stroke: Stroke): Bounds | null {
     // size against the streamline's outward bump on tight corners. A Pattern
     // stroke fills whole lattice cells, so the cell its tip's edge lands
     // inside runs on past it by one more.
-    const pad = stroke.size + 1 + (stroke.paint?.patternScale ?? 0);
+    const pad =
+      stroke.size +
+      1 +
+      (stroke.paint?.kind === "pattern" ? patternScaleOf(stroke.paint) : 0);
     // A **shape** stamp is the exception: its points are the corners of the
     // boxes it filled, and a box hangs down and right from its corner. So the
     // box reaches a whole stamp past the furthest point rather than half a

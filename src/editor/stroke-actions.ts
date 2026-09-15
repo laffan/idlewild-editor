@@ -18,6 +18,7 @@ import type { Grid } from "../lib/grid";
 import { addPatternShapePoints } from "../lib/layer-kinds";
 import type { Selection } from "../lib/types";
 import * as log from "../lib/log";
+import { openPsdProgress } from "./psd-progress";
 import type { DrawingLayer } from "../drawing";
 import { strokesBox, strokesToPsd, strokesToZonePoints } from "../drawing";
 import type { WorldScene } from "../game/world-scene";
@@ -46,6 +47,18 @@ export async function convertStrokesToPsd(
     return;
   }
 
+  // Something on screen for the whole wait. Stamping the ink, encoding it and
+  // running the pipeline over the file are seconds of work between one tap and
+  // anything appearing — and the first two of those block this thread, so the
+  // sheet has to be up and painted before they start. See `psd-progress.ts`;
+  // the stage lines the pipeline itself emits arrive on it as they happen.
+  const progress = openPsdProgress(
+    "Converting to PSD",
+    `${strokes.length} stroke${strokes.length === 1 ? "" : "s"} · ` +
+      `${Math.round(box.width)} × ${Math.round(box.height)} px`,
+    "Drawing the strokes…",
+  );
+
   try {
     const name = `sketch-${Date.now().toString(36)}`;
     // A sketch knows exactly which spaces it was drawn over, so it is marked
@@ -61,6 +74,7 @@ export async function convertStrokesToPsd(
     const result = await strokesToPsd(projectId, name, strokes, {
       atlas: drawing.atlas,
       scale: EXPORT_SCALE,
+      stage: (line) => progress.stage(line),
       marks: (raster) => ({
         ...scaleMarks(
           marksForCells(grid, cells, anchor, {
@@ -85,6 +99,7 @@ export async function convertStrokesToPsd(
     // becomes nothing at all, which is the worst outcome available here and
     // silent besides, so the ink stays until there is artwork standing in
     // its place.
+    await progress.stage("Placing the artwork…");
     store.history.begin();
     try {
       const placed = await scene.placePsd(
@@ -110,6 +125,10 @@ export async function convertStrokesToPsd(
     );
   } catch (err) {
     log.error("Could not turn the strokes into a PSD:", err);
+  } finally {
+    // However it went. A refusal has to take the sheet with it, or the app is
+    // held behind a wait that is over.
+    progress.close();
   }
 }
 

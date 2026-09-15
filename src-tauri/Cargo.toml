@@ -36,6 +36,27 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 objc2-ui-kit = { version = "0.3", default-features = false, features = ["std", "UIPasteboard"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSEnumerator", "NSString"] }
 
+# Dependencies are optimised even in a debug build.
+#
+# The iPad runs `tauri ios build --debug` — see `build:ios` in package.json —
+# so without this, every crate in this tree is compiled at `opt-level = 0` on
+# the device somebody actually draws on. That is fine for *this* crate, which
+# is glue. It is not fine for the PSD pipeline, which is entirely dependency
+# code: the `psd` fork writes the file and psd-to-json parses and slices it,
+# and both were unoptimised.
+#
+# Measured on one 1826 x 1412 sketch — a 14.6 MB PSD, the size a lassoed
+# scribble actually makes — on the same machine, unoptimised then optimised:
+# writing the file 2.16 s -> 0.86 s, and running psd-to-json over it
+# 2.34 s -> 0.13 s. Four and a half seconds becomes one, and that is most of
+# "Convert to PSD takes ten seconds on an iPad".
+#
+# This crate stays at `opt-level = 0`, so a debug build still steps through
+# app code and still compiles as quickly as it did; only the dependencies
+# below it are built once, optimised, and cached.
+[profile.dev.package."*"]
+opt-level = 3
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

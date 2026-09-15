@@ -810,11 +810,18 @@ one pressed state across them, because only one tool is ever in hand):
 | Column | Where | Tools | What they have in common |
 |---|---|---|---|
 | rail | hangs from the top left | Select, Pan, Point, Boundary | what you do *to* the canvas: the camera and the pointer, then the two that make something out of bare ground — nothing already on it can be promoted into either |
-| draw | stands on the bottom left | Pencil, Pattern, Shape, Eraser, Lasso, Fill | the ink |
+| draw | stands on the bottom left | Pencil, Pattern, Shape, Slice, Lasso, Fill | the ink |
 
 Three of the six paint with the **library** rather than with a colour —
 Pattern always, Shape always, Fill when it is aimed at one — and all three are
 set from the same control. See *The pattern and shape libraries*, below.
+
+Four of the six can be **turned round and used as erasers** — Pencil, Pattern,
+Shape and Fill, which is `ERASABLE` in `tool-rail.ts`, the set of tools that
+lay a mark down. Slice is not one of them: it cuts a stroke in two rather than
+rubbing pixels out, which is a different thing that used to share the name
+*Eraser* and now has a knife for an icon. Lasso and the rail's four draw
+nothing at all. See *Erasing is a flag, not a mode*, below.
 
 Same class, same 56px buttons, same width: `.tool-rail.draw-bar` is the rail
 turned the other way up, and `top: auto; bottom: 16px` is the whole of the
@@ -833,9 +840,9 @@ in `styles.test.ts`, because a toolbar hidden behind a bar is not an error
 anything reports — and so is the `top: auto` itself, since dropping it leaves
 the toolbar hanging from the top *over* the rail.
 
-**Rub is the tool with no button in either.** It is the pencil with the paint
-taken out and what it rubs out is PSD Edit mode's own session ink, so it is a
-toggle on that mode's bar — but it is a `ToolId` like the rest, because the
+**Rub is the tool with no button in either.** It is the pencil turned round
+and what it rubs out is PSD Edit mode's own session ink, so it is a toggle on
+that mode's bar — but it is a `ToolId` like the rest, because the
 pointer is doing something of its own while it is up, and the label beside the
 canvas has to follow it. `OFF_BAR` is the one entry that says so, and
 `tool-bars.test.ts` asserts that every `ToolId` is either in a column or in
@@ -1558,6 +1565,66 @@ The `S | ` prefix is load-bearing: psd-to-json classifies by the pipe
 convention and silently ignores layers without it, so a converted image
 without the prefix would process to nothing.
 
+### Where Convert to PSD's ten seconds went
+
+A lassoed sketch took about ten seconds on an iPad, with no indication that
+anything was happening. Three separate things were paying for it. All three
+numbers below are measured — the JavaScript in a browser against a
+1826 × 1412 raster, the Rust in `cargo test` against the 14.6 MB PSD that
+raster actually writes — rather than guessed at from reading the code.
+
+**The base64 was built as one string.** `toBase64` concatenated the whole
+buffer into a `binary` string and handed that to `btoa`: for a conversion that
+is ten megabytes of rope concatenation and a single `btoa` over ten megabytes,
+**435 ms** on a desktop machine and several times that on an iPad. Encoding
+48 KB at a time and joining the base64 pieces gives a byte-identical string in
+**96 ms**. The trick is that each piece is a **multiple of three** bytes long,
+which is what makes it encode standalone — base64 turns three bytes into four
+characters, so a run whose length divides by three encodes to exactly what it
+would have inside the whole buffer. There were three copies of this function;
+there is one now, in `lib/ipc.ts`, so every import, paste, drop, extrusion and
+PSD-edit write takes the fast path too.
+
+**The file was parsed to read its own size.** `psd_dimensions` read the whole
+PSD off the disk and handed it to `psd::Psd::from_bytes` to ask for `width()`
+and `height()` — and every conversion calls it *before* `psd_pipeline::process`
+parses the same file again, so the file was decoded twice to place it once.
+The first 26 bytes of a PSD are its header, and its layout is fixed: `8BPS`, a
+version, six reserved bytes, the channel count, then the height and the width
+as big-endian `u32`s. So it reads 26 bytes: **17.6 ms → 0.075 ms**, and a
+multi-megabyte read off the disk goes with it.
+
+**And the iPad build is a debug build.** `npm run build:ios` is
+`tauri ios build --debug`, so without a profile override every crate in the
+tree compiles at `opt-level = 0` on the device somebody actually draws on —
+including the entire PSD pipeline, which is *all* dependency code: the `psd`
+fork writes the file and psd-to-json parses and slices it. `Cargo.toml` now
+carries `[profile.dev.package."*"] opt-level = 3`, which optimises the
+dependencies and leaves this crate at 0, so a debug build still steps through
+app code and still compiles as quickly as it did. On the same sketch, on the
+same machine: writing the file **2.16 s → 0.86 s**, and running psd-to-json
+over it **2.34 s → 0.13 s**. Four and a half seconds of Rust becomes one.
+
+Two things are left, and both are somebody else's file. The 13.7 MB base64
+string crosses the Tauri bridge as JSON; Tauri 2 can take an `ArrayBuffer` as a
+raw request body instead, which would remove the encode, the JSON serialise and
+the Rust decode together, at the cost of moving the command's named arguments
+into headers. And a 1826 × 1412 sketch — a few percent ink on a clear ground —
+writes a **14.6 MB** PSD, which says the channel data is going in uncompressed;
+RLE would shrink it and everything downstream that has to read it. That is
+`PsdBuilder` in the [`psd` fork](https://github.com/laffan/psd), not this
+repository.
+
+**And it says so while it happens.** `editor/psd-progress.ts` already had the
+sheet — an undismissable panel with a sliding bar and the pipeline's own
+`psd-log-line` events under it — for the background writer; the two conversions
+use it now. The one thing that had to be added is that `stage()` **resolves
+after a paint**, two `requestAnimationFrame`s deep: the rasterise and the
+base64 are synchronous on this thread, so setting the text and going straight
+into them puts the words up after the wait they describe. The sliding bar is
+CSS `translateX`, which runs on the compositor, so it keeps moving through
+those blocked stretches.
+
 ### Pasting is importing
 
 A paste on the canvas takes the first image on the clipboard and runs it down
@@ -1932,17 +1999,22 @@ preview *is* the result: at 100 the line under the pointer is already the
 straight one it will become, which is the only way a setting like this can be
 aimed.
 
-### Four things a stroke can be
+### What a stroke can be
 
 `Stroke.mode` was Hush's two — "ink" paints and "highlight" multiplies — and
-the drawing toolbar's Rub and Fill added two more, each of which *is* a tool
-rather than a variation on one. "erase" stamps the same brush with `destination-out`, so
-the tip's softness and the pressure taper are the eraser's too. "fill" is not
-stamped at all: its points are a closed outline and what is drawn is the
-inside of it.
+the drawing toolbar added more, each of which *is* a tool rather than a
+variation on one. "fill" is not stamped at all: its points are a closed
+outline and what is drawn is the inside of it. "shape" stamps a *library
+shape* into a box at each recorded point, which is what makes the Shape brush
+lay tiles rather than a line — its points are grid spaces rather than a path.
 
-Putting both in the stroke model rather than beside it is what keeps them
-small. A fill previews, undoes, slices, exports and applies through the code
+"erase" is the fifth and it is **legacy**. It used to be the whole of the Rub
+tool: the pencil stamped with `destination-out`. Erasing is a flag now, for
+the reason below; a stored stroke that still says "erase" is read as an inked
+one with that flag set, so nothing drawn before it changed has to be migrated.
+
+Putting all of them in the stroke model rather than beside it is what keeps
+them small. A fill previews, undoes, slices, exports and applies through the code
 that was already there for a pencil line; a fill that was a new kind of object
 in the document would have needed all five written again.
 
@@ -1959,6 +2031,55 @@ and everything else the streamline, and both previews are honest as a result —
 neither `fillPreview` nor the point fill's repaint streamlines either, so what
 you were looking at is what lands. Pinned in `render.test.ts`, because the
 failure draws a perfectly plausible shape.
+
+### Erasing is a flag, not a mode
+
+Every tool that lays a mark down can be turned round: what it *would have
+drawn* is what it takes out. A Pattern brush set to erase removes exactly the
+lattice cells it would have revealed; a Shape brush takes back the tiles it
+would have stamped; a Fill subtracts its own region. That is why `Stroke.erase`
+is a boolean beside `mode` rather than another `mode`: what a mark is made of
+and whether it is added or subtracted are two independent questions, and the
+old "erase" mode answered both at once and could therefore only ever mean *the
+pencil*.
+
+**The subtraction is one composite over the finished mark.** This is the
+load-bearing part, and it is not an optimisation. Every one of these marks is
+several draws that overlap: a stamped stroke lays seven brush tips on any
+given pixel at a spacing of 0.15, `drawShape` cuts a shape's holes out of its
+own body with `destination-out`, a pattern fills the lattice cell by cell.
+Compositing each of those away separately would take a donut's hole out of the
+*canvas* along with its body, and would bite deeper wherever a run crossed
+itself. So `render.ts` draws the whole mark into the scratch canvas at full
+strength and subtracts the result once — the same flatten path a translucent
+stroke and a highlighter already used, generalised into `composited()`. The
+colour goes into the scratch **opaque** and its alpha is applied to that one
+composite, which is what makes a half-transparent colour a *soft* eraser
+rather than an uneven one. `render.test.ts` counts composites on the target
+for exactly this: one `drawImage` on the target and a pile of them on the
+scratch is it working, and a pile on the target is the bug.
+
+There is one guard around the scratch: `scratchBusy`, because there is a
+single scratch canvas for the module and an erase composites a mark that might
+itself want flattening. A nested use gives the scratch up and composites
+straight onto its target, which is wrong only in the overlaps of a mark that
+is already being subtracted whole.
+
+**An eraser previews as a wash, not as a hole.** The live canvas sits *over*
+the baked one and holds nothing of its own, so compositing `destination-out`
+into it takes away nothing and shows nothing — you would drag an eraser across
+the canvas and watch it behave exactly like a broken tool. `renderLive` draws
+the same geometry in `ERASE_PREVIEW` instead, a translucent accent, and the
+release subtracts it for real.
+
+Which tools are turned round is kept per tool, in `editor/tool-routing.ts`,
+not on the style: a Pattern brush left set to erase is still an eraser when
+you come back to it, exactly as its size and its pattern are still what you
+left them. One flag on the style would have made erasing a property of the
+*pen*, so picking up the Pencil to draw a line would have found it rubbing one
+out. `apply()` writes `style.erase` on every tool change rather than only when
+a tool has a patch, because picking Fill up after erasing with the Pencil has
+to *stop* erasing.
 
 ### The sweep fill is two tools sharing a colour
 
@@ -2797,7 +2918,7 @@ same sentence every time.
 
 **A zone with nothing in it is never mounted.** `createZone` hands back an
 element and a `mount` that refuses when the body is empty, so a tool that does
-one thing with one gesture — Select, Pan, Point, Boundary, the Eraser, the
+one thing with one gesture — Select, Pan, Point, Boundary, Slice, the
 Lasso — gets no TOOL zone rather than a heading over a sentence that never
 changes. That sentence is exactly what the single *Inspector* heading was, and
 reintroducing it once per tool would have been the same mistake nine times.

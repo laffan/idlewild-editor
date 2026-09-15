@@ -382,10 +382,33 @@ fn next_free_key(project_id: &str, key: &str) -> Result<String, String> {
 }
 
 /// A PSD's canvas size, read back from the file that was just written.
+/// How wide and how tall the file on disk is, from its **header**.
+///
+/// The header is twenty-six bytes at the front of every PSD and its layout is
+/// fixed: `8BPS`, a version, six reserved bytes, the channel count, then the
+/// height and the width as big-endian `u32`s. So this reads twenty-six bytes.
+///
+/// It used to read the whole file and hand it to `psd::Psd::from_bytes`, which
+/// parses the entire document — every layer's channels decompressed — to
+/// answer a question the first twenty-six bytes already contain. Every
+/// conversion pays it: a sketch is written, measured, and *then* parsed again
+/// by the pipeline, so the file was being decoded twice to place it once. On a
+/// multi-megabyte PSD that is a whole parse thrown away, and the iPad is where
+/// it was felt.
 pub fn psd_dimensions(path: &Path) -> Result<(u32, u32), String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("Cannot read PSD: {e}"))?;
-    let doc = psd::Psd::from_bytes(&bytes).map_err(|e| format!("Cannot parse PSD: {e}"))?;
-    Ok((doc.width(), doc.height()))
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| format!("Cannot read PSD: {e}"))?;
+    let mut header = [0u8; 26];
+    file.read_exact(&mut header)
+        .map_err(|e| format!("Cannot read PSD header: {e}"))?;
+    if &header[0..4] != b"8BPS" {
+        return Err("Cannot parse PSD: not a Photoshop document".to_string());
+    }
+    let be = |at: usize| {
+        u32::from_be_bytes([header[at], header[at + 1], header[at + 2], header[at + 3]])
+    };
+    // Height first, then width — the order the format puts them in.
+    Ok((be(18), be(14)))
 }
 
 pub fn list_output_files(project_id: &str, key: &str) -> Result<Vec<OutputFile>, String> {

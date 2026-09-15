@@ -382,7 +382,7 @@ fn export_assets_refuses_an_archive_with_nothing_in_it() {
         // archive that comes out empty because of it says so.
         let err = export_assets::build_zip(&meta.id, &["nobody".to_string()], both)
             .expect_err("an empty result should be refused");
-        assert!(err.contains("nothing to export"), "unhelpful refusal: {err}");
+        assert!(err.contains("anything to export"), "unhelpful refusal: {err}");
     });
 
     store::delete_project(&meta.id).ok();

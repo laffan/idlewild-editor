@@ -18,11 +18,12 @@
 
 import type { DocStore } from "../lib/doc-store";
 import { Grid, cellsBounds as cellsRange, describeRange, fillShape } from "../lib/grid";
-import { psd } from "../lib/ipc";
+import { psd, toBase64 } from "../lib/ipc";
 import type { AnchorMarks } from "../lib/ipc";
 import type { Cell, FillPatch, Point, Rect, Selection } from "../lib/types";
 import type { Paint } from "../lib/paint";
 import * as log from "../lib/log";
+import { openPsdProgress } from "./psd-progress";
 import type { WorldScene } from "../game/world-scene";
 import {
   anchorCell,
@@ -65,6 +66,15 @@ export async function convertFillToPsd(
   const raster = rasteriseFill(shape, fill.color ?? "#ec3013");
   if (!raster) return;
 
+  // The same wait as a converted sketch, and the same sheet over it: writing
+  // the file and running the pipeline over it is seconds between one tap and
+  // anything appearing. See `psd-progress.ts`.
+  const progress = openPsdProgress(
+    "Converting to PSD",
+    `${describeRange(grid, cellsRange(fill.cells).from, cellsRange(fill.cells).to)}`,
+    "Packing the pixels…",
+  );
+
   try {
     const name = `fill-${Date.now().toString(36)}`;
     // The space the artwork hangs from. A run of grid spaces anchors on its
@@ -102,6 +112,7 @@ export async function convertFillToPsd(
 
     // The block-out going and the artwork arriving are one thing, so undo
     // takes them back together rather than leaving a fill that is also a PSD.
+    await progress.stage("Placing the artwork…");
     store.history.begin();
     try {
       await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
@@ -114,6 +125,8 @@ export async function convertFillToPsd(
     );
   } catch (err) {
     log.error("Could not turn the fill into a PSD:", err);
+  } finally {
+    progress.close();
   }
 }
 
@@ -269,16 +282,6 @@ function marksForFill(
   }
 
   return marksForCells(grid, fill.cells, anchor, art);
-}
-
-function toBase64(bytes: Uint8ClampedArray): string {
-  let binary = "";
-  const chunk = 0x8000;
-  const view = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  for (let i = 0; i < view.length; i += chunk) {
-    binary += String.fromCharCode(...view.subarray(i, i + chunk));
-  }
-  return btoa(binary);
 }
 
 /**

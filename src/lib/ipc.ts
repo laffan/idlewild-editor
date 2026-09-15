@@ -4,21 +4,55 @@ import { invoke } from "@tauri-apps/api/core";
 import type { GameOptions, Genre, ProjectMeta, Projection } from "./types";
 
 /**
+ * How many bytes are encoded as one standalone piece.
+ *
+ * A **multiple of three**, which is the whole trick: base64 turns three bytes
+ * into four characters, so a run whose length divides by three encodes to
+ * exactly what it would have encoded to inside the whole buffer. The pieces
+ * can therefore be joined afterwards instead of the bytes being joined first.
+ */
+const B64_BYTES = 3 * 16384;
+
+/** And how many arguments `String.fromCharCode` is spread over at once. */
+const SPREAD = 0x8000;
+
+/**
  * Bytes as the command surface takes them.
  *
- * Every route that hands Rust a file — an import, a paste, a drop, a saved
- * PNG — sends base64 over the bridge, so the encoding lives beside the calls
- * rather than being written out again in each caller. Chunked because
- * `String.fromCharCode` is applied to the whole run at once and a megabyte of
+ * Every route that hands Rust a file — an import, a paste, a drop, a converted
+ * sketch — sends base64 over the bridge, so the encoding lives beside the
+ * calls rather than being written out again in each caller.
+ *
+ * **Encoded in pieces, not in one go.** This used to build a `binary` string
+ * the size of the whole buffer and hand that to `btoa`. A converted sketch is
+ * routinely ten megabytes, which made that ten megabytes of rope
+ * concatenation followed by a single `btoa` over ten megabytes: **four
+ * hundred milliseconds of a desktop machine**, measured, for a raster of
+ * 1826 × 1412 — and an iPad is several times slower again. Encoding
+ * forty-eight kilobytes at a time and joining the results is the same string
+ * in a fifth of the time (96 ms on the same raster), which is what makes it
+ * an optimisation rather than a change.
+ *
+ * Both loops are load-bearing. The outer one keeps each piece a multiple of
+ * three so it can stand alone; the inner one keeps the argument list handed
+ * to `String.fromCharCode` inside what an engine will spread — a megabyte of
  * arguments overflows the stack.
  */
-export function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+export function toBase64(bytes: Uint8Array | Uint8ClampedArray): string {
+  const view =
+    bytes instanceof Uint8Array
+      ? bytes
+      : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const parts: string[] = [];
+  for (let i = 0; i < view.length; i += B64_BYTES) {
+    const end = Math.min(i + B64_BYTES, view.length);
+    let binary = "";
+    for (let j = i; j < end; j += SPREAD) {
+      binary += String.fromCharCode(...view.subarray(j, Math.min(j + SPREAD, end)));
+    }
+    parts.push(btoa(binary));
   }
-  return btoa(binary);
+  return parts.join("");
 }
 
 /**

@@ -11,7 +11,7 @@
  * the ink that was on screen, brush texture and pressure taper included.
  */
 
-import { psd } from "../lib/ipc";
+import { psd, toBase64 } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import type { Stroke } from "../lib/types";
 import { createAtlasCache, type AtlasCache } from "./atlas";
@@ -98,26 +98,30 @@ export async function strokesToPsd(
     scale?: number;
     /** Built from `raster.bounds`, so ask for those first. */
     marks?: (raster: Raster) => AnchorMarks;
+    /**
+     * Called before each of the two long synchronous steps, and awaited.
+     *
+     * Both of them block this thread for as long as they take — a sketch of
+     * two megapixels is a few hundred milliseconds of stamping and as much
+     * again of encoding, and several times that on an iPad — so a caller
+     * putting words on screen has to be given the chance to paint them
+     * *first*. Hence awaited rather than called: see `editor/psd-progress.ts`.
+     */
+    stage?: (line: string) => Promise<void> | void;
   } = {},
 ): Promise<ImportResult | null> {
+  await options.stage?.("Drawing the strokes…");
   const raster = rasteriseStrokes(strokes, options.atlas, options.scale);
   if (!raster) return null;
+  await options.stage?.("Packing the pixels…");
+  const rgbaBase64 = toBase64(raster.rgba);
+  await options.stage?.("Writing the PSD…");
   return psd.fromRgba(
     projectId,
     name,
     raster.width,
     raster.height,
-    toBase64(raster.rgba),
+    rgbaBase64,
     options.marks?.(raster),
   );
-}
-
-function toBase64(bytes: Uint8ClampedArray): string {
-  let binary = "";
-  const chunk = 0x8000;
-  const view = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  for (let i = 0; i < view.length; i += chunk) {
-    binary += String.fromCharCode(...view.subarray(i, i + chunk));
-  }
-  return btoa(binary);
 }
