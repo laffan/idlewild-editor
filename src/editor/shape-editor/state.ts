@@ -194,7 +194,16 @@ export function selectedPaths(state: ShapeEditorState): number[] {
   return wanted.length > 0 ? wanted.sort((a, b) => a - b) : [state.current];
 }
 
-/** Point one path out, on its own or added to what is already picked. */
+/**
+ * Point one path out, on its own or added to what is already picked.
+ *
+ * The **current** path follows, which is right for a click on the canvas: you
+ * pointed at it, so it is what the point tools and the boolean's subject are
+ * about. It is wrong for the panel's ⊕, which says "and this one as well" —
+ * see `togglePathInSelection`, where the whole bug was that adding a clip to
+ * the selection quietly made the clip the subject, so *Cut out* took the
+ * shape out of the thing being cut with.
+ */
 export function selectPath(state: ShapeEditorState, index: number, add: boolean): void {
   if (!state.paths[index]) return;
   if (add) {
@@ -208,4 +217,16 @@ export function selectPath(state: ShapeEditorState, index: number, add: boolean)
   }
   state.current = index;
   state.selectedPoints.clear();
+}
+
+/** Add a path to the selection, or take it out, leaving the subject alone. */
+export function togglePathInSelection(state: ShapeEditorState, index: number): void {
+  if (!state.paths[index]) return;
+  if (state.selectedPaths.has(index)) {
+    // Never down to nothing: every operation reads the selection, and an
+    // empty one would silently fall back to the current path anyway.
+    if (state.selectedPaths.size > 1) state.selectedPaths.delete(index);
+    return;
+  }
+  state.selectedPaths.add(index);
 }

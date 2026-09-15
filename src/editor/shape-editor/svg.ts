@@ -56,9 +56,13 @@ function pathData(path: EditPath): string {
     const to = path.vertices[(i + 1) % path.vertices.length];
     if (live(from.ctrlRight) || live(to.ctrlLeft)) {
       out.push(`C ${control(from, "right")} ${control(to, "left")} ${at(to)}`);
-    } else {
-      out.push(`L ${at(to)}`);
+      continue;
     }
+    // `Z` already draws the straight run back to the start, so writing it as
+    // an `L` first puts a second copy of the first point in the path — which
+    // reads back as a five-cornered square.
+    if (path.closed && i === count - 1) break;
+    out.push(`L ${at(to)}`);
   }
   if (path.closed) out.push("Z");
   return out.join(" ");
@@ -207,12 +211,16 @@ function readElement(node: Element, unit: ToUnit): EditPath[] {
 /**
  * Walk an SVG path string.
  *
+ * Exported for its own tests: it is the one part of this file with no DOM in
+ * it and the one most likely to be wrong, since it is a parser for a grammar
+ * with eight commands, two cases and implicit repetition.
+ *
  * Each subpath becomes a path of its own; every curve command is normalised
  * to a cubic, because that is what the library stores and a quadratic has an
  * exact cubic form. Handles are kept **relative to their vertex**, which is
  * the only conversion this does.
  */
-function parsePathData(d: string, unit: ToUnit): EditPath[] {
+export function parsePathData(d: string, unit: ToUnit): EditPath[] {
   const tokens = d.match(/[MmLlHhVvCcSsQqTtZzAa]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
   const paths: EditPath[] = [];
   let vertices: Vertex[] = [];
@@ -245,6 +253,21 @@ function parsePathData(d: string, unit: ToUnit): EditPath[] {
       i++;
       if (command === "Z" || command === "z") {
         closed = true;
+        // An exporter that wrote the closing segment *and* a `Z` leaves the
+        // first point in the list twice. A ring is closed by being a ring.
+        const first = vertices[0];
+        const last = vertices[vertices.length - 1];
+        if (
+          vertices.length > 1 &&
+          first &&
+          last &&
+          Math.abs(first.x - last.x) < 1e-9 &&
+          Math.abs(first.y - last.y) < 1e-9
+        ) {
+          // The closing curve's handle belongs to the point that survives.
+          if (last.ctrlLeft) first.ctrlLeft = last.ctrlLeft;
+          vertices.pop();
+        }
         flush();
         x = startX;
         y = startY;

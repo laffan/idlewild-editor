@@ -39,6 +39,7 @@ import {
   redo,
   selectPath,
   squarePath,
+  togglePathInSelection,
   toShapeData,
   undo,
   type ShapeEditorState,
@@ -120,7 +121,12 @@ export function openShapeEditor(
         redraw();
       },
       cut: () => {
-        if (!booleanCut(state)) log.warn("Pick a second path to cut out of this one");
+        if (!booleanCut(state)) {
+          log.warn(
+            "Nothing to cut: pick a second path with ⊕, and make sure it does " +
+              "not swallow the one being cut",
+          );
+        }
         redraw();
       },
       reflect: (axis) => {
@@ -161,8 +167,12 @@ export function openShapeEditor(
         redraw();
       }),
       exportSvg: () => void saveSvg(state),
-      pickPath: (index, add) => {
-        selectPath(state, index, add);
+      pickPath: (index) => {
+        selectPath(state, index, false);
+        redraw();
+      },
+      togglePath: (index) => {
+        togglePathInSelection(state, index);
         redraw();
       },
     });

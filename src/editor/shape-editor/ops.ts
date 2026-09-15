@@ -320,6 +320,11 @@ export function booleanCut(state: ShapeEditorState): boolean {
     if (rings.length === 0) break;
   }
 
+  // A cut that removes the subject entirely is a cut whose clip swallowed it,
+  // and applying it leaves an editor holding a shape with no points — which
+  // is a dead end rather than an answer. Refused, and the caller says so.
+  if (rings.length === 0) return false;
+
   capture(state);
   const made: EditPath[] = rings.map((ring) => ({
     vertices: ring.map((p) => ({ x: p.x, y: p.y })),
@@ -334,9 +339,8 @@ export function booleanCut(state: ShapeEditorState): boolean {
   const at = state.paths.length;
   state.paths.push(...made);
   state.current = Math.min(at, state.paths.length - 1);
-  state.selectedPaths = new Set(state.paths.length > 0 ? [state.current] : []);
+  state.selectedPaths = new Set([state.current]);
   state.selectedPoints.clear();
-  if (state.paths.length === 0) state.paths.push({ vertices: [], closed: true, hole: false });
   return true;
 }
 

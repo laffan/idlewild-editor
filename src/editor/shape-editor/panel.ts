@@ -34,7 +34,10 @@ export interface ShapePanelActions {
   crop: () => void;
   importSvg: () => void;
   exportSvg: () => void;
-  pickPath: (index: number, add: boolean) => void;
+  /** Make this path the current one — the subject of everything unqualified. */
+  pickPath: (index: number) => void;
+  /** And the ⊕: in or out of the selection, leaving the subject alone. */
+  togglePath: (index: number) => void;
 }
 
 export interface ShapePanel {
@@ -96,7 +99,7 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
           h("button", {
             class: "lib-path-name",
             text: `${path.hole ? "Hole" : "Path"} ${index + 1}`,
-            onClick: () => actions.pickPath(index, false),
+            onClick: () => actions.pickPath(index),
           }),
           h("span", { class: "lib-path-count m", text: `${path.vertices.length}` }),
           h(
@@ -105,7 +108,7 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
               class: "lib-path-add",
               title: picked.has(index) ? "Take out of the selection" : "Add to the selection",
               "aria-pressed": String(picked.has(index)),
-              onClick: () => actions.pickPath(index, true),
+              onClick: () => actions.togglePath(index),
             },
             icon(picked.has(index) ? ICONS.check : ICONS.plus, 14),
           ),

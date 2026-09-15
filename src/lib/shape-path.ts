@@ -207,7 +207,22 @@ export function subPathPolygon(path: SubPath, box: ShapeBox, steps = 8): Point[]
 
   push(at(vertices[0], box));
   for (let i = 1; i < vertices.length; i++) walk(vertices[i - 1], vertices[i]);
-  if (path.closed !== false) walk(vertices[vertices.length - 1], vertices[0]);
+  if (path.closed !== false) {
+    walk(vertices[vertices.length - 1], vertices[0]);
+    // The closing walk lands back on the first point, and a ring that ends
+    // where it starts has a zero-length edge in it — which every geometry
+    // routine downstream then has to be careful of. A ring is closed by being
+    // a ring, not by saying so twice.
+    const first = out[0];
+    const last = out[out.length - 1];
+    if (
+      out.length > 1 &&
+      Math.abs(first.x - last.x) < 1e-9 &&
+      Math.abs(first.y - last.y) < 1e-9
+    ) {
+      out.pop();
+    }
+  }
   return out;
 }
 
