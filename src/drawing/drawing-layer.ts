@@ -232,7 +232,14 @@ export class DrawingLayer {
     // `repaint` re-cuts it — and is what stops a hole outliving the tool.
     this.surface.endErase();
     this.surface.setInteractive(tool !== null);
-    this.root.classList.toggle("erasing", tool === "eraser");
+    // Every tool that paints its own pointer hides the system one — a
+    // crosshair sitting on top of a six-pixel tip is most of what you were
+    // trying to look at. See `previews`, and `cursor.ts` for what is drawn
+    // instead.
+    this.root.classList.toggle(
+      "paints-cursor",
+      tool !== null && this.previews(tool),
+    );
     // A shape half tapped out survives a change of tool but stops being
     // *drawn*, which is not the same thing. It has to survive because holding
     // space borrows Pan — every tool in this editor can be interrupted that

@@ -74,6 +74,18 @@ describe("the drawing layer's stylesheet", () => {
     expect(rule(".draw-surface.active")["pointer-events"]).toBe("auto");
   });
 
+  /**
+   * A tool that draws itself at the pointer hides the system cursor, and the
+   * pair have to agree: `drawing-layer.ts` puts the class on for exactly the
+   * tools `previews` answers for, and without the rule below a crosshair sits
+   * on top of a six-pixel tip — which is most of what the preview was for.
+   * The tools whose mark is a whole gesture keep the crosshair.
+   */
+  it("hides the pointer for a tool that paints its own", () => {
+    expect(rule(".draw-surface.active").cursor).toBe("crosshair");
+    expect(rule(".draw-surface.active.paints-cursor").cursor).toBe("none");
+  });
+
   it("anchors the stage's transform to its top-left", () => {
     const stage = rule(".draw-stage");
     expect(stage.position).toBe("absolute");

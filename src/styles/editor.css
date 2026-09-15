@@ -646,8 +646,12 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
   touch-action: none;
   cursor: crosshair;
 }
-/* The eraser paints its own disc at the pointer, so the arrow is noise. */
-.draw-surface.active.erasing { cursor: none; }
+/* A tool that draws itself at the pointer hides the system cursor: Slice's
+   disc, and the faded stamp the three brushes show — see drawing/cursor.ts.
+   A crosshair over a six-pixel tip is most of what you were looking at, and
+   the preview marks the spot more exactly than the crosshair did. The tools
+   whose mark is a whole gesture rather than a tip keep it. */
+.draw-surface.active.paints-cursor { cursor: none; }
 
 .draw-stage {
   position: absolute;

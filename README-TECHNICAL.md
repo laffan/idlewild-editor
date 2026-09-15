@@ -5137,6 +5137,14 @@ shows nothing — the real subtraction is cut into the *baked* canvas by the
 session, which has not happened yet. So `erase` is forced false and the colour
 carries the meaning.
 
+**The system cursor goes where a preview comes.** `.draw-surface.active` is a
+crosshair, and `.paints-cursor` — set for exactly the tools `previews` answers
+for, Slice included — turns it off. A crosshair on top of a six-pixel tip is
+most of what the preview was drawn to show, and the preview marks the point
+more exactly than the crosshair did: it *is* the mark. The rule and the class
+are asserted together in `styles/__tests__`, because a stylesheet has no type
+checker over it and the failure is silent.
+
 **Three tools have no preview and it is not an oversight.** Fill, the Lasso and
 the Boundary sweep are a *path*: what they lay down is decided on release by
 where the whole gesture went, so there is nothing at the pointer to show.
