@@ -668,8 +668,9 @@ remaining pieces are wired to real slots rather than mocked.
   undo there instead, in that file's own history, which is the same one ⌘Z has
   always had in it, and while extrude or collider mode is up they undo *in
   that*, a pull or a rub at a time, with the document's history waiting
-  untouched underneath. The code panel carries a pair of its own beside Save,
-  for when it is floating over the header. Undo does not reach across the things
+  untouched underneath. The code panel carried a pair of its own for when it is
+  floating over the header, and they went with the bar they were on — see the
+  Code section below. Undo does not reach across the things
   the editor cannot take back: renaming a PSD, or bringing an edited one home,
   moves a file on disk, and the history stops there rather than restoring a
   document that names a file which is no longer where it says
@@ -734,13 +735,31 @@ remaining pieces are wired to real slots rather than mocked.
   folds the sidebar that is left** is back, too: it was there the whole time,
   drawn underneath the running game, so the one control for getting the column
   out of the way was invisible for the whole of the mode
-- The panel sits in one of **three** places, on a row of buttons in its own
-  header — a row above the console (the default: code here is code about the
-  canvas beside it), a column to the right of it, where a wide screen gives a
-  file the window's full height, or over the whole editor. Each remembers its
-  own size, and which one you left it in is remembered too. The reference goes
-  where there is room for it: beside the editor when the panel is wide, under it
+- The panel sits in one of **three** places, from the pin in its bar — a row
+  above the console (the default: code here is code about the canvas beside
+  it), a column to the right of it, where a wide screen gives a file the
+  window's full height, or over the whole editor. Each remembers its own size,
+  and which one you left it in is remembered too. The reference goes where
+  there is room for it: beside the editor when the panel is wide, under it
   when the panel is itself a column
+- **One bar of chrome, where there were three.** There was a header across the
+  top carrying three placement buttons, Docs and Close; the bar naming the open
+  file; and a footer carrying Save, the words ⌘S and a pair of undo buttons.
+  A hundred and sixty pixels of the window on nine controls, in a section whose
+  whole subject is a file taller than the screen — which on an iPad is a third
+  of the panel gone before a line of code is shown. Now it is the file bar and
+  nothing else: the path, whether it is saved and whatever the editor last had
+  to say on the left, and right-aligned the pin, the reference and Close, as
+  three icons. The pin opens a menu rather than standing its three places in a
+  row, and it ticks the one you are in. The path is cut in the middle rather
+  than at the end when the column is narrow, so what you can always read is the
+  filename
+- **The save bar is gone rather than moved.** Nothing on it did anything the
+  keyboard does not — ⌘S, ⌘Z, ⇧⌘Z — and nothing typed can be lost without it:
+  the panel writes a dirty file when you open another one and when you leave
+  Code, and the editor's own undo and redo follow the caret into the code.
+  The one thing it costs is the full-screen placement on a device with no
+  keyboard, where the header is covered and there is now no button to undo with
 - The project's real file tree in CodeMirror 6. New File and New Folder sit over
   the column they create into, folders fold away — and stay folded, per
   install — and a switch beside the open file's path takes the whole column off

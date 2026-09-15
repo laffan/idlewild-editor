@@ -8,10 +8,22 @@
  * asks only for a dockable modal for now.
  *
  * Where it sits is a choice of three — a row above the console, a column to
- * the right of the canvas, or the whole shell — and the row of buttons in its
- * head is how it is made. Which of them is in force is the editor shell's
- * business, because it is a fact about the shell's layout, so a placement is
- * reported rather than acted on here. See `editor/code-panel.ts`.
+ * the right of the canvas, or the whole shell — and the pin in the file bar is
+ * how it is made. Which of them is in force is the editor shell's business,
+ * because it is a fact about the shell's layout, so a placement is reported
+ * rather than acted on here. See `editor/code-panel.ts`.
+ *
+ * **One bar of chrome, and it is the one that names the open file.** There
+ * were three: a head over the whole panel carrying the placement buttons, the
+ * reference and Close; the file bar; and a footer carrying Save, its shortcut
+ * and a pair of history buttons. On an iPad that is a hundred and sixty
+ * pixels of the window spent on nine controls, in a section whose whole
+ * subject is a file that is taller than the screen. The head's three are
+ * right-aligned in the file bar now, as icons — the pin opens a menu instead
+ * of standing three buttons in a row — and the footer is gone outright, since
+ * Save, undo and redo are ⌘S, ⌘Z and ⇧⌘Z, the document saves itself when the
+ * file changes or the section is left, and the editor header carries a
+ * history pair of its own.
  *
  * Docs opens a region of its own on a divider: the Phaser reference, MDN's,
  * and the two written guides, following the caret where they can. It is
@@ -30,9 +42,10 @@
 
 import { EditorView } from "@codemirror/view";
 import { redo, redoDepth, undo, undoDepth } from "@codemirror/commands";
-import { clear, h, ICONS, icon } from "../lib/dom";
+import { clear, h } from "../lib/dom";
 import { gameFiles } from "../lib/ipc";
 import * as log from "../lib/log";
+import { CodeBar } from "./code-bar";
 import { FileTree } from "./file-tree";
 import { DocsPanel } from "./docs/panel";
 import { fileState } from "./editor-state";
@@ -50,21 +63,12 @@ import { createResizer, type Resizer } from "../editor/resizer";
  */
 export type CodePlacement = "bottom" | "right" | "full";
 
-/** The three, in the order the head offers them. */
-const PLACEMENTS: Array<{ value: CodePlacement; label: string; title: string }> = [
-  { value: "bottom", label: "Bottom", title: "Dock above the console" },
-  { value: "right", label: "Right", title: "Dock to the right of the canvas" },
-  { value: "full", label: "Full", title: "Cover the editor" },
-];
-
 export class CodeModal {
   readonly root: HTMLElement;
   private readonly projectId: string;
   private readonly tree: FileTree;
-  private readonly filename: HTMLElement;
-  private readonly dirtyFlag: HTMLElement;
-  /** Why an edit did not take, or what a Reset just did. Clears itself. */
-  private readonly note: HTMLElement;
+  /** The one row of chrome: the file on the left, the panel's own on the right. */
+  private readonly bar: CodeBar;
   /** The template has blocks this file lacks, and an offer to put them in. */
   private readonly repair: HTMLElement;
   private readonly editorHost: HTMLElement;
@@ -73,22 +77,17 @@ export class CodeModal {
   private dirty = false;
   /** Null until the shell has placed it, which it does as soon as it is up. */
   private placement: CodePlacement | null = null;
-  private readonly placementButtons = new Map<CodePlacement, HTMLButtonElement>();
-  private readonly docsButton: HTMLButtonElement;
-  private readonly undoButton: HTMLButtonElement;
-  private readonly redoButton: HTMLButtonElement;
   private readonly onPlacementChange: (placement: CodePlacement) => void;
   /** A file was written. The shell restarts a running game against it. */
   private readonly onSaved: (path: string) => void;
   /**
    * Told when what undo and redo would do here has moved, so the header's own
-   * pair can follow. Set by `editor/code-panel.ts`; the pair in this modal's
-   * footer is updated from the same place — see `historyMoved`.
+   * pair can follow. Set by `editor/code-panel.ts`, and the only pair there
+   * is — see `historyMoved`.
    */
   onHistoryChange: () => void = () => {};
   /** Which open is the current one — see `openFile`. */
   private openToken = 0;
-  private noteTimer: number | null = null;
   private readonly filesResizer: Resizer;
   private readonly docs = new DocsPanel();
   /** Rebuilt on every move: the axis differs between the two sides. */
@@ -99,7 +98,6 @@ export class CodeModal {
   /** The panel and the row inside it: what a placement moves the docs between. */
   private readonly panel: HTMLElement;
   private readonly body: HTMLElement;
-  private readonly filesButton: HTMLButtonElement;
   private filesShown = true;
 
   constructor(
@@ -117,7 +115,7 @@ export class CodeModal {
         // The editor is showing a file that just changed name or folder.
         if (this.openPath !== from) return;
         this.openPath = to;
-        this.filename.textContent = to;
+        this.bar.setFilename(to);
         this.tree.setOpen(to);
       },
       onRemoved: (path) => {
@@ -140,114 +138,18 @@ export class CodeModal {
     // the first `setPlacement` calls. It starts closed either way.
     this.docs.root.hidden = true;
 
-    this.filename = h("div", { class: "code-filename m", text: "No file open" });
-    this.dirtyFlag = h("div", { class: "code-dirty m" });
-    this.note = h("div", { class: "code-note m" });
+    this.bar = new CodeBar({
+      onToggleFiles: () => this.setFilesShown(!this.filesShown),
+      onPlacement: (placement) => this.setPlacement(placement),
+      onToggleDocs: () => this.setDocsOpen(!this.docsOpen),
+      onClose,
+    });
     this.repair = h("div", { class: "code-repair hidden" });
     this.editorHost = h("div", { class: "code-editor" });
-
-    this.docsButton = h(
-      "button",
-      {
-        class: "code-pin-btn",
-        title: "Phaser, JavaScript and psd-to-phaser reference",
-        "aria-pressed": "false",
-        onClick: () => this.setDocsOpen(!this.docsOpen),
-      },
-      icon(ICONS.book, 15),
-      h("span", { text: "Docs" }),
-    ) as HTMLButtonElement;
-
-    // The file column's own switch, beside the path it is showing: on a column
-    // dock the tree and the editor are fighting over 420 px, and the tree is
-    // the half you only need between files.
-    this.filesButton = h(
-      "button",
-      {
-        class: "code-files-btn",
-        title: "Hide the file browser",
-        "aria-label": "Toggle the file browser",
-        "aria-pressed": "true",
-        onClick: () => this.setFilesShown(!this.filesShown),
-      },
-      icon(ICONS.sidebar, 15),
-    ) as HTMLButtonElement;
-
-    // Three buttons rather than one toggle: there is no natural pair here, and
-    // a control that cycled through three places would be a guessing game.
-    const dockGroup = h("div", { class: "code-dock" }, icon(ICONS.pin, 15));
-    for (const { value, label, title } of PLACEMENTS) {
-      const button = h("button", {
-        class: "code-dock-btn",
-        type: "button",
-        title,
-        text: label,
-        "aria-pressed": "false",
-        onClick: () => this.setPlacement(value),
-      }) as HTMLButtonElement;
-      this.placementButtons.set(value, button);
-      dockGroup.appendChild(button);
-    }
-
-    // A pair of its own beside Save, as well as the two in the header. The
-    // header's are out of reach whenever the panel is placed over the whole
-    // shell, and on an iPad with no keyboard those are the only way to undo. `mousedown` is swallowed so pressing one does not take the
-    // caret out of the editor it is about.
-    const keepFocus = (event: Event) => event.preventDefault();
-    this.undoButton = h(
-      "button",
-      {
-        class: "code-history",
-        title: "Undo (⌘Z)",
-        "aria-label": "Undo",
-        disabled: "",
-        onMouseDown: keepFocus,
-        onClick: () => {
-          this.undo();
-          this.historyMoved();
-        },
-      },
-      icon(ICONS.undo, 15),
-    ) as HTMLButtonElement;
-    this.redoButton = h(
-      "button",
-      {
-        class: "code-history",
-        title: "Redo (⇧⌘Z)",
-        "aria-label": "Redo",
-        disabled: "",
-        onMouseDown: keepFocus,
-        onClick: () => {
-          this.redo();
-          this.historyMoved();
-        },
-      },
-      icon(ICONS.redo, 15),
-    ) as HTMLButtonElement;
 
     const panel = h(
       "div",
       { class: "code-panel", onClick: (e: Event) => e.stopPropagation() },
-      h(
-        "div",
-        { class: "code-head" },
-        // Where the word "Code" and the project name used to sit, and then New
-        // File and New Folder: those belong over the column they create into,
-        // so they have gone there. What takes the left is where the panel goes
-        // — the one control that is about this row rather than about what is
-        // under it — and the reference sits with Close at the other end.
-        dockGroup,
-        h(
-          "div",
-          { class: "code-head-right" },
-          this.docsButton,
-          h(
-            "button",
-            { class: "icon-btn", title: "Close", onClick: onClose },
-            icon(ICONS.close, 16),
-          ),
-        ),
-      ),
       (this.body = h(
         "div",
         { class: "code-body" },
@@ -256,29 +158,9 @@ export class CodeModal {
         h(
           "div",
           { class: "code-main" },
-          h(
-            "div",
-            { class: "code-bar" },
-            this.filesButton,
-            this.filename,
-            this.dirtyFlag,
-            this.note,
-          ),
+          this.bar.root,
           this.repair,
           this.editorHost,
-          h(
-            "div",
-            { class: "code-foot" },
-            h("button", {
-              class: "btn btn-primary",
-              text: "Save",
-              onClick: () => void this.save(),
-            }),
-            h("div", { class: "m", text: "⌘S" }),
-            h("div", { class: "code-foot-spacer" }),
-            this.undoButton,
-            this.redoButton,
-          ),
         ),
       )),
     );
@@ -319,12 +201,16 @@ export class CodeModal {
   }
 
   /**
-   * The open file's history has moved. Both pairs of buttons follow: this
-   * modal's own, and — through the shell — the two in the header.
+   * The open file's history has moved, so the header's pair can follow.
+   *
+   * There was a second pair in this panel's own footer, for the case the
+   * header's cannot cover: a panel placed over the whole shell hides them.
+   * The footer went with the rest of that bar — ⌘Z and ⇧⌘Z are the reach that
+   * matters, and a 56px row standing there for the one placement that hides
+   * two buttons was the wrong trade on an iPad. Docked, which is where the
+   * panel is nine times in ten, the header's pair is right there.
    */
   private historyMoved(): void {
-    this.undoButton.disabled = !this.canUndo;
-    this.redoButton.disabled = !this.canRedo;
     this.onHistoryChange();
   }
 
@@ -343,9 +229,7 @@ export class CodeModal {
     for (const side of ["right", "bottom"] as const) {
       this.root.classList.toggle(`dock-${side}`, placement === side);
     }
-    for (const [value, button] of this.placementButtons) {
-      button.setAttribute("aria-pressed", String(value === placement));
-    }
+    this.bar.setPlacement(placement);
     this.placeDocs();
     this.onPlacementChange(placement);
   }
@@ -402,8 +286,7 @@ export class CodeModal {
     this.filesShown = shown;
     this.root.classList.toggle("files-hidden", !shown);
     this.filesResizer.handle.hidden = !shown;
-    this.filesButton.setAttribute("aria-pressed", String(shown));
-    this.filesButton.title = shown ? "Hide the file browser" : "Show the file browser";
+    this.bar.setFilesShown(shown);
   }
 
   /**
@@ -434,7 +317,7 @@ export class CodeModal {
     this.docsOpen = open;
     this.docs.root.hidden = !open;
     if (this.docsResizer) this.docsResizer.handle.hidden = !open;
-    this.docsButton.setAttribute("aria-pressed", String(open));
+    this.bar.setDocsOpen(open);
     // Opening it with the caret already somewhere should answer for where the
     // caret already is, rather than waiting for the next keystroke.
     if (open) this.reportCursor();
@@ -453,7 +336,7 @@ export class CodeModal {
   /** The open file went away under us. */
   private closeFile(): void {
     this.openPath = null;
-    this.filename.textContent = "No file open";
+    this.bar.setFilename(null);
     this.setDirty(false);
     this.view?.destroy();
     this.view = null;
@@ -479,9 +362,9 @@ export class CodeModal {
     if (token !== this.openToken) return;
 
     this.openPath = path;
-    this.filename.textContent = path;
+    this.bar.setFilename(path);
     this.setDirty(false);
-    this.setNote(
+    this.bar.setNote(
       isGenerated(path)
         ? "The editor writes this file. It follows the canvas."
         : "",
@@ -496,7 +379,7 @@ export class CodeModal {
       onSave: () => void this.save(),
       onReset: (blockId) => void this.reset(blockId),
       onRefused: () =>
-        this.setNote("These lines are the editor's — Reset puts them back."),
+        this.bar.setNote("These lines are the editor's — Reset puts them back."),
       onMissing: (ids) => this.offerMissing(path, ids),
       onEdit: () => {
         this.setDirty(true);
@@ -548,13 +431,13 @@ export class CodeModal {
     // moves while the modal is open.
     const canonical = await this.readTemplate(path);
     if (!canonical) {
-      this.setNote("There is no scaffold for this file to go back to.");
+      this.bar.setNote("There is no scaffold for this file to go back to.");
       return;
     }
 
     const next = resetBlock(path, this.view.state.doc.toString(), canonical, blockId);
     if (next === null) {
-      this.setNote(`Could not find ${blockId} to reset.`);
+      this.bar.setNote(`Could not find ${blockId} to reset.`);
       return;
     }
     this.view.dispatch({
@@ -563,7 +446,7 @@ export class CodeModal {
     });
     this.setDirty(true);
     await this.save();
-    this.setNote(`${blockId} is back the way the editor wrote it.`);
+    this.bar.setNote(`${blockId} is back the way the editor wrote it.`);
   }
 
   /**
@@ -626,19 +509,7 @@ export class CodeModal {
     });
     this.setDirty(true);
     await this.save();
-    this.setNote("Added the blocks this file was missing.");
-  }
-
-  /** A line in the file bar, gone again after a moment. */
-  private setNote(text: string, clearAfterMs = 4000): void {
-    this.note.textContent = text;
-    if (this.noteTimer !== null) window.clearTimeout(this.noteTimer);
-    this.noteTimer = null;
-    if (!text || clearAfterMs <= 0) return;
-    this.noteTimer = window.setTimeout(() => {
-      this.note.textContent = "";
-      this.noteTimer = null;
-    }, clearAfterMs);
+    this.bar.setNote("Added the blocks this file was missing.");
   }
 
   /**
@@ -657,7 +528,7 @@ export class CodeModal {
 
   private setDirty(dirty: boolean): void {
     this.dirty = dirty;
-    this.dirtyFlag.textContent = dirty ? "Unsaved" : "";
+    this.bar.setDirty(dirty);
   }
 
   async save(): Promise<void> {
@@ -676,7 +547,7 @@ export class CodeModal {
   }
 
   destroy(): void {
-    if (this.noteTimer !== null) window.clearTimeout(this.noteTimer);
+    this.bar.destroy();
     this.filesResizer.destroy();
     this.docsResizer?.destroy();
     this.docs.destroy();

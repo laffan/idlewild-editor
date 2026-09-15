@@ -161,6 +161,34 @@ describe("the code panel's placements", () => {
     // Under the finger, it would be the element `dropTarget` found.
     expect(ghost["pointer-events"]).toBe("none");
   });
+
+  /**
+   * The panel's three bars became one, and the two safe-area insets they were
+   * carrying had to be caught by whatever is left.
+   *
+   * Both fail silently and only on a device: the head owned the top, so
+   * without this the file bar sits under the iPad's status bar; the footer
+   * owned the bottom, so without this the last line of the file sits under
+   * the home indicator. Neither shows up on a Mac at all.
+   */
+  it("carries both device insets now the head and the footer are gone", () => {
+    const bar = ruleIn(codeCss, ".code-backdrop:not(.docked) .code-bar");
+    expect(bar["padding-top"]).toBe("var(--safe-top)");
+    const panel = ruleIn(codeCss, ".code-backdrop:not(.docked) .code-panel");
+    expect(panel["padding-bottom"]).toBe("var(--safe-bottom)");
+  });
+
+  /**
+   * One row where there were three, so the bar has to carry a path it can no
+   * longer give a whole line to. Only the folders may be given away: a bar
+   * that cut the other way would name a folder instead of the open file.
+   */
+  it("shrinks a path's folders and never its filename", () => {
+    const dir = ruleIn(codeCss, ".code-path-dir");
+    expect(dir.flex).toBe("0 1 auto");
+    expect(dir["text-overflow"]).toBe("ellipsis");
+    expect(ruleIn(codeCss, ".code-path-name").flex).toBe("none");
+  });
 });
 
 /**

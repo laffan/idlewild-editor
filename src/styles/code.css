@@ -41,20 +41,9 @@
   border-left: var(--rule-chrome);
 }
 
-/* Docked, the chrome competes with the editor for a much shorter box. */
-.code-backdrop.docked .code-head { min-height: var(--bar-h); }
-.code-backdrop.docked .code-foot { min-height: 40px; }
+/* Docked, the chrome competes with the editor for a much shorter box — which
+   is why there is one bar of it rather than three. See `code/code-modal.ts`. */
 .code-backdrop.dock-bottom .code-column { width: 200px; }
-
-/* In a column the file tree takes less of the width, and the head wraps if
-   what is in it does not fit on one line. */
-.code-backdrop.dock-right .code-head {
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 10px;
-  min-height: 0;
-}
-.code-backdrop.dock-right .code-head-right { margin-left: auto; }
 .code-backdrop.dock-right .code-column { width: 170px; }
 
 /* The file column, folded away by the switch beside the file path. The
@@ -71,82 +60,22 @@
   flex-direction: column;
 }
 
-.code-head {
-  min-height: 60px;
-  flex: none;
-  border-bottom: var(--rule-chrome);
-  display: flex;
-  align-items: center;
-  padding: 0 12px 0 12px;
-  gap: 14px;
-}
-.code-head-right {
-  margin-left: auto;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  font-size: 10px;
-  color: var(--chrome-dim);
-}
-
 /* Over the whole shell — the editor header included — the panel is the thing
-   standing under the iPad's status bar, so it owns the inset. Docked it is a row
-   between two rows or a column between two columns, and insets nothing. */
-.code-backdrop:not(.docked) .code-head {
-  min-height: calc(60px + var(--safe-top));
+   standing under the iPad's status bar, so it owns both insets. The top used
+   to be the head's; with the head gone the file bar is what stands under the
+   status bar, and the bottom used to be the footer's, so the panel itself
+   takes that one or the last line of the file sits under the home indicator.
+   Docked it is a row between two rows or a column between two columns, and
+   insets nothing. */
+.code-backdrop:not(.docked) .code-bar {
+  min-height: calc(44px + var(--safe-top));
   padding-top: var(--safe-top);
 }
 .code-backdrop:not(.docked) .code-panel {
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
 }
-.code-backdrop:not(.docked) .code-foot { padding-bottom: var(--safe-bottom); }
-
-.code-pin-btn {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
-  color: var(--chrome-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font: 600 12px var(--font-heading);
-}
-.code-pin-btn:hover { background: var(--chrome-rule); }
-.code-pin-btn[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
-
-/* Where the panel sits: four buttons rather than one toggle, because there is
-   no natural pair and a control that cycled through four places would be a
-   guessing game. The pin glyph labels the group. */
-.code-dock {
-  display: flex;
-  align-items: stretch;
-  border: 1px solid var(--color-neutral-700);
-}
-.code-dock > svg {
-  flex: none;
-  align-self: center;
-  margin: 0 8px;
-  color: var(--chrome-dim);
-}
-.code-dock-btn {
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-left: 1px solid var(--color-neutral-700);
-  background: transparent;
-  color: var(--chrome-text);
-  font: 600 11px var(--font-heading);
-  white-space: nowrap;
-}
-.code-dock-btn:hover { background: var(--chrome-rule); }
-.code-dock-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 
 .code-body { flex: 1; min-height: 0; display: flex; }
 
@@ -303,19 +232,29 @@
 .code-drag-ghost.outside .code-ghost-target { color: var(--chrome-dim); }
 
 .code-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* The panel's only bar.
+
+   Left to right: the file column's switch, the open file, whether it is
+   saved, whatever the editor last had to say — then, right-aligned, the three
+   that are about the panel rather than about the file. It carried the first
+   four; the head above it carried the last three and a footer under the
+   editor carried Save, its shortcut and two history buttons. One row of 44px
+   where there were three of 44, 60 and 56. */
 .code-bar {
   min-height: 44px;
   flex: none;
   border-bottom: 1px solid var(--chrome-rule);
   display: flex;
   align-items: center;
-  padding: 0 16px 0 6px;
+  padding: 0 6px;
   gap: 12px;
 }
 
-/* The file browser's own switch, at the left of the bar that names the open
-   file — which is the thing that is still there when the column is not. */
-.code-files-btn {
+/* Every button in the bar is the same 32px square: the file column's switch,
+   the pin, the reference and Close. They were three different kinds of button
+   on two different bars — a bordered pill, a labelled group and a full-height
+   icon button — and one row cannot carry three. */
+.code-bar-btn {
   flex: none;
   width: 32px;
   height: 32px;
@@ -327,10 +266,46 @@
   justify-content: center;
   padding: 0;
 }
-.code-files-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
-.code-files-btn[aria-pressed="true"] { color: var(--chrome-text); }
-.code-filename { font-size: 10px; color: var(--chrome-text); }
-.code-dirty { font-size: 10px; color: var(--color-accent); }
+.code-bar-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+/* On, rather than merely hovered: the file column is showing, the reference is
+   up. Lit rather than filled — the reference used to be a pill that went solid
+   accent, and a block of colour in a 44px bar over a file reads as an alert.
+   And one of these is on by default, so it must not shout. */
+.code-bar-btn[aria-pressed="true"] { color: var(--chrome-text); }
+.code-bar-btn[aria-expanded="true"] { background: var(--chrome-rule); color: var(--chrome-text); }
+
+/* The three about the panel, at the far end. `margin-left` rather than a
+   spacer element: the note already claims the free space, and this sits after
+   whatever is left of it. */
+.code-bar-right {
+  flex: none;
+  margin-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The open file. Two spans, because a path in a 260px column has to lose
+   something and only one half can be given away: the folders shrink and
+   ellipsize, the filename never does. A bar that cut the other way would be a
+   bar naming a folder. The whole path is on the title. */
+.code-filename {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  font-size: 10px;
+  color: var(--chrome-text);
+}
+.code-path-dir {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chrome-dim);
+}
+.code-path-name { flex: none; white-space: nowrap; }
+.code-dirty { flex: none; font-size: 10px; color: var(--color-accent); }
 /* Why an edit did not take, or what a Reset just did. Right-aligned so it
    never pushes the filename around as it comes and goes. */
 .code-note {
@@ -416,34 +391,9 @@
 .code-editor { flex: 1; min-height: 0; overflow: hidden; }
 .code-editor .cm-editor { height: 100%; }
 
-.code-foot {
-  min-height: 56px;
-  flex: none;
-  border-top: var(--rule-chrome);
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 12px;
-  font-size: 10px;
-  color: var(--chrome-dim);
-}
-.code-foot .btn { min-height: 40px; padding: 0 16px; font-size: 13px; }
-/* Pushes undo and redo to the right end of the footer bar. */
-.code-foot-spacer { flex: 1; }
-/* Undo and redo for the open file. The header carries a pair too, but they
-   are behind this panel whenever it is floating, which is exactly when an
-   iPad with no keyboard has nowhere else to press. */
-.code-history {
-  width: 40px;
-  height: 40px;
-  flex: none;
-  border: var(--rule-chrome);
-  background: transparent;
-  color: var(--chrome-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-.code-history:hover:not(:disabled) { background: var(--chrome-rule); }
-.code-history:disabled { color: var(--chrome-rule); cursor: default; }
+/* There was a footer here: Save, the words "⌘S", and a pair of history
+   buttons, on a 56px row under the editor. Nothing on it did anything the
+   keyboard does not — ⌘S, ⌘Z, ⇧⌘Z — and the two things Save was covering for
+   are covered without it: the modal saves the open file when another is
+   opened in it and when the section is left, and the editor's header carries
+   the history pair. Fifty-six pixels of a file is several lines of it. */

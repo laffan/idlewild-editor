@@ -632,12 +632,16 @@ for ⌘ so a keyboard without a Command key is not locked out.
 un-prevented ⌘Z as its own editing undo, which on iPadOS surfaces as the
 system's Undo over whatever field was last touched.
 
-An iPad without a keyboard is why the buttons exist at all, and it is also why
-there are four of them. The pair in the header sits beside the Draw/Code/Play
-toggle; the code panel carries a second pair in its footer beside Save,
-because the header is behind it whenever the panel is placed over the whole
-shell — which is exactly the moment a device with no ⌘ has nowhere else to
-press.
+An iPad without a keyboard is why the buttons exist at all. The pair in the
+header sits beside the Draw/Code/Play toggle and follows the caret into the
+code panel, so a docked panel's file undoes from there.
+
+There was a second pair, in that panel's own footer beside Save, because the
+header is behind it whenever it is placed over the whole shell — which is
+exactly the moment a device with no ⌘ has nowhere else to press. That footer
+has gone (see *One bar of chrome, where there were three*), and the trade is
+written down there: fifty-six pixels of every file in every placement, against
+two buttons in the one placement that hides the header's.
 
 ---
 
@@ -6054,7 +6058,7 @@ column on the other side and the same remembered width.
 it: the config follows the canvas, a save while a game is up restarts it, and a
 console line opens the file it was written in — all of which you want to be
 looking at while it happens, and the bottom dock is the placement that says so
-with the least moved. The other three are one tap away and the choice is
+with the least moved. The other two are in the pin's menu, and the choice is
 remembered (`codePlacement`, and the old `codePinned` is read once for anyone
 who only ever answered that: "not pinned" was today's full screen).
 
@@ -6074,18 +6078,61 @@ bottom, a width for the two columns. Without that, moving from a column to the
 overlay does not look like an overlay; it looks like the panel jumped to the top
 of the screen, which is exactly what it did.
 
-### What is in the panel's own chrome
+### One bar of chrome, where there were three
 
-The head carries the three **placement** buttons on the left — the one control
-in here that is about this row rather than about what is inside it — and
-**Docs** with Close at the other end. The word "Code" and the project name were
-there once and said nothing the user did not already know a moment after opening
-the modal from that project.
+The panel had a **head** across the top carrying three placement buttons, Docs
+and Close; a **file bar** under it carrying the column's switch and the open
+file's name; and a **footer** under the editor carrying Save, the words "⌘S"
+and a pair of history buttons. Sixty, forty-four and fifty-six pixels — a
+hundred and sixty of the window spent on nine controls, in a section whose
+whole subject is a file taller than the screen, on a device where the screen is
+not large to begin with. The editor is developed on an iPad; that is a third of
+a bottom dock gone before a line of code is shown.
+
+It is **one 44px row** now, `code/code-bar.ts`, and it reads left to right as
+two groups. On the left, what is about the **file** under it: the column's
+switch, the path, whether it is saved, and whatever the editor last had to say
+about an edit. Right-aligned, what is about the **panel**: the pin, the
+reference, Close. That is the same sentence the head and the file bar were
+saying between them, in one row instead of two — and it is why the three that
+moved are the ones that moved, rather than the ones that happened to fit.
+
+**The pin is a menu now.** Three is still the right number of places, and a
+control that *cycled* through them would be a guessing game — but a menu is
+not a cycle: it says all three at once, ticks the one in force rather than
+dropping it, and costs the bar a single 32px button instead of most of its
+width. Docs loses its word for the same reason; the book is what the reference
+is everywhere else in this editor, and the sentence it stood beside is on its
+tooltip. All four buttons in the bar are now the same 32px square, where they
+had been a bordered pill, a labelled group and a full-height icon button on
+two different bars.
+
+**The footer is gone outright, not moved.** Nothing on it did anything the
+keyboard does not — ⌘S, ⌘Z, ⇧⌘Z — and the two jobs Save was quietly doing are
+done without it: the modal writes a dirty file when another is opened in it
+(`openFile`) and when the section is left (`CodePanel.hide`), so nothing typed
+can be lost by leaving. The history pair went with it; the editor's own header
+carries one that follows the caret in here. What that costs is the full-screen
+placement, where the header is covered: there, on a device with no keyboard,
+there is now no button for undo. That is the trade — 56px of every file in
+every placement against two buttons in one of them.
+
+**Two safe-area insets had to be caught by what is left.** The head owned the
+top, so the file bar takes it or it sits under the iPad's status bar; the
+footer owned the bottom, so `.code-panel` takes it or the last line of the file
+sits under the home indicator. Both fail silently and neither fails on a Mac,
+which is why `styles.test.ts` asserts them.
+
+**And the path had to learn to be cut.** One row means the filename shares it
+with everything else, and in a 260px column dock `js/prefabs/character.js` has
+to lose something. It is two spans rather than one string: the folders shrink
+and ellipsize, the filename never does, and the whole path is on the title. A
+bar that cut the other way would be a bar naming a folder.
 
 **New File and New Folder are over the column they create into**, which is where
 they belong: they read which file is open to decide where a new one goes, and
 they used to sit in the head, a long way from the thing they make. They are the
-width of that column and shorter than a button in the head, because they are a
+width of that column and shorter than a button in the bar, because they are a
 strip rather than a row of chrome — and in a column dock they stack, because 170
 px is not two names wide and clipping "New Folder" to "New Fold" is the other
 answer.
