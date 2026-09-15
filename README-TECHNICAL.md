@@ -221,9 +221,24 @@ gets a directory and the document is written beside its assets.
 
 `src/lib/types.ts` is the shared shape; `src-tauri/src/project.rs` mirrors it.
 `src/lib/doc-shape.ts` holds the parts of it that are functions rather than
-state — an empty layer, a copy of one, and the migration a document goes
-through on the way in from disk. Split from `doc-store.ts` for the line rule,
-and it splits cleanly: none of it touches the store.
+state — an empty layer, a copy of one, how a fill describes what it covers,
+and the migration a document goes through on the way in from disk. Split from
+`doc-store.ts` for the line rule, and it splits cleanly: none of it touches
+the store.
+
+Three fields are about **what a mark is made of** rather than where it is, and
+all three are optional because *absent* means the flat colour everything was
+before the libraries existed:
+
+| Field | On | What it says |
+|---|---|---|
+| `Stroke.paint` | a stroke | the library row it is drawn with, and the lattice a pattern is pinned to |
+| `Stroke.stamp` | a `"shape"` stroke | the box each stamp fills, and whether the space is the diamond inside it |
+| `FillPatch.paint` | a filled run of grid spaces | the same, for ground rather than ink |
+
+A `PaintSpec` names a row by **id**, and the library is per install — see
+*The pattern and shape libraries* for what a document carrying an id this
+machine does not have draws instead.
 
 - **Layers are top-first**, matching Hush. Phaser depth counts upward, so
   layer *N* of *M* renders at depth `(M − N) × 1000`. Inside a layer's slot
@@ -795,7 +810,11 @@ one pressed state across them, because only one tool is ever in hand):
 | Column | Where | Tools | What they have in common |
 |---|---|---|---|
 | rail | hangs from the top left | Select, Pan, Point, Boundary | what you do *to* the canvas: the camera and the pointer, then the two that make something out of bare ground — nothing already on it can be promoted into either |
-| draw | stands on the bottom left | Pencil, Pixels, Eraser, Lasso, Fill | the ink |
+| draw | stands on the bottom left | Pencil, Pattern, Shape, Eraser, Lasso, Fill | the ink |
+
+Three of the six paint with the **library** rather than with a colour —
+Pattern always, Shape always, Fill when it is aimed at one — and all three are
+set from the same control. See *The pattern and shape libraries*, below.
 
 Same class, same 56px buttons, same width: `.tool-rail.draw-bar` is the rail
 turned the other way up, and `top: auto; bottom: 16px` is the whole of the
@@ -2849,6 +2868,164 @@ change and a drag rebuilds it per pointer move.
 The pass is idempotent — a section it has been over carries
 `data-collapsible` — which matters because the PSD layer list is built once and
 kept across re-renders, so the same element comes back round.
+
+## The pattern and shape libraries
+
+Two palettes carried over from
+[simple-tileset-generator](https://github.com/laffan/simple-tileset-generator)
+— fourteen pixel patterns and twenty-nine vector shapes, unchanged — and both
+of its editors, rebuilt in this shell. Three tools paint out of them: the
+Pattern brush, the Shape brush, and Fill.
+
+```
+src/lib/library/
+  types.ts         PatternData, ShapeData, and the grid operations
+  pattern-defs.ts  the fourteen, pixel for pixel
+  shape-defs.ts    the twenty-nine, vertex for vertex
+  store.ts         Library<T>: order, customs, renames, selection
+  index.ts         patternLibrary, shapeLibrary, onLibraryChange
+src/lib/paint.ts        Paint, PaintSpec, and the lattice
+src/lib/shape-path.ts   drawing a shape into a box — or into a diamond
+src/drawing/paint-render.ts  what the three painters actually draw
+src/editor/paint-picker.ts   the one control that picks any of it
+src/editor/pattern-editor/   the pixel editor
+src/editor/shape-editor/     the vector editor
+```
+
+### The library is the app's, not the project's
+
+It lives in `localStorage`, which on this shell is per install — the same
+place the sidebar widths, the folded inspector sections and the colour
+picker's recent swatches already live. A pattern is a mark you make, the way a
+brush is: nobody wants the dither they drew on Tuesday to belong to the
+project they happened to draw it in.
+
+What a **document** stores is the id and nothing else, and that is the trade,
+stated plainly: a project opened on a machine whose library does not have
+`pattern_k3f…` draws that stroke in flat colour and says so — `paintIsPlain`
+is the one question every painter asks first, and falling back to the colour
+is the answer that is never wrong. The built-ins are in the binary, so a
+project using only those is portable with no caveat at all.
+
+Built-ins and customs are the same kind of row: both can be renamed,
+reordered, duplicated and taken out of the palette. What a built-in cannot be
+is **edited in place** — `Library.save` on one writes a copy and puts the copy
+in its slot — so the defaults are a floor you cannot lose, and **Restore
+defaults** puts back anything removed. A removed row is still reachable by id,
+which is what keeps a document that names it drawable.
+
+### The lattice, and why the Pattern brush reads as revealing
+
+The old Pixels tool was the pencil with a checkered atlas tip. That made it a
+textured pencil rather than a tool: a stamp's phase follows the *path*, so two
+strokes that crossed disagreed about where the squares were, and drawing over
+your own tail thickened the dither.
+
+What replaced it is not stamped at all. `cellsUnderStroke` walks the path and
+collects the **lattice cells** the tip passed over; `fillLatticeCells` fills
+the ones whose pattern bit is set. Cell `(cx, cy)` is at
+`(cx × scale, cy × scale)` in **world** units, so:
+
+- two passes over the same ground fill the same cells,
+- a stroke drawn backwards covers the same set,
+- a stroke broken into pieces covers the union of them exactly,
+- and the result reads as an area that was already filled and is being
+  *uncovered*, which is the thing a pattern brush is for.
+
+`paint-render.test.ts` is written as those four claims.
+
+An area **fill** takes the cheap path instead — a `CanvasPattern` whose own
+matrix carries the same scale, so the lattice is pinned identically and the
+whole region is one call however large. Both are nearest-neighbour: a pattern
+pixel is a pixel, and a smoothed one is a smudge that happens to repeat.
+
+`Paint` is split into `PaintSpec` and a colour, because a `Stroke` already has
+a `color` and a second copy of it inside a paint field would be a fact stored
+twice — the kind that is right for a week and then quietly disagrees.
+
+### A shape fills a space, not the box around it
+
+An isometric grid space is a **diamond**, and its neighbours' bounding boxes
+overlap it by half. A shape drawn into the box therefore covers four
+half-spaces and lines up with none of them: `square` came out as a square
+floating over the lattice instead of the filled space it is meant to be.
+
+`ShapeBox.diamond` maps the unit box onto the diamond inscribed in it —
+`(0,0)` to the top point, `(1,0)` to the right, `(1,1)` to the bottom,
+`(0,1)` to the left, which is the order `Grid.cellPolygon` lists them in. It
+is a shear, so it is one `ctx.transform` and every painter below it is
+unchanged. The brush, the swept fill and a filled run of grid spaces all carry
+the flag, and `stampsOver` walks whichever of the two lattices the project
+has.
+
+The Shape brush records **places** rather than a path: its stroke's points are
+the corners of the boxes it stamped, which is why `"shape"` is a stroke mode
+rather than a brush. A streamline over those would slide every tile off the
+space it was put on, so `renderStroke` leaves them alone exactly as it leaves
+a fill's corners alone.
+
+### Painted fills need a texture, because Graphics cannot do either
+
+`DocRenderer` draws a `FillPatch` with Phaser's `Graphics`, which is right for
+a colour and can do neither of the others: a pattern is a lattice of thousands
+of small rectangles on an object that rebuilds its batch every frame, and a
+shape is a bezier path per grid space. So `game/fill-paint.ts` renders each
+painted patch **once** into a canvas texture and puts it on the scene as one
+image over its own bounds, keyed on a signature of the paint, the colour, the
+bounds and the grid. Panning, zooming and every unrelated document edit cost
+nothing.
+
+Both paints are clipped to the fill's own **spaces** rather than to its
+bounding box — a run of grid spaces is usually irregular and an isometric one
+is never a rectangle — and the canvas carries the world transform, so two
+patches filled with the same pattern line up across the gap between them.
+
+Two senses of the word *pattern* meet on `FillPatch` and are kept apart:
+`kind: "pattern"` is a **PSD in this project** whose texture tiles the patch,
+and `paint` is a row in the **app-wide library**. A patch is usually
+`kind: "color"` and carries a `paint` as well — the colour is what the pattern
+or the shape is drawn in, and what it falls back to.
+
+### The two editors
+
+Both are full-width sheets with the same three columns — a toolbar, the thing
+being edited, and a preview of it at the size *this project* will draw it —
+because they are the same kind of work and should not have to be learned
+twice.
+
+The **pattern editor** shows the tile surrounded by its own repeats, dimmed.
+That is the point of it: a pattern is a thing that repeats, and an 8×8 grid on
+its own says nothing about whether the repeat is seamless. Every write is
+taken modulo the size, so a tip that hangs off an edge paints the opposite
+edge and the four seams take care of themselves.
+
+The **shape editor** does not use Two.js, which upstream does. It works in the
+format the library stores — flat `{x, y, ctrlLeft, ctrlRight}` in a 0–1 box —
+so nothing is converted on the way in or out and there is no place for two
+representations to disagree. Its one piece of real geometry is the boolean,
+`lib/polygon-ops.ts`: Greiner–Hormann with the clip ring reversed, which is
+how a difference is made out of an intersection routine, and traced **always
+forwards** on both rings because the reversal is what makes the clip's arcs
+run the carving way.
+
+Upstream reaches for a modifier key for three things this editor also has to
+offer without one, because an iPad has no ⌘ and no space bar:
+
+| Upstream | Here as well |
+|---|---|
+| ⌘-drag to select a region of the pattern | a **Select** mode in the toolbar |
+| space-drag to change a pattern's phase | a **Pan** mode, and a nudge pad |
+| ⇧-click to add a path to the selection | a **⊕** on each row of the path list |
+
+The keys still work for anyone who has them, and both readings write the same
+field. The ⊕ is not quite ⇧-click, though, and the difference was a bug worth
+keeping: adding a path to the selection must **not** move the current one,
+because *Cut out* takes every other selected path out of the current one — so
+a ⊕ that changed the subject took the shape out of the thing being cut with.
+
+Both editors listen on the document in the **capture** phase and stop what
+they handle. The shell's own ⌘Z and space bar are bound to the same document,
+and while a sheet is up they are about the wrong history and the wrong camera.
 
 ## A colour carries its own opacity
 
@@ -5355,8 +5532,33 @@ console is a record of what happened rather than a document.
 ## Known gaps
 
 - Pattern fills store their PSD key and render as a tint; the texture is not
-  yet sampled into the fill. That is a *fill*, not a pattern layer — the two
-  share a word and nothing else.
+  yet sampled into the fill. That is a *fill* whose texture is a **PSD in the
+  project**, and it is a third sense of the word, unrelated to a pattern layer
+  and unrelated to the app-wide library. A fill made of a library pattern or
+  shape does draw — see *The pattern and shape libraries*.
+- There is no **combination** editor, which is the one thing
+  simple-tileset-generator has that this does not: a shape spanning several
+  tiles, with a pattern per path. Every piece is here — the shapes, the
+  patterns, the lattice, the boolean — and what is missing is the editor and
+  somewhere for a multi-tile stamp to live in the document, since a `Stroke`'s
+  stamp is one space.
+- A shape stroke carries a shape *or* a pattern, never both. The combination
+  editor's per-path patterns are the obvious place that would be wanted, and
+  `PaintSpec.kind` would have to stop being one of three things first.
+- The SVG reader does not convert arcs. An `A` comes through as a straight
+  line to its endpoint, which is honest but lossy; every other command, in
+  both cases, round-trips.
+- The boolean cut answers in polygons, not curves. A cut edge is the curve
+  walked at twelve samples a segment, which reads as the curve at a tile's
+  size and does not if the shape is later scaled far up. A boolean over
+  beziers is a much larger piece of work, and upstream makes the same trade.
+- A painted fill larger than 3072 world pixels a side keeps its flat colour:
+  the canvas texture it would need is the trap `fill-actions.ts` guards
+  against when it generates a PSD, measured in hundreds of megabytes.
+- The library is per install and a document names a row by id, so a project
+  moved to another machine loses any custom pattern or shape it used — it
+  draws in its colour and says so. A library export, or carrying used rows in
+  the `.idlewild` file, is the fix and neither is written.
 - A pattern layer is absent from the minimap in both directions: its
   placements are a palette standing nowhere, so drawing them would show a
   heap of elements on one space, and the pattern made of them reaches

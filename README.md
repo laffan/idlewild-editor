@@ -297,7 +297,7 @@ remaining pieces are wired to real slots rather than mocked.
   the top corner and is what you do *to* the canvas: Select, Pan, Point and
   Boundary — the camera and the pointer, then the two that make something out
   of bare ground. The **drawing toolbar** stands on the bottom corner and is
-  the ink: Pencil, Pixels, Eraser, Lasso and Fill. They were one column with a
+  the ink: Pencil, Pattern, Shape, Eraser, Lasso and Fill. They were one column with a
   gap in the middle doing the work of saying that Select and Pencil answer to
   different owners, and it grew a second column under it whenever PSD Edit
   mode was up. Which end a column hangs from carries that now — and the ink is
@@ -350,6 +350,69 @@ remaining pieces are wired to real slots rather than mocked.
   hundred pixels away from the thing they were about. Tapping the first corner
   again still closes the shape, which is how a polygon has always been closed;
   the bar is what tells you so
+- **The Pattern brush is a fill brush.** It was *Pixels*, and it was the
+  pencil with a hard checker for a tip — which made it a textured pencil
+  rather than a tool of its own: the checker was stamped along the path, so
+  its phase followed the hand and two strokes that crossed disagreed about
+  where the squares were. What it lays down now is a pixel pattern's own
+  cells, on a lattice pinned to the **world**. Drawing over your own tail
+  changes nothing, a second pass continues the first exactly, and the area
+  reads as one that was already filled and is being *uncovered* — which is
+  what a pattern brush does in every pixel-art editor that has one. There is
+  no brush row under it, because there is no tip: the size is how wide the
+  opening is, not what shape the paint is, and it keeps a size of its own
+  because six pixels of pencil is a line and six pixels of this is a
+  checkered thread
+- **Shape**, beside it, stamps a shape into every grid space you cross. It
+  records *places* rather than a path: drag across the grid and each space
+  takes one copy, filling that space exactly; cross it again and nothing
+  happens, because the space already has one. On an isometric project a space
+  is a **diamond**, so the shape is mapped into the diamond rather than into
+  the box around it — *square* fills its space, *half circle bottom* meets the
+  space below, and a run of quarter circles rounds a corner along the lattice.
+  That is what the shapes are for: they come from a tileset generator, where
+  the tile is the unit
+- **The patterns and the shapes are a library, and it is the app's rather than
+  the project's.** Fourteen patterns and twenty-nine shapes come from
+  [simple-tileset-generator](https://github.com/laffan/simple-tileset-generator)
+  — the same fourteen, pixel for pixel, and the same shapes, vertex for
+  vertex. A dither you draw on Tuesday is in the palette of the project you
+  start on Wednesday, because nobody wants a mark they made to belong to the
+  file they happened to make it in. What a *document* stores is the id, so a
+  project opened on a machine whose library does not have that row draws the
+  stroke in its colour and says so; the built-ins are in the binary, so a
+  project using only those is portable with no caveat at all. New, Edit,
+  Duplicate, Rename and Remove are under the swatches, and **Restore
+  defaults** puts back anything taken out. Editing a built-in makes a copy and
+  puts the copy in its place — the defaults are the floor, and you cannot lose
+  them
+- **The pattern editor** opens on the row in your hand: the tile surrounded by
+  its own repeats, because a pattern is a thing that repeats and an 8×8 grid
+  on its own tells you nothing about whether the repeat is seamless. Every
+  write wraps, so a tip that hangs off an edge paints the opposite edge and
+  the four seams take care of themselves. Four tips — square, round, airbrush,
+  and one made from a selection or an uploaded image — an erase toggle, a
+  straight line on shift, a selection to fill, clear or turn into a tip, a
+  grid from 4 to 64, a pattern you can push around to change its phase,
+  invert, import an image, save a PNG, and undo. Beside it is the pattern at
+  **this project's** scale, because a dither previewed at some arbitrary zoom
+  says nothing about whether it is the density you wanted on this grid
+- **The shape editor** is the vector half: drag points and handles, click an
+  edge to drop a point into it, ⌥-click a point to turn a corner into a curve,
+  add a square, circle, triangle or hexagon, flip, align — with the tile when
+  one path is picked, with each other when several are — distribute, punch a
+  hole, cut one path out of another, resize and rotate under ⌘, crop to the
+  tile, and SVG in and out. The paths are listed, because *Cut out* and
+  *Align* are aimed at a selection and ⇧-click is not a gesture an iPad has:
+  tapping a row picks it, and the ⊕ beside it adds it to the selection without
+  moving what the cut is about
+- **Fill takes all three.** The swept shape and the tapped-out one can be a
+  flat colour, a pattern revealed on the world's own lattice, or a field of a
+  shape — and so can a filled run of grid spaces, where a shape fill is a
+  tileset laid down in one gesture: the spaces are already there, so *a shape
+  in every space* is exactly what it sounds like. It is the one tool that
+  offers the choice, which is why it is the one that shows the three-way
+  switch
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as
   a blocking boundary play mode walks around. The PSD carries the same
   orienting marks an import does — the anchor dot and the grid the sketch was
@@ -450,7 +513,7 @@ remaining pieces are wired to real slots rather than mocked.
   taken out, rubbing out ink from this session, tip and pressure and all.
   Pressing it again puts the plain pencil back. It is the one thing in hand
   that means nothing outside the mode, which is why it is the only one on that
-  bar — Fill and Pixels used to be beside it on a second tool rail that
+  bar — Fill and Pattern used to be beside it on a second tool rail that
   appeared and disappeared with the mode, and both of those work anywhere, so
   both are on the drawing toolbar now. It is still a first cut: an eraser that
   reaches the artwork already inside the file is the version after it
@@ -607,7 +670,16 @@ remaining pieces are wired to real slots rather than mocked.
 - A pattern layer on the minimap. Its placements are a palette standing
   nowhere and the pattern made of them has no edges to frame, so the map
   skips it rather than showing a heap of elements on one space
-- Pattern fills rendering their PSD texture rather than a tint
+- Pattern fills rendering their PSD texture rather than a tint. (A fill made
+  of a *library* pattern or shape does draw — see above. This is the other
+  sense of the word: a patch whose texture comes from a PSD in the project)
+- A **combination** editor, which is the one thing
+  [simple-tileset-generator](https://github.com/laffan/simple-tileset-generator)
+  has that this does not: a shape spanning several tiles, with a pattern per
+  path. The pieces are all here — the shapes, the patterns, the lattice — and
+  what is missing is the editor and a place for a multi-tile stamp to live
+- Arcs in an imported SVG. `A` comes through as a straight line to its
+  endpoint rather than as a curve, which is honest but lossy
 - Phaser-aware autocomplete in the code modal, and the other direction of the
   canvas ↔ code binding: the canvas drives the code today, through the config
   the editor writes, and code does not yet drive the canvas
@@ -656,6 +728,7 @@ npm run vendor:p2p
 | [psd-to-json-rust](https://github.com/laffan/psd-to-json-rust) | PSD → game assets, in-process |
 | [psd](https://github.com/laffan/psd) | Reading PSDs, and the write half that turns images and sketches into them |
 | [hush](https://github.com/laffan/hush) | The drawing layer: stroke engine, infinite canvas, Apple Pencil |
+| [simple-tileset-generator](https://github.com/laffan/simple-tileset-generator) | The pattern and shape libraries, and both of their editors |
 
 The reference in the code modal carries [MDN Web Docs](https://developer.mozilla.org)
 content, used under CC BY-SA 2.5, alongside Phaser's and psd-to-phaser's own
