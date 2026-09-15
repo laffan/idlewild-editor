@@ -2065,6 +2065,19 @@ itself want flattening. A nested use gives the scratch up and composites
 straight onto its target, which is wrong only in the overlaps of a mark that
 is already being subtracted whole.
 
+**An antialiased edge keeps a quarter of itself, and that is arithmetic
+rather than a bug.** `destination-out` leaves `dst x (1 - src)`, so a pixel the
+mark covers half of — which is what an antialiased edge *is* — keeps
+`0.5 x 0.5` of what was under it. Erasing a shape with the identical shape
+therefore leaves a faint tracing of its outline: measured, nothing keeps more
+than **64/255**, and it is confined to the edge, with the interior going to
+exactly zero. It is what every raster editor does and what the old Rub tool
+always did. The fixes are worse than the residue: compositing the mask twice
+leaves an eighth instead of a quarter but eats visibly *past* what the brush
+would have drawn, and an eraser fatter than its own pen is a more surprising
+defect than a faint edge. A hard-edged mark — the Pattern brush's lattice
+cells — has no antialiasing to leave behind and comes out clean.
+
 **An eraser previews as a wash, not as a hole.** The live canvas sits *over*
 the baked one and holds nothing of its own, so compositing `destination-out`
 into it takes away nothing and shows nothing — you would drag an eraser across
