@@ -52,6 +52,7 @@ import {
   insideSelection,
   layoutOf,
   onSelectionHandle,
+  rawCellAt,
 } from "./view";
 
 export interface PatternEditorOptions {
@@ -368,7 +369,9 @@ function bindPointer(
         capture(state);
         held = regionBits(state.pattern, box);
         heldFrom = box;
-        heldAt = cell;
+        // Unwrapped, so a drag that leaves the tile carries on instead of
+        // leaping to the other side — see `rawCellAt`.
+        heldAt = rawCellAt(state, at.x, at.y);
         doing = onSelectionHandle(state, at.x, at.y) ? "resize" : "move";
         state.preview = moveRegion(state.pattern, box, held, box.r0, box.c0);
         redraw();
@@ -420,9 +423,10 @@ function bindPointer(
     }
 
     if ((doing === "move" || doing === "resize") && held && heldFrom && heldAt) {
+      const raw = rawCellAt(state, at.x, at.y);
       if (doing === "move") {
-        const dr = cell.row - heldAt.row;
-        const dc = cell.col - heldAt.col;
+        const dr = raw.row - heldAt.row;
+        const dc = raw.col - heldAt.col;
         state.preview = moveRegion(state.pattern, heldFrom, held, heldFrom.r0 + dr, heldFrom.c0 + dc);
         state.selection = {
           r0: heldFrom.r0 + dr,
@@ -431,8 +435,8 @@ function bindPointer(
           c1: heldFrom.c1 + dc,
         };
       } else {
-        const width = Math.max(1, cell.col - heldFrom.c0 + 1);
-        const height = Math.max(1, cell.row - heldFrom.r0 + 1);
+        const width = Math.max(1, Math.min(state.pattern.size, raw.col - heldFrom.c0 + 1));
+        const height = Math.max(1, Math.min(state.pattern.size, raw.row - heldFrom.r0 + 1));
         state.preview = moveRegion(state.pattern, heldFrom, held, heldFrom.r0, heldFrom.c0, {
           width,
           height,
@@ -463,6 +467,19 @@ function bindPointer(
   const end = (): void => {
     if (state.preview && (doing === "line" || doing === "move" || doing === "resize")) {
       state.pattern = state.preview;
+      // The cells wrapped as they landed; the box has to follow them back
+      // into the tile, or the next drag on it is a drag on empty canvas.
+      if (state.selection) {
+        const size = state.pattern.size;
+        const wrap = (n: number) => ((n % size) + size) % size;
+        const { r0, c0, r1, c1 } = state.selection;
+        state.selection = {
+          r0: wrap(r0),
+          c0: wrap(c0),
+          r1: wrap(r0) + (r1 - r0),
+          c1: wrap(c0) + (c1 - c0),
+        };
+      }
     }
     if (doing === "pan") commitOffset(state);
     state.preview = null;

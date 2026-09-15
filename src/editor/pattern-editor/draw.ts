@@ -124,10 +124,11 @@ export function setSelection(state: PatternEditorState, value: number): void {
   if (!box) return;
   capture(state);
   const grid = copyPattern(state.pattern);
+  const wrap = (n: number) => ((n % grid.size) + grid.size) % grid.size;
   for (let row = box.r0; row <= box.r1; row++) {
     for (let col = box.c0; col <= box.c1; col++) {
-      const line = grid.pixels[row];
-      if (line) line[col] = value;
+      const line = grid.pixels[wrap(row)];
+      if (line) line[wrap(col)] = value;
     }
   }
   state.pattern = grid;
@@ -137,14 +138,7 @@ export function setSelection(state: PatternEditorState, value: number): void {
 export function selectionBits(state: PatternEditorState): number[][] | null {
   const box = selectionBounds(state);
   if (!box) return null;
-  const bits: number[][] = [];
-  for (let row = box.r0; row <= box.r1; row++) {
-    const out: number[] = [];
-    for (let col = box.c0; col <= box.c1; col++) {
-      out.push(state.pattern.pixels[row]?.[col] === 1 ? 1 : 0);
-    }
-    bits.push(out);
-  }
+  const bits = regionBits(state.pattern, box);
   return bits.some((r) => r.includes(1)) ? bits : null;
 }
 
@@ -187,16 +181,22 @@ export function patternPngUrl(pattern: PatternData): string {
 
 // ── moving and tiling what a selection holds ────────────────────────────────
 
-/** The raw cells of a box, zeroes included — unlike `selectionBits`. */
+/**
+ * The raw cells of a box, zeroes included — unlike `selectionBits`.
+ *
+ * Reads wrap, because a box dragged past an edge carries on rather than
+ * stopping: what it is a window on is the pattern, and the pattern repeats.
+ */
 export function regionBits(
   pattern: PatternData,
   box: { r0: number; c0: number; r1: number; c1: number },
 ): number[][] {
+  const wrap = (n: number) => ((n % pattern.size) + pattern.size) % pattern.size;
   const out: number[][] = [];
   for (let row = box.r0; row <= box.r1; row++) {
     const line: number[] = [];
     for (let col = box.c0; col <= box.c1; col++) {
-      line.push(pattern.pixels[row]?.[col] === 1 ? 1 : 0);
+      line.push(pattern.pixels[wrap(row)]?.[wrap(col)] === 1 ? 1 : 0);
     }
     out.push(line);
   }

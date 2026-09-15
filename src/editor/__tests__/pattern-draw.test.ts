@@ -263,3 +263,21 @@ describe("moving what a selection holds", () => {
     expect(filled(state)).toEqual(["0,0", "0,2", "2,0", "2,2"].sort());
   });
 });
+
+
+describe("a box that runs past an edge", () => {
+  it("reads the cells that wrapped round to the other side", () => {
+    // A box is a window on the pattern, and the pattern repeats — so a box
+    // dragged off the right edge carries on rather than reading zeroes.
+    const state = stateOf(4);
+    applyBrush(state, state.pattern, 0, 0, 1);
+    expect(regionBits(state.pattern, { r0: 0, c0: 3, r1: 0, c1: 4 })).toEqual([[0, 1]]);
+  });
+
+  it("fills through the wrap as well", () => {
+    const state = stateOf(4);
+    state.selection = { r0: 0, c0: 3, r1: 0, c1: 4 };
+    setSelection(state, 1);
+    expect(filled(state)).toEqual(["0,0", "0,3"].sort());
+  });
+});

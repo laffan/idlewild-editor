@@ -48,19 +48,38 @@ export function layoutOf(state: PatternEditorState): Layout {
   };
 }
 
-/** Which cell of the pattern a canvas point falls on, wrapped into it. */
-export function cellAt(
+/**
+ * Which cell of the pattern a canvas point falls on, **unwrapped**.
+ *
+ * The copies around the tile are the same pattern, so a point over the one to
+ * the right is column `size + n`. Most callers want that folded back in — see
+ * `cellAt` — but a *drag* must not: folding it is what makes a selection
+ * pushed off the right edge leap back to the left instead of carrying on.
+ */
+export function rawCellAt(
   state: PatternEditorState,
   x: number,
   y: number,
 ): { row: number; col: number } {
   const layout = layoutOf(state);
-  const size = state.pattern.size;
-  const col = Math.floor((x - layout.x) / layout.cell);
-  const row = Math.floor((y - layout.y) / layout.cell);
   return {
-    row: ((row % size) + size) % size,
-    col: ((col % size) + size) % size,
+    col: Math.floor((x - layout.x) / layout.cell),
+    row: Math.floor((y - layout.y) / layout.cell),
+  };
+}
+
+/** The same, folded into the tile — which is what a mark on one of the
+ *  copies means: the same cell of the one pattern. */
+export function cellAt(
+  state: PatternEditorState,
+  x: number,
+  y: number,
+): { row: number; col: number } {
+  const raw = rawCellAt(state, x, y);
+  const size = state.pattern.size;
+  return {
+    row: ((raw.row % size) + size) % size,
+    col: ((raw.col % size) + size) % size,
   };
 }
 
