@@ -15,6 +15,7 @@
  * pointer does — see `geometry.ts`.
  */
 
+import type { Point } from "../../lib/types";
 import {
   copyShape,
   isHole,
@@ -68,6 +69,17 @@ export interface ShapeEditorState {
   crop: boolean;
   /** Whether the transform box is showing — ⌘, or the toolbar's own toggle. */
   transforming: boolean;
+  /**
+   * A path being tapped out, corner by corner, or null when the pen is down.
+   *
+   * Upstream makes a path by clicking three times on empty canvas, with no
+   * mode: the third click is the shape. That is a hard thing to discover and
+   * an easy one to do by accident — a click on empty canvas is also how you
+   * deselect. So it is a toggle here, and it is the same gesture as this
+   * editor's own point-to-point Fill, which anybody using it already knows:
+   * tap corners, tap the first one again to close.
+   */
+  pen: Point[] | null;
 
   past: ShapeSnapshot[];
   future: ShapeSnapshot[];
@@ -129,6 +141,7 @@ export function createShapeState(
     name,
     crop: false,
     transforming: false,
+    pen: null,
     past: [],
     future: [],
   };

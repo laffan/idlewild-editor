@@ -60,6 +60,14 @@ export interface PatternEditorState {
 
   /** The rectangle a selection covers, in pattern cells, inclusive. */
   selection: { r0: number; c0: number; r1: number; c1: number } | null;
+  /**
+   * Whether the box is still being swept.
+   *
+   * A settled box grows a corner handle and answers to a drag inside it; one
+   * still being swept does neither, because a handle that appeared mid-sweep
+   * would be a target moving under the pointer that made it.
+   */
+  sweeping: boolean;
 
   /** How far the tile has been dragged, in whole cells, before it is applied. */
   offset: { x: number; y: number };
@@ -87,6 +95,7 @@ export function createPatternState(
     hover: null,
     preview: null,
     selection: null,
+    sweeping: false,
     offset: { x: 0, y: 0 },
     past: [],
     future: [],

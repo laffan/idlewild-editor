@@ -394,9 +394,12 @@ remaining pieces are wired to real slots rather than mocked.
   and one made from a selection or an uploaded image — an erase toggle, a
   straight line on shift, a selection to fill, clear or turn into a tip, a
   grid from 4 to 64, a pattern you can push around to change its phase,
-  invert, import an image, save a PNG, and undo. Beside it is the pattern at
-  **this project's** scale, because a dither previewed at some arbitrary zoom
-  says nothing about whether it is the density you wanted on this grid
+  invert, import an image, save a PNG, and undo. A box you have drawn is not
+  only a box: drag inside it and the cells it holds move, wrapping; drag its
+  corner and they **repeat** across the new size, which is how a motif drawn
+  once becomes a row of itself. Beside it is the pattern at **this project's**
+  scale, because a dither previewed at some arbitrary zoom says nothing about
+  whether it is the density you wanted on this grid
 - **The shape editor** is the vector half: drag points and handles, click an
   edge to drop a point into it, ⌥-click a point to turn a corner into a curve,
   add a square, circle, triangle or hexagon, flip, align — with the tile when
@@ -405,7 +408,11 @@ remaining pieces are wired to real slots rather than mocked.
   tile, and SVG in and out. The paths are listed, because *Cut out* and
   *Align* are aimed at a selection and ⇧-click is not a gesture an iPad has:
   tapping a row picks it, and the ⊕ beside it adds it to the selection without
-  moving what the cut is about
+  moving what the cut is about. Align and distribute read the **points** when
+  two or more of them are picked and the paths otherwise — the selected points
+  are the smaller, more specific thing you pointed at. And **Draw a path** is
+  the pen: tap corners, tap the first one again to close, which is the same
+  gesture as the point-to-point Fill on the canvas outside
 - **Fill takes all three.** The swept shape and the tapped-out one can be a
   flat colour, a pattern revealed on the world's own lattice, or a field of a
   shape — and so can a filled run of grid spaces, where a shape fill is a

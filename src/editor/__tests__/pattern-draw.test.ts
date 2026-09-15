@@ -16,7 +16,9 @@ import {
   commitOffset,
   invert,
   lineInto,
+  moveRegion,
   nudge,
+  regionBits,
   resize,
   selectionBits,
   setSelection,
@@ -218,3 +220,46 @@ function fakeImage(size: number, rgba: number[]): HTMLImageElement {
   };
   return { width: size, height: size } as unknown as HTMLImageElement;
 }
+
+
+describe("moving what a selection holds", () => {
+  const box = { r0: 0, c0: 0, r1: 1, c1: 1 };
+
+  it("reads a box including its empty cells", () => {
+    const state = stateOf(4);
+    applyBrush(state, state.pattern, 0, 0, 1);
+    // `selectionBits` refuses an empty box; this one is about the cells
+    // themselves, because moving a box has to take its holes with it.
+    expect(regionBits(state.pattern, box)).toEqual([
+      [1, 0],
+      [0, 0],
+    ]);
+  });
+
+  it("lifts the cells out and puts them down somewhere else", () => {
+    const state = stateOf(4);
+    applyBrush(state, state.pattern, 0, 0, 1);
+    applyBrush(state, state.pattern, 1, 1, 1);
+    const bits = regionBits(state.pattern, box);
+    state.pattern = moveRegion(state.pattern, box, bits, 2, 2);
+    expect(filled(state)).toEqual(["2,2", "3,3"].sort());
+  });
+
+  it("wraps off one edge and back on the other", () => {
+    const state = stateOf(4);
+    applyBrush(state, state.pattern, 0, 0, 1);
+    const bits = regionBits(state.pattern, box);
+    state.pattern = moveRegion(state.pattern, box, bits, 0, 3);
+    expect(filled(state)).toEqual(["0,3"]);
+  });
+
+  it("repeats what it holds over a larger box", () => {
+    // Dragging the corner tiles the motif rather than stretching it, which is
+    // how a mark drawn once becomes a row of itself.
+    const state = stateOf(4);
+    applyBrush(state, state.pattern, 0, 0, 1);
+    const bits = regionBits(state.pattern, box);
+    state.pattern = moveRegion(state.pattern, box, bits, 0, 0, { width: 4, height: 4 });
+    expect(filled(state)).toEqual(["0,0", "0,2", "2,0", "2,2"].sort());
+  });
+});

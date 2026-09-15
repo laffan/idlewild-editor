@@ -80,6 +80,26 @@ export function primitivePath(kind: Primitive): EditPath {
   return { vertices, closed: true, hole: false };
 }
 
+/**
+ * Lay a tapped-out path down, if it encloses anything.
+ *
+ * Three corners is the least that encloses anything, which is the same floor
+ * the point-to-point Fill and the sweep both use. A refusal leaves the
+ * corners where they are rather than throwing them away — the answer to "that
+ * is not a shape yet" is another tap.
+ */
+export function commitPen(state: ShapeEditorState): boolean {
+  const corners = state.pen;
+  if (!corners || corners.length < 3) return false;
+  addPath(state, {
+    vertices: corners.map((p) => ({ x: p.x, y: p.y })),
+    closed: true,
+    hole: false,
+  });
+  state.pen = [];
+  return true;
+}
+
 export function addPath(state: ShapeEditorState, path: EditPath): void {
   capture(state);
   state.paths.push(path);
@@ -210,8 +230,18 @@ export function reflect(state: ShapeEditorState, axis: "horizontal" | "vertical"
   }
 }
 
-/** Line the selected paths up — with the tile if there is one, or each other. */
+/**
+ * Line things up.
+ *
+ * **Points win over paths** when two or more of them are selected, which is
+ * upstream's rule and the right one: the selected points are the smaller,
+ * more specific thing you have pointed at, and aligning the whole path
+ * instead would be answering a question nobody asked. Points align to each
+ * other; a lone path aligns to the tile; several align to each other.
+ */
 export function align(state: ShapeEditorState, how: Alignment): void {
+  if (state.selectedPoints.size > 1) return alignPoints(state, how);
+
   const wanted = selectedPaths(state);
   capture(state);
   const target =
@@ -243,7 +273,13 @@ export function align(state: ShapeEditorState, how: Alignment): void {
  * upstream's third mode and the one that has no equivalent anywhere else.
  */
 export function distribute(state: ShapeEditorState, how: Distribution): void {
-  const wanted = selectedPaths(state);
+  if (state.selectedPoints.size >= 3) return distributePoints(state, how);
+
+  // Three explicitly selected, or — failing that — all of them. Distribute is
+  // about a row of things and it is tedious to have to pick every one of them
+  // when the row is the whole shape.
+  const picked = selectedPaths(state);
+  const wanted = picked.length >= 3 ? picked : state.paths.map((_, i) => i);
   if (wanted.length < 3) return;
   capture(state);
 
@@ -436,4 +472,98 @@ export function snapshotPaths(paths: readonly EditPath[]): EditPath[] {
     closed: path.closed,
     hole: path.hole,
   }));
+}
+
+
+// ── the same two, over points ───────────────────────────────────────────────
+
+/** The selected points of the current path, with their indices. */
+function pickedPoints(state: ShapeEditorState): Array<{ index: number; vertex: Vertex }> {
+  const path = state.paths[state.current];
+  if (!path) return [];
+  return [...state.selectedPoints]
+    .filter((i) => path.vertices[i])
+    .map((index) => ({ index, vertex: path.vertices[index] }));
+}
+
+/** Line the selected points up with each other. */
+function alignPoints(state: ShapeEditorState, how: Alignment): void {
+  const points = pickedPoints(state);
+  if (points.length < 2) return;
+  capture(state);
+
+  const xs = points.map((p) => p.vertex.x);
+  const ys = points.map((p) => p.vertex.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+
+  for (const { index } of points) {
+    const vertex = state.paths[state.current].vertices[index];
+    if (how === "left") vertex.x = minX;
+    if (how === "centre") vertex.x = (minX + maxX) / 2;
+    if (how === "right") vertex.x = maxX;
+    if (how === "top") vertex.y = minY;
+    if (how === "middle") vertex.y = (minY + maxY) / 2;
+    if (how === "bottom") vertex.y = maxY;
+  }
+}
+
+/**
+ * Space the selected points out evenly.
+ *
+ * **Along a line** takes the two furthest apart as the ends and puts the rest
+ * on the straight line between them, in the order they project onto it — so a
+ * hand-drawn run of points becomes a straight edge without anybody having to
+ * say which two ends it has.
+ */
+function distributePoints(state: ShapeEditorState, how: Distribution): void {
+  const points = pickedPoints(state);
+  if (points.length < 3) return;
+  capture(state);
+  const vertices = state.paths[state.current].vertices;
+  const held = points.map((p) => ({ index: p.index, x: p.vertex.x, y: p.vertex.y }));
+
+  if (how !== "line") {
+    const axis = how === "horizontal" ? "x" : "y";
+    held.sort((a, b) => a[axis] - b[axis]);
+    const from = held[0][axis];
+    const span = held[held.length - 1][axis] - from;
+    held.forEach((p, i) => {
+      if (i === 0 || i === held.length - 1) return;
+      vertices[p.index][axis] = from + (span * i) / (held.length - 1);
+    });
+    return;
+  }
+
+  let best = 0;
+  let a = held[0];
+  let b = held[1];
+  for (let i = 0; i < held.length; i++) {
+    for (let j = i + 1; j < held.length; j++) {
+      const gap = Math.hypot(held[j].x - held[i].x, held[j].y - held[i].y);
+      if (gap <= best) continue;
+      best = gap;
+      a = held[i];
+      b = held[j];
+    }
+  }
+  if (best === 0) return;
+
+  const lineX = b.x - a.x;
+  const lineY = b.y - a.y;
+  const between = held
+    .filter((p) => p !== a && p !== b)
+    .map((p) => ({
+      ...p,
+      t: ((p.x - a.x) * lineX + (p.y - a.y) * lineY) / (best * best),
+    }))
+    .sort((p, q) => p.t - q.t);
+
+  between.forEach((p, i) => {
+    const t = (i + 1) / (between.length + 1);
+    vertices[p.index].x = a.x + t * lineX;
+    vertices[p.index].y = a.y + t * lineY;
+  });
 }

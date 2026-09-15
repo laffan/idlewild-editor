@@ -13,12 +13,20 @@
   flex-wrap: wrap;
 }
 
+/* The toolbar is the tallest of the three columns and the only one whose
+   height is a list rather than a measurement, so it is the one that scrolls.
+   Letting the sheet's own body scroll instead took the canvas off the top of
+   the screen to reach a button at the bottom of this column. */
 .lib-tools {
   flex: 0 0 210px;
   min-width: 190px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  max-height: 68vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
 }
 
 .lib-stage {
@@ -39,7 +47,7 @@
 }
 
 .lib-section {
-  padding: 12px 0;
+  padding: 10px 0;
   border-bottom: var(--rule-chrome);
 }
 .lib-section:last-child { border-bottom: 0; }
@@ -188,6 +196,8 @@
    two rows that come and go — the airbrush's density, and what to do with a
    selection — have to say it again. */
 .lib-field[hidden],
+.lib-hint[hidden],
+.lib-link[hidden],
 .lib-row-buttons[hidden] { display: none; }
 
 .lib-row-buttons { display: flex; flex-wrap: wrap; gap: 4px; }

@@ -33,6 +33,7 @@ export interface PatternPanelActions {
   importImage: () => void;
   exportPng: () => void;
   uploadBrush: () => void;
+  forgetBrush: () => void;
   brushFromSelection: () => void;
   fillSelection: (value: number) => void;
   clearSelection: () => void;
@@ -141,6 +142,15 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
     density.root.hidden = actions.state().brush !== "airbrush";
   });
 
+  const forget = h("button", {
+    class: "lib-link",
+    text: "Forget the custom tip",
+    onClick: () => actions.forgetBrush(),
+  });
+  syncs.push(() => {
+    forget.hidden = actions.state().customBrush === null;
+  });
+
   root.append(
     section(
       "Brush",
@@ -153,6 +163,7 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
         text: "Upload a tip…",
         onClick: () => actions.uploadBrush(),
       }),
+      forget,
     ),
   );
 
@@ -180,6 +191,16 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
     nudge("Down", ICONS.chevronDown, () => actions.nudge(0, 1)),
   );
 
+  const selectHint = h("div", {
+    class: "lib-hint m",
+    text:
+      "Drag a box, then drag inside it to move what it holds — or drag its " +
+      "corner to repeat that across the new size.",
+  });
+  syncs.push(() => {
+    selectHint.hidden = actions.state().mode !== "select";
+  });
+
   const selectionRow = h(
     "div",
     { class: "lib-row-buttons" },
@@ -197,7 +218,7 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
     selectionRow.hidden = selectionBounds(actions.state()) === null;
   });
 
-  root.append(section("Pointer", modeRow, nudgeRow, selectionRow));
+  root.append(section("Pointer", modeRow, selectHint, nudgeRow, selectionRow));
 
   // ── the whole grid at once ────────────────────────────────────────────────
   root.append(

@@ -23,6 +23,8 @@ import { imageToBits } from "./brushes";
 import {
   applyBrush,
   commitOffset,
+  moveRegion,
+  regionBits,
   invert,
   lineInto,
   nudge,
@@ -39,10 +41,18 @@ import {
   capture,
   createPatternState,
   redo,
+  selectionBounds,
   undo,
   type PatternEditorState,
 } from "./state";
-import { cellAt, drawEditor, drawPreview, layoutOf } from "./view";
+import {
+  cellAt,
+  drawEditor,
+  drawPreview,
+  insideSelection,
+  layoutOf,
+  onSelectionHandle,
+} from "./view";
 
 export interface PatternEditorOptions {
   /** The row to open. Absent or unknown means a new, blank pattern. */
@@ -134,6 +144,11 @@ export function openPatternEditor(
         state.brush = "custom";
         redraw();
       }),
+      forgetBrush: () => {
+        state.customBrush = null;
+        if (state.brush === "custom") state.brush = "square";
+        redraw();
+      },
       brushFromSelection: () => {
         const bits = selectionBits(state);
         if (!bits) {
@@ -318,10 +333,14 @@ function bindPointer(
   redraw: () => void,
 ): void {
   /** What the gesture in flight is doing, or null between gestures. */
-  let doing: "draw" | "line" | "select" | "pan" | null = null;
+  let doing: "draw" | "line" | "select" | "move" | "resize" | "pan" | null = null;
   let value = 1;
   let from: { row: number; col: number } | null = null;
   let panFrom: { x: number; y: number } | null = null;
+  /** What a settled selection is carrying, once a drag has picked it up. */
+  let held: number[][] | null = null;
+  let heldFrom: { r0: number; c0: number; r1: number; c1: number } | null = null;
+  let heldAt: { row: number; col: number } | null = null;
 
   const local = (event: PointerEvent): { x: number; y: number } => {
     const rect = canvas.getBoundingClientRect();
@@ -342,7 +361,22 @@ function bindPointer(
       return;
     }
     if (wantsSelect) {
+      const box = selectionBounds(state);
+      // A settled box answers to two more gestures before it answers to being
+      // replaced: its corner repeats what it holds, and its middle moves it.
+      if (box && (onSelectionHandle(state, at.x, at.y) || insideSelection(state, cell.row, cell.col))) {
+        capture(state);
+        held = regionBits(state.pattern, box);
+        heldFrom = box;
+        heldAt = cell;
+        doing = onSelectionHandle(state, at.x, at.y) ? "resize" : "move";
+        state.preview = moveRegion(state.pattern, box, held, box.r0, box.c0);
+        redraw();
+        return;
+      }
+
       doing = "select";
+      state.sweeping = true;
       state.selection = { r0: cell.row, c0: cell.col, r1: cell.row, c1: cell.col };
       redraw();
       return;
@@ -385,6 +419,35 @@ function bindPointer(
       return;
     }
 
+    if ((doing === "move" || doing === "resize") && held && heldFrom && heldAt) {
+      if (doing === "move") {
+        const dr = cell.row - heldAt.row;
+        const dc = cell.col - heldAt.col;
+        state.preview = moveRegion(state.pattern, heldFrom, held, heldFrom.r0 + dr, heldFrom.c0 + dc);
+        state.selection = {
+          r0: heldFrom.r0 + dr,
+          c0: heldFrom.c0 + dc,
+          r1: heldFrom.r1 + dr,
+          c1: heldFrom.c1 + dc,
+        };
+      } else {
+        const width = Math.max(1, cell.col - heldFrom.c0 + 1);
+        const height = Math.max(1, cell.row - heldFrom.r0 + 1);
+        state.preview = moveRegion(state.pattern, heldFrom, held, heldFrom.r0, heldFrom.c0, {
+          width,
+          height,
+        });
+        state.selection = {
+          r0: heldFrom.r0,
+          c0: heldFrom.c0,
+          r1: heldFrom.r0 + height - 1,
+          c1: heldFrom.c0 + width - 1,
+        };
+      }
+      redraw();
+      return;
+    }
+
     if (doing === "line" && from) {
       state.preview = lineInto(state, state.pattern, from, cell, value);
       redraw();
@@ -398,12 +461,18 @@ function bindPointer(
   });
 
   const end = (): void => {
-    if (doing === "line" && state.preview) state.pattern = state.preview;
+    if (state.preview && (doing === "line" || doing === "move" || doing === "resize")) {
+      state.pattern = state.preview;
+    }
     if (doing === "pan") commitOffset(state);
     state.preview = null;
+    state.sweeping = false;
     doing = null;
     from = null;
     panFrom = null;
+    held = null;
+    heldFrom = null;
+    heldAt = null;
     redraw();
   };
 

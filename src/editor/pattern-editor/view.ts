@@ -205,7 +205,44 @@ function drawSelection(
   ctx.lineWidth = 1.5;
   ctx.setLineDash([5, 4]);
   ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+
+  // The corner handle, which repeats what the box holds over the new size.
+  // Drawn only while the box is settled: one that appeared mid-sweep would be
+  // a target moving under the pointer that made it.
+  if (!state.sweeping) {
+    ctx.fillStyle = BOUNDARY;
+    ctx.fillRect(x + w - HANDLE_PX / 2, y + h - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+  }
   ctx.restore();
+}
+
+/** How big the selection's corner handle is, in CSS pixels. */
+export const HANDLE_PX = 9;
+
+/** Whether a canvas point is on that handle. */
+export function onSelectionHandle(
+  state: PatternEditorState,
+  x: number,
+  y: number,
+): boolean {
+  const box = selectionBounds(state);
+  if (!box) return false;
+  const layout = layoutOf(state);
+  const hx = layout.x + (box.c1 + 1) * layout.cell;
+  const hy = layout.y + (box.r1 + 1) * layout.cell;
+  return Math.abs(x - hx) <= HANDLE_PX && Math.abs(y - hy) <= HANDLE_PX;
+}
+
+/** Whether a cell is inside the selection. */
+export function insideSelection(
+  state: PatternEditorState,
+  row: number,
+  col: number,
+): boolean {
+  const box = selectionBounds(state);
+  if (!box) return false;
+  return row >= box.r0 && row <= box.r1 && col >= box.c0 && col <= box.c1;
 }
 
 /**

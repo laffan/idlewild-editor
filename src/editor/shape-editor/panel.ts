@@ -31,6 +31,10 @@ export interface ShapePanelActions {
   distribute: (how: Distribution) => void;
   toggleCurve: () => void;
   deletePoints: () => void;
+  /** Put the pen down, or take it up and throw away what it has. */
+  togglePen: () => void;
+  /** Lay the tapped-out path down. */
+  finishPen: () => void;
   crop: () => void;
   importSvg: () => void;
   exportSvg: () => void;
@@ -151,7 +155,12 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
         h("button", { class: "btn btn-ghost", text: "Flip across", onClick: () => actions.reflect("horizontal") }),
         h("button", { class: "btn btn-ghost", text: "Flip down", onClick: () => actions.reflect("vertical") }),
       ),
-      h("div", { class: "lib-hint m", text: "One path lines up with the tile; several with each other." }),
+      h("div", {
+        class: "lib-hint m",
+        text:
+          "Two or more points selected and it is the points that line up. " +
+          "Otherwise one path lines up with the tile, and several with each other.",
+      }),
       h(
         "div",
         { class: "lib-grid-3" },
@@ -159,7 +168,10 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
           h("button", { class: "btn btn-ghost", text: a.label, onClick: () => actions.align(a.id) }),
         ),
       ),
-      h("div", { class: "lib-hint m", text: "Distribute needs three or more." }),
+      h("div", {
+        class: "lib-hint m",
+        text: "Three or more — points if that many are selected, else paths.",
+      }),
       row(
         ...DISTRIBUTIONS.map((d) =>
           h("button", { class: "btn btn-ghost", text: d.label, onClick: () => actions.distribute(d.id) }),
@@ -180,6 +192,32 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
   });
   syncs.push(() => transform.setAttribute("aria-pressed", String(actions.state().transforming)));
 
+  // The pen, and the two things that only make sense while it is down.
+  const pen = h("button", {
+    class: "lib-toggle",
+    text: "Draw a path",
+    title: "Tap corners on the canvas; tap the first one again to close",
+    onClick: () => actions.togglePen(),
+  });
+  const penRow = h(
+    "div",
+    { class: "lib-row-buttons" },
+    h("button", { class: "btn btn-ghost", text: "Finish", onClick: () => actions.finishPen() }),
+    h("button", { class: "btn btn-ghost", text: "Cancel", onClick: () => actions.togglePen() }),
+  );
+  const penCount = h("div", { class: "lib-hint m" });
+  syncs.push(() => {
+    const corners = actions.state().pen;
+    pen.setAttribute("aria-pressed", String(corners !== null));
+    penRow.hidden = corners === null;
+    penCount.hidden = corners === null;
+    const count = corners?.length ?? 0;
+    penCount.textContent =
+      count === 0
+        ? "Tap the canvas to drop a corner."
+        : `${count} ${count === 1 ? "corner" : "corners"} — tap the first one again to close.`;
+  });
+
   root.append(
     section(
       "Points",
@@ -188,6 +226,9 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
         h("button", { class: "btn btn-ghost", text: "Delete point", onClick: () => actions.deletePoints() }),
       ),
       transform,
+      pen,
+      penCount,
+      penRow,
       h("div", {
         class: "lib-hint m",
         text: "Click an edge to drop a point into it. ⌥-click a point to curve it.",

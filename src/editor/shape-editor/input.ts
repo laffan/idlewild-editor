@@ -25,9 +25,11 @@ import {
   pathAt,
   pathBounds,
   pathsBounds,
+  toPx,
   toUnit,
 } from "./geometry";
 import {
+  commitPen,
   duplicateSelected,
   insertPoint,
   movePath,
@@ -38,6 +40,7 @@ import {
 } from "./ops";
 import {
   capture,
+  HIT_PX,
   selectPath,
   selectedPaths,
   type EditPath,
@@ -74,6 +77,22 @@ export function bindShapePointer(
     startUnit = at;
     moved = false;
     ghost = null;
+
+    // The pen takes the tap before anything else, because while it is down
+    // every tap is a corner — including one that lands on an existing path,
+    // which is how a shape is traced over another.
+    if (state.pen) {
+      const first = state.pen[0];
+      const close =
+        state.pen.length >= 3 &&
+        first &&
+        Math.hypot(toPx(first).x - toPx(at).x, toPx(first).y - toPx(at).y) <= HIT_PX;
+      if (close) commitPen(state);
+      else state.pen.push(at);
+      grip = { kind: "none" };
+      redraw();
+      return;
+    }
 
     // ⌘ shows the box; once it is showing, its handles win every hit test
     // inside the shape, which is what makes a corner handle over a corner

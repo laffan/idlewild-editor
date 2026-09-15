@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import {
   align,
   booleanCut,
+  commitPen,
   crop,
   deletePoints,
   distribute,
@@ -307,5 +308,95 @@ describe("SVG", () => {
 
   it("stops rather than spinning on something it cannot read", () => {
     expect(() => parsePathData("M 0 0 ? 9 9 L 1 1", same)).not.toThrow();
+  });
+});
+
+
+describe("aiming align and distribute", () => {
+  /**
+   * Points win over paths when two or more are selected: they are the
+   * smaller, more specific thing you pointed at, and moving the whole path
+   * instead would answer a question nobody asked.
+   */
+  it("lines the selected points up rather than the path", () => {
+    const state = stateOf([
+      { vertices: [{ x: 0, y: 0 }, { x: 0.8, y: 0.2 }, { x: 0.4, y: 1 }], closed: true, hole: false },
+    ]);
+    state.selectedPoints = new Set([0, 1]);
+    align(state, "top");
+    expect(state.paths[0].vertices[0].y).toBeCloseTo(0, 6);
+    expect(state.paths[0].vertices[1].y).toBeCloseTo(0, 6);
+    // The one that was not selected stayed where it was.
+    expect(state.paths[0].vertices[2].y).toBeCloseTo(1, 6);
+  });
+
+  it("evens out the selected points, keeping the two ends", () => {
+    const state = stateOf([
+      {
+        vertices: [
+          { x: 0, y: 0 },
+          { x: 0.1, y: 0 },
+          { x: 1, y: 0 },
+          { x: 0.5, y: 1 },
+        ],
+        closed: true,
+        hole: false,
+      },
+    ]);
+    state.selectedPoints = new Set([0, 1, 2]);
+    distribute(state, "horizontal");
+    expect(state.paths[0].vertices[1].x).toBeCloseTo(0.5, 6);
+    expect(state.paths[0].vertices[0].x).toBeCloseTo(0, 6);
+    expect(state.paths[0].vertices[2].x).toBeCloseTo(1, 6);
+  });
+
+  it("puts a run of points on the line between the two furthest apart", () => {
+    const state = stateOf([
+      {
+        vertices: [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.9 },
+          { x: 1, y: 1 },
+        ],
+        closed: true,
+        hole: false,
+      },
+    ]);
+    state.selectedPoints = new Set([0, 1, 2]);
+    distribute(state, "line");
+    expect(state.paths[0].vertices[1].x).toBeCloseTo(0.5, 6);
+    expect(state.paths[0].vertices[1].y).toBeCloseTo(0.5, 6);
+  });
+
+  it("falls back to every path when fewer than three are picked", () => {
+    const state = stateOf([square(0, 0, 0.1), square(0.2, 0, 0.1), square(0.9, 0, 0.1)]);
+    state.selectedPaths = new Set([0]);
+    distribute(state, "horizontal");
+    expect(pathBounds(state.paths[1]).x).toBeCloseTo(0.45, 6);
+  });
+});
+
+describe("the pen", () => {
+  it("refuses a shape that encloses nothing, and keeps the corners", () => {
+    const state = stateOf([square(0, 0, 1)]);
+    state.pen = [{ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.1 }];
+    expect(commitPen(state)).toBe(false);
+    expect(state.pen).toHaveLength(2);
+    expect(state.paths).toHaveLength(1);
+  });
+
+  it("lays a path down and makes it the one in hand", () => {
+    const state = stateOf([square(0, 0, 1)]);
+    state.pen = [
+      { x: 0.1, y: 0.1 },
+      { x: 0.9, y: 0.1 },
+      { x: 0.5, y: 0.9 },
+    ];
+    expect(commitPen(state)).toBe(true);
+    expect(state.paths).toHaveLength(2);
+    expect(state.current).toBe(1);
+    expect(state.paths[1].vertices).toHaveLength(3);
+    // Ready for the next one rather than still holding the last.
+    expect(state.pen).toEqual([]);
   });
 });

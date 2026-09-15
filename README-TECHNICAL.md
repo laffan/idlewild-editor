@@ -3016,12 +3016,33 @@ offer without one, because an iPad has no ⌘ and no space bar:
 | ⌘-drag to select a region of the pattern | a **Select** mode in the toolbar |
 | space-drag to change a pattern's phase | a **Pan** mode, and a nudge pad |
 | ⇧-click to add a path to the selection | a **⊕** on each row of the path list |
+| three clicks on empty canvas make a path | a **Draw a path** toggle, closed by tapping its first corner |
 
 The keys still work for anyone who has them, and both readings write the same
-field. The ⊕ is not quite ⇧-click, though, and the difference was a bug worth
+field. The last row is not only about the keyboard: upstream's third click on
+empty canvas *is* the new shape, and a click on empty canvas is also how you
+deselect — so the gesture is hard to find and easy to trip over. As a toggle
+it is the same gesture as this editor's own point-to-point Fill, which anyone
+using it already knows. The ⊕ is not quite ⇧-click, though, and the difference was a bug worth
 keeping: adding a path to the selection must **not** move the current one,
 because *Cut out* takes every other selected path out of the current one — so
 a ⊕ that changed the subject took the shape out of the thing being cut with.
+
+Two more things that are upstream's and worth stating because neither is
+obvious from the code:
+
+**A selection is not only a box.** Once it has settled, dragging inside it
+moves the cells it holds and dragging its corner *repeats* them across the new
+size — one `moveRegion`, because the two gestures are the same one with a
+different size. Both the lift and the landing wrap, so a motif dragged off the
+right edge comes back on the left and the pattern stays seamless.
+
+**Align and distribute read the points first.** Two or more points selected
+and it is the points that line up; otherwise a lone path lines up with the
+tile and several line up with each other. The selected points are the smaller,
+more specific thing you pointed at, and moving the whole path instead would be
+answering a question nobody asked. Distribute falls back to *every* path when
+fewer than three are picked, because a row is usually the whole shape.
 
 Both editors listen on the document in the **capture** phase and stop what
 they handle. The shell's own ⌘Z and space bar are bound to the same document,

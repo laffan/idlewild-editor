@@ -62,7 +62,52 @@ export function drawShapeEditor(
   drawOutlines(ctx, state);
   if (state.transforming) drawTransformBox(ctx, state);
   drawAnchors(ctx, state);
+  if (state.pen) drawPen(ctx, state.pen);
   if (ghost) drawGhost(ctx, ghost);
+}
+
+/**
+ * The path being tapped out, as it stands.
+ *
+ * The run so far and a ring on the first corner, because tapping that one
+ * again is what closes the shape and a gesture nobody can see is a gesture
+ * nobody finds.
+ */
+function drawPen(ctx: CanvasRenderingContext2D, corners: readonly Point[]): void {
+  if (corners.length === 0) return;
+  const at = corners.map(toPx);
+
+  if (at.length > 1) {
+    ctx.beginPath();
+    ctx.moveTo(at[0].x, at[0].y);
+    for (let i = 1; i < at.length; i++) ctx.lineTo(at[i].x, at[i].y);
+    if (at.length > 2) {
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.lineTo(at[0].x, at[0].y);
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  at.forEach((p, i) => {
+    ctx.fillStyle = ACCENT;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, i === 0 ? 5 : 4, 0, Math.PI * 2);
+    ctx.fill();
+    if (i !== 0 || at.length < 3) return;
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+    ctx.stroke();
+  });
 }
 
 function drawGround(ctx: CanvasRenderingContext2D): void {

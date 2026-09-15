@@ -183,3 +183,63 @@ export function patternPngUrl(pattern: PatternData): string {
   }
   return canvas.toDataURL("image/png");
 }
+
+
+// ── moving and tiling what a selection holds ────────────────────────────────
+
+/** The raw cells of a box, zeroes included — unlike `selectionBits`. */
+export function regionBits(
+  pattern: PatternData,
+  box: { r0: number; c0: number; r1: number; c1: number },
+): number[][] {
+  const out: number[][] = [];
+  for (let row = box.r0; row <= box.r1; row++) {
+    const line: number[] = [];
+    for (let col = box.c0; col <= box.c1; col++) {
+      line.push(pattern.pixels[row]?.[col] === 1 ? 1 : 0);
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/**
+ * The grid with a box lifted out and put down somewhere else, tiled to fit.
+ *
+ * One function for both gestures, because they are the same one with a
+ * different size: dragging a selection moves its cells, and dragging its
+ * corner **repeats** them over the new box — which is how a motif drawn once
+ * becomes a row of itself.
+ *
+ * Both the lift and the landing wrap, so a selection dragged off the right
+ * edge comes back on the left and the pattern stays seamless.
+ */
+export function moveRegion(
+  pattern: PatternData,
+  from: { r0: number; c0: number; r1: number; c1: number },
+  bits: number[][],
+  toRow: number,
+  toCol: number,
+  size?: { width: number; height: number },
+): PatternData {
+  const next = copyPattern(pattern);
+  const wrap = (n: number) => ((n % next.size) + next.size) % next.size;
+
+  for (let row = from.r0; row <= from.r1; row++) {
+    for (let col = from.c0; col <= from.c1; col++) {
+      const line = next.pixels[wrap(row)];
+      if (line) line[wrap(col)] = 0;
+    }
+  }
+
+  const height = Math.max(1, size?.height ?? bits.length);
+  const width = Math.max(1, size?.width ?? (bits[0]?.length ?? 1));
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const value = bits[row % bits.length]?.[col % (bits[0]?.length ?? 1)] ?? 0;
+      const line = next.pixels[wrap(toRow + row)];
+      if (line) line[wrap(toCol + col)] = value;
+    }
+  }
+  return next;
+}

@@ -21,6 +21,7 @@ import {
   addPath,
   align,
   booleanCut,
+  commitPen,
   crop,
   deletePoints,
   deleteSelected,
@@ -145,6 +146,15 @@ export function openShapeEditor(
         toggleCurve(state);
         redraw();
       },
+      togglePen: () => {
+        state.pen = state.pen ? null : [];
+        state.selectedPoints.clear();
+        redraw();
+      },
+      finishPen: () => {
+        if (!commitPen(state)) log.warn("Three corners is the least that encloses anything");
+        redraw();
+      },
       deletePoints: () => {
         if (!deletePoints(state)) log.warn("A path needs three points — pick another to delete");
         redraw();
@@ -243,6 +253,14 @@ export function openShapeEditor(
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
+        // The pen first: a mode you are in is the thing Escape is about, and
+        // losing a half-tapped path *and* the sheet on one key is two
+        // surprises for the price of one.
+        if (state.pen) {
+          state.pen = null;
+          redraw();
+          return;
+        }
         finish(null);
         return;
       }
