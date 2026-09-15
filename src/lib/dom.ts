@@ -124,7 +124,10 @@ export const ICONS = {
      pixels out. It was a rubber block, and that became a lie the moment every
      brush grew an eraser of its own: this one slices a line in two and leaves
      both halves, which is a different thing that happened to share a name. */
-  slice: ["M3 19l10-12 5 5-13 8Z", "M16 10l5-5"],
+  /* It points the *other* way from the pencil on purpose. Both are a blade on
+     a diagonal at 21px, and drawn the same way round they read as the same
+     glyph four buttons apart. */
+  slice: ["M21 20 10 8l-4 4 11 9Z", "M8 10l-5-5"],
   /* A nib: the barrel, the slit down the middle, and the point it writes
      from. Its own glyph rather than the rail's pencil, because the two mean
      different things — that one picks up a tool, this one opens a mode. */
