@@ -15,6 +15,8 @@
 
 import { describe, expect, it } from "vitest";
 import { OFF_BAR, TOOLS, toolName } from "../tool-rail";
+import { defaultPatternScale, stampBoxAt, stampSize } from "../stamp-box";
+import { Grid } from "../../lib/grid";
 import { TOOL_IDS, type ToolId } from "../../lib/types";
 
 /** The ids in one column, in the order they are drawn. */
@@ -61,5 +63,46 @@ describe("the two columns", () => {
     for (const id of TOOL_IDS) {
       expect(toolName(id), `${id} has no name`).not.toBe("");
     }
+  });
+});
+
+/**
+ * How big one Shape brush stamp is, which is the one number the drawing layer
+ * takes from the projection.
+ *
+ * The blank case is the one worth a test. Its addressable cell is a single
+ * world **pixel**, so "a grid space" read literally gives a one-pixel shape —
+ * which is nothing at all on screen, and was.
+ */
+describe("a shape stamp", () => {
+  it("is a grid space on a square project", () => {
+    expect(stampSize(new Grid("orthogonal", 64))).toEqual({ width: 64, height: 64 });
+  });
+
+  it("is the 2:1 space on an isometric one, and says the space is a diamond", () => {
+    const grid = new Grid("isometric", 64);
+    expect(stampSize(grid)).toEqual({ width: 64, height: 32 });
+    expect(stampBoxAt(grid, 0, 0).diamond).toBe(true);
+  });
+
+  it("is the nominal unit on a project with no lattice, not its one-pixel cell", () => {
+    const grid = new Grid("blank", 32);
+    expect(stampSize(grid)).toEqual({ width: 32, height: 32 });
+    const box = stampBoxAt(grid, 70, 70);
+    expect(box).toEqual({ x: 64, y: 64, width: 32, height: 32 });
+    expect(box.diamond).toBeUndefined();
+  });
+
+  it("lands on the same lattice wherever inside a box it is asked about", () => {
+    const grid = new Grid("blank", 32);
+    for (const at of [64, 70, 80, 95]) {
+      expect(stampBoxAt(grid, at, at).x).toBe(64);
+    }
+  });
+
+  it("starts a pattern pixel at a sixteenth of a space", () => {
+    expect(defaultPatternScale(new Grid("orthogonal", 64))).toBe(4);
+    // Never below one: on an 8px grid a pattern tile *is* the tile.
+    expect(defaultPatternScale(new Grid("orthogonal", 8))).toBe(1);
   });
 });

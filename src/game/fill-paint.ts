@@ -182,8 +182,9 @@ export class FillPaintRender {
   private spacesOf(fill: FillPatch, bounds: Rect): Rect[] {
     if (fill.rect || fill.cells.length === 0) {
       // A project that does not snap has no spaces, so the shape tiles on a
-      // lattice of the project's nominal unit — which is the only size in the
-      // document that means anything there.
+      // lattice of the project's nominal unit — the same answer `stampSize`
+      // gives the brush, because a fill and a stroke over the same ground
+      // have to agree about where the tiles are.
       const step = Math.max(4, this.grid.size);
       const out: Rect[] = [];
       const x0 = Math.floor(bounds.x / step) * step;

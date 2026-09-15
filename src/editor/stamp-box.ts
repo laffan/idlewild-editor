@@ -12,6 +12,22 @@ import type { Grid } from "../lib/grid";
 import type { StampBox, StrokeStyle } from "../drawing";
 
 /**
+ * How big one stamp is on this project.
+ *
+ * A grid space, where the grid snaps. Where it does not — a blank project,
+ * whose addressable cell is a single world **pixel** — that reading gives a
+ * one-pixel shape, which is nothing at all. So a blank project stamps on its
+ * **nominal unit** instead: `size` is still the number the project was made
+ * with and the one play mode measures its character in, it simply is not what
+ * the editor rounds to. `fill-paint.ts` reaches the same answer for a filled
+ * rectangle, and the two have to agree.
+ */
+export function stampSize(grid: Grid): { width: number; height: number } {
+  if (!grid.snaps) return { width: grid.size, height: grid.size };
+  return { width: grid.tileWidth, height: grid.tileHeight };
+}
+
+/**
  * The box a stamp at this world point fills: the bounding box of the grid
  * space under it.
  *
@@ -21,6 +37,20 @@ import type { StampBox, StrokeStyle } from "../drawing";
  * rather than into the box. See `lib/shape-path.ts`.
  */
 export function stampBoxAt(grid: Grid, x: number, y: number): StampBox {
+  // A project with no lattice has no space to ask about, so the stamps fall
+  // on a lattice of their own size anchored on the world origin — which is
+  // the same rule the pattern lattice follows, and for the same reason: two
+  // passes over the same ground have to agree about where the boxes are.
+  if (!grid.snaps) {
+    const { width, height } = stampSize(grid);
+    return {
+      x: Math.floor(x / width) * width,
+      y: Math.floor(y / height) * height,
+      width,
+      height,
+    };
+  }
+
   const diamond = grid.projection === "isometric";
   const corners = grid.cellPolygon(grid.worldToCell({ x, y }));
   let minX = Infinity;
@@ -65,8 +95,7 @@ export function libraryStyle(grid: Grid, style: StrokeStyle): StrokeStyle {
   return {
     ...style,
     stamp: {
-      width: grid.tileWidth,
-      height: grid.tileHeight,
+      ...stampSize(grid),
       diamond: grid.projection === "isometric",
     },
     paint: { ...style.paint, patternScale: defaultPatternScale(grid) },

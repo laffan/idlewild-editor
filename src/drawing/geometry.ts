@@ -289,13 +289,22 @@ export function strokeBox(stroke: Stroke): Bounds | null {
       if (pts[i + 1] > maxY) maxY = pts[i + 1];
     }
     // A stamp reaches half the brush size from the centre; pad by the whole
-    // size against the streamline's outward bump on tight corners.
-    const pad = stroke.size + 1;
+    // size against the streamline's outward bump on tight corners. A Pattern
+    // stroke fills whole lattice cells, so the cell its tip's edge lands
+    // inside runs on past it by one more.
+    const pad = stroke.size + 1 + (stroke.paint?.patternScale ?? 0);
+    // A **shape** stamp is the exception: its points are the corners of the
+    // boxes it filled, and a box hangs down and right from its corner. So the
+    // box reaches a whole stamp past the furthest point rather than half a
+    // brush — without this the right and bottom edges of a tile run are
+    // cropped out of a sketch converted to a PSD, and the eraser declines to
+    // cut there.
+    const stamp = stroke.mode === "shape" ? stroke.stamp : undefined;
     box = {
       x: minX - pad,
       y: minY - pad,
-      width: maxX - minX + pad * 2,
-      height: maxY - minY + pad * 2,
+      width: maxX - minX + pad * 2 + (stamp?.width ?? 0),
+      height: maxY - minY + pad * 2 + (stamp?.height ?? 0),
     };
   }
   boundsCache.set(stroke, box);

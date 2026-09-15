@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 import { cellsUnderStroke, stampsOver } from "../paint-render";
-import type { StreamPoint } from "../geometry";
+import { strokeBox, type StreamPoint } from "../geometry";
 
 const stream = (points: [number, number][]): StreamPoint[] =>
   points.map(([x, y]) => ({ point: [x, y], pressure: 1 }));
@@ -114,5 +114,49 @@ describe("where a field of shapes goes", () => {
       expect(Math.min(...ys)).toBeLessThanOrEqual(100);
       expect(Math.max(...ys) + stamp.height).toBeGreaterThanOrEqual(300);
     }
+  });
+});
+
+describe("the box a stroke covers", () => {
+  it("reaches a whole stamp past a shape stroke's last point", () => {
+    // The points are the *corners* of the boxes that were filled, and a box
+    // hangs down and right from its corner. Without that, a run of tiles
+    // converted to a PSD comes back with its right and bottom edges cropped.
+    const shape = strokeBox({
+      id: "s",
+      points: [0, 0, 1, 64, 32, 1],
+      brushId: 1,
+      size: 6,
+      color: "#000",
+      mode: "shape",
+      stamp: { width: 64, height: 32 },
+      createdAt: 0,
+    });
+    expect(shape).not.toBeNull();
+    expect(shape!.x + shape!.width).toBeGreaterThanOrEqual(64 + 64);
+    expect(shape!.y + shape!.height).toBeGreaterThanOrEqual(32 + 32);
+  });
+
+  it("reaches a lattice cell past a pattern stroke", () => {
+    const flat = strokeBox({
+      id: "a",
+      points: [0, 0, 1, 10, 0, 1],
+      brushId: 1,
+      size: 6,
+      color: "#000",
+      mode: "ink",
+      createdAt: 0,
+    });
+    const patterned = strokeBox({
+      id: "b",
+      points: [0, 0, 1, 10, 0, 1],
+      brushId: 1,
+      size: 6,
+      color: "#000",
+      mode: "ink",
+      paint: { kind: "pattern", patternId: "checkerboard", patternScale: 8 },
+      createdAt: 0,
+    });
+    expect(patterned!.width).toBe(flat!.width + 16);
   });
 });
