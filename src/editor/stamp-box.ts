@@ -15,12 +15,13 @@ import type { StampBox, StrokeStyle } from "../drawing";
  * The box a stamp at this world point fills: the bounding box of the grid
  * space under it.
  *
- * A bounding box rather than the space's own outline, because a shape is
- * drawn into a rectangle — and on an isometric project that rectangle is 2:1,
- * which is exactly what makes a tile shape come out as the diamond it was
- * drawn to be.
+ * A bounding box rather than the space's own outline, because that is what
+ * `ShapeBox` takes — with `diamond` set on an isometric project, which is
+ * what tells the painter to map the shape into the diamond inscribed in it
+ * rather than into the box. See `lib/shape-path.ts`.
  */
 export function stampBoxAt(grid: Grid, x: number, y: number): StampBox {
+  const diamond = grid.projection === "isometric";
   const corners = grid.cellPolygon(grid.worldToCell({ x, y }));
   let minX = Infinity;
   let minY = Infinity;
@@ -32,7 +33,7 @@ export function stampBoxAt(grid: Grid, x: number, y: number): StampBox {
     if (p.x > maxX) maxX = p.x;
     if (p.y > maxY) maxY = p.y;
   }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY, diamond };
 }
 
 /** The one drawing-layer callback that needs a grid behind it. */
@@ -43,17 +44,31 @@ export function libraryPointer(grid: Grid): {
 }
 
 /**
- * The style with the two numbers the library tools take from the project.
+ * How wide one pattern pixel starts out, in world pixels.
  *
- * A stamp is a grid space. A pattern pixel is a sixteenth of one, which puts
- * a default 8×8 pattern at half a space on a 64px grid and at exactly one
- * space on an 8px one — where the art is pixels and a pattern tile *is* the
- * tile. Both are only starting points: the scale is a slider.
+ * A sixteenth of a grid space, which puts a default 8×8 pattern at half a
+ * space on a 64px grid and at exactly one space on an 8px one — where the art
+ * is pixels and a pattern tile *is* the tile. Only a starting point: the
+ * scale is a slider.
+ *
+ * Asked by two places that both start empty and must agree: the drawing
+ * layer's style, and the inspector's memory of what the last fill was made
+ * of. They disagreed while this was written out twice, and the symptom was a
+ * brush and a fill of the same pattern coming out at different sizes.
  */
+export function defaultPatternScale(grid: Grid): number {
+  return Math.max(1, Math.round(grid.size / 16));
+}
+
+/** The style with the numbers the library tools take from the project. */
 export function libraryStyle(grid: Grid, style: StrokeStyle): StrokeStyle {
   return {
     ...style,
-    stamp: { width: grid.tileWidth, height: grid.tileHeight },
-    paint: { ...style.paint, patternScale: Math.max(1, Math.round(grid.size / 16)) },
+    stamp: {
+      width: grid.tileWidth,
+      height: grid.tileHeight,
+      diamond: grid.projection === "isometric",
+    },
+    paint: { ...style.paint, patternScale: defaultPatternScale(grid) },
   };
 }

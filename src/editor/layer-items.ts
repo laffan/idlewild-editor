@@ -21,6 +21,7 @@ import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { LayerKind } from "../lib/types";
 import type { Layer, Placement, Selection } from "../lib/types";
 import { describeFill } from "../lib/doc-shape";
+import { paintLabel } from "../lib/paint";
 
 export interface LayerItem {
   /** What selecting this row means. */
@@ -140,7 +141,15 @@ export function layerItems(
   for (const fill of layer.fills) {
     items.push({
       selection: { kind: "fill", layerId: layer.id, fillId: fill.id },
-      label: fill.kind === "pattern" ? "Pattern fill" : "Colour fill",
+      // What it is made of, which is the library's answer when it has one:
+      // a list of four rows all called "Colour fill" is a list that says
+      // nothing about which is which.
+      label:
+        fill.paint && fill.paint.kind !== "color"
+          ? `${paintLabel(fill.paint)} fill`
+          : fill.kind === "pattern"
+            ? "Pattern fill"
+            : "Colour fill",
       detail: describeFill(fill),
       path: ICONS.fill,
       swatch: fill.color ?? "#ec3013",

@@ -295,10 +295,10 @@ export interface Stroke {
   paint?: PaintSpec;
   /**
    * The box each stamp fills, in world pixels. Only on a "shape" stroke: a
-   * grid space, whose width and height differ on an isometric project, which
-   * is what makes a tile shape come out as the diamond it is meant to be.
+   * grid space, with `diamond` set on an isometric project, where the space
+   * is the diamond inscribed in that box — see `lib/shape-path.ts`.
    */
-  stamp?: { width: number; height: number };
+  stamp?: { width: number; height: number; diamond?: boolean };
   createdAt: number;
 }
 

@@ -12,6 +12,8 @@
 
 import { h } from "../lib/dom";
 import { strokesBox } from "../drawing";
+import { createPaintPicker } from "./paint-picker";
+import { DEFAULT_PAINT_SPEC, type Paint } from "../lib/paint";
 import { count } from "./layer-items";
 import { unionRect } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
@@ -355,6 +357,60 @@ export function renderZone(
         class: "panel-btn",
         text: "Delete boundary",
         onClick: () => actions.onDeleteSelection(),
+      }),
+    ),
+  );
+}
+
+
+/**
+ * What a run of grid spaces — or a patch already on one — is filled with.
+ *
+ * All three kinds, because a grid fill is where a **shape** fill makes the
+ * most sense it ever makes: the spaces are already there, so "a shape in
+ * every space" is a tileset laid down in one gesture rather than a field
+ * approximated on a lattice.
+ *
+ * **Use pattern image** stays where it was and means something else — a PSD
+ * in *this project* whose texture tiles the patch, rather than a row in the
+ * app-wide library. The two are kept apart on `FillPatch`; see the note there.
+ *
+ * Here rather than in `inspector.ts`, where it lived until that file reached
+ * its seven hundred lines. What stayed behind is the *memory* of what the
+ * control last said, which is panel state rather than a panel.
+ */
+export function renderFillPaint(
+  body: HTMLElement,
+  options: {
+    grid: Grid;
+    fill: FillPatch | undefined;
+    /** What the control opens on when there is no fill to read. */
+    held: Paint;
+    onPaint: (paint: Paint) => void;
+    onUsePatternImage: () => void;
+  },
+): void {
+  const { fill, held } = options;
+  const value: Paint = fill
+    ? { ...(fill.paint ?? DEFAULT_PAINT_SPEC), color: fill.color ?? held.color }
+    : { ...held };
+
+  const picker = createPaintPicker({
+    value,
+    cell: options.grid.tileWidth,
+    onChange: options.onPaint,
+  });
+
+  body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Fill" }),
+      picker.root,
+      h("button", {
+        class: "panel-btn",
+        text: "Use pattern image…",
+        onClick: () => options.onUsePatternImage(),
       }),
     ),
   );

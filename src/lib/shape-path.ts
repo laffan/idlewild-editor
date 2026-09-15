@@ -16,19 +16,33 @@
  *
  * Everything here works in a **box**: the shape's 0–1 coordinates times a
  * width and a height, offset to a corner. A square grid hands it a square; an
- * isometric one hands it the diamond's bounding box, which is 2:1 — a tile
- * shape drawn into it comes out as the tile it is meant to be.
+ * isometric one hands it a space's bounding box and asks for the diamond
+ * inside it — see `ShapeBox`.
  */
 
 import { isHole, pathsOf, type ShapeData, type SubPath, type Vertex } from "./library/types";
 import type { Point, Rect } from "./types";
 
-/** Where a shape is being drawn: a box in whatever units the context has. */
+/**
+ * Where a shape is being drawn: a box in whatever units the context has.
+ *
+ * `diamond` is the isometric case, and it is the difference between a shape
+ * brush that works on this editor's headline projection and one that does
+ * not. An isometric grid space is a **diamond** inscribed in that box, and
+ * its neighbours' boxes overlap it by half — so a shape drawn into the box
+ * covers four half-spaces and lines up with none of them. Drawn into the
+ * diamond, *square* fills the space exactly, *half circle bottom* meets the
+ * space below it, and the palette means the same thing on both projections.
+ *
+ * The box is still what is passed, because the diamond is inscribed in it and
+ * a caller holding one holds the other.
+ */
 export interface ShapeBox {
   x: number;
   y: number;
   width: number;
   height: number;
+  diamond?: boolean;
 }
 
 /** Whether a vertex's handle is doing anything. */
@@ -97,6 +111,18 @@ export function drawShape(
 ): void {
   const paths = pathsOf(shape);
   if (paths.length === 0) return;
+
+  // The diamond is a shear, so it is a transform rather than a second
+  // painter: the unit box's corners go to the diamond's four points, and
+  // everything below draws in unit space exactly as it always did.
+  if (box.diamond) {
+    ctx.save();
+    diamondTransform(ctx, box);
+    drawShape(ctx, shape, { x: 0, y: 0, width: 1, height: 1 }, fill);
+    ctx.restore();
+    return;
+  }
+
   if (fill !== undefined) ctx.fillStyle = fill;
 
   const holes = paths.map((_, i) => isHole(shape, i));
@@ -127,6 +153,20 @@ export function drawShape(
   });
   ctx.fill("nonzero");
   ctx.globalCompositeOperation = held;
+}
+
+/**
+ * Map the unit box onto the diamond inscribed in `box`.
+ *
+ * `(0,0)` goes to the top point, `(1,0)` to the right, `(1,1)` to the bottom
+ * and `(0,1)` to the left — the order `Grid.cellPolygon` lists them in, so a
+ * shape drawn through this and a space outlined on the canvas agree about
+ * which corner is which.
+ */
+function diamondTransform(ctx: CanvasRenderingContext2D, box: ShapeBox): void {
+  const hw = box.width / 2;
+  const hh = box.height / 2;
+  ctx.transform(hw, hh, -hw, hh, box.x + hw, box.y);
 }
 
 /**

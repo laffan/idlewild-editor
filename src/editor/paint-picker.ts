@@ -109,19 +109,24 @@ export function createPaintPicker(options: PaintPickerOptions): PaintPicker {
     const rows = patternLibrary.list();
     const palette = h("div", { class: "paint-palette" });
     for (const row of rows) {
-      palette.appendChild(
-        swatch(
-          row.name,
-          patternSwatch(row, { color: "#201e1d" }),
-          row.id === paint.patternId,
-          () => {
-            paint = { ...paint, patternId: row.id };
-            patternLibrary.select(row.id);
-            render();
-            emit();
-          },
-        ),
+      const cell = swatch(
+        row.name,
+        patternSwatch(row, { color: "#201e1d" }),
+        row.id === paint.patternId,
+        () => {
+          paint = { ...paint, patternId: row.id };
+          patternLibrary.select(row.id);
+          // Marked in place rather than rebuilt. A full re-render would
+          // replace the colour picker underneath the pointer — and detach the
+          // very button that was clicked, which is also how the second tap of
+          // a double lands on nothing.
+          for (const other of palette.children) {
+            other.setAttribute("aria-pressed", String(other === cell));
+          }
+          emit();
+        },
       );
+      palette.appendChild(cell);
     }
 
     const scale = h("input", {
@@ -148,7 +153,7 @@ export function createPaintPicker(options: PaintPickerOptions): PaintPicker {
       "aria-pressed": String(!!paint.patternInvert),
       onClick: () => {
         paint = { ...paint, patternInvert: !paint.patternInvert };
-        render();
+        invert.setAttribute("aria-pressed", String(!!paint.patternInvert));
         emit();
       },
     });
@@ -189,14 +194,15 @@ export function createPaintPicker(options: PaintPickerOptions): PaintPicker {
   function shapeSide(): HTMLElement {
     const palette = h("div", { class: "paint-palette" });
     for (const row of shapeLibrary.list()) {
-      palette.appendChild(
-        swatch(row.name, shapeSwatch(row), row.id === paint.shapeId, () => {
-          paint = { ...paint, shapeId: row.id };
-          shapeLibrary.select(row.id);
-          render();
-          emit();
-        }),
-      );
+      const cell = swatch(row.name, shapeSwatch(row), row.id === paint.shapeId, () => {
+        paint = { ...paint, shapeId: row.id };
+        shapeLibrary.select(row.id);
+        for (const other of palette.children) {
+          other.setAttribute("aria-pressed", String(other === cell));
+        }
+        emit();
+      });
+      palette.appendChild(cell);
     }
 
     return h(

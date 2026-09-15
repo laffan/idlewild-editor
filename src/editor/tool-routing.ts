@@ -86,7 +86,20 @@ const ANNOUNCE: Partial<Record<ToolId, string>> = {
   rub: "Rub — the pencil with the paint taken out",
 };
 
+/**
+ * Which tools have a size worth remembering separately.
+ *
+ * The pencil is a nib and the Pattern brush is an *opening* onto a filled
+ * area, so their natural sizes are an order apart: six pixels of pencil is a
+ * line, and six pixels of Pattern brush is a checkered thread. Sharing one
+ * number meant picking the other tool up and re-aiming it every single time.
+ */
+const SIZED: readonly ToolId[] = ["pencil", "pattern"];
+
 export function createToolRouting(host: ToolRoutingHost): ToolRouting {
+  /** What each of those was last set to. Pattern starts wide, on purpose. */
+  const sizes: Partial<Record<ToolId, number>> = { pattern: 28 };
+
   /**
    * The stroke mode and the paint a tool draws with.
    *
@@ -128,11 +141,24 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
 
   function apply(tool: ToolId, announce = true): void {
     const drawing = host.drawing();
+    // Read before the rail is told, because it is what the rail is showing
+    // now that says which tool is being put down.
+    const previous = host.rail.tool;
     host.rail.setTool(tool);
 
     if (drawing) {
+      if (previous !== tool && SIZED.includes(previous)) {
+        sizes[previous] = drawing.style.size;
+      }
       const patch = styleFor(tool, drawing.style);
-      if (patch) drawing.style = { ...drawing.style, ...patch };
+      const size = SIZED.includes(tool) ? sizes[tool] : undefined;
+      if (patch || size !== undefined) {
+        drawing.style = {
+          ...drawing.style,
+          ...(patch ?? {}),
+          ...(size === undefined ? {} : { size }),
+        };
+      }
     }
 
     const drawingTool = DRAWN[tool] ?? null;

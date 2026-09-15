@@ -138,7 +138,12 @@ function patternPanel(
           "Sweep to reveal the pattern. It is pinned to the world rather than " +
           "to the stroke, so two passes line up exactly.",
       }),
-      sizeRow(style, actions),
+      // Its own range rather than the pencil's 1–48. This is an opening onto
+      // a filled area, so the useful sizes start where a nib's end: at six
+      // pixels over a four-pixel lattice what you get is a checkered thread.
+      slider("Size", style.size, 4, 200, (next) => `${next} px`, (next) =>
+        actions.onStyle({ size: next }),
+      ),
       smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
     ),
     paintSection("Pattern", style, actions, ["pattern"]),

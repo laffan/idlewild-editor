@@ -168,11 +168,12 @@ export class FillPaintRender {
 
     const libraryShape = paintShape(fill.paint);
     if (!libraryShape) return null;
-    // One copy per grid space, in the space's own box — which on an isometric
-    // project is the diamond's bounding box, so a tile shape comes out as the
-    // tile it was drawn to be.
+    // One copy per grid space. On an isometric project the space is the
+    // diamond inside that box rather than the box itself, so a *square* fills
+    // its space instead of covering four halves of its neighbours'.
+    const diamond = this.grid.projection === "isometric";
     for (const cell of this.spacesOf(fill, bounds)) {
-      drawShape(ctx, libraryShape, cell, colour);
+      drawShape(ctx, libraryShape, { ...cell, diamond }, colour);
     }
     return canvas;
   }

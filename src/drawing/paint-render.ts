@@ -37,6 +37,13 @@ import { drawShape } from "../lib/shape-path";
 import type { StreamPoint } from "./geometry";
 import type { Bounds } from "./types";
 
+/** How big one shape stamp is, and how the space sits inside it. */
+export interface StampGeometry {
+  width: number;
+  height: number;
+  diamond?: boolean;
+}
+
 /** A lattice cell, as the key a set holds it under. */
 function key(cx: number, cy: number): string {
   return `${cx},${cy}`;
@@ -211,7 +218,7 @@ export function paintRegion(
   stream: readonly StreamPoint[],
   color: string,
   paint: PaintSpec,
-  stamp: { width: number; height: number },
+  stamp: StampGeometry,
 ): boolean {
   if (stream.length < 3) return true;
   const box = streamBox(stream);
@@ -246,14 +253,13 @@ export function paintRegion(
   ctx.save();
   traceOutline(ctx, stream);
   ctx.clip("nonzero");
-  const x0 = Math.floor(box.x / w);
-  const x1 = Math.floor((box.x + box.width) / w);
-  const y0 = Math.floor(box.y / h);
-  const y1 = Math.floor((box.y + box.height) / h);
-  for (let cy = y0; cy <= y1; cy++) {
-    for (let cx = x0; cx <= x1; cx++) {
-      drawShape(ctx, shape, { x: cx * w, y: cy * h, width: w, height: h }, color);
-    }
+  for (const at of stampsOver(box, stamp)) {
+    drawShape(
+      ctx,
+      shape,
+      { x: at.x, y: at.y, width: w, height: h, diamond: stamp.diamond },
+      color,
+    );
   }
   ctx.restore();
   return true;
@@ -277,16 +283,82 @@ export function paintShapeStroke(
   stream: readonly StreamPoint[],
   color: string,
   paint: PaintSpec,
-  stamp: { width: number; height: number } | undefined,
+  stamp: StampGeometry | undefined,
 ): boolean {
   const shape = paintShape(paint);
   if (!shape) return false;
   const width = Math.max(1, stamp?.width ?? 32);
   const height = Math.max(1, stamp?.height ?? 32);
+  const diamond = stamp?.diamond;
   ctx.save();
   for (const { point } of stream) {
-    drawShape(ctx, shape, { x: point[0], y: point[1], width, height }, color);
+    drawShape(
+      ctx,
+      shape,
+      { x: point[0], y: point[1], width, height, diamond },
+      color,
+    );
   }
   ctx.restore();
   return true;
+}
+
+/**
+ * Every grid space whose box meets a world box.
+ *
+ * Two lattices, because there are two kinds of grid and a shape fill has to
+ * tile the one the project actually has. The square case is a division; the
+ * isometric one walks the diamond lattice — `(cx − cy)` across and
+ * `(cx + cy)` down, which is `Grid.cellToWorld` read from the drawing layer,
+ * where there is no grid to ask. The range is found by inverting that at the
+ * four corners of the box and padding by one, so nothing on an edge is lost.
+ */
+export function stampsOver(
+  box: Bounds,
+  stamp: StampGeometry,
+): Array<{ x: number; y: number }> {
+  const w = Math.max(1, stamp.width);
+  const h = Math.max(1, stamp.height);
+  const out: Array<{ x: number; y: number }> = [];
+
+  if (!stamp.diamond) {
+    const x0 = Math.floor(box.x / w);
+    const x1 = Math.floor((box.x + box.width) / w);
+    const y0 = Math.floor(box.y / h);
+    const y1 = Math.floor((box.y + box.height) / h);
+    for (let cy = y0; cy <= y1; cy++) {
+      for (let cx = x0; cx <= x1; cx++) out.push({ x: cx * w, y: cy * h });
+    }
+    return out;
+  }
+
+  let minCx = Infinity;
+  let maxCx = -Infinity;
+  let minCy = Infinity;
+  let maxCy = -Infinity;
+  for (const [px, py] of [
+    [box.x, box.y],
+    [box.x + box.width, box.y],
+    [box.x, box.y + box.height],
+    [box.x + box.width, box.y + box.height],
+  ]) {
+    const a = px / (w / 2);
+    const b = py / (h / 2);
+    const cx = Math.round((a + b) / 2);
+    const cy = Math.round((b - a) / 2);
+    if (cx < minCx) minCx = cx;
+    if (cx > maxCx) maxCx = cx;
+    if (cy < minCy) minCy = cy;
+    if (cy > maxCy) maxCy = cy;
+  }
+  for (let cy = minCy - 1; cy <= maxCy + 1; cy++) {
+    for (let cx = minCx - 1; cx <= maxCx + 1; cx++) {
+      // The centre of the diamond, then back to the box's own corner.
+      out.push({
+        x: (cx - cy) * (w / 2) - w / 2,
+        y: (cx + cy) * (h / 2) - h / 2,
+      });
+    }
+  }
+  return out;
 }

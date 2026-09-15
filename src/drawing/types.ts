@@ -65,11 +65,11 @@ export interface StrokeStyle {
    * The box one shape stamp fills, in world pixels.
    *
    * The grid's own tile, handed down by the shell — the drawing layer knows
-   * nothing about projections and must not learn. Width and height differ on
-   * an isometric project, which is what makes a tile shape come out as the
-   * diamond it was drawn to be.
+   * nothing about projections and must not learn. `diamond` says the space is
+   * the diamond inscribed in that box rather than the box itself, which is
+   * what an isometric project's spaces are.
    */
-  stamp: { width: number; height: number };
+  stamp: { width: number; height: number; diamond?: boolean };
 }
 
 export const DEFAULT_STYLE: StrokeStyle = {

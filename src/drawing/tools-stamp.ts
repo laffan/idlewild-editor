@@ -29,12 +29,14 @@ import type { Surface } from "./surface";
 import { boundsOf, type ToolSession } from "./tools";
 import type { StrokeStyle } from "./types";
 
-/** The box one stamp fills, and where it is. */
+/** The box one stamp fills, where it is, and how the space sits inside it. */
 export interface StampBox {
   x: number;
   y: number;
   width: number;
   height: number;
+  /** The space is the diamond inscribed in the box — an isometric grid. */
+  diamond?: boolean;
 }
 
 /**
@@ -70,7 +72,7 @@ export function beginShapeStamp(
     if (seen.has(key)) return false;
     seen.add(key);
     points.push({ x: box.x, y: box.y, pressure: 1 });
-    stamp = { width: box.width, height: box.height };
+    stamp = { width: box.width, height: box.height, diamond: box.diamond };
     return true;
   };
 

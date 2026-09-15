@@ -42,6 +42,7 @@ import {
   renderLayer,
   renderPlacements,
   renderPoint,
+  renderFillPaint,
   renderRegion,
   renderStrokes,
   renderZone,
@@ -51,8 +52,8 @@ import {
 import { fillColliderSection } from "./inspect-collider";
 import type { PsdLayerEditor } from "./psd-layers";
 import { DEFAULT_FILL_COLOR } from "../lib/color";
-import { DEFAULT_PAINT_SPEC, type Paint } from "../lib/paint";
-import { createPaintPicker } from "./paint-picker";
+import { DEFAULT_PAINT_SPEC, paintLabel, type Paint } from "../lib/paint";
+import { defaultPatternScale } from "./stamp-box";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import { describeFill } from "../lib/doc-shape";
@@ -175,6 +176,7 @@ export class Inspector {
    * grey is the shape of bug this used to have with colours alone.
    */
   private lastPaint: Paint = { ...DEFAULT_PAINT_SPEC, color: DEFAULT_FILL_COLOR };
+
   private suspended = false;
   /**
    * The layer list for the PSD currently being inspected, kept across
@@ -187,6 +189,7 @@ export class Inspector {
   private adjusting: string | null = null;
 
   constructor(store: DocStore, grid: Grid, callbacks: InspectorCallbacks) {
+    this.lastPaint.patternScale = defaultPatternScale(grid);
     this.store = store;
     this.grid = grid;
     this.callbacks = callbacks;
@@ -582,12 +585,22 @@ export class Inspector {
 
     this.head("Filled space", describeFill(fill));
     this.section("Info");
-    this.row("Kind", fill.kind === "pattern" ? "Pattern" : "Colour");
+    // What it is *made of*, which is the library's answer when it has one and
+    // falls back to the two the document already had: a PSD texture, or a
+    // flat colour.
+    this.row(
+      "Made of",
+      fill.paint && fill.paint.kind !== "color"
+        ? paintLabel(fill.paint)
+        : fill.kind === "pattern"
+          ? "Pattern image"
+          : "Colour",
+    );
     if (fill.rect) {
       this.row("Origin", `${Math.round(fill.rect.x)}, ${Math.round(fill.rect.y)}`);
     }
     this.row("Colour", fill.color ?? "—");
-    this.row("Pattern", fill.patternKey ?? "—");
+    if (fill.patternKey) this.row("Pattern image", fill.patternKey);
     this.fillSection(fill);
 
     // What it stops, under the same heading a placed PSD's says it under.
@@ -618,45 +631,24 @@ export class Inspector {
   }
 
   /**
-   * What a run of grid spaces is filled with.
+   * What a run of grid spaces is filled with — the control, in
+   * `inspect-panels.ts`, and the memory of what it last said, here.
    *
-   * All three kinds, because this is the one place where a shape fill makes
-   * the most sense it ever makes: the spaces are already there, so "a shape in
-   * every space" is a tileset laid down in one gesture rather than a field
-   * approximated on a lattice.
-   *
-   * **Use pattern image** stays where it was and means something else — a PSD
-   * in *this project* whose texture tiles the patch, rather than a row in the
-   * app-wide library. The two are kept apart on `FillPatch`; see the note
-   * there.
+   * The memory is what makes the second and third patch come out of the same
+   * gesture as the first: pick a dither, fill three areas with it, and all
+   * three are that dither rather than one of them and two greys.
    */
   private fillSection(fill: FillPatch | undefined): void {
-    const value: Paint = fill
-      ? { ...(fill.paint ?? DEFAULT_PAINT_SPEC), color: fill.color ?? this.lastPaint.color }
-      : { ...this.lastPaint };
-
-    const picker = createPaintPicker({
-      value,
-      cell: this.grid.tileWidth,
-      onChange: (paint) => {
+    renderFillPaint(this.zone.body, {
+      grid: this.grid,
+      fill,
+      held: this.lastPaint,
+      onPaint: (paint) => {
         this.lastPaint = { ...paint };
         this.callbacks.onFillPaint(paint);
       },
+      onUsePatternImage: () => this.callbacks.onUsePatternImage(),
     });
-
-    this.zone.body.appendChild(
-      h(
-        "div",
-        { class: "inspect-section" },
-        h("div", { class: "inspect-section-title m", text: "Fill" }),
-        picker.root,
-        h("button", {
-          class: "panel-btn",
-          text: "Use pattern image…",
-          onClick: () => this.callbacks.onUsePatternImage(),
-        }),
-      ),
-    );
   }
 
   /**

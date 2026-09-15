@@ -184,8 +184,21 @@
 }
 .lib-link:hover { text-decoration: underline; }
 
+/* `display: flex` below outranks the browser's own rule for [hidden], so the
+   two rows that come and go — the airbrush's density, and what to do with a
+   selection — have to say it again. */
+.lib-field[hidden],
+.lib-row-buttons[hidden] { display: none; }
+
 .lib-row-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
-.lib-row-buttons .btn { flex: 1 1 auto; padding: 6px 8px; font-size: 11px; }
+.lib-row-buttons .btn {
+  flex: 1 1 auto;
+  padding: 6px 8px;
+  font-size: 11px;
+  min-height: 30px;
+  text-align: center;
+  justify-content: center;
+}
 
 .lib-grid-3 {
   display: grid;
@@ -193,6 +206,23 @@
   gap: 4px;
 }
 .lib-grid-3 .btn { padding: 6px 4px; font-size: 11px; }
+
+/* The plain `.btn` is the home screen's — dark ink on a light ground — and
+   the paint control also lives in the properties sidebar, which is the
+   chrome's dark end. A sheet has a rule of its own for this; the sidebar did
+   not, so the library's six actions came out near-black on near-black. */
+.side-panel .lib-row-buttons .btn,
+.side-panel .lib-grid-3 .btn {
+  border-color: var(--color-neutral-700);
+  color: var(--chrome-text);
+  background: transparent;
+  min-height: 0;
+  text-align: center;
+  justify-content: center;
+}
+.side-panel .lib-row-buttons .btn:hover,
+.side-panel .lib-grid-3 .btn:hover { background: var(--chrome-rule); }
+.side-panel .lib-row-buttons .btn[disabled] { opacity: 0.35; }
 
 /* The nudge pad: up over left-right over down, in a 3×3 with the middle out. */
 .lib-nudge {
