@@ -24,13 +24,18 @@
  * an empty labelled box is the thing the old single heading was doing wrong.
  * The order is the answer to the question the old panel could not settle:
  * what is in my hand, where is it going, what is it on top of.
+ *
+ * All three fold, and each is marked as the thing that is *not* a section — a
+ * chip, a tinted ground, a heavier rule — because the sections inside them
+ * fold too and a column of identical headings says nothing about which of them
+ * is the structure. See `inspect-zone.ts`.
  */
 
 import { clear, h } from "../lib/dom";
 import type { FillMode, StrokeStyle } from "../drawing";
-import { makeSectionsCollapsible } from "./inspect-collapse";
-import { toolPanel, TOOL_TITLES } from "./inspect-brush";
-import { createZone, type Zone } from "./inspect-zone";
+import { makeSectionsCollapsible, sectionTitle } from "./inspect-collapse";
+import { toolPanel, TOOL_HINTS, TOOL_TITLES } from "./inspect-brush";
+import { createZone, type Zone, type ZoneOptions } from "./inspect-zone";
 import { renderBackground } from "./inspect-background";
 import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
 import { layerKind } from "../lib/layer-kinds";
@@ -39,6 +44,7 @@ import {
   type PlacementActions,
 } from "./inspect-placement";
 import {
+  renderFill,
   renderLayer,
   renderPlacements,
   renderPoint,
@@ -49,14 +55,12 @@ import {
   type PanelActions,
   type PanelSurface,
 } from "./inspect-panels";
-import { fillColliderSection } from "./inspect-collider";
 import type { PsdLayerEditor } from "./psd-layers";
 import { DEFAULT_FILL_COLOR } from "../lib/color";
-import { DEFAULT_PAINT_SPEC, paintLabel, type Paint } from "../lib/paint";
+import { DEFAULT_PAINT_SPEC, type Paint } from "../lib/paint";
 import { defaultPatternScale } from "./stamp-box";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import { describeFill } from "../lib/doc-shape";
 import type { FillPatch, Selection, ToolId } from "../lib/types";
 
 export interface InspectorCallbacks
@@ -71,7 +75,6 @@ export interface InspectorCallbacks
    * run of grid spaces is filled. See `fill-actions.ts`.
    */
   onFillPaint: (paint: Paint) => void;
-  onToggleWalkable: (walkable: boolean) => void;
   /**
    * Get rid of a whole document layer, and everything drawn on it.
    *
@@ -92,8 +95,6 @@ export interface InspectorCallbacks
   /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
-  /** Hand a filled run of grid spaces on as a placed PSD. */
-  onFillToPsd: () => void;
   /**
    * The selected PSD's own layer stack, as an editor that loads itself. Built
    * by the shell rather than here, because it needs the project id and a way
@@ -131,6 +132,20 @@ export interface InspectorCallbacks
   erasing: (tool: ToolId) => boolean;
   onErasing: (tool: ToolId, on: boolean) => void;
 }
+
+/**
+ * What each zone heading says on hover.
+ *
+ * The three answers the panel's order is there to give, in the order it
+ * gives them: what is in my hand, where it is going, what it is on top of.
+ * The TOOL zone prefers the tool's own line when it has one — see
+ * `TOOL_HINTS` — because by then there is something more specific to say.
+ */
+const ZONE_HINTS: Record<string, string> = {
+  TOOL: "What the thing in your hand has to set.",
+  LAYER: "The layer the next thing you do lands on.",
+  OBJECT: "What is selected on the canvas.",
+};
 
 /**
  * Which layer a selection belongs to, or "" for one that belongs to none.
@@ -206,7 +221,7 @@ export class Inspector {
     this.body = h("div", { class: "panel-body scroll" });
     // Replaced on every render; made here so the field is never null and the
     // panels never have to ask whether there is a zone to write into.
-    this.zone = createZone("OBJECT");
+    this.zone = createZone("OBJECT", { hint: ZONE_HINTS.OBJECT });
     this.current = this.zone.body;
     // No `panel-head`. The three zones carry their own headings, and a fourth
     // heading over them saying "Inspector" would be a name for the furniture
@@ -334,7 +349,13 @@ export class Inspector {
     if (!this.strokeStyle) return;
     const title = TOOL_TITLES[this.toolId];
     if (!title) return;
-    this.open("TOOL", title);
+    // What the tool does is on the heading rather than in a line of prose
+    // under it — see `inspect-brush.ts` for why the panel's explanations
+    // moved onto the headings they belong to.
+    this.open("TOOL", {
+      subject: title,
+      hint: TOOL_HINTS[this.toolId] ?? ZONE_HINTS.TOOL,
+    });
     const rows = toolPanel(this.toolId, this.strokeStyle, {
       onStyle: (patch) => this.callbacks.onStrokeStyle(patch),
       // A grid space, for the two library editors' previews — the one thing
@@ -363,7 +384,7 @@ export class Inspector {
     const layerId = layerOf(this.selection) || this.callbacks.activeLayerId();
     const layer = this.store.layer(layerId);
     if (!layer) return;
-    this.open("LAYER", layer.name);
+    this.open("LAYER", { subject: layer.name, hint: ZONE_HINTS.LAYER });
     if (layerKind(layer) === "pattern") {
       renderPatternLayer(this.surface(), this.store, this.callbacks, layer);
     } else {
@@ -379,13 +400,13 @@ export class Inspector {
   private renderObject(): boolean {
     const selection = this.selection;
     if (selection.kind === "none" || selection.kind === "layer") return false;
-    this.open("OBJECT");
+    this.open("OBJECT", { hint: ZONE_HINTS.OBJECT });
     switch (selection.kind) {
       case "region":
         renderRegion(this.surface(), this.grid, this.callbacks, selection);
         break;
       case "fill":
-        this.renderFill(selection.layerId, selection.fillId);
+        renderFill(this.surface(), this.store, this.callbacks, selection);
         break;
       case "placement":
         this.renderPlacement(selection.layerId, selection.placementId);
@@ -416,8 +437,8 @@ export class Inspector {
   }
 
   /** Start a zone. Everything written from here lands in it. */
-  private open(name: string, subject = ""): void {
-    this.zone = createZone(name, subject);
+  private open(name: string, options: ZoneOptions = {}): void {
+    this.zone = createZone(name, options);
     this.current = this.zone.body;
   }
 
@@ -464,7 +485,7 @@ export class Inspector {
       head: (kicker, title) => this.head(kicker, title),
       editableHead: (kicker, value, suffix, onCommit) =>
         this.editableHead(kicker, value, suffix, onCommit),
-      section: (title) => this.section(title),
+      section: (title, hint) => this.section(title, hint),
       row: (key, value) => this.row(key, value),
       empty: () => this.renderEmpty(),
       fillSection: (fill) => this.fillSection(fill),
@@ -552,10 +573,10 @@ export class Inspector {
    * so a panel reads as the sequence of sections it is made of rather than a
    * flat run of rows with buttons somewhere in it.
    */
-  private section(title?: string): HTMLElement {
+  private section(title?: string, hint?: string): HTMLElement {
     const el = h("div", { class: "inspect-section" });
     if (title) {
-      el.appendChild(h("div", { class: "inspect-section-title m", text: title }));
+      el.appendChild(sectionTitle(title, { hint }));
     }
     this.zone.body.appendChild(el);
     this.current = el;
@@ -587,57 +608,6 @@ export class Inspector {
         class: "inspect-empty",
         text: "That has gone from the document.",
       }),
-    );
-  }
-
-  private renderFill(layerId: string, fillId: string): void {
-    const fill = this.store.layer(layerId)?.fills.find((f) => f.id === fillId);
-    if (!fill) return this.renderEmpty();
-
-    this.head("Filled space", describeFill(fill));
-    this.section("Info");
-    // What it is *made of*, which is the library's answer when it has one and
-    // falls back to the two the document already had: a PSD texture, or a
-    // flat colour.
-    this.row(
-      "Made of",
-      fill.paint && fill.paint.kind !== "color"
-        ? paintLabel(fill.paint)
-        : fill.kind === "pattern"
-          ? "Pattern image"
-          : "Colour",
-    );
-    if (fill.rect) {
-      this.row("Origin", `${Math.round(fill.rect.x)}, ${Math.round(fill.rect.y)}`);
-    }
-    this.row("Colour", fill.color ?? "—");
-    if (fill.patternKey) this.row("Pattern image", fill.patternKey);
-    this.fillSection(fill);
-
-    // What it stops, under the same heading a placed PSD's says it under.
-    this.zone.body.appendChild(
-      fillColliderSection(fill, (walkable) =>
-        this.callbacks.onToggleWalkable(walkable),
-      ),
-    );
-
-    this.zone.body.appendChild(
-      h(
-        "div",
-        { class: "inspect-section" },
-        // A fill is a fast way to block a shape out on the grid; this is
-        // what turns the block-out into something an artist can paint.
-        h("button", {
-          class: "panel-btn",
-          text: "Convert to PSD",
-          onClick: () => this.callbacks.onFillToPsd(),
-        }),
-        h("button", {
-          class: "panel-btn",
-          text: "Delete fill",
-          onClick: () => this.callbacks.onDeleteSelection(),
-        }),
-      ),
     );
   }
 

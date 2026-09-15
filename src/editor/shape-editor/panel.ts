@@ -78,6 +78,7 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
   root.append(
     section(
       "Add",
+      "Drops a primitive into the tile, at the size the tile is.",
       row(
         ...PRIMITIVES.map((p) =>
           h("button", { class: "btn btn-ghost", text: p.label, onClick: () => actions.addPrimitive(p.id) }),
@@ -131,6 +132,9 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
   root.append(
     section(
       "Paths",
+      "The outlines this shape is made of. Tap one to make it the current " +
+        "path; the ⊕ beside it adds or removes it from the selection that " +
+        "Arrange and Cut out work on.",
       list,
       row(
         h("button", { class: "btn btn-ghost", text: "Duplicate", onClick: () => actions.duplicate() }),
@@ -151,28 +155,33 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
   root.append(
     section(
       "Arrange",
+      "Reflecting, aligning and spacing out what is selected.",
       row(
         h("button", { class: "btn btn-ghost", text: "Flip across", onClick: () => actions.reflect("horizontal") }),
         h("button", { class: "btn btn-ghost", text: "Flip down", onClick: () => actions.reflect("vertical") }),
       ),
-      h("div", {
-        class: "lib-hint m",
-        text:
-          "Two or more points selected and it is the points that line up. " +
-          "Otherwise one path lines up with the tile, and several with each other.",
-      }),
+      // Each rule is on the row it governs rather than above it. A `title` on
+      // a container answers for every child that has none of its own, so
+      // hovering any of the six buttons says what aligning them will do.
       h(
         "div",
-        { class: "lib-grid-3" },
+        {
+          class: "lib-grid-3",
+          title:
+            "Two or more points selected and it is the points that line up. " +
+            "Otherwise one path lines up with the tile, and several with " +
+            "each other.",
+        },
         ...ALIGNMENTS.map((a) =>
           h("button", { class: "btn btn-ghost", text: a.label, onClick: () => actions.align(a.id) }),
         ),
       ),
-      h("div", {
-        class: "lib-hint m",
-        text: "Three or more — points if that many are selected, else paths.",
-      }),
-      row(
+      h(
+        "div",
+        {
+          class: "lib-row-buttons",
+          title: "Three or more — points if that many are selected, else paths.",
+        },
         ...DISTRIBUTIONS.map((d) =>
           h("button", { class: "btn btn-ghost", text: d.label, onClick: () => actions.distribute(d.id) }),
         ),
@@ -221,24 +230,24 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
   root.append(
     section(
       "Points",
+      "Click an edge to drop a point into it. ⌥-click a point to curve it.",
       row(
         h("button", { class: "btn btn-ghost", text: "Curve or corner", onClick: () => actions.toggleCurve() }),
         h("button", { class: "btn btn-ghost", text: "Delete point", onClick: () => actions.deletePoints() }),
       ),
       transform,
       pen,
+      // Not a hint: a live count of what the pen has down, which is the one
+      // thing in this column that has to be read rather than asked for.
       penCount,
       penRow,
-      h("div", {
-        class: "lib-hint m",
-        text: "Click an edge to drop a point into it. ⌥-click a point to curve it.",
-      }),
     ),
   );
 
   root.append(
     section(
       "Shape",
+      "What to do to the whole shape at once.",
       row(
         h("button", {
           class: "btn btn-ghost",
@@ -262,11 +271,22 @@ export function shapeToolbar(actions: ShapePanelActions): ShapePanel {
   };
 }
 
-function section(title: string, ...children: (Node | null)[]): HTMLElement {
+/**
+ * One block of the toolbar, with what it is for on its heading.
+ *
+ * The explanation is a tooltip rather than a line of prose under the title:
+ * this column is 210 pixels wide, and a paragraph that only needs reading
+ * once is a paragraph everything under it has to be scrolled past for ever.
+ */
+function section(
+  title: string,
+  hint: string | null,
+  ...children: (Node | null)[]
+): HTMLElement {
   return h(
     "div",
     { class: "lib-section" },
-    h("div", { class: "lib-section-title m", text: title }),
+    h("div", { class: "lib-section-title m", text: title, title: hint }),
     ...children,
   );
 }

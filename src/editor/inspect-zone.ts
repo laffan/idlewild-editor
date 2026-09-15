@@ -14,12 +14,37 @@
  * title at all, which is why a layer reads `LAYER : Foreground` and not
  * `LAYER : Layer` over the word *Foreground*.
  *
+ * **A zone folds, and it is marked as the thing that is not a section.** The
+ * panel under one heading can be several screens, and the sections inside it
+ * have folded since `inspect-collapse.ts` existed — which left the three
+ * headings that matter most as the only ones that did not. They fold under
+ * the same store, keyed `zone:TOOL` so a section that happens to be called
+ * Tool is a different thing. And because the panel is now a column of
+ * foldable headings from top to bottom, a zone needs to say it is not one
+ * more section of whatever is above it: hence the chip, the heavier rule and
+ * the tinted ground, which are the only three of them in the panel.
+ *
  * A zone with an empty body is never put in the document — `mount` answers
  * whether there was anything to mount — because a labelled box that is always
  * there and usually empty is what the single *Inspector* heading was.
  */
 
-import { h } from "../lib/dom";
+import { h, ICONS, icon } from "../lib/dom";
+import { isCollapsed, setCollapsed } from "./inspect-collapse";
+
+/**
+ * The chip each zone carries, by name.
+ *
+ * Here rather than at the call site because it is a fact about the zone
+ * rather than about the panel being written into it, and there are exactly
+ * three of them: a name with no chip is a zone this file does not know
+ * about, and it simply goes without.
+ */
+const ZONE_ICONS: Record<string, readonly string[]> = {
+  TOOL: ICONS.zoneTool,
+  LAYER: ICONS.zoneLayer,
+  OBJECT: ICONS.zoneObject,
+};
 
 export interface Zone {
   /** The whole zone, heading included. Only in the document once mounted. */
@@ -37,21 +62,69 @@ export interface Zone {
   mount(into: HTMLElement): boolean;
 }
 
-export function createZone(name: string, subject = ""): Zone {
+export interface ZoneOptions {
+  /** The subject after the colon, when the caller already knows it. */
+  subject?: string;
+  /**
+   * What the heading says on hover: what this zone is for, or what the tool
+   * in hand does. The panel's explanations live here and on the section
+   * headings rather than as a line of prose under each one — see
+   * `inspect-brush.ts`.
+   */
+  hint?: string;
+}
+
+/** The fold store's key for a zone, kept out of the sections' namespace. */
+export function zoneKey(name: string): string {
+  return `zone:${name}`;
+}
+
+export function createZone(name: string, options: ZoneOptions = {}): Zone {
+  const subject = options.subject ?? "";
   const subjectEl = h("span", { class: "inspect-zone-subject", text: subject });
   const body = h("div", { class: "inspect-zone-body" });
+  const glyph = ZONE_ICONS[name];
+  const key = zoneKey(name);
+
+  const head = h(
+    "header",
+    {
+      class: "inspect-zone-head m",
+      role: "button",
+      tabindex: "0",
+      title: options.hint ?? null,
+    },
+    glyph ? icon(glyph, 14) : null,
+    h("span", { class: "inspect-zone-name", text: name }),
+    subjectEl,
+  );
+  if (glyph) head.firstElementChild?.classList.add("inspect-zone-icon");
+
   const root = h(
     "section",
     { class: `inspect-zone zone-${name.toLowerCase()}` },
-    h(
-      "header",
-      { class: "inspect-zone-head m" },
-      h("span", { class: "inspect-zone-name", text: name }),
-      subjectEl,
-    ),
+    head,
     body,
   );
   let named = subject;
+
+  const apply = (collapse: boolean): void => {
+    root.classList.toggle("collapsed", collapse);
+    head.setAttribute("aria-expanded", String(!collapse));
+  };
+  apply(isCollapsed(key));
+
+  head.addEventListener("click", () => {
+    const next = !isCollapsed(key);
+    setCollapsed(key, next);
+    apply(next);
+  });
+  head.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    // Space scrolls the panel otherwise, which is the opposite of folding.
+    event.preventDefault();
+    head.click();
+  });
 
   return {
     root,

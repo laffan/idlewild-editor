@@ -21,6 +21,7 @@
  */
 
 import { h } from "../lib/dom";
+import { sectionTitle } from "./inspect-collapse";
 import { BRUSHES, brushStampUrl, type FillMode, type StrokeStyle } from "../drawing";
 import { createPaintPicker } from "./paint-picker";
 import type { Paint, PaintKind } from "../lib/paint";
@@ -62,6 +63,31 @@ export const TOOL_TITLES: Partial<Record<ToolId, string>> = {
   shape: "Shape",
   rub: "Rub",
   fill: "Fill",
+};
+
+/**
+ * What the TOOL heading says on hover: what this tool *does*, in one line.
+ *
+ * The Shape brush is why this exists rather than living on a section
+ * heading like the others. Its panel was a heading called *Stamp* over a
+ * sentence and nothing else — there is no size, because a shape fills a grid
+ * space and the space is the project's — so with the sentence on a tooltip
+ * the section had nothing left in it, and a heading over an empty box is the
+ * thing the three zones were introduced to stop. The line belongs to the
+ * tool, so it is on the tool's own heading.
+ */
+export const TOOL_HINTS: Partial<Record<ToolId, string>> = {
+  pencil: "Lays ink down along the path, at the tip and size set below.",
+  pattern:
+    "Sweep to reveal the pattern. It is pinned to the world rather than to " +
+    "the stroke, so two passes line up exactly.",
+  shape:
+    "Drag across the grid and every space you cross takes one copy, filling " +
+    "that space exactly. Crossing a space twice changes nothing.",
+  rub:
+    "The pencil with the paint taken out. It rubs out ink drawn in this " +
+    "session, tip and pressure and all.",
+  fill: "Sweeps and tapped-out shapes, filled with a colour, a pattern or a shape.",
 };
 
 /**
@@ -111,18 +137,18 @@ function eraserRow(actions: ToolPanelActions): HTMLElement {
       {
         class: "panel-btn erase-toggle",
         "aria-pressed": String(on),
+        // On the control rather than under it: the hint changes with the
+        // state, so what it says is "here is what is happening now", which
+        // is a thing to ask for rather than a thing to read every time.
+        title: on
+          ? "Taking out what it would have drawn. Hold the tool's button on " +
+            "the toolbar to turn it back."
+          : "Everything this tool would draw, it removes instead. A long " +
+            "press on its button does the same.",
         onClick: () => actions.onErasing(!on),
       },
       h("span", { text: "Use as Eraser" }),
     ),
-    h("div", {
-      class: "field-hint",
-      text: on
-        ? "Taking out what it would have drawn. Hold the tool's button on the " +
-          "toolbar to turn it back."
-        : "Everything this tool would draw, it removes instead. A long press " +
-          "on its button does the same.",
-    }),
   );
 }
 
@@ -138,6 +164,7 @@ function paintSection(
   style: StrokeStyle,
   actions: ToolPanelActions,
   kinds: readonly PaintKind[],
+  hint?: string,
 ): HTMLElement {
   const picker = createPaintPicker({
     value: { ...style.paint, color: style.color } as Paint,
@@ -151,7 +178,7 @@ function paintSection(
   return h(
     "div",
     { class: "inspect-section" },
-    h("div", { class: "inspect-section-title m", text: title }),
+    sectionTitle(title, { hint }),
     picker.root,
   );
 }
@@ -181,13 +208,7 @@ function patternPanel(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Brush" }),
-      h("div", {
-        class: "field-hint",
-        text:
-          "Sweep to reveal the pattern. It is pinned to the world rather than " +
-          "to the stroke, so two passes line up exactly.",
-      }),
+      sectionTitle("Brush", { hint: "How wide the opening onto the pattern is, and how much of the hand's wobble is taken out of it." }),
       // Its own range rather than the pencil's 1–48. This is an opening onto
       // a filled area, so the useful sizes start where a nib's end: at six
       // pixels over a four-pixel lattice what you get is a checkered thread.
@@ -196,7 +217,7 @@ function patternPanel(
       ),
       smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
     ),
-    paintSection("Pattern", style, actions, ["pattern"]),
+    paintSection("Pattern", style, actions, ["pattern"], "Which row of the pattern library the brush reveals, and how big its pixels are on this grid."),
   ];
 }
 
@@ -210,19 +231,16 @@ function patternPanel(
  * shape stamped at some other size is a decoration rather than a tile.
  */
 function shapePanel(style: StrokeStyle, actions: ToolPanelActions): HTMLElement[] {
+  // No Stamp section any more. It held one sentence and no control, and the
+  // sentence is on the TOOL heading now — see `TOOL_HINTS`.
   return [
-    h(
-      "div",
-      { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Stamp" }),
-      h("div", {
-        class: "field-hint",
-        text:
-          "Drag across the grid and every space you cross takes one copy, " +
-          "filling that space exactly. Crossing a space twice changes nothing.",
-      }),
+    paintSection(
+      "Shape",
+      style,
+      actions,
+      ["shape"],
+      "Which row of the shape library each space takes a copy of.",
     ),
-    paintSection("Shape", style, actions, ["shape"]),
   ];
 }
 
@@ -241,10 +259,14 @@ function inkPanel(
   const rows: HTMLElement[] = [];
 
   if (tool === "pencil") {
-    const name = h("div", {
-      class: "inspect-title",
-      text: BRUSHES.find((b) => b.id === style.brushId)?.name ?? "Ink",
+    // The tip's name is the section's own subject — `BRUSH : INK` — rather
+    // than a title of its own above it. It was both, which is one fact
+    // written twice and a 19px heading in a column of 10px labels.
+    const heading = sectionTitle("Brush", {
+      subject: brushName(style.brushId),
+      hint: "The tip the pencil draws with, how wide it is, and how much of the hand's wobble comes out of the line.",
     });
+    const subject = heading.querySelector(".inspect-section-subject");
 
     // The tip itself on each button rather than its number. A brush is a
     // shape you recognise, and "3" is not that shape — see `brushStampUrl`
@@ -266,7 +288,9 @@ function inkPanel(
             for (const other of brushes.children) {
               other.setAttribute("aria-pressed", String(other === button));
             }
-            name.textContent = brush.name;
+            // Written here rather than waiting for a re-render: picking a tip
+            // does not touch the document, so nothing rebuilds this panel.
+            if (subject) subject.textContent = brush.name;
             actions.onStyle({ brushId: brush.id });
           },
         },
@@ -275,12 +299,11 @@ function inkPanel(
       brushes.appendChild(button);
     }
 
-    rows.push(h("div", { class: "inspect-head" }, name));
     rows.push(
       h(
         "div",
         { class: "inspect-section" },
-        h("div", { class: "inspect-section-title m", text: "Brush" }),
+        heading,
         brushes,
         sizeRow(style, actions),
         smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
@@ -291,21 +314,30 @@ function inkPanel(
       h(
         "div",
         { class: "inspect-section" },
-        h("div", { class: "inspect-section-title m", text: "Rubber" }),
-        h("div", {
-          class: "field-hint",
-          text:
-            "The pencil with the paint taken out. It rubs out ink drawn in " +
-            "this session, tip and pressure and all.",
-        }),
+        sectionTitle("Rubber", { hint: TOOL_HINTS.rub }),
         sizeRow(style, actions),
         smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
       ),
     );
   }
 
-  if (tool !== "rub") rows.push(paintSection("Colour", style, actions, ["color"]));
+  if (tool !== "rub") {
+    rows.push(
+      paintSection(
+        "Colour",
+        style,
+        actions,
+        ["color"],
+        "What the ink is made of. Recent swatches are under the wheel.",
+      ),
+    );
+  }
   return rows;
+}
+
+/** The tip's own name, which is what the Brush heading says after the colon. */
+function brushName(brushId: number): string {
+  return BRUSHES.find((b) => b.id === brushId)?.name ?? "Ink";
 }
 
 /**
@@ -335,7 +367,12 @@ function fillPanel(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Mode" }),
+      sectionTitle("Mode", {
+        hint:
+          "Draw sweeps a closed outline in one gesture. Point to point taps " +
+          "the same shape out a corner at a time, and every corner stays " +
+          "draggable until it is laid down.",
+      }),
       h(
         "div",
         { class: "seg" },
@@ -356,10 +393,8 @@ function fillPanel(
       h(
         "div",
         { class: "inspect-section" },
-        h("div", { class: "inspect-section-title m", text: "Shape" }),
-        h("div", {
-          class: "field-hint",
-          text:
+        sectionTitle("Shape", {
+          hint:
             down === 0
               ? "Tap the canvas to drop a corner, and drag any corner to move " +
                 "it. Fill and Cancel appear beside the shape."
@@ -379,10 +414,8 @@ function fillPanel(
       h(
         "div",
         { class: "inspect-section" },
-        h("div", { class: "inspect-section-title m", text: "Sweep" }),
-        h("div", {
-          class: "field-hint",
-          text:
+        sectionTitle("Sweep", {
+          hint:
             "Sweep a closed outline and the inside of it fills. It lands as " +
             "one thing you can erase or undo, like a stroke.",
         }),
@@ -391,7 +424,16 @@ function fillPanel(
     );
   }
 
-  rows.push(paintSection("Paint", style, actions, ["color", "pattern", "shape"]));
+  rows.push(
+    paintSection(
+      "Paint",
+      style,
+      actions,
+      ["color", "pattern", "shape"],
+      "What the inside of the shape is made of: a flat colour, a pixel " +
+        "pattern on the world's own lattice, or a field of a library shape.",
+    ),
+  );
   return rows;
 }
 

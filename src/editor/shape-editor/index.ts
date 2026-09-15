@@ -221,18 +221,27 @@ export function openShapeEditor(
       finish(id);
     };
 
-    sheet.actions.append(
-      undoButton,
-      redoButton,
-      h("button", { class: "btn btn-primary", text: "Save", onClick: () => saveIt(false) }),
+    // Undo and Redo stay on the left, where they are about the work. The two
+    // ways out are grouped and pushed to the right-hand end, in the order the
+    // sheets in this app end on: Cancel, then the qualified save, then the
+    // one Enter would take — so the button under the thumb is the ordinary
+    // answer and Cancel is the furthest thing from it.
+    sheet.actions.append(undoButton, redoButton);
+    const ways = h("div", { class: "sheet-actions-end" });
+    ways.append(
       h("button", { class: "btn btn-ghost", text: "Cancel", onClick: () => finish(null) }),
     );
+    // Only where there is something to be a copy *of*. A new shape saved as
+    // a copy would be the same button twice.
     if (state.sourceId) {
-      sheet.actions.insertBefore(
+      ways.append(
         h("button", { class: "btn btn-ghost", text: "Save as a copy", onClick: () => saveIt(true) }),
-        sheet.actions.lastChild,
       );
     }
+    ways.append(
+      h("button", { class: "btn btn-primary", text: "Save", onClick: () => saveIt(false) }),
+    );
+    sheet.actions.append(ways);
 
     const pointer = bindShapePointer(canvas, state, () => redraw());
 

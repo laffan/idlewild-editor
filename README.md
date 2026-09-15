@@ -425,7 +425,10 @@ remaining pieces are wired to real slots rather than mocked.
   corner and they **repeat** across the new size, which is how a motif drawn
   once becomes a row of itself. Beside it is the pattern at **this project's**
   scale, because a dither previewed at some arbitrary zoom says nothing about
-  whether it is the density you wanted on this grid
+  whether it is the density you wanted on this grid. The brush's size sits
+  straight under the *Brush* heading, where the number that changes most often
+  belongs, and Draw / Select / Pan are the size of the grid chips above them
+  so the three fit on one line of a 210-pixel column
 - **The shape editor** is the vector half: drag points and handles, click an
   edge to drop a point into it, ⌥-click a point to turn a corner into a curve,
   add a square, circle, triangle or hexagon, flip, align — with the tile when
@@ -439,6 +442,10 @@ remaining pieces are wired to real slots rather than mocked.
   are the smaller, more specific thing you pointed at. And **Draw a path** is
   the pen: tap corners, tap the first one again to close, which is the same
   gesture as the point-to-point Fill on the canvas outside
+- Both editors keep **Undo** and **Redo** on the left of the bar, where they
+  are about the work, and put the ways out at the right-hand end in the order
+  every other sheet ends on: Cancel, Save as a copy, Save. Their toolbars'
+  explanations are tooltips on the headings, as the inspector's are
 - **Fill takes all three.** The swept shape and the tapped-out one can be a
   flat colour, a pattern revealed on the world's own lattice, or a field of a
   shape — and so can a filled run of grid spaces, where a shape fill is a
@@ -472,12 +479,30 @@ remaining pieces are wired to real slots rather than mocked.
   were — Info, Transform, the collider, the file's own layer stack. A placed
   image's title is its filename, and retyping the part before `.psd` renames
   the file, moves its assets with it, and repoints every placement on it
+- **The three zones fold too, and they are marked as the ones that are not
+  sections.** Each carries a small chip — a brush, a stack of sheets, a box
+  with corner handles — sits on a ground a shade off the panel's, and has a
+  heavier rule over it than any section boundary. Without that, a column that
+  folds from top to bottom has nothing in it saying which three headings are
+  the structure
 - **Every named section folds away.** A placed PSD carries Info, Transform, its
   collider, its own layer stack and — on a pattern layer — the rule and its
   shapes, and most of the time only one of those is being worked on. Click a
   heading and it shuts; it stays shut for the next thing you select and for the
   next time you open the app, because closing Collider once is a statement about
   how you work rather than about that one PSD
+- **A heading can say which one, as well as what.** The pencil's panel used to
+  open with a heading naming the tip — *Ink* — above a section called *Brush*,
+  which is one fact written twice. The section says `BRUSH : INK` now and
+  changes as you pick a tip, and what it folds under is still *Brush*, so
+  choosing a different one does not reopen a section you closed
+- **The explanations are on the headings, not under them.** A sentence saying
+  what a pattern's scale means, or what the Pattern brush does, reads once and
+  is scrolled past for ever after — and four of them is most of a narrow
+  column. They are tooltips now: hold the cursor over *Scale*, or over the
+  TOOL heading, or over *Add shape*, and the line is there. What stays on
+  screen is what is not an explanation — a count, an empty state, the reason
+  a button is greyed
 - Option-drag a fill or an image to copy it. Two placed PSDs on the same file
   are **instances** of it: equal objects rather than one pointing at another, so
   editing the artwork edits every one of them and deleting any leaves the rest

@@ -213,6 +213,17 @@ export const ICONS = {
   /* A triangle with a bar in it — the one glyph here that means something is
      wrong rather than something is available. */
   warning: ["M12 3 22 20H2L12 3Z", "M12 10v4", "M12 17h.01"],
+  /* The three chips on the properties sidebar's zone headings — TOOL, LAYER,
+     OBJECT. They are there to say *these three are not sections*: the panel
+     is one column of foldable headings, and without something to separate
+     them a zone reads as another section of whatever is above it.
+
+     A brush standing on its ferrule, a stack of sheets, and a box with its
+     corner handles: what is in my hand, where it is going, what is under it,
+     which is the sentence the three zones are in that order to make. */
+  zoneTool: ["M12 3v7", "M9 10h6l-1.2 7.6a1.8 1.8 0 0 1-3.6 0L9 10Z"],
+  zoneLayer: ["m12 3 9 5-9 5-9-5 9-5Z", "m3 13 9 5 9-5", "m3 17 9 5 9-5"],
+  zoneObject: ["M7 7h10v10H7z", "M4 4h.01", "M20 4h.01", "M4 20h.01", "M20 20h.01"],
   /* A drag handle. Round line caps turn each zero-length segment into a dot,
      which is how a six-dot grip is drawn without leaving the stroked-path
      vocabulary the rest of this set uses. */

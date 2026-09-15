@@ -53,7 +53,16 @@ const BRUSHES: Array<{ id: BrushKind; label: string }> = [
 
 const MODES: Array<{ id: PatternMode; label: string; hint: string }> = [
   { id: "draw", label: "Draw", hint: "Drag to paint; hold shift for a straight line" },
-  { id: "select", label: "Select", hint: "Drag a box — fill it, clear it, or make a brush of it" },
+  {
+    id: "select",
+    label: "Select",
+    // The line that used to sit under the row as a `lib-hint`, on the button
+    // it was about: it only ever applied to this one mode.
+    hint:
+      "Drag a box — fill it, clear it, or make a brush of it. Drag inside " +
+      "the box to move what it holds, or its corner to repeat that across " +
+      "the new size.",
+  },
   { id: "pan", label: "Pan", hint: "Drag the pattern under the box to change its phase" },
 ];
 
@@ -89,7 +98,13 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
     sizeField.value = String(actions.state().pattern.size);
   });
   root.append(
-    section("Grid", sizeRow, labelled("Custom", sizeField)),
+    section(
+      "Grid",
+      "How many cells the tile is across. The pattern repeats every one of " +
+        "them, so this is the whole of its size.",
+      sizeRow,
+      labelled("Custom", sizeField),
+    ),
   );
 
   // ── the tip ───────────────────────────────────────────────────────────────
@@ -154,9 +169,15 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
   root.append(
     section(
       "Brush",
+      "The tip a drag paints with, and how wide it is.",
+      // Size first, under the heading. It is the number that changes most
+      // often and the one the other controls are read against — a tip four
+      // cells wide is a different tool from the same tip one cell wide — so
+      // it was the wrong thing to have to scroll past two rows of buttons to
+      // reach.
+      sizeSlider.root,
       brushRow,
       erase,
-      sizeSlider.root,
       density.root,
       h("button", {
         class: "lib-link",
@@ -191,16 +212,6 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
     nudge("Down", ICONS.chevronDown, () => actions.nudge(0, 1)),
   );
 
-  const selectHint = h("div", {
-    class: "lib-hint m",
-    text:
-      "Drag a box, then drag inside it to move what it holds — or drag its " +
-      "corner to repeat that across the new size.",
-  });
-  syncs.push(() => {
-    selectHint.hidden = actions.state().mode !== "select";
-  });
-
   const selectionRow = h(
     "div",
     { class: "lib-row-buttons" },
@@ -218,12 +229,22 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
     selectionRow.hidden = selectionBounds(actions.state()) === null;
   });
 
-  root.append(section("Pointer", modeRow, selectHint, nudgeRow, selectionRow));
+  root.append(
+    section(
+      "Pointer",
+      "What a drag on the tile does: paint with the tip, sweep a box, or " +
+        "push the pattern around to change its phase.",
+      modeRow,
+      nudgeRow,
+      selectionRow,
+    ),
+  );
 
   // ── the whole grid at once ────────────────────────────────────────────────
   root.append(
     section(
       "Pattern",
+      "What to do to the whole tile at once.",
       h(
         "div",
         { class: "lib-row-buttons" },
@@ -242,11 +263,22 @@ export function patternToolbar(actions: PatternPanelActions): PatternPanel {
   };
 }
 
-function section(title: string, ...children: (Node | null)[]): HTMLElement {
+/**
+ * One block of the toolbar, with what it is for on its heading.
+ *
+ * The explanation is a tooltip rather than a line of prose under the title:
+ * this column is 210 pixels wide and everything in it has to be reachable
+ * without scrolling past a paragraph that only ever needs reading once.
+ */
+function section(
+  title: string,
+  hint: string | null,
+  ...children: (Node | null)[]
+): HTMLElement {
   return h(
     "div",
     { class: "lib-section" },
-    h("div", { class: "lib-section-title m", text: title }),
+    h("div", { class: "lib-section-title m", text: title, title: hint }),
     ...children,
   );
 }

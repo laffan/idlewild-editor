@@ -27,6 +27,7 @@ import type { PanelSurface } from "./inspect-panels";
 import { scaleOf, sizeControls } from "./inspect-transform";
 import type { PsdLayerEditor } from "./psd-layers";
 import { instanceCount } from "../game/instances";
+import { layerName } from "../lib/manifest";
 import { unitMembers, unitOf } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
 import { layerKind } from "../lib/layer-kinds";
@@ -217,12 +218,26 @@ export function renderPlacement(
   psdLayers.setAdjust({ members: members.length, adjusting: open });
 
   // What is left down here is about the placement rather than the file.
+  //
+  // The button says *what* it takes, because that is the one thing about it
+  // worth knowing before pressing it and the answer is not always the same:
+  // a file that moves as one goes whole, and one that has been opened up
+  // loses the single layer under the pointer. "Remove from layer" said
+  // neither, and left the two senses of "layer" — Phaser's and Photoshop's —
+  // to be told apart by the reader.
+  const one = open && members.length > 1;
   const foot = panel.section();
   foot.appendChild(
     h("button", {
       class: "panel-btn",
-      text:
-        members.length > 1 && !open ? "Remove PSD from layer" : "Remove from layer",
+      text: one
+        ? `Remove “${layerName(placement.layerPath)}” from layer`
+        : "Remove PSD from layer",
+      title: one
+        ? "This PSD is opened up, so only the layer selected goes. Tap away " +
+          "from it to close the file and take the whole thing."
+        : "Takes every layer this PSD was placed with off the document layer. " +
+          "The file itself stays in the project.",
       onClick: () => actions.onDeleteSelection(),
     }),
   );

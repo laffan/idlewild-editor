@@ -181,11 +181,19 @@ export function createPaintPicker(options: PaintPickerOptions): PaintPicker {
       h(
         "div",
         { class: "lib-field" },
-        h("span", { class: "m", text: "Scale" }),
+        // The explanation is on the word rather than under the slider: it is
+        // one fact about one number, and a line of prose for it was two rows
+        // of a narrow column saying what the label already half said.
+        h("span", {
+          class: "m",
+          text: "Scale",
+          title:
+            "How many world pixels one pattern pixel covers. The lattice is " +
+            "pinned to the world, so strokes line up.",
+        }),
         scale,
         readout,
       ),
-      h("div", { class: "lib-hint m", text: "How many world pixels one pattern pixel covers. The lattice is pinned to the world, so strokes line up." }),
       invert,
     );
   }
@@ -223,6 +231,15 @@ export function createPaintPicker(options: PaintPickerOptions): PaintPicker {
     );
   }
 
+  /**
+   * The colour, which every kind of paint has one of.
+   *
+   * Its own label only when something is above it. A pattern or a shape puts
+   * a palette over the wheel and the label is what separates the two; a
+   * picker that offers nothing but a colour has the section's own heading
+   * saying *Colour* directly over it, and a second copy of that word inside
+   * the box is the panel saying the same thing twice.
+   */
   function colourSide(): HTMLElement {
     const picker = createColorPicker({
       value: paint.color,
@@ -238,7 +255,9 @@ export function createPaintPicker(options: PaintPickerOptions): PaintPicker {
     return h(
       "div",
       { class: "paint-section" },
-      h("div", { class: "lib-section-title m", text: "Colour" }),
+      paint.kind === "color"
+        ? null
+        : h("div", { class: "lib-section-title m", text: "Colour" }),
       picker.root,
     );
   }

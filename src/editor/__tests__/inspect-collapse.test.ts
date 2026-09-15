@@ -18,6 +18,7 @@ import {
   sectionName,
   setCollapsed,
 } from "../inspect-collapse";
+import { zoneKey } from "../inspect-zone";
 
 /** A `localStorage` for a suite that runs in node. */
 const store = new Map<string, string>();
@@ -85,5 +86,27 @@ describe("what closing one is remembered as", () => {
     // And it can still be written afterwards.
     setCollapsed("Collider", true);
     expect(isCollapsed("Collider")).toBe(true);
+  });
+});
+
+/**
+ * The three zone headings fold under the same store the sections do, which is
+ * the only reason they persist at all — but they are not sections, and a
+ * project whose PSD panel happens to carry a section called *Object* must not
+ * close the OBJECT zone with it. One prefix is the whole of the separation.
+ */
+describe("a zone's fold", () => {
+  it("is keyed apart from a section of the same name", () => {
+    expect(zoneKey("OBJECT")).not.toBe(sectionName("OBJECT"));
+    setCollapsed(zoneKey("OBJECT"), true);
+    expect(isCollapsed("OBJECT")).toBe(false);
+    expect(isCollapsed(zoneKey("OBJECT"))).toBe(true);
+  });
+
+  it("survives the panel, like a section's", () => {
+    setCollapsed(zoneKey("TOOL"), true);
+    resetCollapsedForTests();
+    expect(isCollapsed(zoneKey("TOOL"))).toBe(true);
+    expect(isCollapsed(zoneKey("LAYER"))).toBe(false);
   });
 });

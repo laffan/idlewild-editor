@@ -55,6 +55,18 @@
   flex: none;
   flex-wrap: wrap;
 }
+/* A group held at the right-hand end of the action row.
+   The two library editors put Undo and Redo on the left, where they are about
+   the work, and the ways out on the right: Cancel, Save as a copy, Save. The
+   button under the thumb is then the ordinary answer and Cancel is the
+   furthest thing from it — which is the order every other sheet in the app
+   already ends on, read the same way round. */
+.sheet-actions-end {
+  margin-left: auto;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 
 .sheet .btn { border-color: var(--color-neutral-700); color: var(--chrome-text); }
 .sheet .btn:hover { background: var(--chrome-rule); }

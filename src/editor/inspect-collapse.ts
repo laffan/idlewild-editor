@@ -27,6 +27,8 @@
  * closing it.
  */
 
+import { h } from "../lib/dom";
+
 const STORAGE_KEY = "idlewild.inspector.collapsed";
 
 /**
@@ -76,6 +78,53 @@ export function sectionName(heading: string): string {
   return heading.split(" · ")[0].trim();
 }
 
+export interface SectionTitleOptions {
+  /**
+   * The part after the colon — `Brush : Ink`.
+   *
+   * The same device the zone headings use, and for the same reason: the
+   * pencil's panel had a *Brush* heading and, above it, a title saying which
+   * brush, which is two headings for one fact. The subject is not part of
+   * the name the fold is keyed on, so picking a different brush does not
+   * reopen a section somebody closed.
+   */
+  subject?: string;
+  /**
+   * What the heading says on hover.
+   *
+   * Where the panel's explanations live. They were a line of prose under
+   * each heading, which is a paragraph you read once and then scroll past
+   * for ever — and four of them in a narrow column is most of the column.
+   */
+  hint?: string;
+}
+
+/**
+ * A section's heading, as `makeSectionsCollapsible` expects to find it: the
+ * **first** child of an `.inspect-section`.
+ *
+ * Built here rather than at each of the seven call sites because the fold
+ * reads the name off it, and a heading that carries a subject or a tooltip
+ * has to say which part of itself is the name.
+ */
+export function sectionTitle(
+  name: string,
+  options: SectionTitleOptions = {},
+): HTMLElement {
+  const el = h("div", {
+    class: "inspect-section-title m",
+    title: options.hint ?? null,
+  });
+  el.dataset.foldName = sectionName(name);
+  el.appendChild(h("span", { class: "inspect-section-name", text: name }));
+  if (options.subject) {
+    el.appendChild(
+      h("span", { class: "inspect-section-subject", text: options.subject }),
+    );
+  }
+  return el;
+}
+
 /** Whether a section with this name is currently folded away. */
 export function isCollapsed(name: string): boolean {
   return state().has(name);
@@ -106,7 +155,9 @@ export function makeSectionsCollapsible(body: HTMLElement): void {
       continue;
     }
 
-    const name = sectionName(title.textContent ?? "");
+    // `data-fold-name` when the heading carries more than its name — a
+    // subject after the colon, which is not part of what it is keyed on.
+    const name = title.dataset.foldName || sectionName(title.textContent ?? "");
     if (!name) continue;
 
     section.dataset.collapsible = "true";

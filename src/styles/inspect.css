@@ -18,22 +18,52 @@
    **The zone name is the quiet half.** It is the part that never changes —
    TOOL is always TOOL — so it is set thin and at half opacity, and the
    subject beside it, which is the part that answers *which one*, carries the
-   panel's full text colour. A heading drawn as a tinted band instead put the
-   emphasis on the label rather than on the thing the label is about, and made
-   three of them in a narrow column read as three headings rather than as one
-   sentence you scan down.
+   panel's full text colour. A band dark enough to read as a button would put
+   the emphasis back on the label rather than on the thing the label is
+   about, which is why the tint below is a shade rather than a colour.
 
-   What separates the zones is the rule between them, which is enough: the
-   headings are the only 10px labels in this panel that carry a subject after
-   them, so they do not need a background to be found. */
-.inspect-zone + .inspect-zone { border-top: 1px solid var(--chrome-rule); }
+   **The heading is the one thing in this panel that is not a section.** A
+   rule between the zones was enough while they were the only headings that
+   did not fold; now that they do, three foldable headings in a column of
+   foldable headings need something that says which three are the structure.
+   So a zone heading carries a chip, a ground a shade off the panel's, and a
+   2px rule over it — the system's own heavy rule, and the only one in here. */
+.inspect-zone { border-top: 2px solid var(--color-neutral-700); }
+.inspect-zone:first-child { border-top: 0; }
 .inspect-zone-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  padding: 16px 16px 10px;
+  padding: 14px 16px;
   font-size: 10px;
+  background: color-mix(in srgb, var(--chrome-text) 8%, transparent);
+  user-select: none;
+  -webkit-user-select: none;
 }
+.inspect-zone-head:hover {
+  background: color-mix(in srgb, var(--chrome-text) 13%, transparent);
+}
+/* The chip, as quiet as the name is quiet: it is there to be recognised at a
+   glance rather than read. */
+.inspect-zone-icon {
+  flex: none;
+  color: var(--chrome-text);
+  opacity: 0.55;
+}
+/* The same caret the sections carry, so the two folds read as one gesture. */
+.inspect-zone-head::after {
+  content: "";
+  flex: none;
+  margin-left: auto;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  color: var(--chrome-dim);
+  transform: rotate(45deg);
+}
+.inspect-zone.collapsed > .inspect-zone-head::after { transform: rotate(-45deg); }
+.inspect-zone.collapsed > .inspect-zone-body { display: none; }
 .inspect-zone-name {
   flex: none;
   font-weight: 400;
@@ -129,6 +159,22 @@
   color: var(--chrome-dim);
   margin-bottom: 12px;
 }
+/* A section heading can carry a subject after a colon the way a zone heading
+   does — `BRUSH : INK`. The pencil's panel used to say it twice: a *Brush*
+   heading, and a 19px title above it naming the tip. One fact, one place; and
+   the fold is keyed on the part before the colon, so picking a different tip
+   does not reopen a section somebody closed. See editor/inspect-collapse.ts. */
+.inspect-section-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--chrome-text);
+}
+.inspect-section-subject::before {
+  content: ": ";
+  color: var(--chrome-dim);
+}
 
 /* A named section folds away, and its heading is the control that folds it.
 
@@ -145,8 +191,11 @@
 .inspect-section-fold {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  /* Not space-between: a heading carrying a subject is two spans, and
+     spreading them would put the subject in the middle of the row. The caret
+     takes the free space instead. */
+  justify-content: flex-start;
+  gap: 4px;
   /* A 10px label is a small thing to hit; the row is the whole target. */
   min-height: 14px;
   user-select: none;
@@ -155,6 +204,7 @@
 .inspect-section-fold::after {
   content: "";
   flex: none;
+  margin-left: auto;
   width: 5px;
   height: 5px;
   border-right: 1px solid currentColor;

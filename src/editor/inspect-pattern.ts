@@ -14,6 +14,7 @@
 
 import { h, ICONS, icon } from "../lib/dom";
 import { count } from "./layer-items";
+import { sectionTitle } from "./inspect-collapse";
 import type { DocStore } from "../lib/doc-store";
 import {
   patternSpec,
@@ -65,7 +66,13 @@ export function patternSection(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Pattern" }),
+      sectionTitle("Pattern", {
+        hint:
+          spec.type === "grid"
+            ? "Evenly spaced, and which element stands where still varies."
+            : "Scattered. The same space always answers the same way, so the " +
+              "pattern is the same one every time you come back to it.",
+      }),
       h(
         "div",
         { class: "seg" },
@@ -78,14 +85,6 @@ export function patternSection(
           }),
         ),
       ),
-      h("div", {
-        class: "field-hint",
-        text:
-          spec.type === "grid"
-            ? "Evenly spaced, and which element stands where still varies."
-            : "Scattered. The same space always answers the same way, so the " +
-              "pattern is the same one every time you come back to it.",
-      }),
     ),
   );
 
@@ -95,7 +94,9 @@ export function patternSection(
   const density = h(
     "div",
     { class: "inspect-section" },
-    h("div", { class: "inspect-section-title m", text: "Density" }),
+    sectionTitle("Density", {
+      hint: "How many elements stand in each repeat of the boundary below.",
+    }),
     numberRow("Per tile", spec.density, 1, 200, (n) =>
       setPatternDensity(store, layer.id, n),
     ),
@@ -117,7 +118,13 @@ export function patternSection(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Repeat boundary" }),
+      sectionTitle("Repeat boundary", {
+        hint:
+          `Spaces. ${PATTERN_DEFAULTS[spec.type].repeat.cols} × ` +
+          `${PATTERN_DEFAULTS[spec.type].repeat.rows} is the default for a ` +
+          `${spec.type} pattern — the arrangement repeats every one of ` +
+          "these, which is what makes it infinite.",
+      }),
       h(
         "div",
         { class: "field-row" },
@@ -129,14 +136,6 @@ export function patternSection(
           setPatternRepeat(store, layer.id, spec.repeat.cols, n),
         ),
       ),
-      h("div", {
-        class: "field-hint",
-        text:
-          `Spaces. ${PATTERN_DEFAULTS[spec.type].repeat.cols} × ` +
-          `${PATTERN_DEFAULTS[spec.type].repeat.rows} is the default for a ` +
-          `${spec.type} pattern — the arrangement repeats every one of these, ` +
-          "which is what makes it infinite.",
-      }),
     ),
   );
 
@@ -160,11 +159,10 @@ function shapesSection(
   const section = h(
     "div",
     { class: "inspect-section" },
-    h("div", {
-      class: "inspect-section-title m",
-      // Counted in the heading, because the list is the subject of this
-      // section rather than a footnote under the buttons.
-      text: spec.shapes.length ? `Shapes · ${spec.shapes.length}` : "Shapes",
+    // Counted in the heading, because the list is the subject of this
+    // section rather than a footnote under the buttons.
+    sectionTitle(spec.shapes.length ? `Shapes · ${spec.shapes.length}` : "Shapes", {
+      hint: "Where the pattern is allowed to be. No shapes means everywhere.",
     }),
   );
 
@@ -185,15 +183,12 @@ function shapesSection(
     h("button", {
       class: "panel-btn",
       text: "Add shape",
-      onClick: () => actions.onEditShape(layer.id, null),
-    }),
-    h("div", {
-      class: "field-hint",
-      text:
+      title:
         "Opens the shape editor: sweep the ground the pattern may use, and " +
         "Remove to take spaces back out. A patch of grid you have already " +
         "selected has Pattern Shape on the bar over it, which starts one from " +
         "those spaces.",
+      onClick: () => actions.onEditShape(layer.id, null),
     }),
   );
   return section;

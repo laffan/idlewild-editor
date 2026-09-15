@@ -13,7 +13,9 @@
 import { h } from "../lib/dom";
 import { strokesBox } from "../drawing";
 import { createPaintPicker } from "./paint-picker";
-import { DEFAULT_PAINT_SPEC, type Paint } from "../lib/paint";
+import { fillColliderSection } from "./inspect-collider";
+import { describeFill } from "../lib/doc-shape";
+import { DEFAULT_PAINT_SPEC, paintLabel, type Paint } from "../lib/paint";
 import { count } from "./layer-items";
 import { unionRect } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
@@ -41,7 +43,12 @@ export interface PanelSurface {
     suffix: string,
     onCommit: (next: string) => void,
   ): void;
-  section(title?: string): HTMLElement;
+  /**
+   * Open a section. `hint` is what its heading says on hover — where this
+   * panel's explanations live now, rather than as a line of prose under each
+   * one; see `inspect-collapse.ts`.
+   */
+  section(title?: string, hint?: string): HTMLElement;
   row(key: string, value: string): void;
   /** What to show when the thing selected has gone from the document. */
   empty(): void;
@@ -58,6 +65,10 @@ export interface PanelSurface {
 export interface PanelActions {
   onDeleteSelection: () => void;
   onExportSelection: () => void;
+  /** Turn a fill's spaces into ground a character can walk on, or not. */
+  onToggleWalkable: (walkable: boolean) => void;
+  /** Hand a filled run of grid spaces on as a placed PSD. */
+  onFillToPsd: () => void;
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
   /**
@@ -79,6 +90,70 @@ export interface PanelActions {
   onRenamePoint: (layerId: string, pointId: string, name: string) => void;
   /** Say where this scene starts play, or that it starts nowhere. */
   onSetStartPoint: (pointId: string | null) => void;
+}
+
+/**
+ * A patch of filled grid: what it is made of, what it stops, and the two
+ * things that can be done with it.
+ *
+ * The paint control itself is the inspector's own — it remembers what it last
+ * settled on across selections, so filling three patches with one dither is
+ * one choice rather than three — and comes in through `fillSection`.
+ */
+export function renderFill(
+  panel: PanelSurface,
+  store: DocStore,
+  actions: PanelActions,
+  selection: Extract<Selection, { kind: "fill" }>,
+): void {
+  const fill = store
+    .layer(selection.layerId)
+    ?.fills.find((f) => f.id === selection.fillId);
+  if (!fill) return panel.empty();
+
+  panel.head("Filled space", describeFill(fill));
+  panel.section("Info");
+  // What it is *made of*, which is the library's answer when it has one and
+  // falls back to the two the document already had: a PSD texture, or a
+  // flat colour.
+  panel.row(
+    "Made of",
+    fill.paint && fill.paint.kind !== "color"
+      ? paintLabel(fill.paint)
+      : fill.kind === "pattern"
+        ? "Pattern image"
+        : "Colour",
+  );
+  if (fill.rect) {
+    panel.row("Origin", `${Math.round(fill.rect.x)}, ${Math.round(fill.rect.y)}`);
+  }
+  panel.row("Colour", fill.color ?? "—");
+  if (fill.patternKey) panel.row("Pattern image", fill.patternKey);
+  panel.fillSection(fill);
+
+  // What it stops, under the same heading a placed PSD's says it under.
+  panel.body.appendChild(
+    fillColliderSection(fill, (walkable) => actions.onToggleWalkable(walkable)),
+  );
+
+  panel.body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      // A fill is a fast way to block a shape out on the grid; this is
+      // what turns the block-out into something an artist can paint.
+      h("button", {
+        class: "panel-btn",
+        text: "Convert to PSD",
+        onClick: () => actions.onFillToPsd(),
+      }),
+      h("button", {
+        class: "panel-btn",
+        text: "Delete fill",
+        onClick: () => actions.onDeleteSelection(),
+      }),
+    ),
+  );
 }
 
 /**
@@ -118,16 +193,15 @@ export function renderPoint(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", {
-        class: "field-hint",
-        text: isStart
-          ? "The game puts the character here when this scene opens."
-          : "A scene has one start point. Making this it releases whichever " +
-            "point holds it now.",
-      }),
       h("button", {
         class: isStart ? "panel-btn" : "panel-btn primary",
         text: isStart ? "Clear start point" : "Make start point",
+        // What it does is on the button rather than under it, and it says the
+        // state it is in: what happens now, asked for rather than read.
+        title: isStart
+          ? "The game puts the character here when this scene opens."
+          : "A scene has one start point. Making this it releases whichever " +
+            "point holds it now.",
         onClick: () => actions.onSetStartPoint(isStart ? null : point.id),
       }),
       h("button", {
@@ -257,7 +331,7 @@ export function renderPlacements(
     panel.row("Origin", `${Math.round(box.x)}, ${Math.round(box.y)}`);
   }
 
-  panel.section("Images");
+  panel.section("Images", "Drag to move them together. Tap one to work on it.");
   for (const placement of placements) {
     panel.row(`${placement.psdKey}.psd`, placement.layerPath);
   }
@@ -266,10 +340,6 @@ export function renderPlacements(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", {
-        class: "field-hint",
-        text: "Drag to move them together. Tap one to work on it.",
-      }),
       h("button", {
         class: "panel-btn",
         text: "Delete images",

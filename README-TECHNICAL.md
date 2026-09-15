@@ -2978,12 +2978,31 @@ the surface hands them.
 **The name is the quiet half of its own heading.** `TOOL` never changes —
 that is what makes it a zone name — so it is set thin and at half opacity, and
 the subject beside it, which is the part that answers *which one*, carries the
-panel's full text colour. The first version drew the heading as a tinted band,
-which put the emphasis on the label rather than on the thing the label is
-about and made three of them in a narrow column read as three headings rather
-than as one sentence you scan down. What separates the zones is the rule
-between them, and that is enough: these are the only 10px labels in the panel
-with a subject after them, so they do not need a background to be found.
+panel's full text colour. A band dark enough to read as a button would put the
+emphasis back on the label rather than on the thing the label is about, which
+is the shape of the first version of this and why the tint below is a shade
+rather than a colour.
+
+**The zones fold, and that is why they are now marked.** The sections inside a
+panel have folded since `inspect-collapse.ts` existed, which left the three
+headings that matter most as the only ones in the column that did not — and a
+placed PSD on a pattern layer is five sections under LAYER before OBJECT even
+starts. So a zone heading is a control: the same caret, the same store, keyed
+`zone:TOOL` through `zoneKey` so that a section which happens to be called
+*Tool* is a different thing.
+
+Once the whole column folds, though, a rule between the zones stops being
+enough — three foldable headings among foldable headings need something that
+says which three are the structure. Three things say it, and they are the only
+three of their kind in the panel: a **chip** (a brush, a stack of sheets, a box
+with corner handles — what is in my hand, where it is going, what it is on top
+of), a ground a shade off the panel's, and a **2px** rule over it where every
+section boundary is 1px.
+
+**A heading's explanation is its tooltip.** Every zone heading carries a
+`title`, and the TOOL zone prefers the tool's own line from `TOOL_HINTS` when
+there is one. That is half of a move the whole panel made — see **Where the
+panel's explanations went** below.
 
 **The LAYER zone's subject is the selection's layer, falling through to the
 active one.** Not a fallback so much as the same rule read twice: a region
@@ -3031,6 +3050,59 @@ change and a drag rebuilds it per pointer move.
 The pass is idempotent — a section it has been over carries
 `data-collapsible` — which matters because the PSD layer list is built once and
 kept across re-renders, so the same element comes back round.
+
+**A heading can carry a subject, and the fold is keyed on the part before it.**
+`sectionTitle` builds one — `BRUSH : INK`, the device the zone headings use —
+and writes the name to `data-fold-name`, which the pass reads in preference to
+the heading's text. Without that, picking a different tip would be a different
+section and would reopen one somebody had closed. It is also why the fold's
+caret is pushed right with `margin-left: auto` rather than by
+`justify-content: space-between`: a heading with a subject is two spans, and
+spreading them puts the subject in the middle of the row.
+
+The pencil is what that is for. Its panel used to open with a 19px title naming
+the tip — *Ink* — directly above a section heading saying *Brush*, which is one
+fact written twice and the only heading in the column at that size. The title
+is gone and the heading says both.
+
+## Where the panel's explanations went
+
+Under the heading they explain, as its `title`. The panel used to carry them as
+`field-hint` and `lib-hint` lines: a sentence under *Scale* saying what a
+pattern's scale means, one under *Brush* saying what the Pattern brush does,
+one under *Repeat boundary* saying what a repeat is. Each reads once and is
+scrolled past for ever after, and in a 300px column four of them is most of the
+column — which is the same complaint the fold answers, one level down.
+
+So `sectionTitle` takes a `hint`, `PanelSurface.section` takes one, and the two
+library editors' own `section()` takes one. Three rules decide where a line
+lands:
+
+- **A line about a section** goes on that section's heading: *Scale*, *Repeat
+  boundary*, *Sweep*, *Arrange*.
+- **A line about one control** goes on that control: the eraser toggle's, which
+  changes with the state; *Make start point*; *Add shape*. A `title` on a
+  container answers for every child that has none of its own, so the shape
+  editor's align rule sits on the row of six buttons and hovering any of them
+  says it.
+- **A line about a tool** goes on the TOOL zone's heading, from `TOOL_HINTS`.
+  That is where the Shape brush's went, and it is why it exists: its panel was
+  a *Stamp* heading over one sentence and no control at all, so with the
+  sentence moved the section had nothing left in it — and a heading over an
+  empty box is what the three zones were introduced to stop.
+
+**What stays on screen is what is not an explanation.** A line reporting state
+is not asked for, it is read: the pattern layer's *No shapes — the pattern goes
+on for ever*, the reason Delete layer is disabled (a disabled control shows no
+tooltip anyway), the pen's live count of corners down, the collider section's
+*this project has no grid*. Those are the panel's answers rather than its
+instructions, and three of the four are the only thing their section contains.
+
+Native `title` rather than a tooltip of the app's own, because that is what the
+rest of the editor already uses for exactly this — the tool rail, the mode bars,
+every button in the two library editors — and because on the iPad there is no
+hover to serve either way. What a tool has to say there, it says in the line the
+console prints when it is picked up.
 
 ## The pattern and shape libraries
 
@@ -3210,6 +3282,25 @@ fewer than three are picked, because a row is usually the whole shape.
 Both editors listen on the document in the **capture** phase and stop what
 they handle. The shell's own ⌘Z and space bar are bound to the same document,
 and while a sheet is up they are about the wrong history and the wrong camera.
+
+**The toolbar is 210 pixels wide, and three things follow from that.** The mode
+row — Draw / Select / Pan — takes the chips' metrics rather than the sheet's own
+segmented control, which is built for the New Game sheet where a row is the
+width of the page and at 15px with 20px of padding either side wrapped three
+options onto three lines. The brush's **size** sits directly under the *Brush*
+heading rather than below two rows of buttons, because it is the number that
+changes most often and the one the tip buttons are read against: a tip four
+cells wide is a different tool from the same tip one cell wide. And the
+explanations are tooltips on the headings, per **Where the panel's explanations
+went** — with the one that only ever applied to *Select* folded into that
+button's own hint instead.
+
+**The ways out sit at the right-hand end, in the order the app ends on.** Undo
+and Redo stay on the left, where they are about the work; Cancel, Save as a
+copy and Save are a `.sheet-actions-end` group pushed right with `margin-left:
+auto`. The button under the thumb is then the ordinary answer and Cancel is the
+furthest thing from it, which is how every other sheet in the app already
+reads.
 
 ## A colour carries its own opacity
 
@@ -3412,6 +3503,14 @@ Carrying a placed PSD to another layer in the left panel takes the unit with
 it, its id and all. The panel lists one row per placed *file* rather than
 one per layer inside it, so what the gesture picks up is the file — see
 **Two senses of "layer"** below.
+
+**The button that takes it off says what it takes.** It read *Remove from
+layer*, which named neither end of a sentence with both senses of "layer" in
+it: the document layer it is removed from, and the PSD layers that go. It says
+**Remove PSD from layer** for a unit going whole, and names the one row when
+the file has been opened up and only that row goes — `Remove "roof" from
+layer`. That is the same question `doomedPlacements` answers, asked where it is
+about to be acted on.
 
 ## Three kinds of layer
 

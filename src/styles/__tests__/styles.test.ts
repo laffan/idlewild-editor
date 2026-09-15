@@ -28,6 +28,8 @@ import docsCss from "../docs.css?raw";
 import modesCss from "../modes.css?raw";
 import panelsCss from "../panels.css?raw";
 import inspectCss from "../inspect.css?raw";
+import libraryCss from "../library.css?raw";
+import sheetsCss from "../sheets.css?raw";
 
 /** The declarations of one rule, by property. Comments are stripped first. */
 function rule(selector: string): Record<string, string> {
@@ -198,6 +200,49 @@ describe("the inspector's folded sections", () => {
         .transform,
     ).toBe("rotate(-45deg)");
   });
+
+  /**
+   * A heading can carry a subject after a colon — `BRUSH : INK` — which makes
+   * it two spans rather than one. `space-between` would then put the subject
+   * in the middle of the row with the caret past it; the caret has to take the
+   * free space instead, or the heading reads as two unrelated words.
+   */
+  it("keeps the caret at the end of a heading that carries a subject", () => {
+    const fold = ruleIn(inspectCss, ".inspect-section-fold");
+    expect(fold["justify-content"]).toBe("flex-start");
+    expect(ruleIn(inspectCss, ".inspect-section-fold::after")["margin-left"]).toBe(
+      "auto",
+    );
+  });
+});
+
+/**
+ * The three zone headings fold too, and they are the one thing in this panel
+ * that is not a section — so they need both halves: the fold itself, and
+ * enough contrast to say which three headings are the structure. See
+ * editor/inspect-zone.ts.
+ */
+describe("the inspector's zones", () => {
+  it("folds the body away and turns the caret, as a section does", () => {
+    expect(ruleIn(inspectCss, ".inspect-zone.collapsed > .inspect-zone-body").display)
+      .toBe("none");
+    expect(ruleIn(inspectCss, ".inspect-zone-head::after").transform).toBe(
+      "rotate(45deg)",
+    );
+    expect(
+      ruleIn(inspectCss, ".inspect-zone.collapsed > .inspect-zone-head::after")
+        .transform,
+    ).toBe("rotate(-45deg)");
+  });
+
+  it("marks the boundary more heavily than a section's", () => {
+    // 2px is the system's heavy rule, and the only one in this panel: every
+    // section boundary is 1px. Without the difference a column of foldable
+    // headings has nothing in it that says which three are the structure.
+    expect(ruleIn(inspectCss, ".inspect-zone")["border-top"]).toContain("2px");
+    expect(ruleIn(inspectCss, ".inspect-section")["border-top"]).toContain("1px");
+    expect(ruleIn(inspectCss, ".inspect-zone-head").background).toBeTruthy();
+  });
 });
 
 /**
@@ -325,5 +370,29 @@ describe("the minimap's stylesheet", () => {
     expect(rule(".editor.code-mode .minimap").display).toBe("none");
     const body = withoutComments(css);
     expect(body).toContain(".editor.play-mode .minimap");
+  });
+});
+
+/**
+ * The two library editors' toolbars, which are 210 pixels wide.
+ *
+ * Both rules here are about that width. The sheet's own segmented control is
+ * built for the New Game sheet, where a row is the width of the page, and at
+ * that size Draw / Select / Pan wrapped onto three lines; and the ways out of
+ * an editor are a group held at the right-hand end of the action row, away
+ * from the Undo and Redo that are about the work rather than about leaving.
+ */
+describe("the library editors' chrome", () => {
+  it("sizes the mode row to the chips beside it", () => {
+    const chip = ruleIn(libraryCss, ".lib-chip");
+    const opt = ruleIn(libraryCss, ".lib-section .seg-opt");
+    expect(opt.padding).toBe(chip.padding);
+    expect(opt.font).toBe(chip.font);
+    // And it may shrink: the sheet's own is 44px tall for the finger.
+    expect(opt["min-height"]).toBe("0");
+  });
+
+  it("holds the ways out at the right-hand end", () => {
+    expect(ruleIn(sheetsCss, ".sheet-actions-end")["margin-left"]).toBe("auto");
   });
 });
