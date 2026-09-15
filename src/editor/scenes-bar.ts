@@ -29,6 +29,16 @@ export class ScenesBar {
   private readonly label: HTMLElement;
   /** The scene whose name is being typed, if one is. */
   private renaming: string | null = null;
+  /**
+   * Whether the menu is only a list of scenes.
+   *
+   * Code mode, where this column is a directory: switching scenes is how you
+   * look at another one and is the reason the sidebar is kept there at all,
+   * but New, Rename, Duplicate and Delete are edits to a project whose canvas
+   * is behind a running game — and Delete is the most expensive button in the
+   * sidebar.
+   */
+  private browsing = false;
 
   constructor(store: DocStore) {
     this.store = store;
@@ -59,6 +69,11 @@ export class ScenesBar {
     this.root.appendChild(this.button);
   }
 
+  /** Offer the scenes and nothing else, or the whole menu again. */
+  setBrowsing(browsing: boolean): void {
+    this.browsing = browsing;
+  }
+
   private openScenes(): void {
     const active = this.store.activeSceneId;
     const items = this.store.scenes.map((scene) => ({
@@ -67,6 +82,11 @@ export class ScenesBar {
       label: scene.id === active ? `${scene.name} ✓` : scene.name,
       onSelect: () => this.store.setActiveScene(scene.id),
     }));
+
+    if (this.browsing) {
+      openMenu(this.button, items);
+      return;
+    }
 
     openMenu(this.button, [
       ...items,

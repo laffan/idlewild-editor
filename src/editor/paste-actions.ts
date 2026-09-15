@@ -19,6 +19,7 @@ import * as log from "../lib/log";
 import type { Cell, Rect } from "../lib/types";
 import { clipboardImage } from "./clipboard";
 import { pasteName } from "./paste";
+import { trimTransparent } from "./trim-alpha";
 import {
   EXPORT_SCALE,
   footprintForBox,
@@ -50,6 +51,13 @@ export interface PasteTarget {
  * arrives as its author built it, layer stack and all, which is the same
  * thing importing a `.psd` from Files does. Adding our two layers to it would
  * mean rewriting someone else's file.
+ *
+ * That same decode is what **crops the transparent field off** a patch copied
+ * out of a layer-based image editor, which arrives padded to the size of the
+ * document it was cut from. The size this places by is the crop's, because
+ * the two answers have to be the same one: marking the grid for the padded
+ * rectangle and then importing the cropped picture would put the footprint
+ * under artwork that is no longer that shape. See `trim-alpha.ts`.
  */
 export async function importPasted(
   projectId: string,
@@ -59,8 +67,9 @@ export async function importPasted(
   landing?: Cell,
 ): Promise<void> {
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const size = await imageSize(file);
+    const trimmed = await trimTransparent(file);
+    const bytes = new Uint8Array(await trimmed.file.arrayBuffer());
+    const size = trimmed.size;
     // A paste has no pointer behind it and lands in the middle of the view;
     // a drop lands where it was let go of, which is the whole gesture.
     const at = landing ?? target.centreCell();
@@ -145,26 +154,4 @@ export function planFor(
     y: box.y - world.y,
   });
   return { anchor, marks: scaleMarks(marks, EXPORT_SCALE) };
-}
-
-/**
- * The pixel size of a pasted image, or null for anything that is not one.
- *
- * `createImageBitmap` decodes whatever the browser decodes, which is every
- * raster format a paste can carry. A PSD is not one of them, and the null it
- * returns is what says "this file is already a document" — the same
- * conclusion Rust reaches from the `8BPS` signature, from the only evidence
- * each side has.
- */
-async function imageSize(
-  file: File,
-): Promise<{ width: number; height: number } | null> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    const size = { width: bitmap.width, height: bitmap.height };
-    bitmap.close();
-    return size.width > 0 && size.height > 0 ? size : null;
-  } catch {
-    return null;
-  }
 }

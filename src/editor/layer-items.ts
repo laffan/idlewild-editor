@@ -48,6 +48,15 @@ export interface LayerItem {
    */
   unit?: string;
   /**
+   * The file this row stands for, when it stands for one.
+   *
+   * The label already says `<key>.psd`, but a name with an extension glued on
+   * is a thing to read rather than a key to ask questions with — and Code
+   * mode's directory asks one: what is inside this file. See
+   * `layer-directory.ts`.
+   */
+  psdKey?: string;
+  /**
    * What is wrong with this thing, in the fewest words that say it.
    *
    * One use so far: a PSD on an object layer with no `P | anchor` at the root
@@ -134,6 +143,7 @@ export function layerItems(
       path: ICONS.file,
       members: unit.map((p) => p.id),
       unit: unitKey(first),
+      psdKey: first.psdKey,
       ...(unanchored ? { warning: "No anchor" } : {}),
     });
   }

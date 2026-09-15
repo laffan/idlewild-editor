@@ -118,6 +118,41 @@ describe("a layer's rows", () => {
     const [row] = layerItems(layer({ placements: [placement("tower")] }));
     expect(row.warning).toBeUndefined();
   });
+
+  /**
+   * The label reads `tower.psd`, which is a thing to read rather than a key
+   * to ask questions with — and Code mode's directory asks one of every
+   * placed row: what is inside this file. Stripping `.psd` back off a label
+   * is how that goes wrong for a file somebody named `map.psd.psd`.
+   */
+  it("carry the file's key, not only its filename", () => {
+    const [row] = layerItems(layer({ placements: [placement("tower")] }));
+    expect(row.label).toBe("tower.psd");
+    expect(row.psdKey).toBe("tower");
+  });
+
+  it("leave it off everything that is not a placed file", () => {
+    const rows = layerItems(
+      layer({
+        points: [
+          { id: "pt1", name: "Start", cell: { cx: 0, cy: 0 } },
+        ],
+        zones: [
+          {
+            id: "z1",
+            name: "Wall",
+            blocking: true,
+            points: [
+              { x: 0, y: 0 },
+              { x: 10, y: 0 },
+              { x: 10, y: 10 },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(rows.map((r) => r.psdKey)).toEqual([undefined, undefined]);
+  });
 });
 
 describe("a background layer's rows", () => {

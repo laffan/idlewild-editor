@@ -337,6 +337,94 @@
 .layer-toggle.on { color: var(--color-accent); }
 
 
+/* ── the directory, which is what Code mode makes of this column ───────────
+
+   Same tree, handles off, one level deeper. See `editor/layer-directory.ts`
+   for why: the game is running over the canvas, so there is nothing in here
+   to rename, hide, lock or carry anywhere — what is wanted beside the code is
+   the names, and the one thing under a placed PSD that Draw's list
+   deliberately does not show is what is inside the file. */
+
+/* The `+` goes, because a layer added here would land on a scene behind a
+   running game. `display: flex` on the button outranks the UA's own
+   `[hidden] { display: none }`, so hiding it takes a rule of its own — which
+   is the sort of thing that looks like it works until somebody opens Code. */
+.panel-add[hidden] { display: none; }
+
+/* The whole row is the disclosure. In Draw it is a 22px arrow because five
+   other controls are on the row; with those gone, a finger should be able to
+   land anywhere. */
+.layer-row.browse {
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  /* A tapped row is not a field, so the rows can keep the panel's own
+     min-height without the 64px a rename field needs. */
+  min-height: 52px;
+}
+.layer-row.browse:hover { background: var(--chrome-rule); }
+
+/* The name, as text rather than as the input it is in Draw. */
+.layer-name.static {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A placed PSD's row, which opens onto the file's own stack. The chevron
+   takes the first 22px of the 52px gutter, exactly as the drag grip does in
+   Draw, so the label lands where it always does. */
+.layer-item.browse { padding-left: 30px; }
+.layer-item.browse .layer-disclose { width: 22px; margin-left: -22px; }
+
+/* And a row that is only a row: a fill, a point, a boundary, a backdrop.
+   Nothing to open and nothing to select, so nothing lights up under the
+   pointer either. */
+.layer-item.static { cursor: default; }
+.layer-item.static:hover {
+  background: transparent;
+  color: var(--color-neutral-300);
+}
+
+/* One layer inside a PSD. Indented past the file's own row and again by its
+   depth in the stack, which `layer-directory.ts` writes inline — the nesting
+   is the file's, not a number this stylesheet could know. */
+.psd-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding-right: 10px;
+  border-bottom: var(--rule-chrome);
+  color: var(--color-neutral-400);
+  font: 500 12px var(--font-body);
+}
+.psd-layer-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.psd-layer-kind { flex: none; font-size: 10px; color: var(--color-neutral-600); }
+/* A layer whose eye is off in the file. It is still in the document and still
+   exported — hidden is about drawing — so it is dimmed rather than left out. */
+.psd-layer-row.hidden-layer { color: var(--color-neutral-600); }
+.psd-layer-row.empty { color: var(--color-neutral-600); font-style: italic; }
+
+/* The point of a lookup is copying what you looked up. The shell suppresses
+   selection globally so a drag on chrome never highlights it; this column is
+   the one place that is the wrong default, and only while it is a directory. */
+.side-panel.left.browsing .panel-body {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 /* Narrow windows: sidebars overlay the canvas instead of squeezing it. */
 @media (max-width: 900px) {
   .side-panel { position: absolute; top: 0; bottom: 0; z-index: 8; box-shadow: var(--shadow-lg); }

@@ -14,8 +14,10 @@ import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
 import { defaultCollider, placementsBox, unitOfKey } from "../lib/collider";
+import type { ManifestLayer } from "../lib/manifest";
 import {
   hasRootAnchor,
+  manifestLayers,
   parseManifest,
   scopeKeys,
   textureKey,
@@ -530,6 +532,20 @@ export class PsdPlacements {
     const data = this.plugin()?.getData(key);
     if (!data) return true;
     return hasRootAnchor((data.original as { layers?: unknown })?.layers);
+  }
+
+  /**
+   * What is inside a loaded PSD, flattened and in the file's own order.
+   *
+   * Read off the plugin's copy of the manifest for the reason `anchored` is:
+   * it is the one description of the file that is already in memory and
+   * already kept in step with it, so there is nothing to cache and nothing to
+   * go stale through a re-parse, a rewritten stack or a rename. A key nobody
+   * has loaded answers with an empty list rather than with a guess.
+   */
+  layersOf(key: string): ManifestLayer[] {
+    const data = this.plugin()?.getData(key);
+    return data ? manifestLayers((data.original as { layers?: unknown })?.layers) : [];
   }
 
   private load(key: string): Promise<void> {

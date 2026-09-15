@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   anchorOffset,
   canvasBox,
+  layerDepth,
+  manifestLayers,
   parseManifest,
   placeableLayers,
   placedPosition,
@@ -557,5 +559,68 @@ describe("what a placement records about it", () => {
     const cleared = placedVisibility(parseManifest(CONVERTED_PNG), "build");
     expect(Object.keys(cleared).sort()).toEqual(["hidden", "hiddenParts"]);
     expect(cleared.hidden).toBeUndefined();
+  });
+});
+
+/**
+ * What is inside a file, read straight off psd-to-phaser's own copy of the
+ * manifest rather than out of a string.
+ *
+ * Code mode's sidebar is a directory of the project — scenes, layers, the
+ * PSDs on them and the layers inside each file — and the last of those four
+ * is this. Two things it must not do: drop rows, because a list of what is in
+ * a document that disagrees with Photoshop is worse than no list; and lose
+ * the nesting, because the indent is the only thing saying which rows are a
+ * group's contents.
+ */
+describe("the layers inside a file", () => {
+  const RAW = [
+    { name: "roof", category: "sprite" },
+    {
+      name: "town",
+      category: "group",
+      children: [
+        { name: "spire", category: "sprite", visible: false },
+        {
+          name: "yard",
+          category: "group",
+          children: [{ name: "well", category: "sprite" }],
+        },
+      ],
+    },
+    { name: "anchor", category: "point" },
+  ];
+
+  it("lists every one of them, depth-first and in the file's order", () => {
+    expect(manifestLayers(RAW).map((l) => l.path)).toEqual([
+      "roof",
+      "town",
+      "town/spire",
+      "town/yard",
+      "town/yard/well",
+      "anchor",
+    ]);
+  });
+
+  it("keeps the editor's own marks, which are in the file too", () => {
+    // The panel dims them rather than hiding them: a directory that quietly
+    // leaves two rows out is a directory nobody can trust about the others.
+    expect(manifestLayers(RAW).some((l) => l.name === "anchor")).toBe(true);
+  });
+
+  it("carries a hidden layer's eye down to what is inside it", () => {
+    const spire = manifestLayers(RAW).find((l) => l.path === "town/spire");
+    expect(spire?.visible).toBe(false);
+  });
+
+  it("answers with nothing for a key nobody has loaded", () => {
+    expect(manifestLayers(undefined)).toEqual([]);
+    expect(manifestLayers({})).toEqual([]);
+  });
+
+  it("reads the indent off the path, since that is where the nesting is", () => {
+    expect(layerDepth("roof")).toBe(0);
+    expect(layerDepth("town/spire")).toBe(1);
+    expect(layerDepth("town/yard/well")).toBe(2);
   });
 });

@@ -121,9 +121,10 @@ export const TOOLS: ToolSpec[] = [
  * that used to share the name Eraser — and neither are Lasso, Select, Pan,
  * Point or Boundary, none of which draw anything.
  *
- * Rub is not here either, for the opposite reason: it is the pencil with
- * erasing already on, and a tool that is only ever an eraser has nothing to
- * toggle. See `editor/tool-routing.ts`.
+ * These four are what PSD Edit mode erases with too. It used to carry a Rub
+ * of its own — the pencil with erasing already on, as a toggle on that mode's
+ * bar — and four brushes that can be turned round is the same capability with
+ * nothing to learn twice. See `editor/tool-routing.ts`.
  */
 export const ERASABLE: readonly ToolId[] = ["pencil", "pattern", "shape", "fill"];
 
@@ -143,25 +144,20 @@ export function canErase(tool: ToolId): boolean {
 export const ERASE_HOLD_MS = 500;
 
 /**
- * What the label beside the rail says, for tools with no button on either
- * column.
- *
- * Rub is PSD Edit mode's alone — it is the pencil with the paint taken out,
- * and it rubs out ink from that session — so its button is a toggle on that
- * mode's own bar. The name beside the canvas still has to follow it, or
- * picking it up looks like picking nothing up.
- */
-export const OFF_BAR: Partial<Record<ToolId, string>> = { rub: "Rub" };
-
-/**
  * What the label beside the canvas calls a tool.
  *
  * Empty for a tool nothing names, which is what the test guards against: a
- * tool added to `ToolId` and forgotten here is a tool whose name goes blank
- * the moment it is picked up, and nothing else would say so.
+ * tool added to `ToolId` and forgotten in `TOOLS` is a tool with no button
+ * anywhere and a blank label the moment something puts it in your hand, and
+ * nothing else would say so.
+ *
+ * There used to be a second table under this one for the tools with no button
+ * on either column, and Rub — PSD Edit mode's own eraser — was its only
+ * entry. The mode erases with the four brushes turned round now, so every
+ * tool is in a column and the exception has nothing to hold.
  */
 export function toolName(tool: ToolId): string {
-  return TOOLS.find((t) => t.id === tool)?.name ?? OFF_BAR[tool] ?? "";
+  return TOOLS.find((t) => t.id === tool)?.name ?? "";
 }
 
 export class ToolRail {

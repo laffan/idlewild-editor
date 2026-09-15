@@ -75,17 +75,6 @@ export interface PsdEditUiOptions {
   drawing: () => DrawingLayer | null;
   /** Entering hands the pointer to the pencil, which is what draws here. */
   usePencil: () => void;
-  /**
-   * Rub was pressed on the bar, or pressed again to put the pencil back.
-   *
-   * The shell owns the drawing layer's style, so what this reports is the
-   * choice; what it *means* — the same brush stamping `destination-out` — is
-   * applied in `tool-routing.ts`, beside every other answer to "what is the
-   * pointer doing".
-   */
-  useRub: (rubbing: boolean) => void;
-  /** Whether the pointer is currently the rubber, so the bar can say so. */
-  isRubbing: () => boolean;
   /** The document layer new ink lands on, which is where a session's is. */
   inkLayerId: () => string;
   /** The file was rewritten and re-parsed; take the result back. */
@@ -172,10 +161,6 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
   const bar = new PsdEditBar({
     onApply: () => void apply(),
     onCancel: () => cancel(),
-    onRub: (rubbing) => {
-      options.useRub(rubbing);
-      sync();
-    },
   });
   options.host.append(bar.root);
 
@@ -228,10 +213,6 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     const art = active ? backdrop : null;
     drawing?.setBackdrop(art?.art ?? null);
     scene?.drawIntoPsdLayer(art?.key ?? null, art?.name);
-    // The rubber is this mode's, so the mode ending is the rubber ending —
-    // said out loud rather than left to be noticed, because the pointer would
-    // otherwise still be erasing over a canvas that is no longer framed.
-    if (!active && options.isRubbing()) options.useRub(false);
     if (!active) {
       // The mode can be taken away rather than left: play mode stops all
       // three, and entering extrude or collider stops the other two. The ink
@@ -246,7 +227,6 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
         layer: "",
         summary: "",
         canApply: false,
-        rubbing: false,
         busy: false,
       });
       return;
@@ -266,7 +246,6 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
             ? `${strokes.length} ${strokes.length === 1 ? "stroke" : "strokes"}`
             : `${strokes.length} outside the frame`,
       canApply: inside,
-      rubbing: options.isRubbing(),
       busy: writing,
     });
   }

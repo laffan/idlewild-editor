@@ -281,8 +281,10 @@ export interface Stroke {
    * is drawn is the inside of it — and "shape" stamps a *library shape* into
    * a box at each recorded point, which is what makes the Shape brush lay
    * tiles rather than a line. "erase" is **legacy**: it was the whole of the
-   * Rub tool, and erasing is a *flag* now — see `erase` — so a stored stroke
-   * that says "erase" is read as an inked one with that flag set.
+   * Rub tool, back when rubbing out was a mode of its own, and erasing is a
+   * *flag* now — see `erase` — so a stored stroke that says "erase" is read
+   * as an inked one with that flag set. Documents hold them, so the reader
+   * keeps it however long ago the tool went.
    */
   mode: "ink" | "highlight" | "erase" | "fill" | "shape";
   /**
@@ -659,12 +661,12 @@ export type EditorMode = "draw" | "code" | "play";
  * What the pointer is doing.
  *
  * Ten tools over two columns — the rail's four and the drawing toolbar's six
- * — plus one that has no button anywhere. "rub" is PSD Edit mode's: the
- * pencil with the paint taken out, offered as a toggle on that mode's own bar
- * rather than as an eleventh button. It is a tool here all the same, because
- * the pointer is doing something of its own while it is up. See
- * `editor/tool-rail.ts` for which button is where and `tool-routing.ts` for
- * what each one means.
+ * — and every one of them has a button. There was an eleventh, "rub", which
+ * had none: it was the pencil with the paint taken out, offered as a toggle
+ * on PSD Edit mode's own bar. It went when the four brushes learned to be
+ * turned round, which gave that mode four erasers that work the way every
+ * other eraser in the editor does. See `editor/tool-rail.ts` for which button
+ * is where and `tool-routing.ts` for what each one means.
  *
  * "pattern" and "shape" paint with the library rather than with a colour, and
  * all four brushes can be turned round to erase — see `editor/tool-rail.ts`.
@@ -686,7 +688,6 @@ export const TOOL_IDS = [
   "eraser",
   "lasso",
   "fill",
-  "rub",
 ] as const;
 
 export type ToolId = (typeof TOOL_IDS)[number];

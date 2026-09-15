@@ -5,14 +5,19 @@
  * button with nothing to re-parse: the PSD sat inside the app's store, and
  * nothing between one parse and the next could change it.
  *
- * The way back differs by platform, because the platforms differ.
+ * The way *out* differs by platform, because the platforms differ. On desktop
+ * the editor opens the file where it lies in the project store and saves over
+ * it, so the file on disk is already the edited one. On iPadOS an app cannot
+ * hand another app its document and get the edits back, so the file goes out
+ * through the share sheet, is edited wherever it lands, and has to be picked
+ * to come home.
  *
- * On desktop the editor opens the file where it lies in the project store and
- * saves over it, so the file on disk is already the edited one and all that
- * is left to do is parse it again — asking the user to go and find it would
- * be busywork. On iPadOS an app cannot hand another app its document and get
- * the edits back, so the file goes out through the share sheet, is edited
- * wherever it lands, and has to be picked to come home.
+ * The way *back* is the same button on both — Re-parse, which runs the
+ * pipeline over the file in the store — and the platforms differ only in
+ * whether it has to ask first. Desktop does not: the file never moved.
+ * Mobile does, because three of its four answers are a replacement arriving
+ * from somewhere; re-parsing in place is the fourth, and it is offered there
+ * now rather than being a thing only a Mac could do.
  */
 
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
@@ -25,15 +30,22 @@ import type { Inspector } from "./inspector";
 import { psdLayerOwner } from "./psd-layer-owner";
 import { PsdLayerEditor } from "./psd-layers";
 import type { PsdLayerInfo } from "../lib/ipc";
-import { openReplacePsd } from "./sheets";
+import { openRefreshPsd } from "./sheets";
 
 /**
- * What the second PSD button is called here. The two are different actions —
- * one re-reads a file that never moved, the other takes a file back — and
- * the label is the only thing that says which.
+ * What the second PSD button is called here.
+ *
+ * The same word on both platforms, because it is the same thing: run the
+ * pipeline over this file again. What differs is how much has to be said
+ * first. Desktop has one answer and takes it — the file never moved — and
+ * mobile has four, so it asks, with re-parsing the file in place at the top
+ * of the list. It was **Re-import** on mobile, which named the other three
+ * and put the plain re-parse out of reach on the platform this editor is
+ * mostly used on: an iPad has as many ways of changing a PSD in the store
+ * without touching the manifest as a Mac does.
  */
 export function refreshPsdLabel(os: string): string {
-  return isMobile(os) ? "Re-import" : "Re-parse";
+  return isMobile(os) ? "Re-parse…" : "Re-parse";
 }
 
 /**
@@ -79,7 +91,7 @@ export async function openPsdExternally(
       // Procreate were missing from a list whose whole purpose was to reach
       // them. The filename is what names it in the sheet either way.
       await navigator.share({ files: [file] });
-      log.info(`Shared ${key}.psd — Re-import it when you have saved your edits`);
+      log.info(`Shared ${key}.psd — Re-parse it when you have saved your edits`);
       return;
     } catch (err) {
       // Swiping the share sheet away rejects the promise, and backing out of
@@ -121,18 +133,18 @@ async function savePsdCopy(projectId: string, key: string): Promise<void> {
   });
   if (!path) return;
   await publish.saveBytes(path, await psd.bytes(projectId, key));
-  log.info(`Saved a copy to ${path} — Re-import it when you have edited it`);
+  log.info(`Saved a copy to ${path} — Re-parse it from Files when you have edited it`);
 }
 
 /**
  * Bring a PSD's edits back into the project and return the fresh manifest.
  *
  * Desktop re-parses the file in place: it never moved, so there is nothing
- * to go and find. Mobile asks *where the file came back from* — Files, the
- * photo library or the clipboard — rather than guessing, which is what it
- * used to do, and it guessed the photo library every time. Returns null when
- * the sheet or the picker is backed out of; a cancelled pick is not an error
- * and should not be logged as one.
+ * to go and find. Mobile asks *which file* first — the one in the project, or
+ * one coming back from Files, the photo library or the clipboard — rather
+ * than guessing, which is what it used to do, and it guessed the photo
+ * library every time. Returns null when the sheet or the picker is backed out
+ * of; a cancelled pick is not an error and should not be logged as one.
  */
 export async function refreshPsd(
   projectId: string,
@@ -144,7 +156,7 @@ export async function refreshPsd(
     log.info(`Re-parsed ${key}.psd`);
     return manifest;
   }
-  return openReplacePsd(projectId, key, os);
+  return openRefreshPsd(projectId, key, os);
 }
 
 const PSD_MIME = "image/vnd.adobe.photoshop";
@@ -190,7 +202,7 @@ export interface PsdFileActionsOptions {
 export interface PsdFileActions {
   /** Hand the file to the OS: a desktop editor, or an iPadOS share sheet. */
   open: (key: string) => Promise<void>;
-  /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
+  /** Bring its edits back: a re-parse, asked for outright or through a sheet. */
   refresh: (key: string) => Promise<void>;
   /** The inspector rewrote the layer stack; take the result back. */
   applyLayers: (

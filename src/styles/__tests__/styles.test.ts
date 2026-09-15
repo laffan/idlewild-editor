@@ -164,11 +164,13 @@ describe("the code panel's placements", () => {
 });
 
 /**
- * Code mode runs the game over the canvas exactly as Play does, and keeps the
- * editor around it. Both halves are rules rather than code, so both are
- * asserted: the tools that would have nothing to act on go down, and the
- * sidebars — the reason the mode exists, because a scene is switched from one
- * of them — stay up.
+ * Code mode runs the game over the canvas exactly as Play does, and keeps
+ * *one* of the panels around it. All of that is rules rather than code, so
+ * all of it is asserted: the tools that would have nothing to act on go down,
+ * the inspector goes with them because a selection cannot be reached through
+ * a running game, and the layer column — the reason the mode keeps a sidebar
+ * at all, since it is the directory of scenes, layers and PSDs — stays up
+ * along with the toggle that folds it.
  */
 describe("code mode", () => {
   it("puts the canvas tools and the ink's own layer down", () => {
@@ -179,10 +181,53 @@ describe("code mode", () => {
     );
   });
 
-  it("leaves both sidebars alone", () => {
+  it("takes the inspector down, with its divider and its toggle", () => {
+    for (const selector of [
+      ".editor.code-mode .side-panel.right",
+      ".editor.code-mode .resize-handle.right",
+      ".editor.code-mode .edge-toggle.right",
+    ]) {
+      expect(rule(selector).display, selector).toBe("none");
+    }
+  });
+
+  it("leaves the layer column up", () => {
     const body = withoutComments(css);
-    expect(body).not.toContain(".editor.code-mode .side-panel");
-    expect(body).not.toContain(".editor.code-mode .edge-toggle");
+    expect(body).not.toContain(".editor.code-mode .side-panel.left");
+    expect(body).not.toContain(".editor.code-mode .side-panel,");
+  });
+
+  /**
+   * The bug this is here for: the toggle was drawn *under* the game frame, so
+   * the one control that folds the sidebar Code exists to keep was invisible
+   * and unclickable for the whole of the mode. It has to outrank the frame.
+   */
+  it("lifts the left toggle over the running game", () => {
+    const toggle = Number(rule(".editor.code-mode .edge-toggle.left")["z-index"]);
+    expect(toggle).toBeGreaterThan(Number(rule(".game-frame")["z-index"]));
+  });
+});
+
+/**
+ * The directory Code mode makes of the left sidebar.
+ *
+ * One rule in here fails silently and is the reason this block exists: the
+ * `+` is hidden through the `hidden` attribute, and `.panel-add` sets
+ * `display: flex`, which outranks the user agent's own
+ * `[hidden] { display: none }`. Without a rule of its own the button is still
+ * there — and Add layer in a mode with no canvas to add one to is the one
+ * control that had to go.
+ */
+describe("the sidebar as a directory", () => {
+  it("actually hides the add-layer button", () => {
+    expect(ruleIn(panelsCss, ".panel-add[hidden]").display).toBe("none");
+  });
+
+  it("lets the names be selected, which nothing else in the shell allows", () => {
+    // The point of a lookup is copying what you looked up.
+    expect(
+      ruleIn(panelsCss, ".side-panel.left.browsing .panel-body")["user-select"],
+    ).toBe("text");
   });
 });
 

@@ -67,7 +67,7 @@ export interface PsdLayerEditorCallbacks {
   ownerOf?: (layer: PsdLayerInfo) => OwnedLayer | null;
   /** Hand the file to the OS: a desktop editor, or an iPadOS share sheet. */
   onOpen: () => void;
-  /** Bring its edits back — a re-parse on desktop, a re-import on iPadOS. */
+  /** Bring its edits back: a re-parse, asked for outright or through a sheet. */
   onRefresh: () => void;
   /** Open the placed PSD up into its layers on the canvas, or close it. */
   onToggleAdjust: () => void;

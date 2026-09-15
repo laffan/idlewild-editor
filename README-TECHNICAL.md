@@ -765,9 +765,17 @@ to right in the order the work goes.
 canvas in both, because a code editor beside a still picture of the game is a
 code editor you cannot check anything in: a save restarts the thing in front of
 you, which is the only way to see whether the edit worked. What Code keeps that
-Play does not is the editor *around* the canvas — both sidebars and the panel —
-so the scene can be switched and the document adjusted while the game runs,
-before a full test in Play.
+Play does not is the **left** sidebar and the panel, so the scene can be
+switched and the project read while the game runs, before a full test in Play.
+
+It used to keep both sidebars, and the right one was a mistake that took a
+while to see. The inspector describes what is *selected on the canvas*, and in
+Code the canvas is behind a running game: nothing there can be picked, dragged
+or resized, so every control in that column was aimed at a selection nobody
+could reach. It goes down in Code now, with its divider — a grip that resizes
+something nobody can see — and its edge toggle, which would fold a panel that
+is already gone. The left column stays and becomes something else; see *The
+left sidebar is a directory in Code*, below.
 
 That makes the difference between the two a fact about the shell rather than
 about the scene, and the code says so in three places.
@@ -780,19 +788,97 @@ about the scene, and the code says so in three places.
   the game is about to cover the thing it was being pulled over.
 - **The stylesheet takes the tools down in both** — the rail, the tool name,
   the selection bar, the ink's own layer, and the canvas's pointer events —
-  and the sidebars in Play only. Both halves are asserted in
-  `styles/__tests__/styles.test.ts`, because "Code keeps the sidebars" is the
-  whole reason the mode exists and a rule is an easy thing to widen by
-  accident.
+  the *right* sidebar in both, and the left one in Play only. All three are
+  asserted in `styles/__tests__/styles.test.ts`, because "Code keeps the layer
+  column" is most of the reason the mode exists and a rule is an easy thing to
+  widen by accident.
 - **`editor.ts` runs the game for anything that is not Draw**, flushing the
   document first: the config the game reads is written by that save. A scene
   switch does the same, which is what makes the dropdown in the left sidebar
   worth having while the game is up.
 
+**And the toggle that folds the left sidebar had to be lifted over the game.**
+The two edge toggles live inside the canvas wrapper at `z-index: 6`, and the
+game frame covers that wrapper at `8` — so in Code the button was rendered
+underneath a running game: there in the DOM, catching nothing, for the whole of
+the mode. One rule (`.editor.code-mode .edge-toggle.left { z-index: 9 }`) is
+the whole fix, and it is Code's alone, because Play hides both toggles and Draw
+has no frame to be under. Asserted against `.game-frame`'s own z-index rather
+than against the number, since the pair only means anything relative to each
+other.
+
 Entering Code puts the panel up wherever it was last placed and leaving takes it
 down, writing a dirty file on the way out. Anything that wants a file on screen
 — the console's LOG link, which opens the line a message was written on — asks
 for the mode first and the file second.
+
+---
+
+### The left sidebar is a directory in Code
+
+Draw's layer panel is a set of *controls*: rename a layer, hide it, lock it,
+carry it up the stack, drag a placed file to another layer, put a new layer on
+top. In Code not one of those has anywhere to happen — the game is over the
+canvas, nothing in the scene can be picked up, and the panel that would
+describe a selection is down. A column of live controls for a document nobody
+can touch is worse than useless: it is an invitation to change something and
+watch nothing happen.
+
+What is wanted there instead is the **names**. A developer writing against
+`config.scenes`, `place()` or a texture key needs to know what the scenes are
+called, what the layers in them are called, which PSDs are standing on those,
+and what the layers *inside* each PSD are called — and reading the last of
+those off the file in Photoshop, or out of `game.config.json`, is two windows
+away from where the line is being typed.
+
+So `LayersPanel.setBrowsing(true)` swaps the body for `layer-directory.ts`:
+the same tree with the handles taken off and one level added.
+
+- **Every row is inert except its disclosure.** A layer row is a button whose
+  whole width toggles it — in Draw that is a 22px arrow because five other
+  controls share the row, and with those gone a finger should be able to land
+  anywhere. The name is a `span` rather than the `input` it is in Draw; the
+  eye, the lock and both grips are simply not built.
+- **A placed PSD opens onto its own stack.** This is the level Draw's panel
+  deliberately does not have, and it is right not to: a placed PSD is *one
+  thing* on the canvas however many layers are inside it, so listing its
+  insides there would put a file's stack in the panel that is about the scene
+  — see *Two senses of "layer", and why the panels must not mix them*. Here
+  nothing is being selected, so the two senses cannot be confused by a click.
+- **The layers come from the plugin's own manifest**, through
+  `WorldScene.psdLayers` → `PsdPlacements.layersOf` → `manifestLayers`. That
+  is the one description of the file already in memory and already kept in
+  step with it through a re-parse, a rewritten stack and a rename, so there is
+  nothing to cache and nothing to go stale. A key nobody has loaded answers
+  with an empty list, and the row says *Not loaded yet* rather than nothing.
+- **Nothing is filtered out of it** — the editor's two marks included. A
+  directory of what is in a document that quietly drops two rows is a
+  directory that disagrees with Photoshop, which is worse than one that shows
+  a row somebody has to learn to ignore. What it *does* say is the category
+  beside each name, which is also what tells a developer whether a row has a
+  texture behind it or is a point the config carries.
+- **The indent is the file's.** `layerDepth` reads it off the slash-joined
+  path and the row carries it inline, because the nesting is the document's
+  and not a number a stylesheet could know.
+- **The names are selectable.** The shell suppresses selection globally so a
+  drag on chrome never highlights it; this column, while it is a directory, is
+  the one place that is the wrong default — the point of a lookup is copying
+  what you looked up.
+
+Two things beyond the list go with it. The `+` is hidden, and hiding it takes
+a rule of its own: `.panel-add` sets `display: flex`, which outranks the user
+agent's `[hidden] { display: none }`, so the attribute alone left the button
+exactly where it was. And the scene dropdown offers **the scenes and nothing
+else** — switching is navigation, and the reason this sidebar is kept in Code
+at all, but New, Rename, Duplicate and Delete are edits to a project whose
+canvas is behind a running game, and Delete is the most expensive button in
+the column.
+
+The panel keeps one set of open rows across both shapes. The directory's ids
+for a placed file are `psd:<layerId>:<placementId>` — keyed on the placement
+rather than on the file, because the same PSD on two layers is two rows and
+opening one is not opening the other — so they share the set with the layer
+ids without colliding, and an id nothing matches is simply never asked about.
 
 ---
 
@@ -840,14 +926,15 @@ in `styles.test.ts`, because a toolbar hidden behind a bar is not an error
 anything reports — and so is the `top: auto` itself, since dropping it leaves
 the toolbar hanging from the top *over* the rail.
 
-**Rub is the tool with no button in either.** It is the pencil turned round
-and what it rubs out is PSD Edit mode's own session ink, so it is a toggle on
-that mode's bar — but it is a `ToolId` like the rest, because the
-pointer is doing something of its own while it is up, and the label beside the
-canvas has to follow it. `OFF_BAR` is the one entry that says so, and
-`tool-bars.test.ts` asserts that every `ToolId` is either in a column or in
-it: a tool that is in neither gets no button anywhere and a blank label the
-moment something puts it in your hand, and nothing else would say so.
+**Every tool is in one of the two columns, and there used to be an exception.**
+Rub was a `ToolId` with no button on either — the pencil turned round, rubbing
+out PSD Edit mode's own session ink, offered as a toggle on that mode's bar —
+and `OFF_BAR` was a second table holding its label so that picking it up did
+not look like picking nothing up. Both are gone; see *Rub went, and the four
+brushes were already the answer*, below. `tool-bars.test.ts` now asserts the
+plain thing: every `ToolId` is in a column. A tool that is in none gets no
+button anywhere and a blank label the moment something puts it in your hand,
+and nothing else would say so.
 
 ## Gesture routing
 
@@ -1123,23 +1210,40 @@ frontend one, so the webview never needs a filesystem scope over the store —
 the only path it can ask for is one built from a project id and a PSD key it
 already holds.
 
-The way *back* differs by platform, and `platform` is what decides. On
-desktop the editor opens the file where it lies in the store and saves over
-it, so the file on disk is already the edited one and `reprocess_psd` is the
-whole of it — asking the user to go and find a file that never moved would
-be busywork. On iPadOS an app cannot hand another app its document and get
-the edits back, so the file goes out through the share sheet
-(`navigator.share` with the bytes from `read_psd_bytes`, or a copy saved
-through the document picker where the sheet refuses files) and has to be
-picked to come home: `reimport_psd` writes it over
-`<project>/psd/<key>.psd` — the stem is forced to the existing key, which is
-what makes it an overwrite rather than a second import — and re-runs
-psd-to-json, which clears the old `assets/<key>/` first.
+The way *out* differs by platform, and `platform` is what decides. On desktop
+the editor opens the file where it lies in the store and saves over it, so the
+file on disk is already the edited one. On iPadOS an app cannot hand another
+app its document and get the edits back, so the file goes out through the
+share sheet (`navigator.share` with the bytes from `read_psd_bytes`, or a copy
+saved through the document picker where the sheet refuses files) and has to be
+picked to come home: `reimport_psd` writes it over `<project>/psd/<key>.psd` —
+the stem is forced to the existing key, which is what makes it an overwrite
+rather than a second import — and re-runs psd-to-json, which clears the old
+`assets/<key>/` first.
 
-**Which picker, and why it has to be said.** Re-import asks *where the file
-came back from* — Files, the photo library, or the clipboard — rather than
-guessing. Getting "Files" to actually mean Files took two goes, so the rule is
-written down here: **on iOS the filters decide, not `pickerMode`.** The plugin
+The way *back* is the same button on both, and it says **Re-parse**. What
+differs is only whether it has to ask first. Desktop does not — the file never
+moved, so `reprocess_psd` is the whole of it. Mobile asks, because three of
+its four answers are a replacement arriving from somewhere.
+
+**The fourth answer was missing, and it was the one a desktop takes for
+granted.** The mobile button was called *Re-import* and offered only the three
+replacement routes, which made re-parsing in place a thing only a Mac could
+do — and there is nothing platform-shaped about it. `reprocess_psd` reads
+`<project>/psd/<key>.psd` and runs the pipeline; the file is in the app's own
+store on both. Plenty rewrites it without anybody going near Photoshop: Apply
+in PSD Edit mode, an extrusion, a layer stack rewritten in the inspector, a
+project restored from a `.idlewild` archive. Any of those can leave a manifest
+describing the version before it, and on an iPad the only cure was to go
+hunting in Files for a copy of a file that had never left. *Re-parse this
+file* is now the first row of the sheet, and it is its own runner rather than
+an `ImportResult` faked up to fit the import one — nothing is written and
+nothing is picked, so there is nothing to report but the manifest.
+
+**Which picker, and why it has to be said.** The other three rows ask *where
+the file came back from* — Files, the photo library, or the clipboard — rather
+than guessing. Getting "Files" to actually mean Files took two goes, so the
+rule is written down here: **on iOS the filters decide, not `pickerMode`.** The plugin
 shows the media picker when the mode asks for it *or* when the filters name no
 non-media type and do name an image or video one — the two are `||`-ed, and
 the plugin's own source comment says the media picker wins "regardless of
@@ -1666,6 +1770,39 @@ frontend reaching the same conclusion Rust reaches from the `8BPS` signature,
 from the only evidence each side has. A pasted PSD is therefore unmarked and
 untouched — as a `.psd` imported from Files is, and for the same reason:
 adding our layers would mean rebuilding someone else's stack.
+
+**And that same decode is what crops the transparent field off it.** Copy a
+patch of a drawing out of Photoshop or Procreate and what reaches the
+pasteboard is a PNG **the size of the document it came from**, with the copied
+marks somewhere inside it and nothing but alpha around them. That is the right
+answer for pasting back into the same document — the padding is what makes the
+patch land where it was cut from — and the wrong one everywhere else: here the
+padding *becomes the artwork's size*, so a thumbnail-sized sketch claims a
+footprint the size of somebody else's canvas, the placement's handles are
+nowhere near the picture, and the PSD written out of it is mostly nothing.
+
+`trim-alpha.ts` takes the box of every pixel with **any** alpha at all —
+`> 0` rather than a threshold, so the feathered edge of a brush stroke
+survives — and re-encodes just that box as a PNG. Three cases hand the file
+back untouched rather than cropped: nothing transparent to take off (the
+common one, and it means no re-encode at all), a buffer that is transparent
+*everywhere* (a 0 × 0 import is not a better answer than the empty rectangle
+somebody copied), and anything that fails — an undecodable paste, a canvas
+with no 2D context, an encode that returns nothing. The padding is a nuisance,
+not a fault, so the worst case is the behaviour there was before it.
+
+It runs **here**, on the way in, and not in Rust, because the size is needed
+on this side: the marks travel with the import and describe where the artwork
+sits, so cropping after they were worked out would mark the grid for a picture
+that is no longer that shape. The same call therefore answers both questions
+at once, which is what keeps the two from ever disagreeing.
+
+What it deliberately does not touch: a PSD, which the browser cannot decode
+and which arrives as its author built it; and a **replacement** for a file
+already in the project (`importClipboard` with a `key`, and every route
+through `reimport_psd`), because a file coming home is held where it is rather
+than re-centred — see *A file that comes home without its mark* — so cropping
+one would slide the artwork out from under every placement standing on it.
 
 `planFor` works out where it lands. The artwork goes at half size, centred on
 the space in the middle of the view, and the spaces that box covers become the
@@ -5153,7 +5290,7 @@ draw. `hasToolCursor` is the membership, and `__tests__/cursor.test.ts` pins
 it — a tool added to `DrawingTool` and forgotten there gets no preview and
 nothing says so.
 
-### Rub, and the second rail that went
+### Rub went, and the four brushes were already the answer
 
 There used to be a second tool rail under the editor's own, up only while this
 mode was, carrying three tools: **Rub**, **Fill** and **Pixels**. Two of the
@@ -5163,28 +5300,50 @@ they were in here was that they arrived with the mode — and the column they
 were in appeared and disappeared under your hand, which is a rail whose
 buttons move.
 
-So Fill and Pixels are tools on the drawing toolbar (`editor/tool-rail.ts`),
+So Fill and Pixels became tools on the drawing toolbar (`editor/tool-rail.ts`),
 where the rest of the ink is, and this mode borrows them like everything else.
-What is left is Rub, which *is* the mode's: what it rubs out is this session's
-ink, which only exists while the session does. One tool does not want a
-column, so it is a toggle in the middle of the mode's own bar — where extrude
-puts Backfaces and Erase, and the collider puts its own. Same row, same
-pressed state, learned once.
+What was left was Rub, which *was* the mode's: what it rubbed out is this
+session's ink, which only exists while the session does. One tool does not
+want a column, so it became a toggle in the middle of the mode's own bar.
 
-All three are still the pencil with something changed about it, and only one
-of them ever needed the engine to learn anything:
+**And then erasing became a flag, which left Rub with nothing to be.** Pencil,
+Pattern, Shape and Fill can each be turned round — what the tool *would have
+drawn* is what it takes out instead, per tool and remembered, from the switch
+at the top of its own panel or a long press on its button. That is four
+erasers inside this mode, each of them the ordinary editor-wide gesture, and
+beside them Rub was a fifth: a tool that was only ever an eraser, with a
+button in a place no other tool has one and a rule (`tool === "rub"` forcing
+`erase`) that no other eraser needed. It is out of `TOOL_IDS` entirely, and
+with it go `OFF_BAR`, the `rub` rows in `DRAWN`, `ANNOUNCE` and `styleFor`,
+the *Rubber* panel in `inspect-brush.ts`, and `useRub` / `isRubbing` down
+through `editor.ts`, `canvas-mode-ui.ts`, `psd-edit.ts` and the bar itself.
+Nothing was added anywhere to replace it.
 
-| Tool | What it is | What it cost |
+What is *not* removed is the `"erase"` stroke **mode**. It was the whole of
+what Rub laid down, documents on disk still hold strokes that say it, and
+`isErasing` reads it as an inked stroke with the flag set — for as long as
+those documents exist, which is forever. See `lib/types.ts`.
+
+The bar is left saying which file and which layer, counting the ink, and
+offering the two ways out. Nothing in hand is set from it at all now, which is
+the rule the rest of the editor already followed: the brush, the size, the
+smoothing, the colour and the eraser switch are in the inspector's TOOL
+section, and a second copy of any of them on a mode bar is a second place they
+can disagree.
+
+All three of the original tools were the pencil with something changed about
+it, and only one of them ever needed the engine to learn anything:
+
+| Tool | What it was | What it cost |
 |---|---|---|
-| **Rub** | the same brush stamping `destination-out` | a `mode` on `Stroke` |
+| **Rub** | the same brush taking its mark back out | a `mode` on `Stroke`, now a flag every brush carries |
 | **Pixels** | the same brush with a hard checker for a tip | a mask with no PNG behind it |
 | **Fill** | the lasso's gesture ending in a shape instead of a selection | a `mode`, and `beginFill` |
 
-Being a brush and a stroke mode rather than a gesture is exactly what lets
-them be ordinary buttons: `tool-routing.ts` holds the one table that says what
-picking any tool means to the pointer, and Pixels and Rub differ from Pencil
-only in the two lines of style they patch in. Pixels remembers the brush it
-borrowed the slot from and the plain pencil gives it back.
+Being a brush and a stroke mode rather than a gesture is exactly what let them
+be ordinary buttons: `tool-routing.ts` holds the one table that says what
+picking any tool means to the pointer, and each of them differs from Pencil
+only in the lines of style it patches in.
 
 **A fill is a stroke.** `mode: "fill"` means the points are a closed outline
 and what is drawn is the inside of it, filled `nonzero` so a loop that crosses
@@ -5726,9 +5885,9 @@ the change worked. Entering play mode flushes the document first and waits for
 it, because the document's save is what rewrites the config the game reads.
 
 **A rewritten PSD restarts it too**, for the same reason and it used to not.
-Code keeps both sidebars, so a file can be changed while its game runs beside
-it: ink applied in PSD Edit mode, a layer renamed or turned off, a re-parse, a file
-replaced by a drop. Every one of those re-places the canvas from the new
+A file can be rewritten while its game runs beside it — ink applied in PSD
+Edit mode, a layer renamed or turned off, a re-parse, a file replaced by a
+drop. Every one of those re-places the canvas from the new
 manifest and left the game holding the textures it loaded at start — the two
 halves of one window showing two versions of one file. `psdChanged` in
 `editor.ts` is the one line the paths that rewrite a PSD now share, and it is

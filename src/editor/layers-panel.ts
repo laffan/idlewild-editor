@@ -20,6 +20,12 @@
  * Same gesture, different question: a layer takes a *position* in the list,
  * an image takes a *layer*, so one moves through the DOM as it goes and the
  * other lights up its destination.
+ *
+ * **In Code mode none of that applies**, and the panel says so by becoming a
+ * different thing: a directory of scenes, layers, PSDs and the layers inside
+ * each PSD, with every handle taken off. The game is over the canvas there,
+ * so nothing in this column has anything to act on. See `setBrowsing` and
+ * `layer-directory.ts`.
  */
 
 import { clear, h, ICONS, icon } from "../lib/dom";
@@ -39,6 +45,8 @@ import {
   renderLayerItem,
 } from "./layer-items";
 import { ScenesBar } from "./scenes-bar";
+import { renderDirectory } from "./layer-directory";
+import type { ManifestLayer } from "../lib/manifest";
 
 export interface LayersPanelCallbacks {
   onSelectLayer: (layerId: string) => void;
@@ -55,6 +63,14 @@ export interface LayersPanelCallbacks {
    * no scene behind it answers yes, which is the answer that shows nothing.
    */
   isAnchored: (psdKey: string) => boolean;
+  /**
+   * What is inside a placed PSD, which only the directory asks for.
+   *
+   * Asked of the scene, like `isAnchored`, because the scene is what holds
+   * the parsed manifests — and a panel built with nothing behind it answers
+   * with an empty list, which is a row saying so rather than a row lying.
+   */
+  psdLayers: (psdKey: string) => readonly ManifestLayer[];
   /**
    * Put something behind everything on a background layer. The anchor is the
    * button itself, which the menu hangs under.
@@ -85,9 +101,21 @@ export class LayersPanel {
   private readonly store: DocStore;
   private readonly callbacks: LayersPanelCallbacks;
   private suspended = false;
+  /**
+   * Whether the panel is a directory rather than a set of controls.
+   *
+   * Code mode's shape: the game is running over the canvas, so nothing in
+   * here has anything to act on, and what a developer wants from the column
+   * while writing code beside the game is the names. See `layer-directory.ts`
+   * for what it draws instead.
+   */
+  private browsing = false;
   /** The two drags on this list, and the one gesture that is both — see
    *  `layer-drag.ts`. */
   private readonly drags: LayerDrags;
+  /** The `+`, and the word over it: both say something Code mode does not. */
+  private readonly add: HTMLButtonElement;
+  private readonly title: HTMLElement;
   /** Layers whose contents are shown. Expansion is per-session UI state. */
   private readonly expanded = new Set<string>();
   /** Whether an object layer's placed files are listed — and reorderable —
@@ -117,28 +145,25 @@ export class LayersPanel {
       select: (selection) => this.callbacks.onSelectItem(selection),
     });
     this.scenes = new ScenesBar(store);
+    this.title = h("div", { class: "panel-title m", text: "Layers" });
+    // Three kinds of layer, so the `+` asks which. A menu rather than
+    // three buttons: object is the one anybody wants nine times in ten,
+    // and a row of equals would say otherwise.
+    this.add = h(
+      "button",
+      {
+        class: "panel-add",
+        title: "Add layer",
+        onClick: (event: Event) =>
+          this.openKindMenu(event.currentTarget as HTMLElement),
+      },
+      icon(ICONS.plus, 15),
+    );
     this.root = h(
       "div",
       { class: "side-panel left" },
       this.scenes.root,
-      h(
-        "div",
-        { class: "panel-head" },
-        h("div", { class: "panel-title m", text: "Layers" }),
-        // Three kinds of layer, so the `+` asks which. A menu rather than
-        // three buttons: object is the one anybody wants nine times in ten,
-        // and a row of equals would say otherwise.
-        h(
-          "button",
-          {
-            class: "panel-add",
-            title: "Add layer",
-            onClick: (event: Event) =>
-              this.openKindMenu(event.currentTarget as HTMLElement),
-          },
-          icon(ICONS.plus, 15),
-        ),
-      ),
+      h("div", { class: "panel-head" }, this.title, this.add),
       this.body,
       footer,
     );
@@ -161,6 +186,30 @@ export class LayersPanel {
   }
 
   /**
+   * Turn the panel into a directory, or back into the layer list.
+   *
+   * The `+` goes with it, because a layer added here would land on a scene
+   * behind a running game; the class is what takes the rest of the chrome
+   * down. What is *not* dropped is the scene dropdown's switching — that is
+   * navigation rather than an edit, and it is the reason Code keeps this
+   * sidebar at all.
+   */
+  setBrowsing(browsing: boolean): void {
+    if (browsing === this.browsing) return;
+    this.browsing = browsing;
+    this.root.classList.toggle("browsing", browsing);
+    this.add.hidden = browsing;
+    // What the column is *for* changes with it, and the heading is the one
+    // place that can say so before anything is opened.
+    this.title.textContent = browsing ? "Directory" : "Layers";
+    this.scenes.setBrowsing(browsing);
+    // A row opened in one mode stays open in the other, and the directory has
+    // ids of its own in the same set — see `layer-directory.ts`. Neither is a
+    // problem: an id nothing matches is simply never asked about.
+    this.render();
+  }
+
+  /**
    * Hold re-rendering while the canvas is mid-drag. A drag writes to the
    * document on every pointer move, and rebuilding this panel per frame
    * would throw away the colour picker's state and any half-typed name.
@@ -174,6 +223,23 @@ export class LayersPanel {
     // A drag in flight owns the DOM until it is released; rebuilding under
     // it would drop the element the pointer is holding.
     if (this.drags.active) return;
+
+    if (this.browsing) {
+      clear(this.body);
+      renderDirectory(this.body, {
+        store: this.store,
+        isometric: this.isometric,
+        isAnchored: this.callbacks.isAnchored,
+        psdLayers: this.callbacks.psdLayers,
+        isOpen: (id) => this.expanded.has(id),
+        toggle: (id) => {
+          if (this.expanded.has(id)) this.expanded.delete(id);
+          else this.expanded.add(id);
+          this.render();
+        },
+      });
+      return;
+    }
 
     const active = this.callbacks.getActiveLayerId();
     const selection = this.callbacks.getSelection();

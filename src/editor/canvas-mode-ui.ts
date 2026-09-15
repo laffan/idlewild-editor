@@ -46,10 +46,6 @@ export interface CanvasModeUiOptions {
    * next.
    */
   defaultZoom: () => number;
-  /** Rub was pressed on PSD Edit mode's bar, or pressed again to leave it. */
-  useRub: (rubbing: boolean) => void;
-  /** Whether the pointer is the rubber, so that bar can show it pressed. */
-  isRubbing: () => boolean;
   /** A PSD was rewritten and re-parsed; take the result back. */
   onPsdWritten: (key: string, manifest: string) => Promise<void> | void;
   /** An extrude Apply wrote a new one and placed it — see `ExtrudeUiOptions`. */
@@ -108,8 +104,6 @@ export function createCanvasModeUis(
     drawing: options.drawing,
     usePencil: options.usePencil,
     inkLayerId: options.inkLayerId,
-    useRub: options.useRub,
-    isRubbing: options.isRubbing,
     onWritten: options.onPsdWritten,
   });
 

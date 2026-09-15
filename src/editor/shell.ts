@@ -88,6 +88,11 @@ export function createShell(parts: ShellParts): Shell {
     max: 620,
     storageKey: "rightWidth",
   });
+  // Which sidebar each divider belongs to. The two are otherwise identical
+  // elements, and Code mode takes the inspector down — a handle left behind
+  // there is a grip that resizes something nobody can see.
+  leftResizer.handle.classList.add("left");
+  rightResizer.handle.classList.add("right");
   const consoleResizer = createResizer({
     target: terminal.body,
     axis: "height",

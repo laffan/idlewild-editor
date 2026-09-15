@@ -139,6 +139,7 @@ export async function mountEditor(
       // A fact about the file rather than about the document, so it is asked
       // of the scene — see `PsdPlacements.anchored`.
       isAnchored: (key) => handle?.scene.psdAnchored(key) ?? true,
+      psdLayers: (key) => handle?.scene.psdLayers(key) ?? [],
       onNewBackground: (layerId, anchor) =>
         openNewBackground(anchor, layerId, backgrounds),
     },
@@ -282,10 +283,6 @@ export async function mountEditor(
     usePencil: () => tools.apply("pencil", false),
     inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
-    // Rub is PSD Edit mode's own: the pencil, turned round. The bar reports
-    // the press; `tool-routing.ts` decides what it means to the pointer.
-    useRub: (rubbing) => tools.apply(rubbing ? "rub" : "pencil"),
-    isRubbing: () => rail.tool === "rub",
     onPsdWritten: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
@@ -603,9 +600,10 @@ export async function mountEditor(
    * canvas in both, because a code editor beside a still picture of the game
    * is a code editor you cannot check anything in: save a file and the thing
    * in front of you restarts on it. What Code keeps that Play does not is the
-   * editor around it — both sidebars and the panel — so the scene can be
-   * switched and the document adjusted while the game runs, before a full
-   * test in Play.
+   * left sidebar and the panel — so the scene can be switched and the project
+   * read while the game runs, before a full test in Play. The inspector goes
+   * down with the tools: it describes what is selected on a canvas nobody can
+   * reach through a running game.
    *
    * Code is a section rather than a panel that happens to be open: entering it
    * puts the panel up wherever it was last docked, and leaving takes it down.
@@ -618,6 +616,11 @@ export async function mountEditor(
     shell.classList.toggle("play-mode", next === "play");
     shell.classList.toggle("code-mode", next === "code");
     handle?.scene.setMode(next);
+    // Code keeps the left sidebar, and turns it into a directory: the game is
+    // over the canvas, so there is nothing in that column to act on, and what
+    // is wanted beside the code is the names — scenes, layers, PSDs, and the
+    // layers inside each file. See `editor/layer-directory.ts`.
+    layers.setBrowsing(next === "code");
 
     if (next === "code") code.show();
     else code.hide();

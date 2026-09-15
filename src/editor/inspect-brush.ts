@@ -61,7 +61,6 @@ export const TOOL_TITLES: Partial<Record<ToolId, string>> = {
   pencil: "Pencil",
   pattern: "Pattern",
   shape: "Shape",
-  rub: "Rub",
   fill: "Fill",
 };
 
@@ -84,9 +83,6 @@ export const TOOL_HINTS: Partial<Record<ToolId, string>> = {
   shape:
     "Drag across the grid and every space you cross takes one copy, filling " +
     "that space exactly. Crossing a space twice changes nothing.",
-  rub:
-    "The pencil with the paint taken out. It rubs out ink drawn in this " +
-    "session, tip and pressure and all.",
   fill: "Sweeps and tapped-out shapes, filled with a colour, a pattern or a shape.",
 };
 
@@ -106,8 +102,8 @@ export function toolPanel(
         ? patternPanel(style, actions)
         : tool === "shape"
           ? shapePanel(style, actions)
-          : tool === "pencil" || tool === "rub"
-            ? inkPanel(tool, style, actions)
+          : tool === "pencil"
+            ? inkPanel(style, actions)
             : null;
   if (!rows) return null;
   // **First**, above everything the tool sets. It is the biggest thing you can
@@ -245,94 +241,76 @@ function shapePanel(style: StrokeStyle, actions: ToolPanelActions): HTMLElement[
 }
 
 /**
- * The pencil and its one remaining disguise.
+ * The pencil, on its own.
  *
- * Rub is the pencil with the paint taken out, so the colour is not offered:
- * nothing it lays down has one. Pattern used to be the other disguise and is
- * a tool in its own right now — see `patternPanel`.
+ * It used to wear two other tools' clothes here. Pattern was one and is a
+ * tool in its own right now — see `patternPanel` — and Rub was the other: the
+ * pencil with the paint taken out, which got this panel with the colour row
+ * left off. Turning a brush round is a flag rather than a tool, so there is
+ * one pencil again and the row at the top of every brush's panel is where
+ * erasing is asked for.
  */
 function inkPanel(
-  tool: "pencil" | "rub",
   style: StrokeStyle,
   actions: ToolPanelActions,
 ): HTMLElement[] {
-  const rows: HTMLElement[] = [];
+  // The tip's name is the section's own subject — `BRUSH : INK` — rather
+  // than a title of its own above it. It was both, which is one fact
+  // written twice and a 19px heading in a column of 10px labels.
+  const heading = sectionTitle("Brush", {
+    subject: brushName(style.brushId),
+    hint: "The tip the pencil draws with, how wide it is, and how much of the hand's wobble comes out of the line.",
+  });
+  const subject = heading.querySelector(".inspect-section-subject");
 
-  if (tool === "pencil") {
-    // The tip's name is the section's own subject — `BRUSH : INK` — rather
-    // than a title of its own above it. It was both, which is one fact
-    // written twice and a 19px heading in a column of 10px labels.
-    const heading = sectionTitle("Brush", {
-      subject: brushName(style.brushId),
-      hint: "The tip the pencil draws with, how wide it is, and how much of the hand's wobble comes out of the line.",
-    });
-    const subject = heading.querySelector(".inspect-section-subject");
-
-    // The tip itself on each button rather than its number. A brush is a
-    // shape you recognise, and "3" is not that shape — see `brushStampUrl`
-    // for why it is a mask rather than an image.
-    const brushes = h("div", { class: "brush-row" });
-    for (const brush of BRUSHES) {
-      const stamp = h("span", { class: "brush-stamp" });
-      const url = `url("${brushStampUrl(brush.id)}")`;
-      stamp.style.setProperty("-webkit-mask-image", url);
-      stamp.style.setProperty("mask-image", url);
-      const button = h(
-        "button",
-        {
-          class: "brush-btn",
-          title: brush.name,
-          "aria-label": brush.name,
-          "aria-pressed": String(brush.id === style.brushId),
-          onClick: () => {
-            for (const other of brushes.children) {
-              other.setAttribute("aria-pressed", String(other === button));
-            }
-            // Written here rather than waiting for a re-render: picking a tip
-            // does not touch the document, so nothing rebuilds this panel.
-            if (subject) subject.textContent = brush.name;
-            actions.onStyle({ brushId: brush.id });
-          },
+  // The tip itself on each button rather than its number. A brush is a
+  // shape you recognise, and "3" is not that shape — see `brushStampUrl`
+  // for why it is a mask rather than an image.
+  const brushes = h("div", { class: "brush-row" });
+  for (const brush of BRUSHES) {
+    const stamp = h("span", { class: "brush-stamp" });
+    const url = `url("${brushStampUrl(brush.id)}")`;
+    stamp.style.setProperty("-webkit-mask-image", url);
+    stamp.style.setProperty("mask-image", url);
+    const button = h(
+      "button",
+      {
+        class: "brush-btn",
+        title: brush.name,
+        "aria-label": brush.name,
+        "aria-pressed": String(brush.id === style.brushId),
+        onClick: () => {
+          for (const other of brushes.children) {
+            other.setAttribute("aria-pressed", String(other === button));
+          }
+          // Written here rather than waiting for a re-render: picking a tip
+          // does not touch the document, so nothing rebuilds this panel.
+          if (subject) subject.textContent = brush.name;
+          actions.onStyle({ brushId: brush.id });
         },
-        stamp,
-      );
-      brushes.appendChild(button);
-    }
-
-    rows.push(
-      h(
-        "div",
-        { class: "inspect-section" },
-        heading,
-        brushes,
-        sizeRow(style, actions),
-        smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
-      ),
+      },
+      stamp,
     );
-  } else {
-    rows.push(
-      h(
-        "div",
-        { class: "inspect-section" },
-        sectionTitle("Rubber", { hint: TOOL_HINTS.rub }),
-        sizeRow(style, actions),
-        smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
-      ),
-    );
+    brushes.appendChild(button);
   }
 
-  if (tool !== "rub") {
-    rows.push(
-      paintSection(
-        "Colour",
-        style,
-        actions,
-        ["color"],
-        "What the ink is made of. Recent swatches are under the wheel.",
-      ),
-    );
-  }
-  return rows;
+  return [
+    h(
+      "div",
+      { class: "inspect-section" },
+      heading,
+      brushes,
+      sizeRow(style, actions),
+      smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
+    ),
+    paintSection(
+      "Colour",
+      style,
+      actions,
+      ["color"],
+      "What the ink is made of. Recent swatches are under the wheel.",
+    ),
+  ];
 }
 
 /** The tip's own name, which is what the Brush heading says after the colon. */

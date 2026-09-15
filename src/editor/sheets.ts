@@ -18,6 +18,7 @@ import { isMobile } from "../lib/platform";
 import * as log from "../lib/log";
 import { clipboardImage } from "./clipboard";
 import { pasteName } from "./paste";
+import { trimTransparent } from "./trim-alpha";
 
 /** What the desktop dialog offers. Neither mobile picker reads extensions. */
 const IMAGE_EXTENSIONS = ["psd", "png", "jpg", "jpeg"];
@@ -116,22 +117,30 @@ export function openAddImage(
 }
 
 /**
- * Replace the file behind an existing PSD key, and hand back the manifest
- * the pipeline produced.
+ * Bring a PSD's edits back on a platform that cannot re-parse in place
+ * without being asked where the file is, and hand back the manifest.
  *
- * The same three routes as Add Image, because "the edited file came back"
- * arrives by whichever of them the user sent it out through — Files if it
- * went to a document provider, Photos if it came back as a flattened image,
- * the clipboard if it was copied out of another app. The button used to go
- * straight to one of the three, and on iPadOS it went to the wrong one.
+ * **Four answers, and the first one is that the file never left.** Re-parse
+ * runs the pipeline over `<project>/psd/<key>.psd` as it stands — which is
+ * the whole of the desktop button, and is just as true on an iPad: the file
+ * in the store is written by Apply in PSD Edit mode, by an extrusion, by a
+ * rewritten layer stack, and by a project opened out of a `.idlewild`
+ * archive. Every one of those is a file this editor changed and a manifest
+ * that may be describing the version before it, and until now the only way
+ * to re-read one on an iPad was to go and find a copy of it in Files.
  *
- * Every route writes over `<project>/psd/<key>.psd` and re-runs psd-to-json,
+ * The other three are the ones a *replacement* arrives by, because "the
+ * edited file came back" arrives by whichever route it was sent out through
+ * — Files if it went to a document provider, Photos if it came back as a
+ * flattened image, the clipboard if it was copied out of another app. Each
+ * of those writes over `<project>/psd/<key>.psd` and re-runs psd-to-json,
  * which is what makes it a replacement rather than a second import: the key
  * does not move, so every placement already pointing at it still does.
+ *
  * Resolves to null when the sheet is dismissed or a picker is cancelled —
  * backing out is not an error.
  */
-export function openReplacePsd(
+export function openRefreshPsd(
   projectId: string,
   key: string,
   os: string,
@@ -153,8 +162,8 @@ export function openReplacePsd(
     document.addEventListener("keydown", onEscape);
 
     const sheet = openSheet({
-      title: `Re-import ${key}.psd`,
-      subtitle: "Replaces the file and re-runs the pipeline",
+      title: `Re-parse ${key}.psd`,
+      subtitle: "Re-run the pipeline over this file, or over a replacement",
       width: 560,
     });
 
@@ -171,8 +180,27 @@ export function openReplacePsd(
       }
     };
 
+    /**
+     * The file as it stands. Nothing is written, nothing is picked, and there
+     * is nothing to report but the manifest — so it is its own runner rather
+     * than an `ImportResult` faked up to fit the one above.
+     */
+    const reparse = async () => {
+      sheet.close();
+      try {
+        settle(await psd.reprocess(projectId, key));
+        log.info(`Re-parsed ${key}.psd`);
+      } catch (err) {
+        log.error(`Could not re-parse ${key}.psd:`, err);
+        settle(null);
+      }
+    };
+
     const list = h("div", { class: "sheet-list" });
     list.append(
+      option("Re-parse this file", "The file in the project, as it is", () =>
+        void reparse(),
+      ),
       option("Replace from Files", "PSD, PNG, JPEG", () =>
         run(async () => {
           const picked = await pickDocument(os);
@@ -526,13 +554,22 @@ function zoomRow(initial: number, onChange: (zoom: number) => void): HTMLElement
  * `key` names the PSD to write. Omitted, the paste gets a key of its own from
  * the file's name; given an existing one, it overwrites that file — which is
  * how the clipboard replaces a PSD as well as adding one.
+ *
+ * And that is the one difference in what arrives. A **new** import is cropped
+ * to the pixels that are there, because a patch copied out of a layer-based
+ * editor comes padded to the size of the document it was cut from and the
+ * padding would otherwise become the artwork's size (see `trim-alpha.ts`). A
+ * **replacement** is not: the file coming back is held where it is rather
+ * than re-centred, so cropping it would slide the artwork out from under
+ * every placement standing on it.
  */
 async function importClipboard(
   projectId: string,
   marks?: AnchorMarks,
   key?: string,
 ): Promise<ImportResult> {
-  const file = await clipboardImage();
+  const read = await clipboardImage();
+  const file = key ? read : (await trimTransparent(read)).file;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  return psd.importBytes(projectId, key ?? pasteName(file), toBase64(bytes), marks);
+  return psd.importBytes(projectId, key ?? pasteName(read), toBase64(bytes), marks);
 }

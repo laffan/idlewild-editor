@@ -6,21 +6,22 @@
  * hand beside it, the tools that change what the pointer means, then the two
  * ways out. Learning one is learning all four.
  *
- * **One toggle in the middle, and only one.** The brush, the size, the
- * smoothing and the colour are in the inspector's TOOL section, where they
- * are while drawing anywhere else in this editor, and a second copy of them
- * here would be a second place they could disagree. Rub is the exception
- * because it is not a setting: it is the pencil with the paint taken out, and
- * what it rubs out is *this session's* ink — which makes it the one thing in
- * hand that means nothing outside this mode, and so the one thing that
- * belongs on this mode's own bar rather than on the drawing toolbar with the
- * tools that work everywhere.
+ * **Nothing in hand is set from here.** The brush, the size, the smoothing,
+ * the colour and whether the tool is turned round to erase are in the
+ * inspector's TOOL section, where they are while drawing anywhere else in
+ * this editor, and a second copy of any of them here would be a second place
+ * they could disagree. So the bar says which file and which layer, counts the
+ * ink, and offers the two ways out.
  *
- * It replaces a second tool rail that used to appear under the first while
- * this mode was up. Fill and Pixels were on it too, and they were the reason
- * it had to go: both work anywhere, so both are on the drawing toolbar now,
- * and a column that grew and shrank under your hand was carrying one button
- * that actually belonged to the mode.
+ * Two things have been taken off it. First a second tool rail that appeared
+ * under the first while this mode was up, carrying Rub, Fill and Pixels: the
+ * last two work anywhere, so they are on the drawing toolbar, and a column
+ * that grew and shrank under your hand was carrying one button that actually
+ * belonged to the mode. Then Rub itself, which became that one button — the
+ * pencil with the paint taken out, rubbing out this session's ink. Every
+ * brush can be turned round now (`ERASABLE` in `tool-rail.ts`), which gives
+ * this mode four erasers that work the way the rest of the editor's do, so a
+ * fifth with a rule of its own was one eraser too many.
  */
 
 import { h } from "../lib/dom";
@@ -28,8 +29,6 @@ import { h } from "../lib/dom";
 export interface PsdEditBarCallbacks {
   onApply: () => void;
   onCancel: () => void;
-  /** Rub pressed, or pressed again — true is on, and the pencil is off. */
-  onRub: (rubbing: boolean) => void;
 }
 
 /** Everything the bar shows, as the session currently stands. */
@@ -42,8 +41,6 @@ export interface PsdEditBarState {
   /** How much ink is waiting to go in, and whether any of it is in frame. */
   summary: string;
   canApply: boolean;
-  /** Whether the pointer is currently the rubber rather than the pencil. */
-  rubbing: boolean;
   /**
    * Whether the write Apply started is still in flight.
    *
@@ -58,7 +55,6 @@ export class PsdEditBar {
   readonly root: HTMLElement;
   private readonly title: HTMLElement;
   private readonly size: HTMLElement;
-  private readonly rub: HTMLButtonElement;
   private readonly cancel: HTMLButtonElement;
   private readonly apply: HTMLButtonElement;
   /**
@@ -76,16 +72,6 @@ export class PsdEditBar {
     this.title = h("div", { class: "mode-title", text: "PSD Edit Mode" });
     this.size = h("div", { class: "mode-size" });
     this.progress = h("div", { class: "progress-bar mode-progress", hidden: "true" });
-    this.rub = h("button", {
-      class: "bar-toggle",
-      text: "Rub",
-      title: "Rub out ink drawn in this session",
-      "aria-pressed": "false",
-      // Pressing the one that is down goes back to the pencil, which is the
-      // way out of it and saves a second button saying "the pencil again".
-      onClick: () =>
-        callbacks.onRub(this.rub.getAttribute("aria-pressed") !== "true"),
-    });
     this.cancel = h("button", {
       text: "Cancel",
       onClick: callbacks.onCancel,
@@ -101,7 +87,6 @@ export class PsdEditBar {
       this.title,
       this.size,
       h("div", { class: "mode-spacer" }),
-      this.rub,
       this.cancel,
       this.apply,
       this.progress,
@@ -116,10 +101,9 @@ export class PsdEditBar {
    * away on the way in, so a button that wrote it would rebuild the file and
    * re-run the whole pipeline to change nothing at all.
    *
-   * Both ways out go quiet while a write is in flight, and so does Rub.
-   * Cancel as well as Apply: the strokes it would throw away are the ones
-   * being written, and the mode is only still up because the write can be
-   * refused.
+   * Both ways out go quiet while a write is in flight — Cancel as well as
+   * Apply: the strokes it would throw away are the ones being written, and
+   * the mode is only still up because the write can be refused.
    *
    * The layer's name steps aside while the write runs. What is in that slot
    * then is the pipeline's own line, which names the layer itself — and the
@@ -133,8 +117,6 @@ export class PsdEditBar {
       state.layer && !state.busy
         ? `${state.layer} · ${state.summary}`
         : state.summary;
-    this.rub.setAttribute("aria-pressed", String(state.rubbing));
-    this.rub.disabled = state.busy;
     this.apply.disabled = state.busy || !state.canApply;
     this.cancel.disabled = state.busy;
     this.progress.hidden = !state.busy;

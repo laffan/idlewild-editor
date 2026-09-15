@@ -562,6 +562,30 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 .editor.play-mode .side-panel,
 .editor.play-mode .edge-toggle { display: none; }
 
+/* Code keeps one sidebar, and it is the left one.
+
+   The inspector describes what is selected on the canvas, and in Code the
+   canvas is behind a running game: nothing there can be picked, dragged or
+   resized, so a panel of controls for a selection nobody can reach is a panel
+   of controls that cannot be used. Its divider goes with it — a grip that
+   resizes something nobody can see — and so does its edge toggle, which would
+   fold a panel that is already gone. The layer column stays, because in Code
+   it is the directory of what this project is made of: scenes, the layers in
+   them, the PSDs on those, and the layers inside each file. See
+   `editor/layers-panel.ts`. */
+.editor.code-mode .side-panel.right { display: none; }
+.editor.code-mode .resize-handle.right { display: none; }
+.editor.code-mode .edge-toggle.right { display: none; }
+
+/* And the toggle that folds the one that is left has to be *reachable*.
+
+   It sits inside the canvas wrapper at z-index 6, and in Code the game frame
+   is over that wrapper at 8 — so the button was there the whole time, drawn
+   underneath a running game. Lifting it over the frame is the whole fix, and
+   it is Code's alone: Play hides both toggles, and in Draw there is no frame
+   to be under. */
+.editor.code-mode .edge-toggle.left { z-index: 9; }
+
 /* The canvas tools, in both of the modes that run the game over the canvas.
 
    Code shows what Play shows — the project's own game, in a frame over this

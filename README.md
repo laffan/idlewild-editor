@@ -172,6 +172,19 @@ remaining pieces are wired to real slots rather than mocked.
   exactly as a paste is. Drag it over an image already there and that image
   lights up: dropping on it offers to put the new file behind it instead,
   which changes every placement of that PSD at once
+- **A paste is cropped to the picture in it.** Copy a patch out of Photoshop
+  or Procreate and what reaches the clipboard is a PNG the size of the
+  *document* it came from, with the copied marks somewhere inside it and
+  nothing but transparency around them. That is right for pasting back into
+  the same document and wrong here: the padding became the artwork's size, so
+  a thumbnail-sized sketch arrived claiming a footprint the size of somebody
+  else's canvas, with its handles nowhere near the picture. The transparent
+  field is taken off before the import, so what lands on the grid is what was
+  copied — and nothing is thresholded away, so the soft edge of a brush stroke
+  comes across intact. It applies to a drop and to Paste from clipboard, and
+  deliberately **not** to replacing a PSD that is already in the project: a
+  file coming back is held where it is rather than re-centred, and cropping
+  one would slide the artwork out from under everything standing on it
 - **Two PSDs with a same-named layer no longer collide.** psd-to-phaser keys a
   texture on the layer's own name, so two files each holding a `S | layer 1` —
   which is what New layer calls its rows, counting within each file — were the
@@ -592,15 +605,16 @@ remaining pieces are wired to real slots rather than mocked.
   it straightens; pause before you draw and everything after it is ruled. It
   is the same rule read from either end, and it is PSD Edit mode's, where a line
   drawn against the edge of a building wants to be a line
-- **Rub**, a toggle on PSD Edit mode's own bar: the pencil turned round,
-  rubbing out ink from this session, tip and pressure and all. Pressing it
-  again puts the plain pencil back. It is the same erasing every brush does
-  now — a flag on the mark rather than a mode of its own — so Rub is simply the
-  tool that has it on and nothing to toggle. It is the one thing in hand that
-  means nothing outside the mode, which is why it is the only one on that bar:
-  Fill and Pattern used to be beside it on a second tool rail that appeared and
-  disappeared with the mode, and both of those work anywhere, so both are on
-  the drawing toolbar now
+- **Erasing in here is the same erasing as everywhere else.** There was a
+  **Rub** on the mode's own bar — the pencil turned round, rubbing out this
+  session's ink — and it has gone. Every brush can be turned round now, which
+  is four erasers in the mode rather than one, each taking out exactly what it
+  would have drawn; a fifth with a button of its own and a rule of its own was
+  one too many. The bar it was on is the last of what used to be a second tool
+  rail that appeared and disappeared with the mode, so nothing in hand is set
+  from there any more: the brush, the size, the smoothing, the colour and the
+  eraser switch are all in the TOOL section of the properties column, where
+  they are while drawing anywhere else
 - **Erasing in PSD Edit mode reaches the artwork in the file**, not just the
   ink from this session — and you can see it happen. It did neither, and both
   were the wrong answer for a tool whose whole promise is that what it would
@@ -661,9 +675,19 @@ remaining pieces are wired to real slots rather than mocked.
   document that names a file which is no longer where it says
 - Export a selection as a transparent PNG (save or copy), from the inspector
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
-  to the system editor on macOS and to the share sheet on iPadOS. Re-import
-  asks where the edited file came back from — Files, the photo library or the
-  clipboard — and replaces it under the same key, re-running the pipeline
+  to the system editor on macOS and to the share sheet on iPadOS, and
+  **Re-parse** beside it runs the pipeline over the file again. On a Mac that
+  is the whole of it, because the file never moved. On an iPad it asks which
+  file first, and the answer at the top of the list is *this one* — the PSD in
+  the project, as it stands. **That answer used to be missing on an iPad**,
+  which left the platform this editor is mostly used on with no way to re-read
+  a file at all: the button was called Re-import and offered only the three
+  ways a replacement arrives — Files, the photo library or the clipboard, each
+  written over the same key so every placement survives. Plenty changes a PSD
+  in the store without a trip to Photoshop — Apply in PSD Edit mode, an
+  extrusion, a layer stack rewritten in the inspector, a project opened out of
+  a `.idlewild` file — and re-reading one is not something an iPad should have
+  to go looking through Files for
 - The exported game places the scene you have open, and carries the rest: the
   config holds every scene's layers and loads every scene's PSDs, so switching
   in your own code is a matter of reading `config.scenes`
@@ -687,11 +711,29 @@ remaining pieces are wired to real slots rather than mocked.
   the canvas beside it and the game you play is the game you built
 - Code is a section rather than a panel that happens to be open: the middle of
   the three at the top. **The canvas shows what Play shows** — the project's own
-  game, running — and what Code keeps that Play does not is the editor around
-  it: both sidebars, so you can switch scene and adjust the document while the
-  game runs, and the panel the code is in. Save a file and the thing in front of
-  you restarts on it; switch scene and it restarts there. Play is then the full
+  game, running — and what Code keeps that Play does not is the left sidebar
+  and the panel the code is in. Save a file and the thing in front of you
+  restarts on it; switch scene and it restarts there. Play is then the full
   test rather than the first look
+- **The left sidebar in Code is a directory of the project**, which is what
+  that column is for while you are writing against it: the scenes, the Phaser
+  layers in each, the PSDs standing on those, and — this is the new level —
+  the **layers inside each PSD**, in the file's own order and nesting, with a
+  group's contents indented under it and the category beside each name. Those
+  are the names the project's own code addresses things by, and reading one
+  off the file in Photoshop or out of `game.config.json` is two windows away
+  from where the line is being typed. Every row is inert except its
+  disclosure — tap a layer to open it, tap a placed PSD to open *that* — and
+  the names can be selected and copied, which they cannot anywhere else in the
+  shell. The handles are all gone with the edits: no rename, no eye, no lock,
+  no grip, no `+`, and the scene dropdown offers the scenes and nothing else.
+  Nothing in there had a canvas to act on anyway
+- **The properties sidebar is down in Code.** It describes what is selected on
+  the canvas, and in Code the canvas is behind a running game — so it was a
+  column of controls for a selection nobody could reach. The **toggle that
+  folds the sidebar that is left** is back, too: it was there the whole time,
+  drawn underneath the running game, so the one control for getting the column
+  out of the way was invisible for the whole of the mode
 - The panel sits in one of **three** places, on a row of buttons in its own
   header — a row above the console (the default: code here is code about the
   canvas beside it), a column to the right of it, where a wide screen gives a

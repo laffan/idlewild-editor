@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { canErase, ERASABLE, OFF_BAR, TOOLS, toolName } from "../tool-rail";
+import { canErase, ERASABLE, TOOLS, toolName } from "../tool-rail";
 import { defaultPatternScale, stampBoxAt, stampSize } from "../stamp-box";
 import { Grid } from "../../lib/grid";
 import { TOOL_IDS, type ToolId } from "../../lib/types";
@@ -53,10 +53,14 @@ describe("the two columns", () => {
       expect(seen.has(tool.id), `${tool.id} is in two columns`).toBe(false);
       seen.add(tool.id);
     }
-    // Rub is the one with no button in either: it is a toggle on PSD Edit
-    // mode's own bar, because it means nothing outside that mode.
-    expect(Object.keys(OFF_BAR)).toEqual(["rub"]);
-    expect(seen.has("rub")).toBe(false);
+    // And every tool has one. There used to be an exception — Rub, a toggle
+    // on PSD Edit mode's own bar with no button on either column — and it
+    // went when that mode started erasing with the four brushes turned round.
+    // A tool in neither column gets no button anywhere and a blank label the
+    // moment something puts it in your hand.
+    for (const id of TOOL_IDS) {
+      expect(seen.has(id), `${id} is in no column`).toBe(true);
+    }
   });
 });
 
@@ -84,11 +88,6 @@ describe("the brushes that can be turned round", () => {
     // And it is called Slice now: a tool called Eraser beside four brushes
     // that erase was the name doing the wrong job.
     expect(toolName("eraser")).toBe("Slice");
-  });
-
-  /** It is an eraser already, so there is nothing to toggle. */
-  it("leaves out Rub", () => {
-    expect(canErase("rub")).toBe(false);
   });
 
   it("names every tool there is", () => {

@@ -1,19 +1,18 @@
 /**
  * What a tool means to the pointer.
  *
- * Ten tools on two columns and one more on PSD Edit mode's bar, and picking
- * any of them answers the same short list of questions again: who gets the
- * raw input — the drawing layer, or the game canvas and its gesture arbiter —
- * what a drag on empty space does, what the cursor over the canvas is, and
- * what the inspector should be describing.
+ * Ten tools on two columns, and picking any of them answers the same short
+ * list of questions again: who gets the raw input — the drawing layer, or the
+ * game canvas and its gesture arbiter — what a drag on empty space does, what
+ * the cursor over the canvas is, and what the inspector should be describing.
  *
  * Split out of `editor.ts` because it is the one part of the shell that is
  * about the *pointer* rather than about the document.
  *
- * **Two of them are the pencil wearing a tool's clothes.** Pattern is the
- * pencil with a pattern for its paint and Rub is the pencil with the paint
- * taken out, so both come down to a stroke mode and a style rather than to a
- * gesture of their own.
+ * There was an eleventh on PSD Edit mode's bar — Rub, the pencil with the
+ * paint taken out — and it went once every brush could be turned round:
+ * erasing is a flag on the style, so a tool that was only ever an eraser was
+ * a second way of saying the same thing.
  *
  * Pattern used to be *Pixels*, and it used to borrow the brush slot: the
  * checkered tip went in, the pencil's own brush was remembered, and picking
@@ -79,9 +78,6 @@ export interface ToolRouting {
 /** Which tools hand the raw pointer to the drawing layer, and as what. */
 const DRAWN: Partial<Record<ToolId, DrawingTool>> = {
   pencil: "pencil",
-  // The pencil, drawn differently. Both are a stroke mode and a style; see
-  // `styleFor` for the half that is not the gesture.
-  rub: "pencil",
   // Its own gesture in the layer, because what it records is a path that will
   // be read as lattice cells rather than stamped — and because the live
   // preview has to show the pattern rather than a tip.
@@ -105,7 +101,6 @@ const ANNOUNCE: Partial<Record<ToolId, string>> = {
   eraser: "Slice — drag across a stroke to cut it in two where the blade passes",
   lasso: "Lasso — sweep around strokes to select them",
   fill: "Fill — sweep a closed shape, or tap its corners out",
-  rub: "Rub — the pencil with the paint taken out",
 };
 
 /**
@@ -130,19 +125,17 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
    * The three painting tools each say what their paint has to be: Pattern is
    * a pattern, Shape is a shape, and the plain pencil is a colour. Fill is
    * deliberately left alone, because Fill is the tool whose whole point is
-   * that it can be any of the three. Rub is the pencil, and what makes it an
-   * eraser is the flag `apply` writes rather than anything here.
+   * that it can be any of the three.
    *
    * A tool that changes the kind keeps whatever row was last chosen for it —
    * that is the library's business, not this file's, so what goes out is only
    * the kind and `paint-picker.ts` fills the rest in.
    */
   function styleFor(tool: ToolId, style: StrokeStyle): Partial<StrokeStyle> | null {
-    // Rub is the pencil with erasing already on, rather than a mode of its
-    // own. The stroke mode "erase" is legacy — see `lib/types.ts` — and
-    // leaving Rub on it would have made it the one eraser in the editor that
-    // behaved differently from the other four.
-    if (tool === "pencil" || tool === "rub") {
+    // Ink, whether or not this pencil is turned round: the stroke mode
+    // "erase" is legacy — see `lib/types.ts` — and what makes a mark come out
+    // instead of going on is the flag `apply` writes below.
+    if (tool === "pencil") {
       return { mode: "ink", paint: { ...style.paint, kind: "color" } };
     }
     if (tool === "pattern") {
@@ -183,9 +176,8 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
       const size = SIZED.includes(tool) ? sizes[tool] : undefined;
       // Always written, not only when the tool has a patch: picking the Fill
       // tool up after erasing with the Pencil has to *stop* erasing, and a
-      // flag left behind from the last tool is how that goes wrong. Rub is
-      // the one tool that is an eraser and nothing else.
-      const erase = tool === "rub" || erasing.has(tool);
+      // flag left behind from the last tool is how that goes wrong.
+      const erase = erasing.has(tool);
       drawing.style = {
         ...drawing.style,
         ...(patch ?? {}),

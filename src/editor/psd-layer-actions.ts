@@ -34,7 +34,7 @@ export interface PsdHeadState {
   adjusting: boolean;
   /** What sending the file out is called here — it differs by platform. */
   openLabel: string;
-  /** And bringing it back: a re-parse on desktop, a re-import on iPadOS. */
+  /** And bringing it back, which is a re-parse on both — see `psd-actions.ts`. */
   refreshLabel: string;
 }
 

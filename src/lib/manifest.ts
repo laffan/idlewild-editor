@@ -112,6 +112,32 @@ export function parseManifest(json: string): Manifest {
   };
 }
 
+/**
+ * Every layer in a raw manifest, flattened and depth-first, paths and all.
+ *
+ * The same walk `parseManifest` makes, over psd-to-phaser's own copy of the
+ * document — the plugin keeps it under `getData(key).original.layers` — rather
+ * than over a string. Written against the raw layers for the reason `hasRootAnchor`
+ * is: the caller has the object in hand, and re-serialising it so that it can
+ * be parsed again would be a JSON round trip per row of a panel.
+ *
+ * What reads it is the directory Code mode's sidebar becomes, which lists
+ * what is inside each placed file. Nothing is filtered out — the editor's own
+ * marks included — because a directory of what is in a file that quietly
+ * leaves two layers out is a directory that disagrees with Photoshop.
+ */
+export function manifestLayers(layers: unknown): ManifestLayer[] {
+  if (!Array.isArray(layers)) return [];
+  const all: ManifestLayer[] = [];
+  for (const layer of layers) walk(layer, "", all, true);
+  return all;
+}
+
+/** How deep in the stack a layer sits, from its slash-joined path. */
+export function layerDepth(path: string): number {
+  return path.split("/").length - 1;
+}
+
 /** The anchor mark's position, which psd-to-json reports as the point's
  *  centre rather than its layer's corner. */
 export const ANCHOR_LAYER = "anchor";

@@ -13,6 +13,7 @@ import Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import type { Cell, EditorMode, Selection } from "../lib/types";
+import type { ManifestLayer } from "../lib/manifest";
 import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
 import { SceneCamera } from "./scene-camera";
@@ -634,6 +635,11 @@ export class WorldScene extends Phaser.Scene {
 
   psdAnchored(key: string): boolean {
     return this.psds.anchored(key);
+  }
+
+  /** What is inside a loaded PSD — the directory Code mode's sidebar lists. */
+  psdLayers(key: string): ManifestLayer[] {
+    return this.psds.layersOf(key);
   }
 
   repointPlacement(

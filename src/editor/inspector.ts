@@ -167,9 +167,9 @@ export class Inspector {
   /**
    * What the pointer is holding, so the TOOL zone can offer its settings.
    *
-   * The `ToolId` rather than the drawing engine's own name for it: Pixels and
-   * Rub are both the *pencil* as far as the engine is concerned — a brush and
-   * a stroke mode — and the panel has to tell them apart to know which of
+   * The `ToolId` rather than the drawing engine's own name for it: more than
+   * one tool can be the *pencil* as far as the engine is concerned — a brush
+   * and a stroke mode — and the panel has to tell them apart to know which of
    * their controls mean anything.
    */
   private toolId: ToolId = "select";
@@ -290,10 +290,10 @@ export class Inspector {
    * Which tool is up, and the style it will draw with.
    *
    * The `ToolId` rather than the drawing layer's own name for the tool, and
-   * that is the load-bearing half: Pixels and Rub are both the *pencil* as
-   * far as the engine is concerned — a brush and a stroke mode — so a panel
-   * told only what the engine was doing could not tell which of the three
-   * was in hand, or which of their controls meant anything.
+   * that is the load-bearing half: several tools are the *pencil* as far as
+   * the engine is concerned — a brush and a stroke mode — so a panel told
+   * only what the engine was doing could not tell which of them was in hand,
+   * or which of their controls meant anything.
    */
   setTool(tool: ToolId, style: StrokeStyle | null): void {
     this.toolId = tool;
