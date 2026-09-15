@@ -33,6 +33,24 @@ fn ink(left: i32, top: i32, width: u32, height: u32, rgba: [u8; 4]) -> Paint {
         width,
         height,
         rgba_base64: STANDARD.encode(swatch(width, height, rgba)),
+        erase_base64: None,
+    }
+}
+
+/// The same, carrying a mask of its own over the same rectangle.
+///
+/// `taken` is the mask's alpha, which is the whole of what `cut` reads.
+fn rubbed(
+    left: i32,
+    top: i32,
+    width: u32,
+    height: u32,
+    rgba: [u8; 4],
+    taken: u8,
+) -> Paint {
+    Paint {
+        erase_base64: Some(STANDARD.encode(swatch(width, height, [0, 0, 0, taken]))),
+        ..ink(left, top, width, height, rgba)
     }
 }
 
@@ -79,6 +97,79 @@ fn a_blank_layer_contributes_no_rectangle() {
     let empty = patch(0, 0, 1, 1, [0, 0, 0, 0]);
     assert!(empty.is_blank());
     assert!(!patch(0, 0, 1, 1, [0, 0, 0, 1]).is_blank());
+}
+
+/// A turned-round brush reaches the artwork that was already there.
+///
+/// The thing the mask exists for: the raster the editor sends is drawn on a
+/// clear ground, so an erasing stroke in it has taken out the session's own
+/// ink and nothing else. The layer's own pixels are only reachable from here.
+#[test]
+fn an_eraser_takes_the_layer_s_own_pixels_out() {
+    let base = patch(0, 0, 4, 4, [10, 20, 30, 255]);
+    let cut = psd_paint::cut(base, &patch(2, 2, 4, 4, [0, 0, 0, 255]));
+
+    // The rectangle does not grow: there is nothing outside it to take away.
+    assert_eq!((cut.left, cut.top, cut.width, cut.height), (0, 0, 4, 4));
+    assert_eq!(pixel(&cut, 0, 0), [10, 20, 30, 255], "outside the mask");
+    // Gone, and the colour left exactly as it was — a pixel erased to nothing
+    // is a thinner version of itself rather than a greyer one, which is what
+    // keeps a *partial* erase from tinting the artwork.
+    assert_eq!(pixel(&cut, 3, 3), [10, 20, 30, 0], "under the mask");
+}
+
+/// A soft eraser thins rather than clears, and its edge is not a step.
+#[test]
+fn a_half_covered_pixel_keeps_half_of_itself() {
+    let cut = psd_paint::cut(
+        patch(0, 0, 1, 1, [9, 9, 9, 200]),
+        &patch(0, 0, 1, 1, [0, 0, 0, 128]),
+    );
+    let [r, _, _, a] = pixel(&cut, 0, 0);
+    assert_eq!(r, 9, "the colour does not move");
+    // 200 x (1 - 128/255) = 99.6
+    assert!((98..=101).contains(&a), "expected about 100, got {a}");
+}
+
+/// Erasing happens first and the ink goes over what is left, which is the
+/// order the strokes were drawn in: rub a hole, then draw into it, and what
+/// lands is the new ink over bare canvas rather than over the old artwork.
+#[test]
+fn ink_goes_over_what_the_eraser_left() {
+    let cut = psd_paint::cut(
+        patch(0, 0, 2, 2, [10, 20, 30, 255]),
+        &patch(0, 0, 2, 2, [0, 0, 0, 255]),
+    );
+    let over = psd_paint::over(Some(cut), patch(0, 0, 2, 2, [200, 0, 0, 128]));
+    let [r, g, _, a] = pixel(&over, 0, 0);
+    // Half-transparent red on *nothing*, so it stays red rather than becoming
+    // a blend with the artwork that was rubbed out from under it.
+    assert_eq!((r, g), (200, 0), "the old artwork should not show through");
+    assert_eq!(a, 128);
+}
+
+/// Two erase strokes that cross are one mask, and it composes to the same
+/// thing rubbing twice would have left: `1 - (a1 + a2(1 - a1))` is
+/// `(1 - a1)(1 - a2)`. Asserted here because the editor relies on it to send
+/// one buffer instead of one per stroke — see `drawing/rasterise.ts`.
+#[test]
+fn overlapping_erasers_compose_like_rubbing_twice() {
+    let union = psd_paint::over(
+        Some(patch(0, 0, 1, 1, [0, 0, 0, 128])),
+        patch(0, 0, 1, 1, [0, 0, 0, 128]),
+    );
+    let once = psd_paint::cut(
+        patch(0, 0, 1, 1, [0, 0, 0, 255]),
+        &patch(0, 0, 1, 1, [0, 0, 0, 128]),
+    );
+    let twice = psd_paint::cut(once, &patch(0, 0, 1, 1, [0, 0, 0, 128]));
+    let joined = psd_paint::cut(patch(0, 0, 1, 1, [0, 0, 0, 255]), &union);
+    let [_, _, _, a_twice] = pixel(&twice, 0, 0);
+    let [_, _, _, a_joined] = pixel(&joined, 0, 0);
+    assert!(
+        a_twice.abs_diff(a_joined) <= 1,
+        "one mask left {a_joined}, two passes left {a_twice}"
+    );
 }
 
 #[test]
@@ -201,6 +292,129 @@ fn a_layer_can_be_added_and_then_drawn_into() {
         std::panic::resume_unwind(payload);
     }
 }
+/// An eraser in PSD Edit mode reaches the artwork already in the file.
+///
+/// The end of the path the mask exists for. Everything above this checks the
+/// arithmetic; this checks that it survives being written into a PSD, parsed
+/// back out of one, and re-read — which is where a mask that was decoded but
+/// never applied, or applied to the wrong row, would show up.
+#[test]
+fn rubbing_in_psd_edit_mode_thins_the_layer_that_was_there() {
+    let meta = store::create_project(
+        "Rub",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            psd_write::psd_from_rgba_marked("wall", 32, 32, swatch(32, 32, [9, 9, 9, 255]), None)
+                .expect("PSD should be written");
+        std::fs::write(
+            store::psd_dir(id).expect("psd dir").join("wall.psd"),
+            &bytes,
+        )
+        .expect("PSD should save");
+
+        // The artwork: an opaque block in the file's only layer.
+        psd_layers::paint(id, "wall", 0, "S | wall", ink(4, 4, 8, 8, [200, 30, 10, 255]), |_| {})
+            .expect("the artwork should land");
+
+        // Now rub a 4 x 4 hole out of the middle of it, with no ink at all —
+        // which is exactly the gesture that used to do nothing whatever.
+        let clear = Paint {
+            rgba_base64: STANDARD.encode(swatch(4, 4, [0, 0, 0, 0])),
+            ..rubbed(6, 6, 4, 4, [0, 0, 0, 0], 255)
+        };
+        psd_layers::paint(id, "wall", 0, "S | wall", clear, |_| {})
+            .expect("the rub should land");
+
+        // Read back through the file rather than through the editor's own
+        // list, because the file is the thing that had to change.
+        let written = std::fs::read(store::psd_dir(id).expect("psd dir").join("wall.psd"))
+            .expect("the PSD should still be there");
+        let doc = psd::Psd::from_bytes(&written).expect("it should parse");
+        let (left, top, width, _, rgba) =
+            psd_layers::crop(doc.layer_by_idx(0), doc.width(), doc.height());
+        let at = |x: i32, y: i32| {
+            let i = (((y - top) as usize) * (width as usize) + ((x - left) as usize)) * 4;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        };
+        assert_eq!(at(4, 4), [200, 30, 10, 255], "outside the rub, untouched");
+        assert_eq!(at(7, 7)[3], 0, "the artwork under the rub is gone");
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// Rubbing on its own does not drag the layer's rectangle out to meet it.
+///
+/// A session that only erased sends a buffer of nothing for its ink, and
+/// laying that on would grow the row to cover the rubbing with a margin of
+/// transparent pixels — a bigger sprite on disk for a gesture that took
+/// something away. The same "blank has no rectangle worth keeping" rule the
+/// New layer route relies on, read from the other side.
+#[test]
+fn a_rub_outside_a_layer_leaves_its_rectangle_alone() {
+    let meta = store::create_project(
+        "Reach",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            psd_write::psd_from_rgba_marked("shed", 32, 32, swatch(32, 32, [9, 9, 9, 255]), None)
+                .expect("PSD should be written");
+        std::fs::write(
+            store::psd_dir(id).expect("psd dir").join("shed.psd"),
+            &bytes,
+        )
+        .expect("PSD should save");
+
+        psd_layers::add(id, "shed", |_| {}).expect("a layer should be added");
+        psd_layers::paint(id, "shed", 0, "S | layer-1", ink(4, 4, 6, 6, [200, 30, 10, 255]), |_| {})
+            .expect("the ink should land");
+        let before = psd_layers::read(id, "shed").expect("layers should read");
+        assert_eq!(
+            (before.layers[0].x, before.layers[0].width),
+            (4, 6),
+            "the layer is exactly its ink to begin with"
+        );
+
+        // Rub the far corner, where this layer has nothing at all.
+        let nowhere = Paint {
+            rgba_base64: STANDARD.encode(swatch(6, 6, [0, 0, 0, 0])),
+            ..rubbed(20, 20, 6, 6, [0, 0, 0, 0], 255)
+        };
+        psd_layers::paint(id, "shed", 0, "S | layer-1", nowhere, |_| {})
+            .expect("the rub should land");
+
+        let after = psd_layers::read(id, "shed").expect("layers should read");
+        assert_eq!(
+            (after.layers[0].x, after.layers[0].y, after.layers[0].width, after.layers[0].height),
+            (4, 4, 6, 6),
+            "a rub that touched nothing left the rectangle where it was"
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 /// Applying in PSD Edit mode re-parses the file, and the assets on disk say so.
 ///
 /// The half nobody can see from the editor. Ink goes into the PSD, the
@@ -276,6 +490,7 @@ fn applying_ink_re_parses_and_writes_the_sprite() {
                     use base64::Engine;
                     base64::engine::general_purpose::STANDARD.encode(vec![255u8; 4 * 4 * 4])
                 },
+                erase_base64: None,
             },
             |_| {},
         )

@@ -192,6 +192,15 @@ export interface PsdPaint {
   height: number;
   /** RGBA8, `width * height * 4` bytes. */
   rgbaBase64: string;
+  /**
+   * The coverage a turned-round brush takes *out* of the layer, over the same
+   * rectangle and in the same format — only its alpha is read.
+   *
+   * Applied before the ink, which is the order the strokes were drawn in. Left
+   * out when nothing in the session erased anything, which is the ordinary
+   * case and saves sending a buffer of zeroes.
+   */
+  eraseBase64?: string;
 }
 
 /** One raster layer of a generated group. The name is the exported one. */

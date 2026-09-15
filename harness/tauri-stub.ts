@@ -530,6 +530,14 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         key, index: Number(a.index), name: String(a.name),
         x: a.paint.x, y: a.paint.y,
         width: a.paint.width, height: a.paint.height,
+        // How much ink, and how much of the layer a turned-round brush is
+        // taking out — the second buffer is only sent when something erased,
+        // so a script can tell a rub that reached the artwork from one that
+        // silently did nothing. See src-tauri/src/psd_paint.rs.
+        opaque: countOpaque(String(a.paint.rgbaBase64 ?? "")),
+        erased: a.paint.eraseBase64 === undefined
+          ? null
+          : countOpaque(String(a.paint.eraseBase64)),
       };
       // A blank layer has no rectangle worth keeping, so the first stroke
       // replaces it outright — see src-tauri/src/psd_paint.rs.

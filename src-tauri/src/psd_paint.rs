@@ -12,11 +12,15 @@
 //! artwork a little every time somebody drew on it. The layer's real pixels
 //! are only in the PSD.
 //!
-//! Two rules are worth naming, because both are decisions rather than
+//! Three rules are worth naming, because all three are decisions rather than
 //! mechanics:
 //!
 //! - **Ink is laid over, not instead of.** A layer painted into keeps what
 //!   was in it, and the rectangle the layer occupies grows to hold both.
+//! - **An eraser reaches the artwork.** A paint may carry a second buffer over
+//!   the same rectangle: the coverage a turned-round brush is taking *out*.
+//!   It is applied to the layer's own pixels first and the ink goes over what
+//!   is left, which is the order the strokes were drawn in — see `cut`.
 //! - **A blank layer has no rectangle worth keeping.** An empty layer is
 //!   written as a single transparent pixel at the origin (see
 //!   `psd_layers::add`), and treating that pixel as part of the artwork would
@@ -57,17 +61,35 @@ pub struct Paint {
     pub height: u32,
     /// RGBA8, `width * height * 4` bytes, base64 over the bridge.
     pub rgba_base64: String,
+    /// What a turned-round brush is taking *out* of the layer, over the same
+    /// rectangle and in the same format. Only its alpha is read: erasing has
+    /// no colour. Absent when nothing in the session erased anything, which
+    /// is the ordinary case and saves sending a buffer of zeroes.
+    #[serde(default)]
+    pub erase_base64: Option<String>,
 }
 
 impl Paint {
     pub fn decode(&self) -> Result<Patch, String> {
+        self.buffer(&self.rgba_base64, "ink")
+    }
+
+    /// The erase coverage, when the session had any.
+    pub fn decode_erase(&self) -> Result<Option<Patch>, String> {
+        match &self.erase_base64 {
+            Some(b64) => self.buffer(b64, "erase mask").map(Some),
+            None => Ok(None),
+        }
+    }
+
+    fn buffer(&self, base64: &str, what: &str) -> Result<Patch, String> {
         let rgba = STANDARD
-            .decode(&self.rgba_base64)
-            .map_err(|e| format!("Cannot read the ink: {e}"))?;
+            .decode(base64)
+            .map_err(|e| format!("Cannot read the {what}: {e}"))?;
         let expected = (self.width as usize) * (self.height as usize) * 4;
         if rgba.len() != expected {
             return Err(format!(
-                "The ink is {} bytes, expected {expected} for {}x{}",
+                "The {what} is {} bytes, expected {expected} for {}x{}",
                 rgba.len(),
                 self.width,
                 self.height
@@ -122,6 +144,47 @@ pub fn clip(patch: Patch, canvas_w: u32, canvas_h: u32) -> Option<Patch> {
         height,
         rgba,
     })
+}
+
+/// Take `mask`'s coverage out of `base`, `destination-out`.
+///
+/// Straight alpha, so only the alpha channel moves: a pixel the mask covers by
+/// `a` keeps `1 - a` of what it had, and its colour is left exactly as it was
+/// — an erased pixel is a thinner version of itself, not a greyer one.
+///
+/// The rectangle does **not** grow. There is nothing outside `base` to take
+/// away, so a stroke rubbed across the edge of a layer simply stops there; the
+/// ink that goes over afterwards is what can enlarge the row.
+///
+/// Overlapping erase strokes need no special case here, because they never
+/// arrive separately: the editor draws them all into one mask with `over`, and
+/// `1 - (a1 + a2(1 - a1))` is `(1 - a1)(1 - a2)` — the same product as rubbing
+/// twice. See `drawing/rasterise.ts`.
+pub fn cut(mut base: Patch, mask: &Patch) -> Patch {
+    let x0 = base.left.max(mask.left);
+    let y0 = base.top.max(mask.top);
+    let x1 = (base.left + base.width as i32).min(mask.left + mask.width as i32);
+    let y1 = (base.top + base.height as i32).min(mask.top + mask.height as i32);
+    if x1 <= x0 || y1 <= y0 {
+        return base;
+    }
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let src = mask.at((x - mask.left) as u32, (y - mask.top) as u32);
+            let taken = mask.rgba[src + 3];
+            if taken == 0 {
+                continue;
+            }
+            let dst = base.at((x - base.left) as u32, (y - base.top) as u32);
+            if taken == 255 {
+                base.rgba[dst + 3] = 0;
+                continue;
+            }
+            let kept = (base.rgba[dst + 3] as f32) * (1.0 - taken as f32 / 255.0);
+            base.rgba[dst + 3] = kept.round().clamp(0.0, 255.0) as u8;
+        }
+    }
+    base
 }
 
 /// Lay `ink` over `base`, source-over, on the rectangle covering both.

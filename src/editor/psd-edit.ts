@@ -399,10 +399,16 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     if (!scene || !mode || !target || !frame || !held) return;
 
     const strokes = sessionStrokes();
+    // With the erase mask, because this is the one place in the editor whose
+    // pixels land on artwork that is already there. A conversion draws on a
+    // clear ground and its erasers have nothing to reach past the session's
+    // own ink; here a rubbed-out patch has to reach the layer's own pixels,
+    // which is what the second buffer is for. See `psd_paint::cut`.
     const raster = rasteriseStrokes(
       strokes,
       options.drawing()?.atlas,
       1 / mode.scale,
+      { eraseMask: true },
     );
     if (!raster) {
       log.warn("There is no ink to put in that layer");
@@ -432,13 +438,8 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
           y: Math.round((raster.bounds.y - frame.y) / mode.scale),
           width: raster.width,
           height: raster.height,
-          rgbaBase64: toBase64(
-            new Uint8Array(
-              raster.rgba.buffer,
-              raster.rgba.byteOffset,
-              raster.rgba.byteLength,
-            ),
-          ),
+          rgbaBase64: toBase64(raster.rgba),
+          ...(raster.erase ? { eraseBase64: toBase64(raster.erase) } : {}),
         },
       );
 

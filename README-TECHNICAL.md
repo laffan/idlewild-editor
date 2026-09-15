@@ -4953,12 +4953,36 @@ floods the area under a tap is the version after this one, and it needs a
 raster of the session to flood — which is the thing this deliberately does not
 build yet.
 
-**The eraser reaches this session's ink and no further.** `destination-out`
-clears what is on the layer being drawn on, and the raster Apply sends is
-composited *over* the PSD layer — so a rub takes out ink drawn here and leaves
-the artwork already in the file alone. An eraser that reached that has to work
-on the file's own pixels, which is `psd_paint`'s side of the fence and later
-work.
+**The eraser reaches the artwork, and needed a second buffer to do it.** On
+screen, `destination-out` clears what is on the layer being drawn on, which is
+the session's own ink — the PSD itself is drawn by Phaser underneath and a 2D
+canvas above it cannot punch a hole in it. That was the whole of what erasing
+here did: the raster Apply sends is drawn on a *clear ground*, so an erasing
+stroke in it takes out the ink laid before it and there is nothing else in
+there to take, and then the result was composited **over** the layer. Rubbing
+somewhere the session had not drawn therefore did nothing whatever, which is
+not what "the same brush with the paint taken out" means on raster data.
+
+So Apply sends two buffers over the same rectangle. `rasteriseStrokes` with
+`eraseMask` renders the erasing strokes a second time as the marks they *would
+have drawn* — same geometry, same brush, same colour opacity, so a soft eraser
+makes a soft mask — and `psd_paint::cut` multiplies the layer's own alpha by
+`1 - mask` before the ink goes over what is left. That order is the order the
+strokes were drawn in: rub a hole and then draw into it, and the new ink lands
+on bare canvas rather than being taken straight back out.
+
+Overlapping erase strokes need no special case, because they never arrive
+separately: they are all drawn into the one mask with `over`, and
+`1 - (a₁ + a₂(1 - a₁))` is `(1 - a₁)(1 - a₂)` — the same product rubbing twice
+would have left. Pinned in `painting.rs`, along with the two decisions that are
+silent when wrong: a rub outside the layer does not drag its rectangle out to
+meet it, and a session that only rubbed sends blank ink which is not laid on at
+all.
+
+**What it still cannot do is preview.** The wash shows exactly where the cut
+will land, and the hole appears when Apply re-parses the file — the same delay
+as every other thing Apply does, but the only one where the *canvas* is what
+changes rather than something being added to it.
 
 **The pixel brush is out of the numbered set** (`PIXEL_BRUSH = 90`). The five
 are the pencil's, chosen from the inspector's own TOOL section; this is a tool

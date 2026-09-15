@@ -541,8 +541,18 @@ remaining pieces are wired to real slots rather than mocked.
   means nothing outside the mode, which is why it is the only one on that bar:
   Fill and Pattern used to be beside it on a second tool rail that appeared and
   disappeared with the mode, and both of those work anywhere, so both are on
-  the drawing toolbar now. It is still a first cut: an eraser that reaches the
-  artwork already inside the file is the version after it
+  the drawing toolbar now
+- **Erasing in PSD Edit mode reaches the artwork in the file**, not just the
+  ink from this session. It did not, and that was the wrong answer for a tool
+  whose whole promise is that what it would draw is what it takes out: the
+  pixels Apply sends are drawn on a clear ground, so a rub somewhere you had
+  not already drawn did nothing at all. Apply now sends a second buffer — the
+  coverage the erasers would have laid down — and Rust takes it out of the
+  layer's own pixels before the ink goes over what is left, which is the order
+  the strokes were drawn in. Rub a hole and draw into it and the new ink lands
+  on bare canvas. The one thing it cannot do is show you before you press
+  Apply: the PSD is drawn underneath the ink layer, so the wash marks where the
+  cut will land and the hole appears when the file comes back
 - Convert a fill to a PSD, the same way a sketch converts. Both export at
   double resolution and place at half, so a converted block-out matches an
   imported image pixel for pixel instead of arriving at half its detail

@@ -171,13 +171,33 @@ fn painted(
     let Some(paint) = &node.edit.paint else {
         return Ok(held);
     };
-    let Some(ink) = psd_paint::clip(paint.decode()?, doc.width(), doc.height()) else {
+    let ink = psd_paint::clip(paint.decode()?, doc.width(), doc.height());
+    let taken = match paint.decode_erase()? {
+        Some(mask) => psd_paint::clip(mask, doc.width(), doc.height()),
+        None => None,
+    };
+    if ink.is_none() && taken.is_none() {
         // Every stroke fell outside the canvas. The layer keeps what it had.
         return Ok(held);
-    };
+    }
     // A blank layer has no rectangle worth keeping — see `psd_paint`.
-    let base = held.filter(|patch| !patch.is_blank());
-    Ok(Some(psd_paint::over(base, ink)))
+    let mut base = held.filter(|patch| !patch.is_blank());
+    // **Erasing first, ink over what is left**, which is the order the strokes
+    // were drawn in: a session that rubbed a hole and then drew into it sends
+    // the hole in the mask and the new ink in the buffer, and laying the ink
+    // first would have the hole take it straight back out again.
+    if let Some(mask) = taken {
+        base = base.map(|patch| psd_paint::cut(patch, &mask));
+    }
+    // Ink that is entirely transparent is not laid on at all. It arrives that
+    // way from a session that only *rubbed* — nothing was drawn — and laying
+    // it would grow the layer's rectangle to cover the rubbing with a margin
+    // of nothing, which is the same "blank has no rectangle worth keeping"
+    // rule read from the other side.
+    Ok(match ink.filter(|patch| !patch.is_blank()) {
+        Some(ink) => Some(psd_paint::over(base, ink)),
+        None => base,
+    })
 }
 
 /// The pixels a brand-new row starts life with: its ink, or one clear pixel.
