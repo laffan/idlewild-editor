@@ -2951,7 +2951,7 @@ gone, and in its place are three zones, always in this order:
 | Zone | Subject | Shown when |
 |---|---|---|
 | **TOOL** | what the thing in your hand has to set | the tool has anything to set |
-| **LAYER** | the layer the next thing you do lands on | always — there is always one |
+| **LAYER** | the layer the next thing you do lands on | the layer is the subject — see below |
 | **OBJECT** | what is selected on the canvas | something is |
 
 The order is the answer the old panel could not give: what is in my hand,
@@ -3004,10 +3004,19 @@ section boundary is 1px.
 there is one. That is half of a move the whole panel made — see **Where the
 panel's explanations went** below.
 
-**The LAYER zone's subject is the selection's layer, falling through to the
-active one.** Not a fallback so much as the same rule read twice: a region
-selection is ground rather than a thing standing on a layer, and the layer it
-falls through to is the one a Fill over that region would land on anyway.
+**The LAYER zone steps aside for an object.** It was there always, on the
+reading that there is always a layer new work lands on — which is true and was
+not the question. Picking a placed PSD drew its layer's whole panel *above* it,
+so selecting one thing looked like selecting two and the object you had just
+tapped started a screen down. It now shows when the layer is what there is to
+talk about: a layer selected, nothing selected, or a **region** — ground rather
+than a thing standing on a layer, where the zone answers "where would the next
+Fill land", which is a question the selection raises and does not settle. That
+is `layerZoneApplies`, beside `layerOf` in `inspect-zone.ts`.
+
+Nothing else changes: the object still belongs to its layer, that layer is
+still the one new ink lands on, and the left panel still expands to reveal the
+object in it. What went is the second subject, not the relationship.
 
 `inspect-zone.ts` is the zone, `inspect-brush.ts` the TOOL zone's contents,
 `inspect-wiring.ts` what every control in the panel actually does, and
@@ -5081,6 +5090,60 @@ zero unless `editor/psd-edit.ts` sets it, and it is set from `sync` rather than 
 the two ends of a session so it follows the mode however it was left —
 including being stopped from outside, which play mode and the other two canvas
 modes all do.
+
+### The tool draws itself under the pointer
+
+A brush is a size, a tip and a colour, and a crosshair says none of the three.
+Until the first mark is down you are guessing, and the guess is worst exactly
+where it costs most — the first stroke on a clear canvas, a pattern whose scale
+has just changed, a shape just picked off the palette. So the pencil, the
+Pattern brush and the Shape brush each paint one stamp of themselves where the
+pointer is, faded: `drawing/cursor.ts`.
+
+**It is the mark, not a picture of the mark.** What it paints goes through the
+same `renderLive` a session paints through, with the same style, at a lower
+`globalAlpha`. The tip is the tip, the pattern lands on the world's own lattice
+at the scale it will, and a shape fills the space it is going to fill — a
+diamond on an isometric project, because the box comes from the same `boxAt`
+the stamp session takes it from. There is no second painter, so there is
+nothing to drift.
+
+**It lives on the live canvas**, beside the eraser's disc, and that is what
+makes it free to take away. A session's first `beginLive` clears the rectangle
+the last paint reported, so pressing to draw removes the preview without
+anything having to remember to — see **The dirty region is what gets uploaded**
+in `surface.ts`. What a press *does* have to do is cancel the queued frame:
+one that fired after the session started would paint the cursor over the stroke
+and leave its rectangle behind as the next clear. `dropCursor` is that, on
+pointer-down and on the pointer leaving.
+
+It is batched through `onFrame` for the reason a stroke is. The eraser's disc
+is painted straight from the move handler and gets away with it because it is
+one `arc`; a pattern preview fills every lattice cell under the tip, and a
+120 Hz pointer against a 60 Hz frame would do that eight times for one picture.
+
+**Erasing is a ring, not a tint.** A tool turned round previews in the accent
+red — but a six-pixel tip tinted red over artwork that is *already* red is
+nothing at all, which is precisely the block-out somebody reaches for the
+eraser on, and a pattern is mostly holes so there is barely a mark to tint. So
+the mark is drawn in red *and* ringed: the tip's circle, or the space's own
+outline for a shape. The ring is stroked twice, a dark halo under a red line,
+because one colour cannot be seen against both a pale lattice and whatever has
+been painted on it.
+
+The preview never takes the erase path itself. `renderLive` composites
+`destination-out` for an erasing mark, and a hole punched in the live canvas
+shows nothing — the real subtraction is cut into the *baked* canvas by the
+session, which has not happened yet. So `erase` is forced false and the colour
+carries the meaning.
+
+**Three tools have no preview and it is not an oversight.** Fill, the Lasso and
+the Boundary sweep are a *path*: what they lay down is decided on release by
+where the whole gesture went, so there is nothing at the pointer to show.
+Slice keeps its own disc, because what it takes away is not a mark it could
+draw. `hasToolCursor` is the membership, and `__tests__/cursor.test.ts` pins
+it — a tool added to `DrawingTool` and forgotten there gets no preview and
+nothing says so.
 
 ### Rub, and the second rail that went
 

@@ -446,6 +446,15 @@ remaining pieces are wired to real slots rather than mocked.
   are about the work, and put the ways out at the right-hand end in the order
   every other sheet ends on: Cancel, Save as a copy, Save. Their toolbars'
   explanations are tooltips on the headings, as the inspector's are
+- **The tool draws itself under the pointer.** The pencil, the Pattern brush
+  and the Shape brush each show a faded stamp of what they are about to lay
+  down, where it would land: the tip's own shape at its own size and colour,
+  the pattern on the world's lattice at its own scale, the shape filling the
+  space it is going to fill. It is the real mark at a lower opacity rather
+  than a drawing of one, so it cannot say something the tool does not do, and
+  it goes the moment you press. A tool turned round to erase previews in red,
+  ringed — a tint alone is invisible over a block-out that is already that
+  colour
 - **Fill takes all three.** The swept shape and the tapped-out one can be a
   flat colour, a pattern revealed on the world's own lattice, or a field of a
   shape — and so can a filled run of grid spaces, where a shape fill is a
@@ -496,6 +505,22 @@ remaining pieces are wired to real slots rather than mocked.
   which is one fact written twice. The section says `BRUSH : INK` now and
   changes as you pick a tip, and what it folds under is still *Brush*, so
   choosing a different one does not reopen a section you closed
+- **A PSD you have just made opens on its layers.** Generate PSD, either
+  Convert to PSD, an extrude Apply and a new image backdrop all end with an
+  empty file standing on the grid, and the only useful next move — Open PSD,
+  or draw into one of its layers — was four sections down a panel that opens
+  on Info. The rest of the panel folds away and it scrolls to the file's own
+  stack, so what is in front of you is the thing you just made and the way
+  into it
+- **Transform sits under Info, and Collider is last.** Between them Info and
+  Transform are what the thing *is*; a collider is what it *stops*, which is a
+  question you come to after the file and its layers rather than in the middle
+  of them
+- **Selecting a thing no longer selects its layer as well.** Picking a placed
+  image drew its layer's whole panel above it, so one tap read as two
+  selections and the thing you tapped started a screen down. The LAYER section
+  is there when the layer is the subject — one selected, nothing selected, or
+  a patch of grid, where it answers where the next Fill would land
 - **The explanations are on the headings, not under them.** A sentence saying
   what a pattern's scale means, or what the Pattern brush does, reads once and
   is scrolled past for ever after — and four of them is most of a narrow

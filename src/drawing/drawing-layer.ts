@@ -38,6 +38,8 @@ import {
   type ToolSession,
 } from "./tools";
 import { PointFill } from "./fill-points";
+import { drawToolCursor, hasToolCursor } from "./cursor";
+import { onFrame } from "./frame";
 import { beginShapeStamp, type StampBox, type StampBoxAt } from "./tools-stamp";
 import {
   DEFAULT_STYLE,
@@ -130,6 +132,17 @@ export class DrawingLayer {
   /** The erase drag's uncommitted stroke list; null outside one. */
   private working: Stroke[] | null = null;
 
+  /**
+   * Where the pointer is hovering, and the frame that paints the tool there.
+   *
+   * Batched through `onFrame` for the reason a stroke is — a 120 Hz pointer
+   * against a 60 Hz frame means every paint but the last is thrown away
+   * unlooked at — and it matters more here than for the eraser's plain disc,
+   * because a pattern preview fills every lattice cell under the tip.
+   */
+  private hoverAt: { x: number; y: number } | null = null;
+  private readonly cursorFrame = onFrame(() => this.paintCursor());
+
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private pinchSpread = 0;
   private lastPanX = 0;
@@ -181,6 +194,7 @@ export class DrawingLayer {
    * the flicker it looked like.
    */
   private onLeave = (): void => {
+    this.dropCursor();
     if (this.session) return;
     if (this.showsPointFill() && this.pointFill.count > 0) {
       this.pointFill.repaint(this.style);
@@ -393,6 +407,7 @@ export class DrawingLayer {
     }
 
     if (!this.tool || this.session) return;
+    this.dropCursor();
     this.root.setPointerCapture(event.pointerId);
     this.sessionPointer = event.pointerId;
     const { x, y } = this.local(event);
@@ -494,12 +509,13 @@ export class DrawingLayer {
     }
 
     if (!this.session || event.pointerId !== this.sessionPointer) {
-      // The eraser paints its own disc instead of a system cursor, so it has
-      // to keep painting it while merely hovering — otherwise the pointer
-      // disappears until the moment you press.
-      if (!this.session && this.tool === "eraser") {
-        const { x, y } = this.local(event);
-        drawEraserCursor(this.surface, x, y);
+      // What the tool would lay down, where it would land — the eraser's disc
+      // and every brush's own tip, both painted while merely hovering. See
+      // `cursor.ts`; the eraser's is a plain ring because what it takes out is
+      // not a mark it could show you.
+      if (!this.session && this.tool && this.previews(this.tool)) {
+        this.hoverAt = this.local(event);
+        this.cursorFrame.request();
       }
       return;
     }
@@ -512,6 +528,42 @@ export class DrawingLayer {
     }
     event.preventDefault();
   };
+
+  /** Whether this tool draws something under the pointer while hovering. */
+  private previews(tool: DrawingTool): boolean {
+    return tool === "eraser" || hasToolCursor(tool);
+  }
+
+  private paintCursor(): void {
+    const at = this.hoverAt;
+    if (!at || this.session || !this.tool) return;
+    if (this.tool === "eraser") {
+      drawEraserCursor(this.surface, at.x, at.y);
+      return;
+    }
+    drawToolCursor(
+      this.surface,
+      this.atlas,
+      this.tool,
+      this.style,
+      at.x,
+      at.y,
+      (wx, wy) => this.stampBox(wx, wy),
+    );
+  }
+
+  /**
+   * Take the preview away.
+   *
+   * The live canvas is about to be somebody else's — a session's first stamp
+   * clears what the preview reported and paints over it — so this is only
+   * about the *queued* frame: one that fired after a press would paint the
+   * cursor over the stroke and leave its rectangle behind as the next clear.
+   */
+  private dropCursor(): void {
+    this.cursorFrame.cancel();
+    this.hoverAt = null;
+  }
 
   private onUp = (event: PointerEvent): void => {
     this.pointers.delete(event.pointerId);

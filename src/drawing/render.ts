@@ -289,7 +289,7 @@ function paint(
  * it caches against a stored stroke's identity, and a mark being erased may
  * still be in the hand.
  */
-function markBox(
+export function markBox(
   stream: readonly StreamPoint[],
   size: number,
   mode: Stroke["mode"],
