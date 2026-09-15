@@ -30,7 +30,7 @@ import * as log from "../lib/log";
 import type { ToolId } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
-import type { ToolRail } from "./tool-rail";
+import { canErase, toolName, type ToolRail } from "./tool-rail";
 
 export interface ToolRoutingHost {
   rail: ToolRail;
@@ -52,6 +52,28 @@ export interface ToolRouting {
    * like nothing happened.
    */
   apply: (tool: ToolId, announce?: boolean) => void;
+  /**
+   * Turn a tool round, or back.
+   *
+   * **Per tool, and remembered.** Erasing is a property of the tool rather
+   * than of the session: a Pattern brush left set to erase is still an eraser
+   * when you come back to it, exactly as its size and its pattern are still
+   * what you left them. One flag on the style would have made it a property
+   * of the *pen*, so picking up the Pencil to draw a line would have found it
+   * rubbing one out.
+   */
+  setErasing: (tool: ToolId, on: boolean) => void;
+  /** Whether a tool is currently turned round. */
+  isErasing: (tool: ToolId) => boolean;
+  /**
+   * A tool held down rather than tapped: pick it up, and turn it round.
+   *
+   * The second way into erase mode, the first being the switch at the top of
+   * the tool's own panel. A toggle, so the way out is the way in — and it
+   * picks the tool up without announcing it, because the line that matters is
+   * the one `setErasing` prints.
+   */
+  hold: (tool: ToolId) => void;
 }
 
 /** Which tools hand the raw pointer to the drawing layer, and as what. */
@@ -99,23 +121,30 @@ const SIZED: readonly ToolId[] = ["pencil", "pattern"];
 export function createToolRouting(host: ToolRoutingHost): ToolRouting {
   /** What each of those was last set to. Pattern starts wide, on purpose. */
   const sizes: Partial<Record<ToolId, number>> = { pattern: 28 };
+  /** Which tools are turned round. See `ToolRouting.setErasing`. */
+  const erasing = new Set<ToolId>();
 
   /**
    * The stroke mode and the paint a tool draws with.
    *
-   * Rub is the only one that changes the *mode* — it is the pencil
-   * compositing `destination-out` — and the three painting tools each say
-   * what their paint has to be: Pattern is a pattern, Shape is a shape, and
-   * the plain pencil is a colour. Fill is deliberately left alone, because
-   * Fill is the tool whose whole point is that it can be any of the three.
+   * The three painting tools each say what their paint has to be: Pattern is
+   * a pattern, Shape is a shape, and the plain pencil is a colour. Fill is
+   * deliberately left alone, because Fill is the tool whose whole point is
+   * that it can be any of the three. Rub is the pencil, and what makes it an
+   * eraser is the flag `apply` writes rather than anything here.
    *
    * A tool that changes the kind keeps whatever row was last chosen for it —
    * that is the library's business, not this file's, so what goes out is only
    * the kind and `paint-picker.ts` fills the rest in.
    */
   function styleFor(tool: ToolId, style: StrokeStyle): Partial<StrokeStyle> | null {
-    if (tool === "rub") return { mode: "erase" };
-    if (tool === "pencil") return { mode: "ink", paint: { ...style.paint, kind: "color" } };
+    // Rub is the pencil with erasing already on, rather than a mode of its
+    // own. The stroke mode "erase" is legacy — see `lib/types.ts` — and
+    // leaving Rub on it would have made it the one eraser in the editor that
+    // behaved differently from the other four.
+    if (tool === "pencil" || tool === "rub") {
+      return { mode: "ink", paint: { ...style.paint, kind: "color" } };
+    }
     if (tool === "pattern") {
       return {
         mode: "ink",
@@ -152,13 +181,17 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
       }
       const patch = styleFor(tool, drawing.style);
       const size = SIZED.includes(tool) ? sizes[tool] : undefined;
-      if (patch || size !== undefined) {
-        drawing.style = {
-          ...drawing.style,
-          ...(patch ?? {}),
-          ...(size === undefined ? {} : { size }),
-        };
-      }
+      // Always written, not only when the tool has a patch: picking the Fill
+      // tool up after erasing with the Pencil has to *stop* erasing, and a
+      // flag left behind from the last tool is how that goes wrong. Rub is
+      // the one tool that is an eraser and nothing else.
+      const erase = tool === "rub" || erasing.has(tool);
+      drawing.style = {
+        ...drawing.style,
+        ...(patch ?? {}),
+        ...(size === undefined ? {} : { size }),
+        erase,
+      };
     }
 
     const drawingTool = DRAWN[tool] ?? null;
@@ -177,7 +210,35 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     if (!announce) return;
     const said = ANNOUNCE[tool];
     if (said) log.info(said);
+    if (erasing.has(tool)) log.info(`${toolName(tool)} is set to erase`);
   }
 
-  return { apply };
+  function setErasing(tool: ToolId, on: boolean): void {
+    if (!canErase(tool)) return;
+    if (on) erasing.add(tool);
+    else erasing.delete(tool);
+    host.rail.setErasing(new Set(erasing));
+    const drawing = host.drawing();
+    if (drawing && host.rail.tool === tool) {
+      drawing.style = { ...drawing.style, erase: on };
+      // The panel's first row is this switch, so it has to be rebuilt — and
+      // `updateStrokeStyle` deliberately does not rebuild. See `Inspector`.
+      host.inspector.setTool(tool, drawing.style);
+    }
+    log.info(
+      on
+        ? `${toolName(tool)} is set to erase — it takes out what it would draw`
+        : `${toolName(tool)} draws again`,
+    );
+  }
+
+  return {
+    apply,
+    setErasing,
+    isErasing: (tool) => erasing.has(tool),
+    hold: (tool) => {
+      apply(tool, false);
+      setErasing(tool, !erasing.has(tool));
+    },
+  };
 }

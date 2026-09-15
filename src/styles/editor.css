@@ -227,6 +227,9 @@
   bottom: 16px;
 }
 .tool-btn {
+  /* `relative` for the eraser's slash, which is a pseudo-element over the
+     icon rather than a second glyph — see `.tool-btn.erasing`. */
+  position: relative;
   width: 56px;
   height: 56px;
   border: 0;
@@ -241,6 +244,32 @@
 .tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
 .tool-btn[disabled] { opacity: 0.45; }
+
+/* A tool turned round: it takes out what it would have drawn.
+   The slash is one pseudo-element rather than a second icon per tool, so
+   every tool that grows an eraser gets the mark for free — and it falls the
+   *opposite* way from the pencil's own diagonal, or it would lie along the
+   glyph it is supposed to cross out.
+
+   Being an eraser is a state of the tool and it survives picking something
+   else up, so the mark has to be visible on a button that is not pressed —
+   in the accent there, and in white on the accent when the tool is in hand.
+   The fill still means "this is what you are holding", which it would stop
+   meaning if every armed tool were filled. */
+.tool-btn.erasing::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30px;
+  height: 2px;
+  background: var(--color-accent);
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+.tool-btn.erasing { color: var(--color-accent); }
+.tool-btn.erasing[aria-pressed="true"] { color: #fff; }
+.tool-btn.erasing[aria-pressed="true"]::after { background: #fff; }
 
 .tool-name {
   position: absolute;

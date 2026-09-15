@@ -25,6 +25,7 @@ import { BRUSHES, brushStampUrl, type FillMode, type StrokeStyle } from "../draw
 import { createPaintPicker } from "./paint-picker";
 import type { Paint, PaintKind } from "../lib/paint";
 import type { ToolId } from "../lib/types";
+import { canErase } from "./tool-rail";
 
 /** What the TOOL section can change, beyond the style itself. */
 export interface ToolPanelActions {
@@ -49,6 +50,9 @@ export interface ToolPanelActions {
    * where they are in front of the thing they are about.
    */
   fillPoints: number;
+  /** Whether the tool in hand is turned round, and the way to turn it. */
+  erasing: boolean;
+  onErasing: (on: boolean) => void;
 }
 
 /** The name the section's heading carries after `TOOL : `. */
@@ -69,11 +73,57 @@ export function toolPanel(
   style: StrokeStyle,
   actions: ToolPanelActions,
 ): HTMLElement[] | null {
-  if (tool === "fill") return fillPanel(style, actions);
-  if (tool === "pattern") return patternPanel(style, actions);
-  if (tool === "shape") return shapePanel(style, actions);
-  if (tool === "pencil" || tool === "rub") return inkPanel(tool, style, actions);
-  return null;
+  const rows =
+    tool === "fill"
+      ? fillPanel(style, actions)
+      : tool === "pattern"
+        ? patternPanel(style, actions)
+        : tool === "shape"
+          ? shapePanel(style, actions)
+          : tool === "pencil" || tool === "rub"
+            ? inkPanel(tool, style, actions)
+            : null;
+  if (!rows) return null;
+  // **First**, above everything the tool sets. It is the biggest thing you can
+  // do to a brush without changing it — the same marks, subtracted instead of
+  // added — so it belongs at the top rather than buried under the sliders that
+  // shape them. The other way in is a long press on the tool's own button; see
+  // `tool-rail.ts`.
+  if (canErase(tool)) rows.unshift(eraserRow(actions));
+  return rows;
+}
+
+/**
+ * Use as Eraser: what the tool would have drawn, taken out instead.
+ *
+ * A switch rather than a segmented pair, because there is no second thing to
+ * name — a brush either draws or it rubs out, and "Draw / Erase" would be two
+ * words for one bit. The hint changes with the state so that the row says what
+ * is happening now rather than only what the control does.
+ */
+function eraserRow(actions: ToolPanelActions): HTMLElement {
+  const on = actions.erasing;
+  return h(
+    "div",
+    { class: "inspect-section" },
+    h(
+      "button",
+      {
+        class: "panel-btn erase-toggle",
+        "aria-pressed": String(on),
+        onClick: () => actions.onErasing(!on),
+      },
+      h("span", { text: "Use as Eraser" }),
+    ),
+    h("div", {
+      class: "field-hint",
+      text: on
+        ? "Taking out what it would have drawn. Hold the tool's button on the " +
+          "toolbar to turn it back."
+        : "Everything this tool would draw, it removes instead. A long press " +
+          "on its button does the same.",
+    }),
+  );
 }
 
 /**

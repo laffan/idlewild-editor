@@ -240,6 +240,15 @@
   color: #fff;
 }
 .panel-btn.pressed:hover { background: var(--color-accent-600); }
+/* The same switch said the other way. `Use as Eraser` is a button that
+   reports its own state, so it carries `aria-pressed` rather than a class
+   someone has to remember to keep in step with it. */
+.panel-btn[aria-pressed="true"] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+.panel-btn[aria-pressed="true"]:hover { background: var(--color-accent-600); }
 
 .inspect-empty {
   padding: 18px 16px;

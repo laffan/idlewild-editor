@@ -121,6 +121,15 @@ export interface InspectorCallbacks
    * shape — see `fill-bar.ts`.
    */
   fillPoints: () => number;
+  /**
+   * Whether a tool is turned round to erase, and the way to turn it.
+   *
+   * By tool rather than by style, because that is where the flag is kept —
+   * see `editor/tool-routing.ts`. Setting it re-renders this panel, so the
+   * row and the toolbar button agree about which way round the tool is.
+   */
+  erasing: (tool: ToolId) => boolean;
+  onErasing: (tool: ToolId, on: boolean) => void;
 }
 
 /**
@@ -334,6 +343,8 @@ export class Inspector {
       fillMode: this.callbacks.fillMode(),
       onFillMode: (mode) => this.callbacks.onFillMode(mode),
       fillPoints: this.callbacks.fillPoints(),
+      erasing: this.callbacks.erasing(this.toolId),
+      onErasing: (on) => this.callbacks.onErasing(this.toolId, on),
     });
     if (rows) this.zone.body.append(...rows);
     this.zone.mount(this.body);

@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { OFF_BAR, TOOLS, toolName } from "../tool-rail";
+import { canErase, ERASABLE, OFF_BAR, TOOLS, toolName } from "../tool-rail";
 import { defaultPatternScale, stampBoxAt, stampSize } from "../stamp-box";
 import { Grid } from "../../lib/grid";
 import { TOOL_IDS, type ToolId } from "../../lib/types";
@@ -57,6 +57,35 @@ describe("the two columns", () => {
     // mode's own bar, because it means nothing outside that mode.
     expect(Object.keys(OFF_BAR)).toEqual(["rub"]);
     expect(seen.has("rub")).toBe(false);
+  });
+});
+
+/**
+ * Which tools can be turned round to erase.
+ *
+ * The rule is "every tool that makes a mark", and it is written out rather
+ * than derived because both ways of getting it wrong are silent: a brush left
+ * out has no eraser and no way to say so, and a tool wrongly in — the Lasso,
+ * say — grows a switch that changes nothing.
+ */
+describe("the brushes that can be turned round", () => {
+  it("is the four that lay a mark down", () => {
+    expect([...ERASABLE]).toEqual(["pencil", "pattern", "shape", "fill"]);
+  });
+
+  it("leaves out everything that draws nothing", () => {
+    for (const tool of ["select", "pan", "point", "zone", "lasso"] as const) {
+      expect(canErase(tool), `${tool} draws nothing`).toBe(false);
+    }
+  });
+
+  it("leaves out the Eraser, which cuts strokes rather than pixels", () => {
+    expect(canErase("eraser")).toBe(false);
+  });
+
+  /** It is an eraser already, so there is nothing to toggle. */
+  it("leaves out Rub", () => {
+    expect(canErase("rub")).toBe(false);
   });
 
   it("names every tool there is", () => {

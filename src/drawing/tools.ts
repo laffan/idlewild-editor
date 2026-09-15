@@ -48,7 +48,7 @@ import {
 } from "./geometry";
 import { onFrame } from "./frame";
 import { paintRegion } from "./paint-render";
-import { renderLive, STREAMLINE } from "./render";
+import { ERASE_PREVIEW, renderLive, STREAMLINE } from "./render";
 import { patternScaleOf } from "../lib/paint";
 import type { AtlasCache } from "./atlas";
 import { ERASER_RADIUS, type Bounds, type StrokeStyle } from "./types";
@@ -425,10 +425,16 @@ export function beginFill(
 export function fillPreview(
   ctx: CanvasRenderingContext2D,
   points: readonly { x: number; y: number }[],
-  style: Pick<StrokeStyle, "color" | "paint" | "stamp">,
+  style: Pick<StrokeStyle, "color" | "paint" | "stamp"> & { erase?: boolean },
   lineWidth: number,
 ): void {
   if (points.length === 0) return;
+
+  // An erasing fill previews in the wash the brushes use, for the reason in
+  // `renderLive`: the shape is what is coming *off*, and previewing it in the
+  // paint it would have been filled with says the opposite. The paint itself
+  // is kept, so a patterned erase still shows which cells go.
+  const color = style.erase ? ERASE_PREVIEW : style.color;
 
   // The inside, in whatever the fill is made of. A pattern previews as the
   // pattern rather than as its colour: the whole question a preview answers
@@ -440,7 +446,7 @@ export function fillPreview(
     paintRegion(
       ctx,
       points.map((p) => ({ point: [p.x, p.y] as [number, number], pressure: 1 })),
-      style.color,
+      color,
       style.paint,
       style.stamp,
     );
@@ -449,7 +455,7 @@ export function fillPreview(
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
     ctx.closePath();
-    ctx.fillStyle = style.color;
+    ctx.fillStyle = color;
     ctx.fill("nonzero");
   }
   ctx.globalAlpha = 1;

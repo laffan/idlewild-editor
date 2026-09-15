@@ -51,6 +51,14 @@ export interface StrokeStyle {
   color: string;
   mode: Stroke["mode"];
   /**
+   * Whether this tool is being used as an eraser.
+   *
+   * Every brush can be: what a tool would draw is what it takes out. Kept per
+   * tool by `editor/tool-routing.ts`, so the Pattern brush can be an eraser
+   * while the Pencil is not.
+   */
+  erase: boolean;
+  /**
    * What the mark is made of, beyond its colour — see `lib/paint.ts`.
    *
    * On the style rather than on the tool, because the same three kinds are
@@ -78,6 +86,7 @@ export const DEFAULT_STYLE: StrokeStyle = {
   smoothing: 0,
   color: "#201e1d",
   mode: "ink",
+  erase: false,
   paint: DEFAULT_PAINT_SPEC,
   stamp: { width: 32, height: 32 },
 };

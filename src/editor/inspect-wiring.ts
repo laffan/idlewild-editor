@@ -29,6 +29,7 @@ import type { PatternShapes } from "./pattern-actions";
 import type { PsdFileActions } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
 import type { Inspector, InspectorCallbacks } from "./inspector";
+import type { ToolRouting } from "./tool-routing";
 
 export interface InspectWiringDeps {
   projectId: string;
@@ -52,6 +53,14 @@ export interface InspectWiringDeps {
   activeLayerId: () => string;
   deleteSelection: () => void;
   deleteLayer: (layerId: string) => void;
+  /**
+   * Which tool is in hand and which way round it is.
+   *
+   * Read through like the rest: the routing is built after the panel, and it
+   * is the routing rather than the style that remembers which tools are set
+   * to erase — see `tool-routing.ts`.
+   */
+  tools: () => ToolRouting;
 }
 
 export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks {
@@ -140,5 +149,11 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
       deps.inspector().render();
     },
     fillPoints: () => deps.drawing()?.fillPointCount ?? 0,
+
+    // Use as Eraser, the first row of every brush's panel. The routing owns
+    // the flag because it is per tool and outlives the panel; all this does
+    // is ask it and tell it.
+    erasing: (tool) => deps.tools().isErasing(tool),
+    onErasing: (tool, on) => deps.tools().setErasing(tool, on),
   };
 }

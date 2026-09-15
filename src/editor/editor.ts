@@ -192,6 +192,7 @@ export async function mountEditor(
       activeLayerId: () => activeLayerId,
       deleteSelection: () => deleteSelection(),
       deleteLayer: (layerId) => void deleteLayer(layerId),
+      tools: () => tools,
     }),
   );
 
@@ -279,9 +280,8 @@ export async function mountEditor(
     usePencil: () => tools.apply("pencil", false),
     inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
-    // Rub is PSD Edit mode's own, and it is a tool like any other once it is
-    // in hand — the pencil with the paint taken out. The bar reports the
-    // press; `tool-routing.ts` decides what it means to the pointer.
+    // Rub is PSD Edit mode's own: the pencil, turned round. The bar reports
+    // the press; `tool-routing.ts` decides what it means to the pointer.
     useRub: (rubbing) => tools.apply(rubbing ? "rub" : "pencil"),
     isRubbing: () => rail.tool === "rub",
     onPsdWritten: async (key, manifest) => {
@@ -289,18 +289,20 @@ export async function mountEditor(
       inspector.reloadPsdLayers(key);
       psdChanged();
     },
-    // Back to the layer's own panel, which is where the shape list — and the
-    // button that opens the next one — is.
+    // Back to the layer's own panel, where the shape list is.
     onMaskDone: (layerId) => handle?.scene.setSelection({ kind: "layer", layerId }),
   });
   const { extrude, collider, psdEdit } = modes;
 
   // The ink's tools and the boundary sweep hand the pointer to the drawing
-  // layer; select, pan and point leave it with the game canvas and its
-  // gesture arbiter. What each of them means to the pointer is
-  // `tool-routing.ts`; `tools` is read through a closure here because the
-  // bars are built before it.
-  const rail = new ToolRail((tool: ToolId) => tools.apply(tool));
+  // layer; select, pan and point leave it with the game canvas and its gesture
+  // arbiter. What each of them means to the pointer — a tap, and a long press,
+  // which turns a brush round into an eraser — is `tool-routing.ts`; `tools`
+  // is read through a closure because the bars are built before it.
+  const rail = new ToolRail(
+    (tool: ToolId) => tools.apply(tool),
+    (tool: ToolId) => tools.hold(tool),
+  );
   const tools = createToolRouting({
     rail,
     canvas: canvasWrap,

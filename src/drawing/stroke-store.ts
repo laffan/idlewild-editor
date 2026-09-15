@@ -60,7 +60,15 @@ export class StrokeStore extends EventTarget {
     // `{kind: "color"}` on every one of them is a field per stroke saying the
     // default — which is bytes on disk and a diff in every test fixture.
     if (style.paint && style.paint.kind !== "color") stroke.paint = { ...style.paint };
-    if (style.mode === "shape") stroke.stamp = { ...style.stamp };
+    // The stamp is wanted by two marks, not one. A "shape" stroke stamps into
+    // it, and a **fill** made of a shape tiles it — and a fill that did not
+    // store it fell back to a 32-pixel orthogonal lattice the moment it was
+    // committed, so on an isometric project the tiles jumped off the grid the
+    // preview had them on.
+    if (style.mode === "shape" || style.paint.kind === "shape") {
+      stroke.stamp = { ...style.stamp };
+    }
+    if (style.erase) stroke.erase = true;
     this.writeStrokes([...this.strokes, stroke]);
     return stroke;
   }

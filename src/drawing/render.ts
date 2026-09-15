@@ -15,7 +15,7 @@ import type { AtlasCache } from "./atlas";
 import { STRIDE, streamlineFor, type StreamPoint } from "./geometry";
 import { stampAngle } from "./geometry";
 import { alphaOf, opaqueHex } from "../lib/color";
-import type { StrokeStyle } from "./types";
+import type { Bounds, StrokeStyle } from "./types";
 
 /** Stamp spacing as a fraction of the brush size. Hush's default. */
 export const SPACING_FRAC = 0.15;
@@ -120,7 +120,20 @@ export function renderStroke(
   paint(ctx, stream, stroke.size, stroke.color, stroke.mode, stroke.brushId, atlas, {
     paint: stroke.paint ?? DEFAULT_PAINT_SPEC,
     stamp: stroke.stamp,
+    erase: isErasing(stroke),
   });
+}
+
+/**
+ * Whether a stroke is taken *out* of the layer rather than laid onto it.
+ *
+ * Two spellings of one fact. `erase` is the flag every brush can carry, and
+ * the "erase" *mode* is what the Rub tool used to be the whole of — strokes
+ * drawn before erasing became a flag still say it, and they still have to rub
+ * out. See `lib/types.ts`.
+ */
+export function isErasing(stroke: Stroke): boolean {
+  return stroke.erase === true || stroke.mode === "erase";
 }
 
 /** A stroke's flat points as the stream shape, with nothing done to them. */
@@ -132,17 +145,43 @@ function asStream(points: readonly number[]): StreamPoint[] {
   return out;
 }
 
-/** Lay an in-flight stroke, which has a style but no record yet. */
+/**
+ * What an eraser's live preview is drawn in.
+ *
+ * The accent, at a bit over a third. It has to read as *marking out* rather
+ * than as painting — which is why it is one flat translucent colour and not
+ * the stroke's own — and it has to be visible over both bare paper and a
+ * dark sketch, which neither a white nor a black wash is.
+ */
+export const ERASE_PREVIEW = "#ec301366";
+
+/**
+ * Lay an in-flight stroke, which has a style but no record yet.
+ *
+ * **An eraser previews as a wash, not as a hole.** The live canvas sits over
+ * the baked one and holds nothing of its own, so compositing `destination-out`
+ * into it would take away nothing and show nothing — you would drag an eraser
+ * across the canvas and watch it behave exactly like a broken tool. What goes
+ * up instead is the mark that is about to come off, in `ERASE_PREVIEW`: the
+ * same geometry the release will subtract, in a colour that says so.
+ */
 export function renderLive(
   ctx: CanvasRenderingContext2D,
   stream: readonly StreamPoint[],
   style: StrokeStyle,
   atlas: AtlasCache,
 ): void {
-  paint(ctx, stream, style.size, style.color, style.mode, style.brushId, atlas, {
-    paint: style.paint,
-    stamp: style.stamp,
-  });
+  const erasing = style.erase || style.mode === "erase";
+  paint(
+    ctx,
+    stream,
+    style.size,
+    erasing ? ERASE_PREVIEW : style.color,
+    erasing && style.mode === "erase" ? "ink" : style.mode,
+    style.brushId,
+    atlas,
+    { paint: style.paint, stamp: style.stamp, erase: false },
+  );
 }
 
 /**
@@ -181,9 +220,28 @@ function modeComposite(
  */
 interface PaintOptions {
   paint: PaintSpec;
-  stamp?: { width: number; height: number };
+  stamp?: { width: number; height: number; diamond?: boolean };
+  /** Whether the finished mark is taken out of the target rather than laid on. */
+  erase?: boolean;
 }
 
+/**
+ * Lay a mark, or take one out.
+ *
+ * Erasing is **one composite over the finished mark**, never one per stamp,
+ * and that is the whole reason this is two functions rather than a flag on
+ * the painters. Every one of the four marks is built out of several draws
+ * that overlap: a stamped stroke lays seven tips on the same pixel, a shape
+ * cuts its own holes with `destination-out`, a pattern fills cell after cell.
+ * Compositing each of those away separately would eat a donut's hole along
+ * with its body and would bite deeper wherever a run crossed itself. So the
+ * mark is drawn at full strength somewhere else, and what comes back is
+ * subtracted once.
+ *
+ * The colour goes in opaque and its alpha is applied to that one composite,
+ * which is what makes a half-transparent colour a *soft* eraser rather than
+ * an uneven one.
+ */
 function paint(
   ctx: CanvasRenderingContext2D,
   stream: readonly StreamPoint[],
@@ -195,6 +253,75 @@ function paint(
   options: PaintOptions,
 ): void {
   if (stream.length === 0) return;
+  if (!options.erase) {
+    paintMark(ctx, stream, size, color, mode, brushId, atlas, options);
+    return;
+  }
+  const box = markBox(stream, size, mode, options);
+  if (!box) return;
+  // "erase" is the legacy mode and "highlight" multiplies; neither means
+  // anything inside the scratch, where all that is wanted is coverage.
+  const drawn = mode === "erase" || mode === "highlight" ? "ink" : mode;
+  composited(ctx, box, "destination-out", alphaOf(color), (target) => {
+    paintMark(target, stream, size, opaqueHex(color), drawn, brushId, atlas, options);
+  });
+}
+
+/**
+ * The world box a mark covers, grown by what the mark is made of.
+ *
+ * `geometry.ts` has `strokeBox` for the same job, and it cannot be used here:
+ * it caches against a stored stroke's identity, and a mark being erased may
+ * still be in the hand.
+ */
+function markBox(
+  stream: readonly StreamPoint[],
+  size: number,
+  mode: Stroke["mode"],
+  options: PaintOptions,
+): Bounds | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const { point } of stream) {
+    if (point[0] < minX) minX = point[0];
+    if (point[1] < minY) minY = point[1];
+    if (point[0] > maxX) maxX = point[0];
+    if (point[1] > maxY) maxY = point[1];
+  }
+  if (minX === Infinity) return null;
+
+  // A fill is bounded by its own outline and a shape by its own box, so both
+  // want nothing but slack for rounding. Anything stamped or latticed reaches
+  // past the path: half a brush, and a whole lattice cell for a pattern,
+  // because the cell the tip's edge lands inside is filled entire.
+  const pad =
+    mode === "fill" || mode === "shape"
+      ? 2
+      : size + 2 + (options.paint?.patternScale ?? 0);
+  // A shape stamp hangs down and right from its point — the points recorded
+  // are the corners of the boxes, not their centres.
+  const stampW = mode === "shape" ? Math.max(1, options.stamp?.width ?? 32) : 0;
+  const stampH = mode === "shape" ? Math.max(1, options.stamp?.height ?? 32) : 0;
+  return {
+    x: minX - pad,
+    y: minY - pad,
+    width: maxX - minX + pad * 2 + stampW,
+    height: maxY - minY + pad * 2 + stampH,
+  };
+}
+
+function paintMark(
+  ctx: CanvasRenderingContext2D,
+  stream: readonly StreamPoint[],
+  size: number,
+  color: string,
+  mode: Stroke["mode"],
+  brushId: number,
+  atlas: AtlasCache,
+  options: PaintOptions,
+): void {
   const spec = options.paint ?? DEFAULT_PAINT_SPEC;
 
   // A stamped field of shapes, which is the whole of what a shape stroke is.
@@ -258,9 +385,8 @@ function paint(
  * time it passes. Compositing the finished stroke *once* is the answer to all
  * three, and it costs one scratch blit per stroke.
  *
- * The scratch carries the target's own transform, so the stamping arithmetic is
- * unchanged and the blit is a rectangle in world units mapped through that
- * transform back into the scratch's raw pixels.
+ * The compositing itself is `composited` below, which erasing also uses — see
+ * `paint`, where a whole mark is subtracted for the same three reasons.
  */
 function flattened(
   ctx: CanvasRenderingContext2D,
@@ -270,58 +396,90 @@ function flattened(
   composite: GlobalCompositeOperation,
   strokeAlpha: number,
 ): void {
-  const scratch = scratchFor(ctx);
+  // The stroke's box in world units, grown by the brush: a stamp is laid
+  // centred on the path, so the ink reaches past the furthest sample.
+  const box = markBox(stream, size, "ink", { paint: DEFAULT_PAINT_SPEC });
+  if (!box) return;
+  composited(ctx, box, composite, strokeAlpha, (target) =>
+    stampStream(target, stream, size, tinted),
+  );
+}
+
+/**
+ * Whether the scratch is already in use further up the stack.
+ *
+ * There is one of it, and an erase composites a mark that may itself want to
+ * be flattened. A nested use would draw the inner mark over the outer one's
+ * pixels and blit the mess back, so the inner one gives up the scratch and
+ * composites straight onto its target instead — which is wrong only in the
+ * overlaps of a mark that is already being subtracted whole.
+ */
+let scratchBusy = false;
+
+/**
+ * Draw something into the scratch at full strength, then lay the result down
+ * as one image.
+ *
+ * The scratch carries the target's own transform, so the drawing arithmetic
+ * inside `body` is unchanged and the blit is a rectangle in world units
+ * mapped through that transform back into the scratch's raw pixels.
+ */
+function composited(
+  ctx: CanvasRenderingContext2D,
+  box: Bounds,
+  composite: GlobalCompositeOperation,
+  alpha: number,
+  body: (target: CanvasRenderingContext2D) => void,
+): void {
+  const scratch = scratchBusy ? null : scratchFor(ctx);
   if (!scratch) {
     // No second context to be had, which is a browser this app does not run
-    // in. Stamping straight on is wrong in the overlaps and right everywhere
+    // in. Drawing straight on is wrong in the overlaps and right everywhere
     // else, which beats drawing nothing.
     ctx.save();
     ctx.globalCompositeOperation = composite;
-    ctx.globalAlpha = strokeAlpha;
-    stampStream(ctx, stream, size, tinted);
+    ctx.globalAlpha = alpha;
+    body(ctx);
     ctx.restore();
     return;
   }
 
-  // The stroke's box in world units, grown by the brush: a stamp is laid
-  // centred on the path, so the ink reaches past the furthest sample.
-  const pad = size + 2;
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const { point } of stream) {
-    if (point[0] < minX) minX = point[0];
-    if (point[1] < minY) minY = point[1];
-    if (point[0] > maxX) maxX = point[0];
-    if (point[1] > maxY) maxY = point[1];
-  }
-  const rx = minX - pad;
-  const ry = minY - pad;
-  const rw = maxX - minX + pad * 2;
-  const rh = maxY - minY + pad * 2;
-
   const t = ctx.getTransform();
-  scratch.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
-  scratch.save();
-  scratch.globalCompositeOperation = "source-over";
-  scratch.globalAlpha = 1;
-  // Only the box, so what is left elsewhere in the scratch is harmless.
-  scratch.clearRect(rx, ry, rw, rh);
-  stampStream(scratch, stream, size, tinted);
-  scratch.restore();
+  scratchBusy = true;
+  try {
+    scratch.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
+    scratch.save();
+    scratch.globalCompositeOperation = "source-over";
+    scratch.globalAlpha = 1;
+    // Only the box, so what is left elsewhere in the scratch is harmless.
+    scratch.clearRect(box.x, box.y, box.width, box.height);
+    body(scratch);
+    scratch.restore();
+  } finally {
+    scratchBusy = false;
+  }
 
   // The same rectangle in the scratch's raw pixels: the transform is a scale
   // and a translation, so this is that scale and that translation applied.
-  const sx = rx * t.a + t.e;
-  const sy = ry * t.d + t.f;
-  const sw = rw * t.a;
-  const sh = rh * t.d;
+  const sx = box.x * t.a + t.e;
+  const sy = box.y * t.d + t.f;
+  const sw = box.width * t.a;
+  const sh = box.height * t.d;
 
   ctx.save();
   ctx.globalCompositeOperation = composite;
-  ctx.globalAlpha = strokeAlpha;
-  ctx.drawImage(scratch.canvas, sx, sy, sw, sh, rx, ry, rw, rh);
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(
+    scratch.canvas,
+    sx,
+    sy,
+    sw,
+    sh,
+    box.x,
+    box.y,
+    box.width,
+    box.height,
+  );
   ctx.restore();
 }
 

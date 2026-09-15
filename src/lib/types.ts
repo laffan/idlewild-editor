@@ -273,16 +273,27 @@ export interface Stroke {
   size: number;
   color: string;
   /**
-   * What the stroke does to what is under it.
+   * What the stroke *is*: how its points are read, and what is drawn from
+   * them.
    *
-   * "ink" paints and "highlight" multiplies, as Hush has always had them.
-   * The other three are each the whole implementation of a tool: "erase"
-   * stamps the same brush with `destination-out`; "fill" is not stamped at
-   * all — its points are a closed outline and what is drawn is the inside of
-   * it; and "shape" stamps a *library shape* into a box at each recorded
-   * point, which is what makes the Shape brush lay tiles rather than a line.
+   * "ink" is stamped along the path and "highlight" is the same multiplied.
+   * "fill" is not stamped at all — its points are a closed outline and what
+   * is drawn is the inside of it — and "shape" stamps a *library shape* into
+   * a box at each recorded point, which is what makes the Shape brush lay
+   * tiles rather than a line. "erase" is **legacy**: it was the whole of the
+   * Rub tool, and erasing is a *flag* now — see `erase` — so a stored stroke
+   * that says "erase" is read as an inked one with that flag set.
    */
   mode: "ink" | "highlight" | "erase" | "fill" | "shape";
+  /**
+   * Whether the mark is taken *out* of the layer rather than laid onto it.
+   *
+   * Orthogonal to `mode`, which is the point: what a tool would draw is what
+   * it erases, so a Pattern brush set to erase takes out exactly the lattice
+   * cells it would have revealed. One composite over the finished mark rather
+   * than one per stamp — see `drawing/render.ts`.
+   */
+  erase?: boolean;
   /**
    * What the mark is made of, when it is not flat colour.
    *
@@ -655,10 +666,8 @@ export type EditorMode = "draw" | "code" | "play";
  * `editor/tool-rail.ts` for which button is where and `tool-routing.ts` for
  * what each one means.
  *
- * "pattern" and "shape" paint with the library rather than with a colour.
- * Pattern was *pixels*, the pencil wearing a checkered tip; it is a fill
- * brush now, and what it lays down is pinned to the world, so a stroke
- * *reveals* an area rather than covering one.
+ * "pattern" and "shape" paint with the library rather than with a colour, and
+ * all four brushes can be turned round to erase — see `editor/tool-rail.ts`.
  *
  * "point" and "zone" are the two ways of making something out of bare ground:
  * there is nothing already on an empty patch of canvas to promote into

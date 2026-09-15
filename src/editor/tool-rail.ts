@@ -103,6 +103,38 @@ export const TOOLS: ToolSpec[] = [
 ];
 
 /**
+ * The tools that can be turned round and used as erasers.
+ *
+ * Every tool that *makes a mark*, which is the whole of the rule: what the
+ * tool would have drawn is what it takes out instead, so a Pattern brush set
+ * to erase removes exactly the lattice cells it would have revealed and a
+ * Shape brush takes back the tiles it would have stamped. The Eraser itself
+ * is not here — it cuts strokes rather than pixels, which is a different
+ * thing that happens to share a name — and neither are Lasso, Select, Pan,
+ * Point or Boundary, none of which draw anything.
+ *
+ * Rub is not here either, for the opposite reason: it is the pencil with
+ * erasing already on, and a tool that is only ever an eraser has nothing to
+ * toggle. See `editor/tool-routing.ts`.
+ */
+export const ERASABLE: readonly ToolId[] = ["pencil", "pattern", "shape", "fill"];
+
+/** Whether a tool can be used as an eraser at all. */
+export function canErase(tool: ToolId): boolean {
+  return ERASABLE.includes(tool);
+}
+
+/**
+ * How long a press on a tool has to be held before it means "and as an
+ * eraser", in milliseconds.
+ *
+ * Long enough that tapping a tool quickly never trips it, short enough that
+ * it is discoverable by leaning on a button — and it is the *second* way in,
+ * not the only one: the same switch is the first row of the tool's own panel.
+ */
+export const ERASE_HOLD_MS = 500;
+
+/**
  * What the label beside the rail says, for tools with no button on either
  * column.
  *
@@ -132,8 +164,20 @@ export class ToolRail {
   readonly label: HTMLElement;
   private readonly buttons = new Map<ToolId, HTMLButtonElement>();
   private current: ToolId = "select";
+  /** Which tools are turned round, so the buttons can carry the slash. */
+  private erasing: ReadonlySet<ToolId> = new Set();
 
-  constructor(onPick: (tool: ToolId) => void) {
+  constructor(
+    onPick: (tool: ToolId) => void,
+    /**
+     * A tool held down rather than tapped: pick it up *and* turn it round.
+     *
+     * Optional so that the rail can still be built on its own — the tool-bar
+     * tests do exactly that — and because a rail with no eraser behind it is
+     * a rail whose long press should simply be a press.
+     */
+    onHold?: (tool: ToolId) => void,
+  ) {
     this.root = h("div", { class: "tool-rail" });
     this.label = h("div", { class: "tool-name m", text: "Select" });
     this.drawBar = h("div", { class: "tool-rail draw-bar" });
@@ -144,6 +188,18 @@ export class ToolRail {
     };
 
     for (const tool of TOOLS) {
+      // A press held on an erasable tool turns it round. The timer is armed
+      // on the way down and cancelled by anything that ends the press; when
+      // it does fire, the click that follows is swallowed, or letting go
+      // would immediately pick the tool up again in its ordinary mode.
+      let timer: number | null = null;
+      let held = false;
+      const hold = canErase(tool.id) && onHold ? onHold : null;
+      const disarm = (): void => {
+        if (timer !== null) window.clearTimeout(timer);
+        timer = null;
+      };
+
       const button = h(
         "button",
         {
@@ -151,7 +207,30 @@ export class ToolRail {
           title: tool.hint ? `${tool.name} — ${tool.hint}` : tool.name,
           "aria-label": tool.name,
           "aria-pressed": String(tool.id === this.current),
+          onPointerDown: () => {
+            if (!hold) return;
+            held = false;
+            disarm();
+            timer = window.setTimeout(() => {
+              timer = null;
+              held = true;
+              this.setTool(tool.id);
+              hold(tool.id);
+            }, ERASE_HOLD_MS);
+          },
+          onPointerUp: disarm,
+          onPointerLeave: () => {
+            disarm();
+            // Dragged off the button: the press is not a press any more, and
+            // the click it would have made is not coming either.
+            held = false;
+          },
+          onPointerCancel: disarm,
           onClick: () => {
+            if (held) {
+              held = false;
+              return;
+            }
             this.setTool(tool.id);
             onPick(tool.id);
           },
@@ -169,6 +248,29 @@ export class ToolRail {
       button.setAttribute("aria-pressed", String(id === tool));
     }
     this.label.textContent = toolName(tool);
+  }
+
+  /**
+   * Which tools are currently turned round.
+   *
+   * A class rather than an attribute because it is not a second pressed
+   * state: a tool can be an eraser while another one is in hand, and the
+   * button has to say so without claiming to be the tool you are holding.
+   * The slash itself is CSS — see `.tool-btn.erasing` in `editor.css`.
+   */
+  setErasing(tools: ReadonlySet<ToolId>): void {
+    this.erasing = tools;
+    for (const [id, button] of this.buttons) {
+      const on = tools.has(id);
+      button.classList.toggle("erasing", on);
+      const name = toolName(id);
+      button.setAttribute("aria-label", on ? `${name} (eraser)` : name);
+    }
+  }
+
+  /** Whether a tool is currently turned round. */
+  isErasing(tool: ToolId): boolean {
+    return this.erasing.has(tool);
   }
 
   get tool(): ToolId {
