@@ -170,8 +170,8 @@ fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
         // publishes are the same file.
         assert!(!page.body.contains("idlewild-game-console"));
 
-        let scene = get(port, &format!("/{id}/game/js/scenes/WorldScene.js"));
-        assert_eq!(scene.status, 200);
+        let scene = get(port, &format!("/{id}/game/js/scenes/Scene1.js"));
+        assert_eq!(scene.status, 200, "body was {:?}", scene.body);
         assert_eq!(
             scene.header("Content-Type"),
             Some("text/javascript; charset=utf-8")

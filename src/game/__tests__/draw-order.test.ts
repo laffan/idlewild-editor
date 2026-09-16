@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-// The two scaffolded scenes as text, the way the Rust side takes them:
-// `include_str!` there, `?raw` here, one file either way.
-import topdownSource from "../../../src-tauri/templates/topdown/js/scenes/WorldScene.js?raw";
-import platformerSource from "../../../src-tauri/templates/platformer/js/scenes/WorldScene.js?raw";
+// The scaffold's own canvas module as text, the way the Rust side takes it:
+// `include_str!` there, `?raw` here, one file either way. It used to be two
+// files — the top of each genre's scene — and holding them to each other was
+// half of what this suite did. There is one now, so that half is a test that
+// no longer has anything to catch.
+import canvasSource from "../../../src-tauri/templates/common/js/shared/canvas.js?raw";
 import { drawOrder } from "../draw-order";
 import type { Cell, Collider, Placement } from "../../lib/types";
 
@@ -15,7 +17,7 @@ import type { Cell, Collider, Placement } from "../../lib/types";
  * `lines`, `shading` and `shape` stacked backwards is a solid with its
  * silhouette painted over everything that made it read as one. The editor
  * gets this right in `doc-renderer.ts`; the game gets it right in the
- * project's own `WorldScene.js`, which cannot import that. So the same
+ * project's own `js/shared/canvas.js`, which cannot import that. So the same
  * ordering exists twice and this holds the two to the same fixtures.
  */
 type DrawOrder = (
@@ -24,7 +26,7 @@ type DrawOrder = (
   colliderOf?: (placement: Placement) => Collider | undefined,
 ) => Placement[];
 
-const templateDrawOrder = blockFrom<DrawOrder>(topdownSource, "drawOrder");
+const templateDrawOrder = blockFrom<DrawOrder>(canvasSource, "drawOrder");
 
 /**
  * The footprint of each file: cell offsets from the anchor, as a collider
@@ -213,18 +215,10 @@ describe("what the order actually is", () => {
   });
 });
 
-describe("both scaffolded scenes", () => {
-  for (const id of ["drawOrder", "applyDepth"]) {
-    it(`carry the same ${id}`, () => {
-      // Found by id rather than by position, so the two cannot drift into
-      // stacking their documents differently.
-      expect(blockText(platformerSource, id)).toBe(blockText(topdownSource, id));
-    });
-  }
-
+describe("the scaffold's own stacking", () => {
   it("space a group's children inside their own slot", () => {
     const applyDepth = blockFrom<(object: unknown, depth: number) => void>(
-      topdownSource,
+      canvasSource,
       "applyDepth",
     );
     const child = (depth: number) => ({
@@ -244,7 +238,7 @@ describe("both scaffolded scenes", () => {
 
   it("give a single-layer placement one plain depth", () => {
     const applyDepth = blockFrom<(object: unknown, depth: number) => void>(
-      topdownSource,
+      canvasSource,
       "applyDepth",
     );
     let given = -1;
@@ -266,11 +260,14 @@ function blockText(source: string, id: string): string {
 }
 
 /**
- * One managed block of a scaffolded scene, as a callable function.
+ * One managed block of the scaffold, as a callable function.
  *
  * The markers make this exact: the block is a whole declaration between two
  * comments, so it can be evaluated on its own without the module around it.
+ * `export` comes off first — the scaffold is modules now, and a Function body
+ * is not one — which changes nothing about the declaration under it.
  */
 function blockFrom<T>(source: string, id: string): T {
-  return new Function(`${blockText(source, id)}\nreturn ${id};`)() as T;
+  const body = blockText(source, id).replace(/^export /gm, "");
+  return new Function(`${body}\nreturn ${id};`)() as T;
 }

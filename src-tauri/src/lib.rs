@@ -138,8 +138,9 @@ fn set_project_options(
     pixel_art: bool,
     round_pixels: bool,
     default_zoom: f64,
+    character: bool,
 ) -> Result<ProjectMeta, String> {
-    store::set_project_options(&id, pixel_art, round_pixels, default_zoom)
+    store::set_project_options(&id, pixel_art, round_pixels, default_zoom, character)
 }
 
 #[tauri::command]

@@ -59,9 +59,12 @@ fn starter_documents_carry_the_chosen_template_and_grid() {
     assert_eq!(value["projection"], "isometric");
     assert_eq!(value["genre"], "topdown");
     assert_eq!(value["gridSize"], 128);
-    // One scene, holding the one layer a project starts with.
+    // One scene, holding the one layer a project starts with. `Scene1`
+    // rather than `Main`, because a scene's name is a filename and a class
+    // name now as well as a label — and Scene1, Scene2, Cave is a sequence
+    // somebody can rename into, where Main sits outside one.
     assert_eq!(value["scenes"].as_array().map(Vec::len), Some(1));
-    assert_eq!(value["scenes"][0]["name"], "Main");
+    assert_eq!(value["scenes"][0]["name"], templates::FIRST_SCENE);
     assert_eq!(value["activeSceneId"], value["scenes"][0]["id"]);
     assert_eq!(value["scenes"][0]["layers"].as_array().map(Vec::len), Some(1));
 
@@ -122,14 +125,20 @@ fn each_style_scaffolds_the_program_it_runs() {
             "a platformer ships no pathfinder: {side_paths:?}"
         );
 
-        // The scenes really are different programs, not one file twice — and
-        // each genre's character is its own prefab.
-        let top_scene =
-            store::read_game_file(&top.id, "js/scenes/WorldScene.js").expect("scene should read");
-        let side_scene =
-            store::read_game_file(&side.id, "js/scenes/WorldScene.js").expect("scene should read");
-        assert!(top_scene.contains("spawnCharacter"));
-        assert!(side_scene.contains("stepBody") || side_scene.contains("solidsFromDocument"));
+        // What differs between the genres is the *character* — what moves,
+        // and what stops it. How a document is drawn is the same question
+        // either way, so `shared/canvas.js` is one file both of them get.
+        let top_character = store::read_game_file(&top.id, "js/shared/character.js")
+            .expect("the character module should read");
+        let side_character = store::read_game_file(&side.id, "js/shared/character.js")
+            .expect("the character module should read");
+        assert!(top_character.contains("isWalkable"));
+        assert!(side_character.contains("solidsFromDocument"));
+        assert_eq!(
+            store::read_game_file(&top.id, "js/shared/canvas.js").ok(),
+            store::read_game_file(&side.id, "js/shared/canvas.js").ok(),
+            "both genres draw a document the same way",
+        );
         assert!(store::read_game_file(&top.id, "js/prefabs/character.js")
             .expect("the prefab should read")
             .contains("findPath"));
@@ -139,9 +148,9 @@ fn each_style_scaffolds_the_program_it_runs() {
 
         // Neither draws a grid. The editor's lattice is scaffolding to build
         // on; a game is the thing that was built.
-        for scene in [&top_scene, &side_scene] {
+        for module in [&top_character, &side_character] {
             assert!(
-                !scene.contains("drawGrid"),
+                !module.contains("drawGrid"),
                 "a played scene should not draw the editor's grid"
             );
         }
@@ -219,10 +228,15 @@ fn a_new_project_scaffolds_a_runnable_game() {
             "index.html",
             "styles.css",
             "js/main.js",
-            "js/scenes/WorldScene.js",
+            // One file per scene, named after it, plus the generated list
+            // `main.js` registers — see `sync_scene_files`.
+            "js/scenes/Scene1.js",
+            "js/scenes/index.js",
             "js/prefabs/character.js",
+            "js/shared/canvas.js",
+            "js/shared/character.js",
             "js/shared/grid.js",
-            // The top-down scene's own module; a platformer gets physics.js
+            // The top-down genre's own module; a platformer gets physics.js
             // instead — see `each_style_scaffolds_the_program_it_runs`.
             "js/shared/navigation.js",
             "js/game.config.json",
@@ -357,24 +371,38 @@ fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
     .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
-        let scene = store::read_game_template(&meta.id, "js/scenes/WorldScene.js")
-            .expect("the scene has a scaffold");
+        let canvas = store::read_game_template(&meta.id, "js/shared/canvas.js")
+            .expect("the canvas module has a scaffold");
         assert_eq!(
-            scene,
-            store::read_game_file(&meta.id, "js/scenes/WorldScene.js").expect("scene should read"),
+            canvas,
+            store::read_game_file(&meta.id, "js/shared/canvas.js").expect("module should read"),
             "an untouched file and its template are the same thing"
         );
-        // A project made before the tree was restructured keeps its scene at
+        // A project made before the tree was restructured keeps its grid at
         // the old path, and Reset has to go on working in it: the old name
         // answers with the file it became.
         assert_eq!(
-            store::read_game_template(&meta.id, "js/WorldScene.js")
+            store::read_game_template(&meta.id, "js/grid.js")
                 .expect("the old path is the same file"),
-            scene,
+            store::read_game_template(&meta.id, "js/shared/grid.js")
+                .expect("the grid has a scaffold"),
         );
-        // The markers the code modal reads ownership from.
-        assert!(scene.contains("// idlewild:begin placeDocument"));
-        assert!(scene.contains("// idlewild:end placeDocument"));
+        // The markers the code modal reads ownership from. They moved with
+        // the code: the machinery is in `shared/`, so that is where the lines
+        // the editor goes on owning are.
+        assert!(canvas.contains("// idlewild:begin placeDocument"));
+        assert!(canvas.contains("// idlewild:end placeDocument"));
+
+        // A scene file is the user's end to end, so it has none at all — and
+        // it still answers, because a file with no blocks and a file with no
+        // scaffold are read differently by the modal.
+        let scene = store::read_game_template(&meta.id, "js/scenes/Scene1.js")
+            .expect("a scene has a scaffold");
+        assert!(
+            !scene.contains("// idlewild:begin"),
+            "a scene file is nobody's but the author's",
+        );
+        assert!(scene.contains("class Scene1 extends Phaser.Scene"));
 
         // The generated config's pristine form is the document as it stands,
         // not the empty file a new project scaffolds with: Reset there means
@@ -396,8 +424,8 @@ fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
     }
 }
 
-/// Both scenes load their PSDs through the plugin's multi-file path, and
-/// neither places the document before that has finished.
+/// The scaffold loads its PSDs through the plugin's multi-file path, and does
+/// not place the document before that has finished.
 ///
 /// `load` keys a texture on the layer's own name, so two PSDs each holding a
 /// `S | layer 1` — which is what New layer names its rows — share one:
@@ -410,28 +438,34 @@ fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
 /// `placeDocument` that did not wait would place against textures that had not
 /// arrived. The two halves are asserted together because either alone is a
 /// broken game.
+///
+/// One assertion where there were two: both genres share `shared/canvas.js`
+/// now, so there is one loader rather than a pair that could drift.
 #[test]
-fn both_scenes_load_psds_namespaced_and_wait_for_them() {
-    for genre in [Genre::Topdown, Genre::Platformer] {
-        let scene = templates::template_file(
-            "js/scenes/WorldScene.js",
-            &seed(Projection::Orthogonal, genre, 32, GameOptions::default()),
-        )
-        .expect("the scene has a scaffold");
+fn the_canvas_loads_psds_namespaced_and_waits_for_them() {
+    let canvas = templates::template_file(
+        "js/shared/canvas.js",
+        &seed(
+            Projection::Orthogonal,
+            Genre::Topdown,
+            32,
+            GameOptions::default(),
+        ),
+    )
+    .expect("the canvas module has a scaffold");
 
-        assert!(
-            scene.contains("this.P2P.load.loadMultiple(this, psds)"),
-            "{genre:?} does not load its PSDs namespaced"
-        );
-        assert!(
-            !scene.contains("this.P2P.load.load(this,"),
-            "{genre:?} still loads a PSD on the path that collides"
-        );
-        assert!(
-            scene.contains("if (!this.psdsReady) return;"),
-            "{genre:?} places its document before its textures are in"
-        );
-    }
+    assert!(
+        canvas.contains("scene.P2P.load.loadMultiple(scene, psds)"),
+        "the scaffold does not load its PSDs namespaced"
+    );
+    assert!(
+        !canvas.contains("scene.P2P.load.load(scene,"),
+        "the scaffold still loads a PSD on the path that collides"
+    );
+    assert!(
+        canvas.contains("if (!scene.psdsReady) return;"),
+        "the scaffold places its document before its textures are in"
+    );
 }
 
 /// A pattern layer waits for the same load `placeDocument` waits for.
@@ -445,54 +479,59 @@ fn both_scenes_load_psds_namespaced_and_wait_for_them() {
 /// appears in the exported game while the editor draws it correctly, which is
 /// as far from the cause as a bug gets.
 #[test]
-fn both_scenes_hold_their_patterns_until_the_psds_are_in() {
-    for genre in [Genre::Topdown, Genre::Platformer] {
-        let scene = templates::template_file(
-            "js/scenes/WorldScene.js",
-            &seed(Projection::Orthogonal, genre, 32, GameOptions::default()),
-        )
-        .expect("the scene has a scaffold");
+fn patterns_are_held_until_the_psds_are_in() {
+    let canvas = templates::template_file(
+        "js/shared/canvas.js",
+        &seed(
+            Projection::Orthogonal,
+            Genre::Topdown,
+            32,
+            GameOptions::default(),
+        ),
+    )
+    .expect("the canvas module has a scaffold");
 
-        let body = scene
-            .split_once("syncPatterns() {")
-            .expect("the scene generates its patterns")
-            .1;
-        let guard = body
-            .find("if (!this.psdsReady) return;")
-            .expect("syncPatterns does not wait for the PSDs");
-        let place = body
-            .find("this.P2P.place(")
-            .expect("syncPatterns places nothing");
-        assert!(
-            guard < place,
-            "{genre:?} places a pattern element before its textures are in"
-        );
-    }
+    let body = canvas
+        .split_once("export function syncPatterns(scene) {")
+        .expect("the scaffold generates its patterns")
+        .1;
+    let guard = body
+        .find("if (!scene.psdsReady) return;")
+        .expect("syncPatterns does not wait for the PSDs");
+    let place = body
+        .find("scene.P2P.place(")
+        .expect("syncPatterns places nothing");
+    assert!(
+        guard < place,
+        "a pattern element is placed before its textures are in"
+    );
 }
 
-/// Every marked block in a scaffolded scene closes, and each genre carries the
-/// set it is meant to — the code modal finds a block by id, so a template that
-/// renamed one on one side would silently stop offering its Reset on that
-/// side.
+/// Every marked block in the scaffold closes, and each file carries the set it
+/// is meant to — the code modal finds a block by id, so a template that
+/// renamed one would silently stop offering its Reset.
 ///
-/// The two lists are written out rather than compared to each other, because
-/// they are allowed to differ and one of them does: `walkDepth` is where a
-/// character sorts itself into an isometric ordering, and a platformer is seen
-/// from the side, where nothing sorts on Y at all. What the assertion is for is
-/// drift — a rename, a block left open, a block quietly dropped — and a list
-/// per genre catches all three on both sides.
+/// The lists are written out rather than derived, because what the assertion
+/// is for is drift: a rename, a block left open, a block quietly dropped.
+/// `canvas.js` is one file for both genres and `character.js` is one per
+/// genre, and the two genres' differ — a top-down character sorts itself into
+/// an isometric ordering, and a platformer is seen from the side, where
+/// nothing sorts on Y at all.
+///
+/// A **scene** file is not here on purpose: it has no blocks, because every
+/// line of it is the author's.
 #[test]
-fn each_scene_marks_the_blocks_it_should_and_closes_every_one() {
-    let shared = [
-        "preload",
-        "patternUpdate",
+fn the_scaffold_marks_the_blocks_it_should_and_closes_every_one() {
+    let canvas = [
+        "sceneOf",
+        "loadDocument",
+        "updateCanvas",
         "applyCamera",
         "placeDocument",
         "paintBackgrounds",
         "placePatterns",
         "paintFill",
-    ];
-    let rest = [
+        "nearPoints",
         "drawOrder",
         "applyDepth",
         "applyScale",
@@ -501,34 +540,42 @@ fn each_scene_marks_the_blocks_it_should_and_closes_every_one() {
         "gradientCorners",
         "patternRule",
     ];
-    let topdown: Vec<&str> = shared
-        .iter()
-        .copied()
-        .chain(["walkDepth"])
-        .chain(rest.iter().copied())
-        .collect();
-    let platformer: Vec<&str> = shared.iter().copied().chain(rest.iter().copied()).collect();
+    let topdown = [
+        "spawnCharacter",
+        "updateCharacter",
+        "sortCharacter",
+        "readColliders",
+        "walkDepth",
+    ];
+    let platformer = ["spawnCharacter", "updateCharacter", "readSolids"];
 
-    for (genre, expected) in [
-        (Genre::Topdown, &topdown),
-        (Genre::Platformer, &platformer),
+    for (genre, file, expected) in [
+        (Genre::Topdown, "js/shared/canvas.js", &canvas[..]),
+        (Genre::Topdown, "js/shared/character.js", &topdown[..]),
+        (Genre::Platformer, "js/shared/character.js", &platformer[..]),
     ] {
-        let scene = templates::template_file(
-            "js/scenes/WorldScene.js",
+        let text = templates::template_file(
+            file,
             &seed(Projection::Orthogonal, genre, 32, GameOptions::default()),
         )
-        .expect("the scene has a scaffold");
+        .expect("the file has a scaffold");
 
         let mut open: Vec<&str> = Vec::new();
         let mut closed: Vec<&str> = Vec::new();
-        for line in scene.lines().map(str::trim) {
+        for line in text.lines().map(str::trim) {
             if let Some(id) = line.strip_prefix("// idlewild:begin ") {
                 open.push(id);
             } else if let Some(id) = line.strip_prefix("// idlewild:end ") {
                 closed.push(id);
             }
         }
-        assert_eq!(open, closed, "{genre:?} has a marker without its pair");
-        assert_eq!(&open, expected, "{genre:?} marks a different set of blocks");
+        assert_eq!(open, closed, "{file} has a marker without its pair");
+        assert_eq!(open, expected, "{file} marks a different set of blocks");
     }
+
+    let scene = templates::scene_file("Scene1", "Scene1");
+    assert!(
+        !scene.contains("// idlewild:"),
+        "a scene file is the author's, end to end",
+    );
 }

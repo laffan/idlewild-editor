@@ -13,8 +13,9 @@
 //! *project* is made of — the starter document, the runnable game each
 //! template selection writes, and the tree the code modal edits; `exports` is
 //! what leaving with one takes. `options` is the per-project settings —
-//! pixel-perfect rendering, the default zoom, and the character controller New
-//! Game can leave out.
+//! pixel-perfect rendering, the default zoom, and whether a character is
+//! spawned. `scenes` is the file each scene in the sidebar is written in, and
+//! the three things that can happen to one.
 
 mod archive;
 mod backgrounds;
@@ -25,6 +26,7 @@ mod options;
 mod painting;
 mod rewrite;
 mod scaffolds;
+mod scenes;
 mod server;
 mod sketching;
 mod stacking;

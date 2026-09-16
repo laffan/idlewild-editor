@@ -15,6 +15,8 @@
 //! ```
 
 use crate::project::{now_ms, GameFile, GameOptions, Genre, ProjectMeta, Projection};
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -128,11 +130,13 @@ pub fn create_project(
 
 /// Change what a project is rendered with, and hand back the meta as written.
 ///
-/// Only the three options that are settings rather than history: `character`
-/// is a fact about what the scaffold wrote and unticking it afterwards would
-/// not take a character out of code that already has one.
+/// All four, `character` included. It used to be the one that could only be
+/// *reported*: it was resolved when the files were written, so unticking it
+/// afterwards would not have taken a character out of code that already had
+/// one. The scaffold is the same either way now and `shared/character.js`
+/// reads the answer out of the config, so it is a setting like the rest.
 ///
-/// The config the project's own code reads carries all three, so it is
+/// The config the project's own code reads carries all four, so it is
 /// rewritten here — otherwise the editor would change and the game would not
 /// until the next time something touched the document.
 pub fn set_project_options(
@@ -140,11 +144,13 @@ pub fn set_project_options(
     pixel_art: bool,
     round_pixels: bool,
     default_zoom: f64,
+    character: bool,
 ) -> Result<ProjectMeta, String> {
     let mut meta = read_meta(id)?;
     meta.options.pixel_art = pixel_art;
     meta.options.round_pixels = round_pixels;
     meta.options.default_zoom = default_zoom;
+    meta.options.character = character;
     meta.updated_at = now_ms();
     write_meta(&meta)?;
     let _ = sync_game_config(id);
@@ -242,13 +248,172 @@ pub fn sync_game_config(id: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    // The config on disk is the record of which file each scene is written
+    // in, so it is read *before* it is replaced and the scene files are
+    // brought into line first. Writing the new one before moving the files
+    // would leave a config describing a tree that is not there yet, and a
+    // failure in between would make the mismatch permanent.
+    let previous = fs::read_to_string(&path).ok();
+    // Never fails the save, for `sync_game_config`'s own reason: a project
+    // with a stale scene file and a written document is better off than one
+    // with neither.
+    let _ = sync_scene_files(id, previous.as_deref(), &config);
+
     // An unchanged config is not rewritten: the code modal watches this file
     // and a save storm on a drag would otherwise reload the editor under the
     // user's caret once per frame.
-    if fs::read_to_string(&path).ok().as_deref() == Some(body.as_str()) {
+    if previous.as_deref() == Some(body.as_str()) {
         return Ok(());
     }
     fs::write(&path, body).map_err(|e| format!("Cannot write the game config: {e}"))
+}
+
+/// Keep `js/scenes/` in step with the document's scenes.
+///
+/// One file per scene, named after it, plus the generated `index.js` that
+/// `main.js` registers. Three things happen here and each is the obvious one:
+/// a scene the project has not got a file for is scaffolded, a scene whose
+/// file name has changed is **renamed** — carrying whatever was written in it
+/// — and a file whose scene has gone is deleted.
+///
+/// **A rename is the reason the previous config is read.** Scene ids never
+/// change and names do, so the only way to tell *Cave renamed to Cavern* from
+/// *Cave deleted, Cavern added* is to know which file that id was in last
+/// time. The config records it, so the config is the answer.
+///
+/// Renaming rewrites the two places the old name appears in the file — the
+/// class and the key it passes to `super` — because a scene called Cavern in
+/// a file called Cave.js is the mismatch this whole arrangement exists to
+/// avoid. Both are anchored replacements of the scaffold's own text: a file
+/// whose class somebody has renamed by hand keeps whatever they called it,
+/// and moves under its new name regardless.
+///
+/// **Projects made before per-scene files are left alone.** They have one
+/// `js/scenes/WorldScene.js` and a `main.js` that imports it by name, and
+/// writing a second scene file beside it would be a file nothing loads. The
+/// test is `js/shared/canvas.js`, which only the new scaffold writes.
+fn sync_scene_files(id: &str, previous: Option<&str>, config: &Value) -> Result<(), String> {
+    let dir = game_dir(id)?;
+    if !dir.join(safe_relative("js/shared/canvas.js")?).exists() {
+        return Ok(());
+    }
+    let scenes_dir = dir.join(safe_relative(crate::templates::SCENES_DIR)?);
+    fs::create_dir_all(&scenes_dir).map_err(|e| e.to_string())?;
+
+    let wanted = scene_files_of(config);
+    let before: HashMap<String, String> = previous
+        .and_then(|text| serde_json::from_str::<Value>(text).ok())
+        .map(|value| {
+            scene_files_of(&value)
+                .into_iter()
+                .map(|(id, file, _)| (id, file))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    for (scene_id, file, name) in &wanted {
+        let path = scenes_dir.join(format!("{file}.js"));
+        match before.get(scene_id) {
+            // Renamed, and the file it was in is still where it was said to
+            // be. Anything else — a file somebody moved or deleted by hand —
+            // falls through to being scaffolded fresh under the new name.
+            Some(was) if was != file && scenes_dir.join(format!("{was}.js")).exists() => {
+                let from = scenes_dir.join(format!("{was}.js"));
+                let text = fs::read_to_string(&from).unwrap_or_default();
+                fs::write(&path, rename_scene_class(&text, was, file))
+                    .map_err(|e| format!("Cannot write {file}.js: {e}"))?;
+                let _ = fs::remove_file(&from);
+            }
+            _ if !path.exists() => {
+                fs::write(&path, crate::templates::scene_file(file, name))
+                    .map_err(|e| format!("Cannot write {file}.js: {e}"))?;
+            }
+            _ => {}
+        }
+    }
+
+    // Scenes that have gone. Deleting a scene in the sidebar already says it
+    // takes everything on it, and the file it was written in is part of that
+    // — an orphan nothing imports would be worse than a clean removal.
+    let keep: HashSet<&str> = wanted.iter().map(|(_, file, _)| file.as_str()).collect();
+    for (scene_id, was) in &before {
+        if keep.contains(was.as_str()) || wanted.iter().any(|(id, _, _)| id == scene_id) {
+            continue;
+        }
+        let _ = fs::remove_file(scenes_dir.join(format!("{was}.js")));
+    }
+
+    let index = scenes_dir.join("index.js");
+    let body = scene_index(&wanted);
+    if fs::read_to_string(&index).ok().as_deref() != Some(body.as_str()) {
+        fs::write(&index, body).map_err(|e| format!("Cannot write the scene list: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Every scene in a config, as (id, file, name).
+fn scene_files_of(config: &Value) -> Vec<(String, String, String)> {
+    config
+        .get("scenes")
+        .and_then(|s| s.as_array())
+        .map(|scenes| {
+            scenes
+                .iter()
+                .filter_map(|scene| {
+                    let file = scene.get("file")?.as_str()?.to_string();
+                    let id = scene.get("id")?.as_str()?.to_string();
+                    let name = scene
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or(&file)
+                        .to_string();
+                    Some((id, file, name))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The generated list `main.js` registers, in document order.
+///
+/// The first scene is the one the game opens on, which is what makes
+/// reordering scenes in the sidebar mean something at runtime.
+pub fn scene_index(scenes: &[(String, String, String)]) -> String {
+    let mut out = String::from(
+        "// The project's scenes, as `main.js` registers them.\n\
+         //\n\
+         // Written by the editor and rewritten whenever a scene is added,\n\
+         // renamed, reordered or removed \u{2014} so nothing here is yours to\n\
+         // edit, and the scene files themselves are entirely yours. The first\n\
+         // entry is the scene the game opens on.\n",
+    );
+    for (_, file, _) in scenes {
+        out.push_str(&format!("import {file} from \"./{file}.js\";\n"));
+    }
+    let names = scenes
+        .iter()
+        .map(|(_, file, _)| file.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    out.push_str(&format!("\nexport const scenes = [{names}];\n"));
+    // The same list by name, so `main.js` can open on the scene the editor
+    // has open without reading a class's own `name` back off it.
+    out.push_str(&format!("export const byFile = {{ {names} }};\n"));
+    out
+}
+
+/// Rename a scene's class and the key it runs under, and nothing else.
+///
+/// Two anchored replacements of what the scaffold wrote. A file that says
+/// neither — somebody's own class name, or a scene rewritten from scratch —
+/// comes back unchanged and still moves to its new path: the filename is the
+/// editor's to keep in step, and what is inside is the author's.
+pub fn rename_scene_class(text: &str, from: &str, to: &str) -> String {
+    text.replace(
+        &format!("class {from} extends"),
+        &format!("class {to} extends"),
+    )
+    .replace(&format!("super(\"{from}\")"), &format!("super(\"{to}\")"))
 }
 
 /// One file of `game/` as the scaffold first wrote it — what a managed
@@ -263,6 +428,13 @@ pub fn read_game_template(id: &str, rel: &str) -> Result<String, String> {
     if rel == crate::game_config::CONFIG_REL {
         let config = crate::game_config::from_document(&meta, &read_doc(id)?)?;
         return serde_json::to_string_pretty(&config).map_err(|e| e.to_string());
+    }
+    // The scene list is generated the same way and for the same reason: its
+    // pristine form is the document as it stands, because that is what the
+    // next save would write into it.
+    if rel == crate::templates::SCENE_INDEX_REL {
+        let config = crate::game_config::from_document(&meta, &read_doc(id)?)?;
+        return Ok(scene_index(&scene_files_of(&config)));
     }
     crate::templates::template_file(rel, &meta)
 }

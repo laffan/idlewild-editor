@@ -40,7 +40,14 @@ import type {
   Zone,
 } from "./types";
 import { doc as docIpc } from "./ipc";
-import { emptyLayer, copyLayer, makeId, nextPointName, withScenes } from "./doc-shape";
+import {
+  copyLayer,
+  emptyLayer,
+  makeId,
+  nextPointName,
+  nextSceneName,
+  withScenes,
+} from "./doc-shape";
 import { nextLayerName } from "./layer-kinds";
 import { UndoHistory } from "./history";
 import * as log from "./log";
@@ -143,7 +150,7 @@ export class DocStore extends EventTarget {
   addScene(name?: string): Scene {
     const scene: Scene = {
       id: makeId("scene"),
-      name: name ?? `Scene ${this.state.scenes.length + 1}`,
+      name: name ?? nextSceneName(this.state.scenes),
       layers: [emptyLayer("Terrain")],
     };
     this.commit({

@@ -20,9 +20,17 @@
    dock has no height to spare for one; a code panel docked as a column beside
    the canvas has no width to spare instead, and keeps it underneath.
 
-   The height is the row's, so the docked height has to come off; the nav and
-   the page stack rather than sitting side by side, because 300 px of column
-   cannot carry both. */
+   The height is the row's, so the docked height has to come off. Everything
+   else is the same panel: the nav stays **beside** the page here as it does
+   underneath, narrower because the column is. It used to stack them — the nav
+   across the top at `max-height: 40%` and the page under it — and that was
+   wrong twice over. A contents list reads as a column and a page of prose
+   reads under a heading, so turning the panel on its side turned both of them
+   the wrong way round; and the page was then a `flex: 1` child of a *column*
+   with no `min-height: 0`, so it could not shrink below its own content, grew
+   past the panel, and was clipped by the panel's `overflow: hidden` with no
+   scrollbar to get any of it back. Lengthening the page made less of it
+   readable, which is the shape that bug had. */
 .docs-panel.docs-right {
   width: 340px;
   min-width: 240px;
@@ -30,13 +38,7 @@
   border-top: 0;
   border-left: var(--rule-chrome);
 }
-.docs-panel.docs-right .docs-body { flex-direction: column; }
-.docs-panel.docs-right .docs-nav {
-  width: auto;
-  max-height: 40%;
-  border-right: 0;
-  border-bottom: var(--rule-chrome);
-}
+.docs-panel.docs-right .docs-nav { width: 140px; }
 .docs-panel.docs-right .docs-head { padding: 6px 8px; gap: 8px; }
 
 /* ── The header: which reference, and how it is being read ───────────────── */
@@ -150,7 +152,13 @@
 
 .docs-content {
   flex: 1;
+  /* Both axes: this is a scrolling box, and a flex child that cannot shrink
+     below its content is a scrolling box that never scrolls — it overflows
+     its parent and is cut off instead. `min-width` is the one that matters in
+     a row and `min-height` the one in a column, and the panel is laid out
+     both ways depending on where it is. */
   min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px 16px;
   font: 400 13px/1.6 var(--font-body);

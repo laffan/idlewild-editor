@@ -27,7 +27,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import topdownSource from "../../../src-tauri/templates/topdown/js/scenes/WorldScene.js?raw";
+import canvasSource from "../../../src-tauri/templates/common/js/shared/canvas.js?raw";
+import characterSource from "../../../src-tauri/templates/topdown/js/shared/character.js?raw";
 
 interface Among {
   base: number;
@@ -41,16 +42,19 @@ interface Placed {
   collider?: { cells: { cx: number; cy: number }[]; blocking: boolean };
 }
 
-// Two blocks, because `nearPoints` asks `drawOrder`'s `nearRow` what a unit's
-// line is — one number, worked out one way, whether it is being sorted or
-// searched.
+// Three blocks over two files, because the answer is split the way the
+// scaffold is: `canvas.js` sorts a layer and records each unit's line —
+// `nearPoints` asks `drawOrder`'s own `nearRow` for it, so the number is
+// worked out one way whether it is being sorted or searched — and
+// `character.js` is what searches. Pulled out by id rather than by file, so
+// moving one between modules is not a test to rewrite.
 const { walkDepth, nearPoints, groundOf } = blockFrom<{
   walkDepth: (among: Among, y: number) => number;
   nearPoints: (order: readonly Placed[], halfTile: number) => number[];
   groundOf: (character: Walker) => number;
 }>(
-  topdownSource,
-  ["drawOrder", "walkDepth"],
+  [canvasSource, characterSource],
+  ["drawOrder", "nearPoints", "walkDepth"],
   ["walkDepth", "nearPoints", "groundOf"],
 );
 
@@ -349,14 +353,23 @@ describe("the point a character is measured from", () => {
   });
 });
 
-/** Managed blocks of the scaffolded scene, as the functions they declare. */
-function blockFrom<T>(source: string, ids: string[], names: string[]): T {
-  const lines = source.split("\n");
+/**
+ * Managed blocks of the scaffold, as the functions they declare.
+ *
+ * Found in whichever of the given files holds each one, and stripped of
+ * `export` — the scaffold is modules now, and a Function body is not one.
+ */
+function blockFrom<T>(sources: string[], ids: string[], names: string[]): T {
   const body = ids.map((id) => {
-    const from = lines.findIndex((l) => l.trim() === `// idlewild:begin ${id}`);
-    const to = lines.findIndex((l) => l.trim() === `// idlewild:end ${id}`);
-    if (from < 0 || to < 0) throw new Error(`no ${id} block in the template`);
-    return lines.slice(from + 1, to).join("\n");
+    for (const source of sources) {
+      const lines = source.split("\n");
+      const from = lines.findIndex((l) => l.trim() === `// idlewild:begin ${id}`);
+      const to = lines.findIndex((l) => l.trim() === `// idlewild:end ${id}`);
+      if (from >= 0 && to >= 0) {
+        return lines.slice(from + 1, to).join("\n").replace(/^export /gm, "");
+      }
+    }
+    throw new Error(`no ${id} block in the template`);
   });
   return new Function(
     `${body.join("\n")}\nreturn { ${names.join(", ")} };`,

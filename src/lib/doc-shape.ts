@@ -201,6 +201,27 @@ export function nextPointName(layers: readonly Layer[]): string {
 }
 
 /**
+ * The next unclaimed `SceneN`, for a scene nobody has named.
+ *
+ * No space in it, unlike a point's: a scene's name is a **filename** and a
+ * class name as well as a label — `js/scenes/Scene2.js` holding `class
+ * Scene2` — and `Scene 2` would have to be mangled into either. Counting past
+ * what is taken rather than off the length of the list, because two scenes
+ * with one name are two files that cannot both have it.
+ *
+ * Here beside `nextPointName` rather than on the store, for the reason
+ * `fillAt` below is: the store is at its line limit and this is a pure
+ * question about a list.
+ */
+export function nextSceneName(scenes: readonly { name: string }[]): string {
+  const taken = new Set(scenes.map((scene) => scene.name));
+  for (let n = scenes.length + 1; ; n++) {
+    const name = `Scene${n}`;
+    if (!taken.has(name)) return name;
+  }
+}
+
+/**
  * The fill covering a space on a layer, if any.
  *
  * A pure question about a layer rather than about the document, which is why

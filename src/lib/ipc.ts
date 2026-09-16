@@ -306,23 +306,23 @@ export const projects = {
       options,
     }),
   /**
-   * Change how a project renders. Hands back the meta as written, and rewrites
-   * the config the project's own code reads — so a game that is up picks the
-   * change up on its next start.
+   * Change how a project renders and what moves in it. Hands back the meta as
+   * written, and rewrites the config the project's own code reads — so a game
+   * that is up picks the change up on its next start.
    *
-   * The scaffold's own choice, whether a character controller was written, is
-   * not among them: a project's `game/` tree is its own copy, and unticking a
-   * box cannot take a character out of code that already has one.
+   * All four, the character controller included. It used to be the one that
+   * could only be reported: it was resolved when the scaffold was written, so
+   * unticking a box could not take a character out of code that already had
+   * one. `shared/character.js` reads the answer out of the config now, so the
+   * files are the same either way and the box is a box.
    */
-  setOptions: (
-    id: string,
-    options: Pick<GameOptions, "pixelArt" | "roundPixels" | "defaultZoom">,
-  ) =>
+  setOptions: (id: string, options: GameOptions) =>
     invoke<ProjectMeta>("set_project_options", {
       id,
       pixelArt: options.pixelArt,
       roundPixels: options.roundPixels,
       defaultZoom: options.defaultZoom,
+      character: options.character,
     }),
   rename: (id: string, name: string) =>
     invoke<ProjectMeta>("rename_project", { id, name }),

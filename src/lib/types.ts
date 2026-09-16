@@ -28,13 +28,13 @@ export type Genre = "topdown" | "platformer";
 /**
  * How a project renders, and what its scaffold put in it.
  *
- * Three of the four are settings: Project Options can change them, the editor
- * applies them to its own canvas, and the game reads them out of the generated
- * config. The fourth, `character`, is a fact about what New Game wrote — a
- * project's `game/` tree is its own copy, so unticking a box afterwards would
- * not take a character out of code that already has one. It is kept because
- * the scaffold has to be reproducible: a managed block's Reset asks Rust for
- * the file as it was first written.
+ * All four are settings: Project Options can change them, the editor applies
+ * them to its own canvas, and the game reads them out of the generated config.
+ *
+ * `character` was the exception until the scaffold was split up: it was
+ * resolved when the files were written, so a project either had a character
+ * in it or no way back to one. `js/shared/character.js` is scaffolded either
+ * way now and reads `config.character`, so the box is a box.
  *
  * Mirrored by `GameOptions` in src-tauri/src/project.rs.
  */
@@ -45,7 +45,7 @@ export interface GameOptions {
   roundPixels: boolean;
   /** The zoom a scene opens at, in the editor and in the game. */
   defaultZoom: number;
-  /** Whether New Game scaffolded a character controller. */
+  /** Whether the project spawns the character controller — see above. */
   character: boolean;
 }
 

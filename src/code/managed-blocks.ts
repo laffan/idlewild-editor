@@ -32,8 +32,16 @@
  * of two strings so it can be tested as one.
  */
 
-/** Files the editor writes end to end. Editing one is not a conversation. */
-const GENERATED = new Set(["js/game.config.json"]);
+/**
+ * Files the editor writes end to end. Editing one is not a conversation.
+ *
+ * The config is the document in the shape the game reads it. The scene list is
+ * the same idea one step out: which scenes the project has, and what each one
+ * is called, is decided in the sidebar — so `main.js` reads a generated list
+ * rather than naming them, and adding or renaming one never asks anybody to
+ * edit an import.
+ */
+const GENERATED = new Set(["js/game.config.json", "js/scenes/index.js"]);
 
 const MARKER = /^\s*\/\/\s*idlewild:(begin|end)\s+([A-Za-z0-9_-]+)\s*$/;
 

@@ -55,12 +55,15 @@ remaining pieces are wired to real slots rather than mocked.
   the zoom you just typed — and stays there for a scene you have never opened
   — the config the game reads is rewritten under it, and a game that is
   running restarts on it
-- **A character controller, optionally.** Ticked — the default — New Game
-  writes `js/prefabs/character.js` and the line in the scene that puts it down:
-  a prefab that walks the grid over A\*, or runs and jumps along it. Unticked,
-  neither is written, and the project places the document and waits for yours.
-  It is the one choice Project Options reports rather than offers, because it
-  was lines in a file and the file is yours from the moment it is written
+- **A character controller, and it is a switch.** Ticked — the default — the
+  project spawns `js/prefabs/character.js`: a prefab that walks the grid over
+  A\*, or runs and jumps along it. Unticked, it places the document and waits
+  for yours. It used to be the one choice Project Options could only *report*,
+  because it was resolved when the files were written and unticking a box
+  cannot take a character out of code that already has one. The wiring is in
+  `js/shared/character.js` now, which is the editor's and is written either
+  way, so it reads the answer out of the config and turning it on is a save
+  rather than a file appearing in your project
 - On an **isometric** project the character sorts itself into the scene as it
   walks, so it goes behind a tree it is standing behind and in front of one it
   is standing in front of. The line it crosses is the one straight up from the
@@ -691,7 +694,25 @@ remaining pieces are wired to real slots rather than mocked.
   to go looking through Files for
 - The exported game places the scene you have open, and carries the rest: the
   config holds every scene's layers and loads every scene's PSDs, so switching
-  in your own code is a matter of reading `config.scenes`
+  in your own code is `this.scene.start("Cave")`, under the name you gave it
+- **The scaffold and your code are different files now.** A scene used to be
+  one thousand-line file with the editor's machinery at the top of it, marked
+  block by block and shown in a different colour, and whatever you wrote went
+  in between. The machinery is in `js/shared/` — `canvas.js` puts the document
+  on screen, `character.js` wires up whatever moves in it — and a scene file is
+  a short one that calls six of them and is otherwise yours, with nothing in it
+  marked at all. `canvas.js` is the same file for both styles; what differs
+  between a game seen from above and one seen from the side is the character,
+  which is what `character.js` is
+- **One file per scene, named after it.** Add a scene in the sidebar and
+  `js/scenes/<Name>.js` appears beside the others; rename it and the file, the
+  class and the Phaser key all move together, carrying whatever you wrote in
+  it; delete it and the file goes with it. A name with spaces in it becomes a
+  class name — *Title Screen* is `TitleScreen.js` — because a scene's name has
+  to be a filename too. `js/scenes/index.js` is the list `main.js` registers
+  and the editor keeps it in step, so adding a scene is never a request to go
+  and edit an import. The game opens on the scene the editor has open, which is
+  three lines in `main.js` you can change
 - Play runs **the project's own code**: the `game/` tree you see in the code
   modal, loaded over the local server exactly the way a published export loads
   it, in a frame over the canvas. No grid lines: the editor's light blue lattice
@@ -783,11 +804,14 @@ remaining pieces are wired to real slots rather than mocked.
   Automatic follows the caret — put it on `this.add.sprite` and the page for it
   appears — and the MDN half follows the file, so a `.css` asks about CSS.
   Search, and a table of contents for the written guides. All of it is on the
-  device, so it works on an iPad with no network
+  device, so it works on an iPad with no network. Beside the editor it is the
+  same panel turned sideways — the contents list stays *beside* the page rather
+  than stacking above it, and the page scrolls rather than being cut off at the
+  bottom of the panel, which it was
 - Console drawer in Fira Code — selectable, `%c`-aware — carrying the
   editor's own commentary, psd-to-json's progress, and the JavaScript console:
   this page's and the running game's, errors and stack traces included, so a
-  `console.log` in your `WorldScene.js` shows up where you are looking. **App**
+  `console.log` in your scene file shows up where you are looking. **App**
   and **JS** toggles on the right of its header bar, when it is open, filter
   one from the other, and **Clear** beside them empties it — which is how you
   see what the next thing you try writes rather than reading it out of an
@@ -806,14 +830,21 @@ remaining pieces are wired to real slots rather than mocked.
   ```text
   index.html
   styles.css
-  js/main.js
+  js/main.js              registers the scenes and starts the game
   js/game.config.json     the document, generated on every save
   js/lib/                 Phaser and psd-to-phaser
-  js/scenes/WorldScene.js
-  js/prefabs/character.js
+  js/scenes/index.js      the scene list, written by the editor
+  js/scenes/Scene1.js     one per scene, named after it — and yours
+  js/shared/canvas.js     the document, drawn
+  js/shared/character.js  what moves in it, and what stops it
   js/shared/grid.js       the projection, and the document's geometry
   js/shared/navigation.js A* — or physics.js, for a platformer
+  js/prefabs/character.js the body, the walk and the artwork — yours
   ```
+
+  The two files you write in are the scene and the prefab. Everything in
+  `js/shared/` is the editor's: it is there to read, it has a Reset beside
+  every block the editor maintains, and you can still type between them.
 
   `js/lib/` is the only directory that is not on your disk while you work: the
   two runtimes are 1.5 MB that would be the same in every project, so the local

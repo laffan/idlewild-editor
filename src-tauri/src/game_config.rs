@@ -60,8 +60,15 @@ pub fn empty(meta: &ProjectMeta) -> Value {
         json!({ "cx": 0, "cy": 0 }),
         json!([]),
         json!([]),
-        json!([{ "id": "scene-main", "name": "Main", "layers": [] }]),
+        json!([{
+            "id": "scene-main",
+            "name": crate::templates::FIRST_SCENE,
+            "file": crate::templates::FIRST_SCENE,
+            "spawn": { "cx": 0, "cy": 0 },
+            "layers": []
+        }]),
         json!("scene-main"),
+        meta.options.character,
     )
 }
 
@@ -130,10 +137,71 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
             .unwrap_or_default()),
         json!(scenes
             .iter()
-            .map(|scene| scene.to_config(colliders))
+            .zip(scene_file_names(&scenes))
+            .map(|(scene, file)| scene.to_config(&file, colliders))
             .collect::<Vec<_>>()),
         json!(active),
+        meta.options.character,
     ))
+}
+
+/// What each scene's file is called, in document order.
+///
+/// A name in the sidebar is free text — "Title Screen", "cave 2", "" — and a
+/// file name, a class name and a Phaser key are none of those things. So the
+/// name is reduced to letters and digits with each word capitalised, which is
+/// what a Phaser scene class is normally called anyway.
+///
+/// Two scenes may share a name; two files may not. A collision takes a
+/// counter, and the scene earlier in the document keeps the bare name — so
+/// renaming the *second* of two Caves is the only thing that moves.
+///
+/// `Index` is reserved because `js/scenes/index.js` is the generated list
+/// beside them, and a scene called Index would be written over it.
+pub fn scene_file_names(scenes: &[Scene]) -> Vec<String> {
+    let mut taken: HashSet<String> = HashSet::new();
+    taken.insert("Index".into());
+    let mut out = Vec::with_capacity(scenes.len());
+    for scene in scenes {
+        let base = scene_file_name(&scene.name);
+        let mut name = base.clone();
+        let mut n = 2;
+        while !taken.insert(name.clone()) {
+            name = format!("{base}{n}");
+            n += 1;
+        }
+        out.push(name);
+    }
+    out
+}
+
+/// One scene name, as a class name.
+///
+/// Anything that is not a letter or a digit is a word break. A name that
+/// reduces to nothing is `Scene`, and one that would start with a digit is
+/// prefixed, because neither is a legal identifier.
+pub fn scene_file_name(name: &str) -> String {
+    let mut out = String::new();
+    let mut upper = true;
+    for ch in name.chars() {
+        if ch.is_ascii_alphanumeric() {
+            if upper {
+                out.extend(ch.to_uppercase());
+            } else {
+                out.push(ch);
+            }
+            upper = false;
+        } else {
+            upper = true;
+        }
+    }
+    if out.is_empty() {
+        return "Scene".into();
+    }
+    if out.starts_with(|c: char| c.is_ascii_digit()) {
+        return format!("Scene{out}");
+    }
+    out
 }
 
 /// The file, in the order it reads.
@@ -153,6 +221,7 @@ fn config(
     layers: Value,
     scenes: Value,
     active_scene: Value,
+    character: bool,
 ) -> Value {
     json!({
         "projection": meta.projection.as_str(),
@@ -167,6 +236,12 @@ fn config(
         "pixelArt": meta.options.pixel_art,
         "roundPixels": meta.options.round_pixels,
         "zoom": meta.options.zoom(),
+        // Whether the project wants the character controller. It used to be
+        // resolved when the files were written — `// idlewild:if character`,
+        // a choice made once — so Project Options could only report it. Read
+        // here by `shared/character.js`, which answers no and leaves the
+        // scene to run without one, it is a switch like the rest of them.
+        "character": character,
         "spawn": spawn,
         "psdKeys": psd_keys,
         "layers": layers,
@@ -263,7 +338,7 @@ impl Document {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct Scene {
+pub struct Scene {
     #[serde(default)]
     id: Option<String>,
     #[serde(default = "unnamed")]
@@ -277,11 +352,22 @@ struct Scene {
 }
 
 impl Scene {
-    fn to_config(&self, colliders: &HashMap<String, Collider>) -> Value {
+    /// `file` is the scene's own file in `js/scenes/`, without the extension
+    /// — which is also its class name and its Phaser key, so the code that
+    /// places this scene can find it by the key it is running under. Worked
+    /// out by the caller rather than here, because it has to be unique across
+    /// the project and one scene cannot see the others.
+    fn to_config(&self, file: &str, colliders: &HashMap<String, Collider>) -> Value {
         json!({
             "id": self.id,
             "name": self.name,
+            "file": file,
             "startPointId": self.start_point_id,
+            // Where play begins *in this scene*. It was one field at the top
+            // of the config, which was the open scene's — right when one file
+            // placed whichever scene was open, and wrong now that each scene
+            // has a file of its own and places itself.
+            "spawn": self.start_cell().unwrap_or(Cell { cx: 0.0, cy: 0.0 }),
             "layers": self
                 .layers
                 .iter()

@@ -149,6 +149,25 @@ describe("the code panel's placements", () => {
     expect(ruleIn(docsCss, ".docs-panel").height).toBeTruthy();
   });
 
+  /**
+   * The reference beside the editor keeps its contents list beside its page.
+   *
+   * It used to stack them, and that took the page's scroll with it: a `flex:
+   * 1` child of a column with no `min-height: 0` cannot shrink below its own
+   * content, so it grew past the panel and was cut off by the panel's
+   * `overflow: hidden` with nothing to scroll it back. Both halves are
+   * asserted because the symptom — a longer page showing less of itself —
+   * does not read as a layout rule at all.
+   */
+  it("keeps the reference's nav beside its page, and the page scrollable", () => {
+    const body = withoutComments(docsCss);
+    expect(body).not.toContain(".docs-panel.docs-right .docs-body");
+    const content = ruleIn(docsCss, ".docs-content");
+    expect(content["min-height"]).toBe("0");
+    expect(content["min-width"]).toBe("0");
+    expect(content["overflow-y"]).toBe("auto");
+  });
+
   it("takes the file column away with its divider", () => {
     expect(ruleIn(codeCss, ".code-backdrop.files-hidden .code-column").display).toBe(
       "none",

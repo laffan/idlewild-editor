@@ -1,5 +1,19 @@
-import { WorldScene } from "./scenes/WorldScene.js";
+import { scenes, byFile } from "./scenes/index.js";
 import config from "./game.config.json" with { type: "json" };
+
+// Which scene the game opens on.
+//
+// The one the editor has open, so Play and Code show what you are looking at
+// and an export carries the scene you published from — which is what this
+// editor has always done. Phaser starts the first scene it is given, so the
+// list is reordered rather than started by hand.
+//
+// These three lines are yours, unmarked on purpose: to pin the opening scene
+// instead, replace `opening` with one of your own — `byFile.TitleScreen`,
+// under the name the sidebar gives it.
+const active = (config.scenes ?? []).find((scene) => scene.id === config.activeScene);
+const opening = (active && byFile[active.file]) ?? scenes[0];
+const running = opening ? [opening, ...scenes.filter((s) => s !== opening)] : scenes;
 
 // How the rendering options chosen in the editor reach Phaser.
 //
@@ -42,5 +56,8 @@ new Phaser.Game({
       },
     ],
   },
-  scene: [WorldScene],
+  // Every scene the project has. `js/scenes/index.js` is written by the
+  // editor and rewritten whenever a scene is added, renamed, reordered or
+  // removed, so this line never has to change.
+  scene: running,
 });

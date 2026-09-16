@@ -81,7 +81,7 @@ way a published export loads it — see [What Play runs](#what-play-runs).
 Play used to be a mode of the editor's scene: a character added to the canvas,
 driven by `game/play-controller.ts` and `game/play-platformer.ts`. That reading
 of "play mode *adds a character to the game*" had two costs that took a while
-to come due. The project's own `WorldScene.js` — the file the code modal opens
+to come due. The project's own scene file — what the code modal opens
 — never ran at all, so a `console.log` saved into it went nowhere and there was
 no way to tell whether any edit to it had worked. And the same game existed
 twice, once in TypeScript for the editor and once in JavaScript for the export,
@@ -275,7 +275,7 @@ shipping six hundred one-pixel division lines into a PSD.
 
 `size` survives as the project's nominal unit even where nothing rounds to
 it — the played character is measured in it, and so is the lattice its
-navigation walks, in the template's `WorldScene.js` as it was in the editor's
+navigation walks, in the template's `shared/character.js` as it was in the editor's
 own play mode. That is what the New Game sheet's grid scale still means on a
 blank canvas, and what the line under the control says.
 
@@ -2674,13 +2674,16 @@ The tree it copies is laid out as a small web project is:
 ```text
 index.html
 styles.css
-js/main.js
+js/main.js               registers the scenes and starts the game
 js/game.config.json      generated — see `game_config`
 js/lib/                  Phaser and psd-to-phaser, written in by the exporter
-js/scenes/WorldScene.js  the genre's program
-js/prefabs/character.js  what walks it, when New Game asked for one
+js/scenes/index.js       generated — the scene list `main.js` reads
+js/scenes/<Scene>.js     one per scene in the editor, and the author's
+js/shared/canvas.js      the document, drawn: loading, camera, fills, placements, patterns
+js/shared/character.js   the genre's wiring between the document and what moves in it
 js/shared/grid.js        the projection, and the document's geometry
 js/shared/…              the genre's own module: navigation.js or physics.js
+js/prefabs/character.js  the body, the walk and the artwork — the author's
 ```
 
 **`js/lib/` is the one directory with nothing behind it in the store.** The two
@@ -2695,11 +2698,18 @@ edited — so both halves of the runtime shim answer both layouts. The server
 strips `game/js/lib/` or `game/lib/`; the exporter reads the project's own
 `index.html` and writes the runtimes where that page asks for them
 (`publish::runtime_dir`). `templates::MOVED` does the same job for the code
-modal: a Reset asked for `js/WorldScene.js` is answered with the pristine
-`js/scenes/WorldScene.js`, because they are the same file under two names and
-the block ids inside them are identical.
+modal: a Reset asked for `js/grid.js` is answered with the pristine
+`js/shared/grid.js`, because they are the same file under two names and the
+block ids inside them are identical.
 
-That file is the document, in the shape `WorldScene.js` reads it. Everything
+`js/scenes/WorldScene.js` is deliberately **not** in that table. The file that
+replaced it is a short one with no blocks in it at all, so answering with that
+would not put anything back — a project holding the old thousand-line scene
+keeps it, keeps running it, and owns every line of it from now on. Nothing in
+`sync_scene_files` touches such a project either: the test there is whether
+`js/shared/canvas.js` exists, which only the new scaffold writes.
+
+That file is the document, in the shape `shared/canvas.js` reads it. Everything
 else in `game/` is the user's source — the code modal edits it, and an export
 must not overwrite what someone typed — but the config is *generated*, and
 shipping the empty one the scaffold wrote is what made an export run and start
@@ -2766,6 +2776,80 @@ keys**. So the scaffolded scene places the document from the plugin's own
 `psdLoadComplete` and `placeDocument` returns early until then, and the editor
 goes on awaiting `psdLoadComplete` as it always did, because it loads at
 *runtime* rather than from a `preload()`.
+
+## One file per scene, named after it
+
+A scene in the sidebar and a file in `js/scenes/` are the same thing said
+twice. Rename *Cave* to *Cavern* and `Cave.js` becomes `Cavern.js`, with the
+class and the Phaser key inside it moving too — so `this.scene.start("Cavern")`
+means what it looks like it means, and a project's file list reads like its
+scene list.
+
+There was one scene file before, `WorldScene.js`, and it placed whichever
+scene the editor had open. That was a defensible reading while the config's
+`layers` was the open scene's, and it made "a project is several places" a
+thing the editor believed and the game did not.
+
+**The name is the hinge, and only one of its four jobs will take free text.**
+It is a label in the sidebar, a filename, a class name and a Phaser key.
+`game_config::scene_file_name` reduces it to letters and digits with each word
+capitalised — *Title Screen* → `TitleScreen` — and `scene_file_names` dedupes
+across the project, because two scenes may share a name and two files may not.
+A name that reduces to nothing is `Scene`, one that would start with a digit
+is prefixed, and `Index` is reserved for the generated list beside them. The
+file name rides in the config as `scenes[].file`, which is what the running
+game matches its own key against.
+
+**Renaming is told apart from delete-and-add by the previous config.** Scene
+ids never change and names do, so the only way to know that *Cave renamed to
+Cavern* is not *Cave deleted, Cavern added* is to know which file that id was
+in last time — and the config on disk is exactly that record. So
+`sync_game_config` reads it before it replaces it, brings `js/scenes/` into
+line first, and writes the new config after: a config describing a tree that
+is not there yet would be a lie that survived a crash.
+
+What a rename rewrites inside the file is two anchored replacements of the
+scaffold's own text — `class Cave extends` and `super("Cave")`. A file whose
+class somebody renamed by hand matches neither, keeps what they called it, and
+still moves: the path is the editor's to keep in step, and what is inside is
+the author's. Deleting a scene deletes its file, because the sheet that asks
+already says everything on the scene goes with it and an orphan nothing
+imports is worse than a clean removal.
+
+**`main.js` never names a scene.** `js/scenes/index.js` is generated beside
+them — an import per scene, the list, and the same list by name — so adding or
+renaming one is never a request to go and edit an import. Which scene the game
+*opens* on is three unmarked lines in `main.js` that read `config.activeScene`:
+Play and Code show the scene you are looking at, an export carries the one you
+published from, and pinning it is replacing one expression.
+
+**Projects made before this are left alone.** They have one
+`js/scenes/WorldScene.js` and a `main.js` that imports it by name, so a second
+scene file beside it would be a file nothing loads and an `index.js` nothing
+reads. `sync_scene_files` returns early unless `js/shared/canvas.js` exists,
+which only the new scaffold writes.
+
+### A second scene must not reload the first one's PSDs
+
+The one thing that broke when there was more than one scene, and it broke
+silently. `loadDocument` hands `config.psdKeys` to `loadMultiple` and waits for
+the plugin's `psdLoadComplete` before placing anything — which is right, and
+was fine while there was one scene and one load.
+
+With two, the second scene asks for files the game already has. Phaser's
+loader **declines a texture key it already holds**: no file is queued, so
+`filecomplete-image-…` never fires for it, so the plugin's own completion count
+never reaches its total, so `psdLoadComplete` never arrives. The scene sits
+blank until the fifteen-second fallback gives up and places the document. Every
+test in the suite passes — the file is valid, the ordering is right, the
+document is correct — because none of them run the game.
+
+So `loadDocument` filters to the keys `P2P.getData` does not already answer
+for, which is the same guard the editor's own `psd-loader.ts` keeps, for the
+same reason. Found by opening a scaffolded tree in a browser and switching
+scene; see `dump_a_runnable_tree`.
+
+---
 
 ## Three exits
 
@@ -2940,12 +3024,27 @@ from the scaffold tests along that seam: the document in the shape the game
 reads, the spaces every placed PSD blocks, a document too broken to read, and
 Export Assets — that it takes the files and the halves it was asked for and
 nothing else, and that an archive which would come out empty is refused with a
-sentence rather than written. The project's options are next door in `tests/options.rs`: that an
-unticked character controller means no prefab and no `spawnCharacter` rather
-than one that is never called, that no conditional marker survives into a
-project's own files either way, that a Reset asks for the scaffold the project
-was *made* with, and that changing a rendering option rewrites the config the
-game reads rather than waiting for whatever touches the document next. The asset
+sentence rather than written. The project's options are next door in `tests/options.rs`: that an unticked
+character controller scaffolds the **same tree** as a ticked one and differs
+only in the config, that it can be turned off and on again afterwards, and
+that changing a rendering option rewrites the config the game reads rather
+than waiting for whatever touches the document next. `tests/scenes.rs` is the
+file each scene in the sidebar is written in — that a name somebody typed
+comes out as a class name, that two scenes called the same thing get two
+files, and that the three things which can happen to a scene each do the
+obvious thing to its file: scaffolded, renamed *carrying what was written in
+it*, deleted.
+
+**And one thing no Rust test can reach: whether the scaffold is a working
+game.** Every assertion above is about text. A scene that places nothing, or a
+second scene that waits fifteen seconds for assets the first one already
+loaded, is valid JavaScript and passes all of it. So `dump_a_runnable_tree` is
+an `#[ignore]`d test that writes a real tree — both runtimes included —
+somewhere a browser can load it, and the way to use it is to serve that
+directory and open it. That is how the reload guard in `loadDocument` was
+found: switching scenes in a project with PSDs left the second one blank,
+because Phaser's loader silently declines a texture key it already holds, so
+the completion its scene was waiting on never came. The asset
 server is tested over a real loopback socket — the request psd-to-phaser makes,
 byte for byte, and what comes back parsed as an HTTP response rather than
 inspected as a `PathBuf`, because the mapping from URL to file is the one
@@ -4107,11 +4206,11 @@ The scene templates gain three marked blocks: `paintBackgrounds`,
 `lib/pattern.ts` line for line. The generator is **in the scene file** rather
 than in `js/shared/`, which is the one thing here that looks like a mistake
 and is not. A project's `game/` tree is its own copy and only `addMissingBlocks`
-can carry a new feature into one that predates it; an import at the top of
-`WorldScene.js` is outside every block, so a helper in another file could
-never reach a project made before today. `drawOrder`, `applyDepth`,
-`applyScale` and `applyHidden` are already duplicated per genre for the same
-reason.
+can carry a new feature into one that predates it; an import at the top of a
+scaffolded module is outside every block, so a helper in another file could
+never reach a project made before today. That is also why the shared modules
+kept their markers when they stopped being mixed with anybody's code: a file
+being the editor's end to end does not give it a way to be *updated*.
 
 Keep the two copies in step. The same rule the editor drew has to come out of
 the game, or Play shows a different world from the one you built —
@@ -4196,8 +4295,8 @@ reached its 700 lines — and a clean seam rather than a convenient one: nothing
 in it touches Phaser's display list or the document store. It holds
 `DEPTH_STRIDE`, `applyDepth`, `drawOrder` and `layerDepth`, which is the whole
 answer to "which of these two is in front", and the exported game's
-`WorldScene.js` carries the same answer in blocks of its own because it cannot
-import it.
+`shared/canvas.js` carries the same answer in blocks of its own because it
+cannot import it.
 
 A PSD is a stack of layers and the order is the artwork: a roof over a tower
 is not the same picture as a tower over a roof. psd-to-json reports that
@@ -5019,11 +5118,11 @@ but not taps.
 `game.config.json`, which is regenerated on every save, so there is one
 implementation of what a collider means rather than one in the editor and
 another in the export. `grid.js` turns a collider into spaces or boxes —
-`colliderCells` and `colliderBoxes` — and the two scenes read it the way each
-needs to: `WorldScene.js` builds the blocked set once in `create()`, because
-`isWalkable` runs per node of every search and the document does not change
-under a running game, and `physics.js` adds the boxes to the ground the
-character stands on.
+`colliderCells` and `colliderBoxes` — and the two genres read it the way each
+needs to: a top-down `shared/character.js` builds the blocked set once when it
+spawns, because `isWalkable` runs per node of every search and the document
+does not change under a running game, and `physics.js` adds the boxes to the
+ground the character stands on.
 
 Spaces are taken as spaces wherever the document has them. Reducing an
 isometric diamond to its bounding box first would block the neighbours its
@@ -5709,7 +5808,7 @@ Two things reach the game now that did not:
 The editor's renderer learned both lessons already, in `doc-renderer.ts` — it
 is where the `drawOrder`/`applyDepth` pair came from. So the same ordering
 exists twice, once for the editor and once in the project's own
-`WorldScene.js`, which cannot import it. `game/__tests__/draw-order.test.ts`
+`shared/canvas.js`, which cannot import it. `game/__tests__/draw-order.test.ts`
 holds them to the same fixtures by pulling the template's functions out
 between their markers and running both, the same arrangement the console
 bridge's snapshot is under.
@@ -5945,13 +6044,24 @@ watches this file.
 The editor writes code into a project and the user edits that same code.
 Without a rule the two fight: the editor rewrites a function and takes a
 hand-made change with it, or it stops rewriting and the code stops matching the
-canvas. The rule is that ownership is **per line**.
+canvas. There are two rules, and the coarse one came second.
 
-A scaffolded file marks its editor-owned runs:
+**The coarse one is the file.** `js/shared/canvas.js` and
+`js/shared/character.js` are the editor's; `js/scenes/<Scene>.js` and
+`js/prefabs/character.js` are the author's. That sounds obvious and was not
+what this used to be: the whole of the machinery lived at the top of the scene
+file, so the file somebody was meant to work in was a thousand lines of
+somebody else's with room to type between them. Splitting them means the
+question "is this mine?" is usually answered by which file is open, and a
+scene file carries no markers at all.
+
+**The fine one is the line, and it is still there** — because a file being the
+editor's does not make it untouchable. Inside the shared modules, ownership is
+per line:
 
 ```js
 // idlewild:begin placeDocument
-placeDocument() { … }
+export function placeDocument(scene) { … }
 // idlewild:end placeDocument
 ```
 
@@ -5991,10 +6101,13 @@ code that calls it rather than at the end. An offer rather than an edit: code
 appearing in someone's file unasked is the fight this whole mechanism exists
 to avoid.
 
-This is not hypothetical. `WorldScene.js` gained `drawOrder` and `applyDepth`
-when the exported game learned to stack a PSD the right way up, and without
-that strip every project made before it would have drawn multi-layer files
-upside down for good.
+This is not hypothetical. The scene template gained `drawOrder` and
+`applyDepth` when the exported game learned to stack a PSD the right way up,
+and without that strip every project made before it would have drawn
+multi-layer files upside down for good. It is also the reason the shared
+modules keep their markers at all, now that each of them is the editor's end
+to end: without the markers there would be no way to offer a project made
+today a block the scaffold gains next year.
 
 The generated config is the whole-file case of the same idea. It has no room
 for comments and nothing in it was written by hand, so it is owned end to end
@@ -6007,24 +6120,31 @@ screen is what the running game reads.
 Resetting the config means *regenerating* it — its pristine form is the
 document as it stands, not the empty file a new project scaffolds with.
 
-Today the marked blocks are `preload`, `applyCamera`, `placeDocument`,
-`paintFill`, `drawOrder`, `applyDepth`, `applyScale` and `pointsToVectors`,
-the same eight in both scenes, plus `pixelPerfect` in `main.js` and the config.
-A test pins that the two genres mark the same set and that
-every marker closes, because a block is found by id and one renamed on one side
-would quietly stop offering its Reset there.
+Today `canvas.js` marks sixteen — `sceneOf`, `loadDocument`, `updateCanvas`,
+`applyCamera`, `placeDocument`, `paintBackgrounds`, `placePatterns`,
+`paintFill`, `nearPoints`, `drawOrder`, `applyDepth`, `applyScale`,
+`applyHidden`, `pointsToVectors`, `gradientCorners` and `patternRule` — and
+it is one file for both genres, so there is no longer a pair that can drift.
+`character.js` marks its own, and the two genres' differ: a top-down character
+sorts itself into an isometric ordering and a platformer does not, so
+`sortCharacter`, `readColliders` and `walkDepth` are the first's and
+`readSolids` is the second's. `main.js` marks `pixelPerfect`, and the config
+and the scene list are generated whole.
 
-`drawGrid` was one of them and is gone: the scenes draw no lattice now. A
+A test pins each file's set and that every marker closes, because a block is
+found by id and one renamed would quietly stop offering its Reset. It also
+pins that a **scene** file marks nothing at all.
+
+`drawGrid` was one of them and is gone: the scaffold draws no lattice now. A
 project scaffolded before that still has the block, and Reset on it reports that
 there is no scaffold to go back to rather than emptying it — which is the same
 answer the modal gives for any file the template does not write, and the right
 one: what to do with a block the template dropped is the author's call.
 
-### A scaffold-time conditional, which is not the same mechanism
+### The character controller stopped being a scaffold-time conditional
 
-`character` cannot reach a project through the config, because leaving a
-character out means not writing the lines that make one. So the templates carry
-one directive the scaffold resolves as it writes:
+There used to be a second directive beside the managed blocks, resolved as the
+scaffold was written rather than after:
 
 ```js
 // idlewild:if character
@@ -6032,15 +6152,27 @@ this.spawnCharacter();
 // idlewild:end if
 ```
 
-The marker lines never reach disk; what is between them does only when the
-option is on. It is deliberately *not* the managed-block mechanism, which is
-about lines the editor goes on owning after they are written — this is a choice
-made once, before the file exists. The two do not interfere because both halves
-of the editor ask `templates::template_files` for the same project: the file on
-disk and the pristine text a Reset compares against are resolved the same way,
-so a managed block's diff compares like with like. It is one level deep and one
-option wide on purpose; a nested condition would be a templating language
-growing out of a single checkbox.
+The marker lines never reached disk; what was between them did only when the
+option was on. The reasoning was that `character` could not reach a project
+through the config, because *leaving a character out means not writing the
+lines that make one* — and that was true while the lines were in the scene
+file, which was the author's. It stopped being true when the wiring moved into
+`js/shared/character.js`, which is the editor's: the file is scaffolded either
+way and `spawnCharacter` reads `config.character` and returns null.
+
+So the directive is gone, and with it `templates::resolve` and the whole idea
+of a template that is not the same text every time. That is worth more than
+the feature it bought: the file on disk and the pristine text a Reset compares
+against were only equal because both halves of the editor asked the same
+function for the same project, which is a rule somebody had to keep. Now they
+are equal because there is one answer.
+
+What it buys directly is a **switch**. Project Options could previously only
+*report* whether New Game had written a character, because unticking a box
+cannot take one out of code that already has it. It is a toggle now, and
+turning it on is a save — the prefab is scaffolded whether or not it is
+spawned, so there is a `js/prefabs/character.js` waiting rather than a file to
+go and create.
 
 ## Where the code panel sits
 
@@ -6145,6 +6277,18 @@ where there is no width to give away and where phaser-bench had it. Each side is
 a divider on a different axis, so each remembers its own size and the inline
 size the other one wrote comes off first — the same trap as the panel's own
 placements, one level down.
+
+**Beside the editor it is the same panel turned sideways, and it was not.** Its
+contents list used to stack *above* the page there rather than staying beside
+it, which was wrong twice over: a contents list reads as a column and a page of
+prose reads under a heading, and the page was then a `flex: 1` child of a
+column with no `min-height: 0` — so it could not shrink below its own content,
+grew past the panel, and was cut off by the panel's `overflow: hidden` with no
+scrollbar to get any of it back. A longer page showed *less* of itself, which
+is not a shape anybody debugs quickly. The nav stays beside the page on both
+sides now, narrower where the column is, and `.docs-content` carries a
+`min-height: 0` as well as its `min-width: 0` because the panel is laid out
+both ways.
 
 **The file column folds two ways.** Its folders collapse — the list Rust returns
 is flat and sorted, so "inside" is a path prefix and a shut folder is rows not
@@ -6476,14 +6620,15 @@ console is a record of what happened rather than a document.
   added does not appear in them. Staleness rather than corruption — the
   placements still point at a key that exists — but it is a scene switch away
   from being visible and there is nothing that says so.
-- The exported game places the open scene. Every scene's layers are in the
-  config and every scene's PSDs are loaded, so switching in your own code is
-  a matter of reading `config.scenes` — but the template does not, and one
-  Phaser scene per Idlewild scene, with transitions, is a feature rather than
-  a line.
-- Only `WorldScene.js` and the generated config carry managed blocks.
-  `grid.js`, `navigation.js` and `physics.js` are the project's alone, even
-  though the scaffold wrote them and the editor's config is what they read.
+- There is one Phaser scene per Idlewild scene now, and the exported game
+  opens on the one the editor had open. What there is no shape for yet is
+  **transitions**: `this.scene.start("Cave")` works and is documented in the
+  scaffold, and anything softer than a cut is the author's to write.
+- `canvas.js`, `character.js`, `main.js` and the generated config carry
+  managed blocks. `grid.js`, `navigation.js` and `physics.js` are the
+  project's alone, even though the scaffold wrote them and the editor's
+  config is what they read — and a **scene** file is the project's by
+  design, which is the point of the split.
 - A platformer takes a blocking boundary as its bounding box, and a
   collider's spaces go through the same reduction in `physics.js`. Resolving
   against the polygon — sloped ground — is a different feature.
