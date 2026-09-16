@@ -13,6 +13,8 @@ import type { DocStore } from "../lib/doc-store";
 import {
   anchorImpliedBy,
   anchorOffset,
+  frameOwners,
+  layerName,
   placeableLayers,
   placedVisibility,
   positionFrom,
@@ -266,6 +268,10 @@ function reviseExisting(
   // inspector rewrites the stack, and it is the one edit whose whole visible
   // effect is which layer is now on top.
   const stack = stackOrder(manifest);
+  const owners = frameOwners(manifest);
+  // Which layers a placement already stands on, so that several placements
+  // swallowed by one atlas collapse onto it rather than stacking up.
+  const claimed = new Set<string>();
 
   for (const layer of store.layers) {
     for (const placement of [...layer.placements]) {
@@ -286,6 +292,23 @@ function reviseExisting(
         path = better;
       }
 
+      // The layer may not be gone but *eaten*. Grouping loose sprites into an
+      // atlas turns them into frames of one image, so the file stops having a
+      // `purple` and starts having a `confetti` that contains it — see
+      // `frameOwners`. Following the artwork keeps the canvas as the author
+      // left it; the old reading took it away for an edit they experienced as
+      // tidying up.
+      if (!manifest.all.some((l) => l.path === path)) {
+        const owner = owners.get(layerName(path));
+        if (owner) {
+          log.info(
+            `${key}.psd — "${path}" is now a frame of "${owner}"; ` +
+              "moving that placement onto it",
+          );
+          path = owner;
+        }
+      }
+
       const entry = manifest.all.find((l) => l.path === path);
       if (!entry) {
         log.warn(
@@ -294,6 +317,15 @@ function reviseExisting(
         store.removePlacement(layer.id, placement.id);
         continue;
       }
+
+      // Several frames of one atlas were several placements a moment ago, and
+      // they all arrive here pointing at the same layer. One placement draws
+      // the whole atlas, so the rest have nothing left to do.
+      if (claimed.has(path)) {
+        store.removePlacement(layer.id, placement.id);
+        continue;
+      }
+      claimed.add(path);
 
       const scaleX = scaleXOf(placement);
       const scaleY = scaleYOf(placement);

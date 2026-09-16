@@ -1,6 +1,6 @@
 {
   "repo": "https://github.com/laffan/psd-to-phaser",
-  "ref": "main",
-  "commit": "78717c9c1d5a9b8423ea112543abc80af846a739",
-  "note": "Built from source by scripts/vendor-p2p.mjs. main publishes no dist/, and the registry copy (0.0.5) is the Phaser 3 line."
+  "ref": "claude/focused-einstein-ie5qey",
+  "commit": "256ec7aef00d8cad50319e46e38c1af7e3261b29",
+  "note": "Built from source by scripts/vendor-p2p.mjs. main publishes no dist/, and the registry copy (0.0.5) is the Phaser 3 line. Pinned ahead of main for the atlas load fix: loadMultiple counted an atlas's frames as assets it would never load, so psdLoadComplete never fired and every load fell through to this editor's fifteen-second timeout."
 }

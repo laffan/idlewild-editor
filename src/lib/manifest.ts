@@ -58,6 +58,26 @@ export interface ManifestLayer {
   name: string;
   category: LayerCategory;
   /**
+   * What psd-to-json made of a sprite: `atlas`, `spritesheet`, `animation`,
+   * or undefined for a plain one.
+   *
+   * It is the difference between a layer that is *one picture* and a layer
+   * that is a sheet of them, and until now nothing here read it — which is
+   * why an atlas was listed as though it were a group, and why a group and
+   * an atlas looked alike to everything downstream.
+   */
+  type?: string;
+  /**
+   * The frames a composited sprite holds, by name, or undefined.
+   *
+   * An atlas swallows its children: they are gone from `children` and live
+   * on only as keys of the manifest's `frames` map. That map is therefore
+   * the only record that `purple` used to be a layer of its own, which is
+   * exactly what a re-parse needs in order to work out where a placement
+   * standing on `purple` should go now. See `frameOwners`.
+   */
+  frames?: string[];
+  /**
    * Whether this layer is drawn, with its groups taken into account.
    *
    * psd-to-json writes `visible: false` on a layer whose eye is off in
@@ -315,10 +335,16 @@ function walk(
   const name = String(node.name ?? "");
   const path = prefix ? `${prefix}/${name}` : name;
 
+  const frames = node.frames;
   const layer: ManifestLayer = {
     path,
     name,
     category: toCategory(node.category, node.type),
+    type: typeof node.type === "string" ? node.type : undefined,
+    frames:
+      frames && typeof frames === "object" && !Array.isArray(frames)
+        ? Object.keys(frames as Record<string, unknown>)
+        : undefined,
     // Absent means visible, which is what every manifest written before
     // psd-to-json read the flag says about every layer in it.
     visible: shown && node.visible !== false,
@@ -442,6 +468,37 @@ export function anchorImpliedBy(
     x: entry.x - (at.x - world.x) / (scaleX || 1),
     y: entry.y - (at.y - world.y) / (scaleY || 1),
   };
+}
+
+/**
+ * Which composited layer swallowed a given name, by name.
+ *
+ * Grouping a handful of loose sprites into `S | confetti | atlas |` is one
+ * edit in Photoshop and a considerable one here: `purple` and `green` stop
+ * being layers and become *frames*, so a manifest that had three entries now
+ * has one. A placement still standing on `purple` points at a layer the file
+ * no longer has, and the honest reading of that — the layer is gone, drop the
+ * placement — takes the artwork off the canvas for what the author experienced
+ * as tidying up.
+ *
+ * The frames map is what makes a better answer possible. It is the only thing
+ * left in the file that remembers `purple` was once a layer, and it says which
+ * image it is part of now, so a placement can follow its artwork into the
+ * atlas instead of being deleted. See `reconcile.ts`.
+ *
+ * Only composited sprites contribute, and a name claimed by two of them
+ * belongs to the first — the manifest addresses layers by name too, so that
+ * ambiguity is the file's rather than this reader's.
+ */
+export function frameOwners(manifest: Manifest): Map<string, string> {
+  const owners = new Map<string, string>();
+  for (const layer of manifest.all) {
+    if (!layer.frames) continue;
+    for (const frame of layer.frames) {
+      if (!owners.has(frame)) owners.set(frame, layer.path);
+    }
+  }
+  return owners;
 }
 
 /**

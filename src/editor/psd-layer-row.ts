@@ -204,6 +204,42 @@ function actionEl(
 }
 
 /**
+ * What a group *is*, for the second line of its row.
+ *
+ * Not every group is a folder. `S | confetti | atlas |` is a group in
+ * Photoshop and a single image to the game: psd-to-json composites what is
+ * inside it into one PNG and the children survive only as frames of it. A
+ * tileset is the same bargain with tiles, and a plain `S | name` group is one
+ * merged picture with nothing addressable inside it at all.
+ *
+ * Calling all of those "group · 6 layers" is the panel saying the one thing
+ * about the file that is not true — it is exactly what an author sees when
+ * they convert a group to an atlas and nothing appears to change.
+ */
+export function groupLabel(layer: PsdLayerInfo, layers: number): string {
+  const { category, type } = layer;
+  const many = (n: number, one: string, more: string) =>
+    `${n} ${n === 1 ? one : more}`;
+
+  if (category === "sprite") {
+    switch (type) {
+      case "atlas":
+        return `atlas · ${many(layers, "frame", "frames")}`;
+      case "spritesheet":
+        return `spritesheet · ${many(layers, "frame", "frames")}`;
+      case "animation":
+        return `animation · ${many(layers, "frame", "frames")}`;
+      default:
+        return `sprite · ${many(layers, "layer", "layers")} merged`;
+    }
+  }
+  if (category === "tileset") {
+    return `tileset · ${many(layers, "layer", "layers")} merged`;
+  }
+  return `group · ${many(layers, "layer", "layers")}`;
+}
+
+/**
  * A group's second line, which is also the handle that folds it away.
  *
  * On the meta line rather than beside the grip, where it would push the name
@@ -220,7 +256,7 @@ function foldEl(row: Row, ctx: RowContext): HTMLElement {
   const layers = ctx.rows
     .slice(at + 1, at + block)
     .filter((held) => !held.source.isGroup).length;
-  const label = `group · ${layers} ${layers === 1 ? "layer" : "layers"}`;
+  const label = groupLabel(row.source, layers);
   if (block < 2) return h("div", { class: "psd-layer-meta m", text: label });
 
   const shut = ctx.folded(row);

@@ -47,9 +47,55 @@ const GROUPED = JSON.stringify({
   ],
 });
 
-function placement(psdKey: string, layerPath: string): Placement {
+/**
+ * The same file before and after its loose sprites are grouped into an atlas.
+ *
+ * One edit in Photoshop; two very different manifests. `purple` and `green`
+ * stop being layers and survive only as keys of the atlas's `frames` map,
+ * which is the whole difficulty: a placement standing on `purple` points at
+ * something the file no longer has.
+ */
+const LOOSE = JSON.stringify({
+  name: "confetti",
+  width: 128,
+  height: 160,
+  layers: [
+    { name: "anchor", category: "point", x: 60, y: 76, width: 12, height: 12 },
+    { name: "purple", category: "sprite", x: 0, y: 0, width: 32, height: 32 },
+    { name: "green", category: "sprite", x: 40, y: 0, width: 32, height: 32 },
+  ],
+});
+
+const ATLASED = JSON.stringify({
+  name: "confetti",
+  width: 128,
+  height: 160,
+  layers: [
+    { name: "anchor", category: "point", x: 60, y: 76, width: 12, height: 12 },
+    {
+      name: "confetti",
+      category: "sprite",
+      type: "atlas",
+      x: 0,
+      y: 0,
+      width: 72,
+      height: 32,
+      filePath: "sprites/confetti.png",
+      frames: {
+        purple: { x: 0, y: 0, width: 32, height: 32 },
+        green: { x: 32, y: 0, width: 32, height: 32 },
+      },
+      instances: [
+        { name: "purple", x: 0, y: 0 },
+        { name: "green", x: 40, y: 0 },
+      ],
+    },
+  ],
+});
+
+function placement(psdKey: string, layerPath: string, id = "p1"): Placement {
   return {
-    id: "p1",
+    id,
     psdKey,
     layerPath,
     x: 0,
@@ -333,5 +379,76 @@ describe("a re-import that lost its anchor", () => {
     const s = store();
     reconcilePlacements(s, grid, "extrude-abc", parseManifest(AS_IMAGE));
     expect(s.layers[0].placements).toHaveLength(0);
+  });
+});
+
+/**
+ * Grouping loose sprites into an atlas.
+ *
+ * The edit that took a document off the canvas. `S | confetti | atlas |` eats
+ * its children, so the layers a placement was standing on stop existing and
+ * the honest old reading — the layer is gone, drop the placement — removed
+ * every placement the key had. With none left there was no sibling to infer
+ * a position from either, so nothing was adopted in their place and the PSD
+ * simply vanished.
+ */
+describe("grouping layers into an atlas", () => {
+  it("moves a placement onto the atlas that swallowed its layer", () => {
+    const s = store(placement("confetti", "purple"));
+    reconcilePlacements(s, grid, "confetti", parseManifest(ATLASED));
+    expect(paths(s)).toEqual(["confetti"]);
+  });
+
+  it("keeps the placement's own identity while it does", () => {
+    const s = store(placement("confetti", "purple"));
+    reconcilePlacements(s, grid, "confetti", parseManifest(ATLASED));
+    const [p] = s.layers[0].placements;
+    expect(p.id).toBe("p1");
+    expect(p.instance).toBe("unit-1");
+    expect(p.anchor).toEqual({ cx: 0, cy: 0 });
+  });
+
+  /**
+   * Two frames of one atlas were two placements a moment ago, and one
+   * placement draws the whole image. Without the collapse the canvas gains a
+   * second copy of the atlas exactly on top of the first.
+   */
+  it("collapses several swallowed placements onto one", () => {
+    const s = store(
+      placement("confetti", "purple", "p1"),
+      placement("confetti", "green", "p2"),
+    );
+    reconcilePlacements(s, grid, "confetti", parseManifest(ATLASED));
+    expect(paths(s)).toEqual(["confetti"]);
+  });
+
+  /** The document survives the round trip rather than emptying out. */
+  it("leaves the PSD on the canvas", () => {
+    const s = store(
+      placement("confetti", "purple", "p1"),
+      placement("confetti", "green", "p2"),
+    );
+    reconcilePlacements(s, grid, "confetti", parseManifest(ATLASED));
+    expect(s.layers[0].placements.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * The guard is the frames map, not "anything missing finds a home": a layer
+   * genuinely deleted from the file still takes its placement with it.
+   */
+  it("still drops a placement whose layer is really gone", () => {
+    const s = store(placement("confetti", "orange"));
+    reconcilePlacements(s, grid, "confetti", parseManifest(ATLASED));
+    expect(paths(s)).toEqual([]);
+  });
+
+  /** Nothing changes for a file whose layers are still loose. */
+  it("leaves loose sprites alone", () => {
+    const s = store(
+      placement("confetti", "purple", "p1"),
+      placement("confetti", "green", "p2"),
+    );
+    reconcilePlacements(s, grid, "confetti", parseManifest(LOOSE));
+    expect(paths(s).sort()).toEqual(["green", "purple"]);
   });
 });

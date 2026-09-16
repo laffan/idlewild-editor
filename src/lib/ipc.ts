@@ -137,6 +137,16 @@ export interface PsdLayerInfo {
   y: number;
   /** What psd-to-json will make of it, read from the pipe prefix. */
   category: "sprite" | "tileset" | "group" | "point" | "zone" | "ignored";
+  /**
+   * The type segment, when the name carries one: `atlas`, `spritesheet`,
+   * `animation`, `jpg`.
+   *
+   * It is what tells a folder of layers apart from a single composited image.
+   * A group named `S | confetti | atlas |` is one picture as far as the game
+   * is concerned, and what is indented under it are its frames rather than
+   * layers anybody can place.
+   */
+  type: string | null;
   /** Whether this row is a group holding the rows indented under it. */
   isGroup: boolean;
   /** How deep it sits: zero at the top level, one inside a group. */

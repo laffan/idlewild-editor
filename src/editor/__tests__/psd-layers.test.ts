@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { manifestName, psdLayerOwner } from "../psd-layer-owner";
-import { paintable } from "../psd-layer-row";
+import { groupLabel, paintable } from "../psd-layer-row";
 import type { PsdLayerInfo } from "../../lib/ipc";
 
 /**
@@ -49,7 +49,7 @@ describe("psdLayerOwner", () => {
     return {
       index: 0, name, category,
       visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
-      isGroup: category === "group", depth: 0,
+      type: null, isGroup: category === "group", depth: 0,
     };
   }
   const noop = () => {};
@@ -107,7 +107,7 @@ describe("which rows PSD Edit mode can draw into", () => {
     return {
       index: 0, name, category,
       visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
-      isGroup: category === "group", depth: 0,
+      type: null, isGroup: category === "group", depth: 0,
     };
   }
   const owner = (l: PsdLayerInfo, isExtrusion = true) =>
@@ -155,5 +155,64 @@ describe("which rows PSD Edit mode can draw into", () => {
     // worth drawing in.
     const mine = layer("S | brickwork", "sprite");
     expect(paintable(mine, owner(mine))).toBe(true);
+  });
+});
+
+/**
+ * What a group row says it is.
+ *
+ * Not every group is a folder. `S | confetti | atlas |` is a group in
+ * Photoshop and a single image to the game — psd-to-json composites what is
+ * inside it into one PNG and the children survive only as frames of it. The
+ * panel called all of them "group · N layers", which is the one thing about
+ * such a file that is not true, and is what an author sees when they convert
+ * a group to an atlas and nothing appears to have changed.
+ */
+describe("groupLabel", () => {
+  function group(
+    category: PsdLayerInfo["category"],
+    type: string | null,
+  ): PsdLayerInfo {
+    return {
+      index: 0, name: "confetti", category, type,
+      visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
+      isGroup: true, depth: 0,
+    };
+  }
+
+  it("names a composited sprite by its type, and counts frames", () => {
+    expect(groupLabel(group("sprite", "atlas"), 6)).toBe("atlas · 6 frames");
+    expect(groupLabel(group("sprite", "spritesheet"), 4)).toBe(
+      "spritesheet · 4 frames",
+    );
+    expect(groupLabel(group("sprite", "animation"), 3)).toBe(
+      "animation · 3 frames",
+    );
+  });
+
+  it("says a plain sprite group is merged, because it is", () => {
+    expect(groupLabel(group("sprite", null), 2)).toBe("sprite · 2 layers merged");
+    expect(groupLabel(group("tileset", null), 2)).toBe("tileset · 2 layers merged");
+  });
+
+  it("leaves a real group alone", () => {
+    expect(groupLabel(group("group", null), 2)).toBe("group · 2 layers");
+  });
+
+  it("counts one of anything in the singular", () => {
+    expect(groupLabel(group("sprite", "atlas"), 1)).toBe("atlas · 1 frame");
+    expect(groupLabel(group("group", null), 1)).toBe("group · 1 layer");
+  });
+
+  /**
+   * The type is matched as typed. psd-to-json copies the segment through and
+   * psd-to-phaser compares it against "atlas" exactly, so `Atlas` is a group
+   * that will not become an atlas — and a row that tidied the spelling would
+   * promise something the export does not deliver.
+   */
+  it("does not claim an atlas for a spelling the pipeline will not match", () => {
+    expect(groupLabel(group("sprite", "Atlas"), 6)).toBe(
+      "sprite · 6 layers merged",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import we from "phaser";
+import ve from "phaser";
 function F(o) {
   return o.category === "sprite";
 }
@@ -24,7 +24,7 @@ function ke(o, e, t, n, s) {
       const l = r.name, c = `${t}/${r.filePath}`, f = () => {
         a--, n(), a === 0 && i();
       };
-      z(r) && X(o, r.name, t, r.maskPath, n, s), r.type === "atlas" ? Se(o, l, c, r, f, s) : r.type === "spritesheet" || r.type === "animation" ? Le(o, l, c, r, f, s) : Me(o, l, c, f, s);
+      z(r) && X(o, r.name, t, r.maskPath, n, s), r.type === "atlas" ? Se(o, l, c, r, f, s) : r.type === "spritesheet" || r.type === "animation" ? _e(o, l, c, r, f, s) : Me(o, l, c, f, s);
     }), a === 0 && i();
   });
 }
@@ -35,35 +35,47 @@ function X(o, e, t, n, s, i) {
   }));
 }
 function Se(o, e, t, n, s, i) {
-  console.log(`[${Date.now()}] Starting loadAtlas for key: ${e}`);
   const a = { frames: {} };
-  Object.entries(n.frames).forEach(([l, c]) => {
-    a.frames[l] = {
+  Object.entries(n.frames).forEach(([h, g]) => {
+    a.frames[h] = {
       frame: {
-        x: c.x,
-        y: c.y,
-        w: c.width,
-        h: c.height
+        x: g.x,
+        y: g.y,
+        w: g.width,
+        h: g.height
       },
       rotated: !1,
       trimmed: !1,
-      sourceSize: { w: c.width, h: c.height },
+      sourceSize: { w: g.width, h: g.height },
       spriteSourceSize: {
         x: 0,
         y: 0,
-        w: c.width,
-        h: c.height
+        w: g.width,
+        h: g.height
       }
     };
   }), o.load.atlas(e, t, a);
-  const r = () => {
-    o.textures.exists(e) ? (i && console.log(`🗺️ Loaded atlas: ${e} from ${t}`), o.load.off("complete", r), s()) : setTimeout(r, 100);
+  let l = 10;
+  const c = () => {
+    o.load.off("complete", f), o.load.off("loaderror", u);
+  }, f = () => {
+    if (o.textures.exists(e)) {
+      i && console.log(`🗺️ Loaded atlas: ${e} from ${t}`), c(), s();
+      return;
+    }
+    if (l-- > 0) {
+      setTimeout(f, 100);
+      return;
+    }
+    console.error(
+      `Atlas "${e}" never became a texture (${t}). Counting it as done so the load can finish.`
+    ), c(), s();
+  }, u = (h) => {
+    h.key === e && (console.error(`Error loading atlas "${e}": `, h), c(), s());
   };
-  o.load.on("complete", r), o.load.on("loaderror", (l) => {
-    console.error("Error loading file: ", l), o.load.off("complete", r);
-  });
+  o.load.on("complete", f), o.load.on("loaderror", u);
 }
-function Le(o, e, t, n, s, i) {
+function _e(o, e, t, n, s, i) {
   o.load.spritesheet(e, t, {
     frameWidth: n.frame_width,
     frameHeight: n.frame_height
@@ -84,7 +96,7 @@ function te(o, e, t, n, s, i) {
     s(), i && console.log(`🧩 Loaded tile: ${a} from ${r}`);
   }), o.load.start()) : (s(), i && console.log(`Tile already loaded or loading: ${a}`));
 }
-function _e(o, e, t, n, s, i, a) {
+function Le(o, e, t, n, s, i, a) {
   e.forEach((r) => {
     for (let l = 0; l < r.columns; l++)
       for (let c = 0; c < r.rows; c++) {
@@ -93,14 +105,14 @@ function _e(o, e, t, n, s, i, a) {
           col: l,
           row: c,
           filetype: r.filetype
-        }, d = `${r.name}_tile_${l}_${c}`;
-        a.push(d), te(
+        }, u = `${r.name}_tile_${l}_${c}`;
+        a.push(u), te(
           o,
           f,
           t,
           n,
           () => {
-            const h = a.indexOf(d);
+            const h = a.indexOf(u);
             h > -1 && a.splice(h, 1), s();
           },
           i
@@ -118,17 +130,17 @@ function oe(o, e, t, n) {
   let c = 0;
   const f = [];
   n.isDebugEnabled("console") && (console.log(`Total assets to load: ${l}`), console.log(`Tiles to load: ${r.tiles}`), console.log(`Sprites to load: ${r.sprites}`), console.log(`Single tiles to load: ${r.singleTiles}`), console.log(`Atlases to load: ${r.atlases}`), console.log(`Masks to load: ${r.masks}`), console.log(`Tile slice size: ${a}`));
-  const d = () => {
+  const u = () => {
     c++;
     const h = c / l;
     o.events.emit("psdLoadProgress", h), n.isDebugEnabled("console") && console.log(`⏳ Progress: ${c} of ${l} ( ${(h * 100).toFixed(2)}% )`), c === l && (o.events.emit("psdLoadComplete"), n.isDebugEnabled("console") && console.log("All PSD assets loaded"));
   };
-  t.tiles && t.tiles.length > 0 && _e(o, t.tiles, i, a, d, n.isDebugEnabled("console"), f), t.singleTiles && t.singleTiles.length > 0 && t.singleTiles.forEach((h) => {
-    te(o, h, i, a, d, n.isDebugEnabled("console"));
-  }), t.sprites && t.sprites.length > 0 && ke(o, t.sprites, i, d, n.isDebugEnabled("console")), t.tiles && t.tiles.length > 0 && t.tiles.forEach((h) => {
-    !h.lazyLoad && z(h) && X(o, h.name, i, h.maskPath, d, n.isDebugEnabled("console"));
+  t.tiles && t.tiles.length > 0 && Le(o, t.tiles, i, a, u, n.isDebugEnabled("console"), f), t.singleTiles && t.singleTiles.length > 0 && t.singleTiles.forEach((h) => {
+    te(o, h, i, a, u, n.isDebugEnabled("console"));
+  }), t.sprites && t.sprites.length > 0 && ke(o, t.sprites, i, u, n.isDebugEnabled("console")), t.tiles && t.tiles.length > 0 && t.tiles.forEach((h) => {
+    !h.lazyLoad && z(h) && X(o, h.name, i, h.maskPath, u, n.isDebugEnabled("console"));
   }), t.groups && t.groups.length > 0 && t.groups.forEach((h) => {
-    z(h) && X(o, h.name, i, h.maskPath, d, n.isDebugEnabled("console"));
+    z(h) && X(o, h.name, i, h.maskPath, u, n.isDebugEnabled("console"));
   }), o.load.isLoading() || o.load.start();
 }
 function Ae(o) {
@@ -187,10 +199,10 @@ function ze(o) {
     let n = 0;
     const s = t.map((i) => new Promise((a, r) => {
       const l = `${i.path}/data.json`, c = `${i.key}_temp_json`;
-      e.load.json(c, l), e.load.once(`filecomplete-json-${c}`, (f, d, h) => {
+      e.load.json(c, l), e.load.once(`filecomplete-json-${c}`, (f, u, h) => {
         if (h) {
-          const x = Ge(h, i.lazyLoad);
-          n += x, i._tempData = h, a();
+          const g = Ee(h, i.lazyLoad);
+          n += g, i._tempData = h, a();
         } else
           console.error(`Failed to load JSON for key: ${i.key}`), r(new Error(`Failed to load JSON for key: ${i.key}`));
       }), e.load.once("loaderror", (f) => {
@@ -230,7 +242,7 @@ function ze(o) {
       };
       t.forEach((r) => {
         const l = o.getData(r.key);
-        l && Ee(e, r.key, l.initialLoad, o, a);
+        l && Ge(e, r.key, l.initialLoad, o, a);
       }), e.load.isLoading() || e.load.start();
     }).catch((i) => {
       console.error("Failed to load multiple PSDs:", i);
@@ -248,7 +260,7 @@ function Ce(o, e) {
   }
   return t.layers && Array.isArray(t.layers) && n(t.layers), t;
 }
-function Ge(o, e) {
+function Ee(o, e) {
   let t = 0;
   function n(s, i = !1) {
     s.forEach((a) => {
@@ -262,19 +274,19 @@ function Ge(o, e) {
             a.type === "atlas" ? t++ : a.type === "spritesheet" ? t += a.frame_count || 1 : t++;
             break;
         }
-      a.children && Array.isArray(a.children) && n(a.children, r);
+      a.category === "group" && Array.isArray(a.children) && n(a.children, r);
     });
   }
   return o.layers && Array.isArray(o.layers) && n(o.layers), t;
 }
-function Ee(o, e, t, n, s) {
+function Ge(o, e, t, n, s) {
   const i = n.getData(e);
   if (!i || !i.basePath) {
     console.error(`Invalid PSD data for key: ${e}`);
     return;
   }
   const a = i.basePath, r = i.original.tile_slice_size || 150;
-  t.tiles && t.tiles.length > 0 && Oe(o, t.tiles, a, r, s, n.isDebugEnabled("console"), [], e), t.singleTiles && t.singleTiles.length > 0 && t.singleTiles.forEach((l) => {
+  t.tiles && t.tiles.length > 0 && Be(o, t.tiles, a, r, s, n.isDebugEnabled("console"), [], e), t.singleTiles && t.singleTiles.length > 0 && t.singleTiles.forEach((l) => {
     se(o, l, a, r, s, n.isDebugEnabled("console"), e);
   }), t.sprites && t.sprites.length > 0 && Te(o, t.sprites, a, s, n.isDebugEnabled("console"), e);
 }
@@ -283,38 +295,53 @@ function Te(o, e, t, n, s, i) {
     const r = a.name, l = `${i}_${r}`, c = `${t}/${a.filePath}`, f = () => {
       n();
     };
-    a.type === "atlas" ? Ne(o, r, l, c, a, f, s) : a.type === "spritesheet" || a.type === "animation" ? Ie(o, r, l, c, a, f, s) : Be(o, r, l, c, f, s);
+    a.type === "atlas" ? Ie(o, r, l, c, a, f, s) : a.type === "spritesheet" || a.type === "animation" ? Ne(o, r, l, c, a, f, s) : Re(o, r, l, c, f, s);
   });
 }
-function Ne(o, e, t, n, s, i, a) {
+function Ie(o, e, t, n, s, i, a) {
   const r = { frames: {} };
   Object.entries(s.frames).forEach(
-    ([c, f]) => {
-      r.frames[c] = {
+    ([g, $]) => {
+      r.frames[g] = {
         frame: {
-          x: f.x,
-          y: f.y,
-          w: f.width,
-          h: f.height
+          x: $.x,
+          y: $.y,
+          w: $.width,
+          h: $.height
         },
         rotated: !1,
         trimmed: !1,
-        sourceSize: { w: f.width, h: f.height },
+        sourceSize: { w: $.width, h: $.height },
         spriteSourceSize: {
           x: 0,
           y: 0,
-          w: f.width,
-          h: f.height
+          w: $.width,
+          h: $.height
         }
       };
     }
   ), o.load.atlas(t, n, r);
-  const l = () => {
-    o.textures.exists(t) ? (a && console.log(`🗺️ Loaded atlas: ${t} from ${n}`), o.load.off("complete", l), i()) : setTimeout(l, 100);
+  let c = 10;
+  const f = () => {
+    o.load.off("complete", u), o.load.off("loaderror", h);
+  }, u = () => {
+    if (o.textures.exists(t)) {
+      a && console.log(`🗺️ Loaded atlas: ${t} from ${n}`), f(), i();
+      return;
+    }
+    if (c-- > 0) {
+      setTimeout(u, 100);
+      return;
+    }
+    console.error(
+      `Atlas "${t}" never became a texture (${n}). Counting it as done so the load can finish.`
+    ), f(), i();
+  }, h = (g) => {
+    g.key === t && (console.error(`Error loading atlas "${t}": `, g), f(), i());
   };
-  o.load.on("complete", l);
+  o.load.on("complete", u), o.load.on("loaderror", h);
 }
-function Ie(o, e, t, n, s, i, a) {
+function Ne(o, e, t, n, s, i, a) {
   o.load.spritesheet(t, n, {
     frameWidth: s.frame_width,
     frameHeight: s.frame_height
@@ -324,18 +351,18 @@ function Ie(o, e, t, n, s, i, a) {
       i();
   });
 }
-function Be(o, e, t, n, s, i) {
+function Re(o, e, t, n, s, i) {
   o.load.image(t, n), o.load.once(`filecomplete-image-${t}`, () => {
     i && console.log(`🎑 Loaded image: ${t} from ${n}`), s();
   });
 }
-function Oe(o, e, t, n, s, i, a, r) {
+function Be(o, e, t, n, s, i, a, r) {
   e.forEach((l) => {
     for (let c = 0; c < l.columns; c++)
       for (let f = 0; f < l.rows; f++) {
-        const d = `${l.name}_tile_${c}_${f}`, h = `${r}_${d}`;
+        const u = `${l.name}_tile_${c}_${f}`, h = `${r}_${u}`;
         a.push(h);
-        const x = {
+        const g = {
           tilesetName: l.name,
           col: c,
           row: f,
@@ -343,12 +370,12 @@ function Oe(o, e, t, n, s, i, a, r) {
         };
         se(
           o,
-          x,
+          g,
           t,
           n,
           () => {
-            const k = a.indexOf(h);
-            k > -1 && a.splice(k, 1), s();
+            const $ = a.indexOf(h);
+            $ > -1 && a.splice($, 1), s();
           },
           i,
           r
@@ -386,7 +413,7 @@ function ie(o, e, t, n) {
     }
   });
 }
-function Re(o) {
+function Oe(o) {
   return {
     load(e, t, n, s) {
       const i = `${n}/data.json`;
@@ -413,7 +440,7 @@ function ae(o, e, t) {
   const a = n.lazyLoad[i];
   return a ? a.some((r) => r.name === t.name) : !1;
 }
-function K(o, e, t) {
+function J(o, e, t) {
   const n = o.add.container(e.x, e.y);
   if (t.isDebugEnabled("shape")) {
     const s = o.add.graphics();
@@ -432,7 +459,7 @@ function K(o, e, t) {
 function T(o, e) {
   o.attributes && (e.attributes = o.attributes);
 }
-function I(o, e) {
+function N(o, e) {
   return o.enableFilters(), o.filters ? o.filters.internal.addMask(e, !1, o.filterCamera) : (console.warn(
     "Masks require the WebGL renderer in Phaser 4. Skipping mask for",
     o.name || o.type
@@ -445,7 +472,7 @@ function Ve(o, e, t) {
   if (!o.textures.exists(n))
     return console.warn(`Mask texture not found: ${n}`), null;
   const s = o.add.image(e.x, e.y, n);
-  return s.setOrigin(0, 0), s.setVisible(!1), I(t, s), s;
+  return s.setOrigin(0, 0), s.setVisible(!1), N(t, s), s;
 }
 function Xe(o, e, t) {
   if (!z(e))
@@ -454,7 +481,7 @@ function Xe(o, e, t) {
   if (!o.textures.exists(n))
     return console.warn(`Mask texture not found: ${n}`), null;
   const s = o.add.image(e.x, e.y, n);
-  return s.setOrigin(0, 0), s.setVisible(!1), I(t, s), s;
+  return s.setOrigin(0, 0), s.setVisible(!1), N(t, s), s;
 }
 function re(o, e, t) {
   if (!z(e))
@@ -467,8 +494,8 @@ function re(o, e, t) {
   const a = e.maskX ?? e.x, r = e.maskY ?? e.y, l = o.add.image(a, r, i);
   l.setOrigin(0, 0), l.setVisible(!1);
   const c = t.getChildren();
-  return console.log(`🎭 Applying mask "${n}" to ${c.length} children at position (${a}, ${r})`), c.forEach((f, d) => {
-    I(f, l), console.log(`  - Applied mask to child ${d}: ${f.name || "unnamed"}`);
+  return console.log(`🎭 Applying mask "${n}" to ${c.length} children at position (${a}, ${r})`), c.forEach((f, u) => {
+    N(f, l), console.log(`  - Applied mask to child ${u}: ${f.name || "unnamed"}`);
   }), l;
 }
 function Fe(o, e, t) {
@@ -484,8 +511,8 @@ function Fe(o, e, t) {
     a.drawImage(s, 0, 0);
     const r = a.getImageData(0, 0, i.width, i.height), l = r.data;
     for (let c = 0; c < l.length; c += 4) {
-      const f = l[c], d = l[c + 1], h = l[c + 2], x = (f + d + h) / 3;
-      l[c] = 255, l[c + 1] = 255, l[c + 2] = 255, l[c + 3] = x;
+      const f = l[c], u = l[c + 1], h = l[c + 2], g = (f + u + h) / 3;
+      l[c] = 255, l[c + 1] = 255, l[c + 2] = 255, l[c + 3] = g;
     }
     return a.putImageData(r, 0, 0), o.textures.addCanvas(t, i), console.log(`🎭 Converted mask "${e}" luminance to alpha → "${t}"`), !0;
   } catch (n) {
@@ -504,14 +531,14 @@ const Ye = {
   group: 16776960
   // Yellow
 }, U = 1e3;
-function B(o, e, t, n) {
+function R(o, e, t, n) {
   const s = {
     shape: null,
     label: null
   }, i = Ye[n.type], a = `#${i.toString(16).padStart(6, "0")}`;
-  return e.isDebugEnabled("shape") && (s.shape = Ke(o, n, i), s.shape && (s.shape.setDepth(U), s.shape.isDebugObject = !0, t.add(s.shape))), e.isDebugEnabled("label") && (s.label = Je(o, n, a), s.label && (s.label.setDepth(U), s.label.isDebugObject = !0, t.add(s.label))), s;
+  return e.isDebugEnabled("shape") && (s.shape = Je(o, n, i), s.shape && (s.shape.setDepth(U), s.shape.isDebugObject = !0, t.add(s.shape))), e.isDebugEnabled("label") && (s.label = Ke(o, n, a), s.label && (s.label.setDepth(U), s.label.isDebugObject = !0, t.add(s.label))), s;
 }
-function Ke(o, e, t) {
+function Je(o, e, t) {
   switch (e.type) {
     case "point":
       const n = o.add.circle(e.x, e.y, 5, t);
@@ -535,7 +562,7 @@ function Ke(o, e, t) {
       return null;
   }
 }
-function Je(o, e, t) {
+function Ke(o, e, t) {
   const n = {
     fontSize: "16px",
     color: t,
@@ -570,18 +597,18 @@ function We(o, e, t, n, s, i, a) {
     "setAlpha",
     "setDepth",
     "setMask"
-  ].forEach((d) => {
-    He(r, d);
+  ].forEach((u) => {
+    Ze(r, u);
   }), ae(t, a, e)) {
-    const d = K(o, e, t);
-    d && r.add(d);
+    const u = J(o, e, t);
+    u && r.add(u);
   } else {
     const h = t.getData(a)?.isMultiplePsd || !1;
-    Ze(o, r, e, n, h, a);
+    He(o, r, e, n, h, a);
   }
   Xe(o, e, r), s.add(r);
   const f = o.add.group();
-  B(o, t, f, {
+  R(o, t, f, {
     type: "tileset",
     name: e.name,
     x: e.x,
@@ -590,15 +617,15 @@ function We(o, e, t, n, s, i, a) {
     height: e.rows * n
   }), s.debugGroup = f;
 }
-function Ze(o, e, t, n, s = !1, i) {
+function He(o, e, t, n, s = !1, i) {
   for (let a = 0; a < t.columns; a++)
     for (let r = 0; r < t.rows; r++) {
-      const l = a * n, c = r * n, d = `${s && i ? `${i}_${t.name}` : t.name}_tile_${a}_${r}`, h = le(
+      const l = a * n, c = r * n, u = `${s && i ? `${i}_${t.name}` : t.name}_tile_${a}_${r}`, h = le(
         o,
         {
           x: l,
           y: c,
-          key: d,
+          key: u,
           initialDepth: t.initialDepth
         },
         e
@@ -606,7 +633,7 @@ function Ze(o, e, t, n, s = !1, i) {
       h && e.add(h);
     }
 }
-function He(o, e) {
+function Ze(o, e) {
   const t = Phaser.GameObjects.Container.prototype[e];
   o[e] = function(...n) {
     const s = t.apply(this, n);
@@ -641,32 +668,32 @@ function fe(o, e) {
 function ue(o, e, t) {
   e.mask && e.maskPath && re(o, e, t);
 }
-function O(o, e) {
+function B(o, e) {
   return e || o.name;
 }
 function de(o, e, t) {
   o.setName(e), o.setOrigin(0, 0), o.setDepth(t);
 }
 function Ue(o, e, t, n, s) {
-  const i = O(e, s), a = o.add.sprite(e.x, e.y, i);
+  const i = B(e, s), a = o.add.sprite(e.x, e.y, i);
   return ce(o, e, a), e.frame !== void 0 && a.setFrame(e.frame), a;
 }
 function je(o, e, t, n, s) {
-  const i = o.add.group(), a = O(e, s);
+  const i = o.add.group(), a = B(e, s);
   if (o.textures.exists(a)) {
     const l = o.textures.get(a).getFrameNames(), c = Object.keys(
       e.frames
-    ).reduce((f, d, h) => (f[d] = h, f), {});
+    ).reduce((f, u, h) => (f[u] = h, f), {});
     e.instances && e.instances.forEach((f) => {
-      const { name: d, x: h, y: x } = f, k = c[d];
-      if (k !== void 0 && k < l.length) {
-        const v = l[k], b = o.add.sprite(h, x, a, v);
-        de(b, d, e.initialDepth ?? 0), i.add(b), t.isDebugEnabled("console") && console.log(
-          `Placed spritesheet instance: ${d}, at (${h}, ${x}), using frame: ${v}`
+      const { name: u, x: h, y: g } = f, $ = c[u];
+      if ($ !== void 0 && $ < l.length) {
+        const v = l[$], b = o.add.sprite(h, g, a, v);
+        de(b, u, e.initialDepth ?? 0), i.add(b), t.isDebugEnabled("console") && console.log(
+          `Placed spritesheet instance: ${u}, at (${h}, ${g}), using frame: ${v}`
         );
       } else
         console.warn(
-          `Frame for "${d}" not found in spritesheet "${a}"`
+          `Frame for "${u}" not found in spritesheet "${a}"`
         );
     });
   } else
@@ -676,14 +703,14 @@ function je(o, e, t, n, s) {
   return fe(e, i), ue(o, e, i), i;
 }
 function qe(o, e, t, n, s) {
-  const i = o.add.group(), a = O(e, s);
+  const i = o.add.group(), a = B(e, s);
   if (o.textures.exists(a)) {
     const l = o.textures.get(a).getFrameNames();
     e.instances && e.instances.forEach((c) => {
-      const { name: f, x: d, y: h } = c;
+      const { name: f, x: u, y: h } = c;
       if (l.includes(f)) {
-        const x = o.add.sprite(d, h, a, f);
-        de(x, f, e.initialDepth ?? 0), i.add(x);
+        const g = o.add.sprite(u, h, a, f);
+        de(g, f, e.initialDepth ?? 0), i.add(g);
       } else
         console.warn(`Frame "${f}" not found in atlas "${a}"`);
     });
@@ -692,7 +719,7 @@ function qe(o, e, t, n, s) {
   return fe(e, i), ue(o, e, i), i;
 }
 function Qe(o, e, t, n, s, i) {
-  const a = O(e, s), r = o.add.sprite(e.x, e.y, a, 0);
+  const a = B(e, s), r = o.add.sprite(e.x, e.y, a, 0);
   if (ce(o, e, r), e.frame_width && e.frame_height) {
     const l = {
       key: a,
@@ -712,7 +739,7 @@ function Qe(o, e, t, n, s, i) {
 }
 function he(o, e, t, n, s, i, a) {
   if (e.lazyLoad) {
-    const c = K(o, e, t);
+    const c = J(o, e, t);
     c && n.add(c), s();
     return;
   }
@@ -734,11 +761,11 @@ function he(o, e, t, n, s, i, a) {
         break;
     }
     if (c) {
-      c instanceof Phaser.GameObjects.Group ? c.getChildren().forEach((d) => {
-        n.add(d);
+      c instanceof Phaser.GameObjects.Group ? c.getChildren().forEach((u) => {
+        n.add(u);
       }) : n.add(c), e.alpha !== void 0 && c.setAlpha(e.alpha), e.hidden !== void 0 && c.setVisible(!1), c.setDepth(e.initialDepth || 0);
       const f = o.add.group();
-      B(o, t, f, {
+      R(o, t, f, {
         type: "sprite",
         name: e.name,
         x: e.x,
@@ -757,7 +784,7 @@ function et(o, e, t, n, s, i) {
   if (a) {
     n.add(a);
     const r = o.add.group(), l = ge(e);
-    B(o, t, r, {
+    R(o, t, r, {
       type: "zone",
       name: e.name,
       x: e.x,
@@ -797,7 +824,7 @@ function ot(o, e, t, n, s, i) {
   if (a) {
     n.add(a);
     const r = o.add.group();
-    B(o, t, r, {
+    R(o, t, r, {
       type: "point",
       name: e.name,
       x: e.x,
@@ -866,7 +893,7 @@ function lt(o) {
     let a = !1;
     const r = (c, f = 0) => {
       if (!(f >= i)) {
-        if (c instanceof Phaser.GameObjects.Group && (c.getChildren().forEach((d) => r(d, f + 1)), f === i)) {
+        if (c instanceof Phaser.GameObjects.Group && (c.getChildren().forEach((u) => r(u, f + 1)), f === i)) {
           c.clear(), a = !0;
           return;
         }
@@ -876,7 +903,7 @@ function lt(o) {
       if (f.length === 0)
         return r(c), !0;
       if (c instanceof Phaser.GameObjects.Group) {
-        const d = f[0], h = c.getChildren().find((x) => x.name === d);
+        const u = f[0], h = c.getChildren().find((g) => g.name === u);
         if (h)
           return l(h, f.slice(1));
       }
@@ -938,23 +965,23 @@ function ht(o) {
     function a(l, c, f) {
       if (f > i || c.length === 0)
         return null;
-      const [d, ...h] = c;
-      let x;
+      const [u, ...h] = c;
+      let g;
       if (l instanceof Phaser.GameObjects.Group)
-        x = l.getChildren();
+        g = l.getChildren();
       else if (l instanceof Phaser.GameObjects.Container)
-        x = l.list;
+        g = l.list;
       else
         return null;
-      const k = x.filter((v) => !v.isDebugObject);
-      for (const v of k)
-        if (v.name === d) {
+      const $ = g.filter((v) => !v.isDebugObject);
+      for (const v of $)
+        if (v.name === u) {
           if (h.length === 0)
             return v;
           if (v instanceof Phaser.GameObjects.Group || v instanceof Phaser.GameObjects.Container)
             return a(v, h, f + 1);
         }
-      for (const v of k)
+      for (const v of $)
         if (v instanceof Phaser.GameObjects.Group || v instanceof Phaser.GameObjects.Container) {
           const b = a(v, c, f + 1);
           if (b) return b;
@@ -971,17 +998,17 @@ function gt(o, e) {
 function xe(o, e) {
   st(o, e), ct(o, e), ft(o, e), gt(o, e);
 }
-function R(o, e) {
+function O(o, e) {
   if (e.length === 0) return null;
   const [t, ...n] = e, s = o.find((i) => i.name === t);
-  return s ? n.length === 0 ? s : Y(s) ? R(s.children, n) : null : null;
+  return s ? n.length === 0 ? s : Y(s) ? O(s.children, n) : null : null;
 }
 function mt(o) {
   return function(t, n, s, i = {}) {
     const a = o.getData(n);
     if (!a || !a.original)
       return console.error(`No data found for key: ${n}`), t.add.group();
-    const r = a.original.tile_slice_size || 150, l = t.add.group(), c = R(
+    const r = a.original.tile_slice_size || 150, l = t.add.group(), c = O(
       a.original.layers,
       s.split("/")
     );
@@ -1022,7 +1049,7 @@ function be(o, e, t, n, s, i, a) {
     return s;
   }
   if (ae(t, i, e)) {
-    const l = K(o, e, t);
+    const l = J(o, e, t);
     return l && s.add(l), s;
   }
   return q(e) ? (We(o, e, t, n, s, () => {
@@ -1034,20 +1061,33 @@ function pt(o) {
     const i = o.getData(n);
     if (!i)
       return console.log(`No PSD data found for key: ${n}`), null;
-    const a = s.split("/"), r = R(i.original.layers, a);
+    const a = s.split("/"), r = O(i.original.layers, a);
     if (!r)
-      return console.log(`Sprite not found: ${s}`), console.log(`Available sprites: ${JSON.stringify(i.original.layers.map((d) => d.name))}`), null;
+      return console.log(`Sprite not found: ${s}`), console.log(`Available sprites: ${JSON.stringify(i.original.layers.map((u) => u.name))}`), null;
     if (!F(r))
       return console.log(`Layer "${s}" is not a sprite layer`), null;
     const c = i.isMultiplePsd || !1 ? `${n}_${r.name}` : r.name;
     if (t.textures.exists(c))
       return t.textures.get(c);
     const f = `${i.basePath}/${r.filePath}`;
-    return t.load.image(c, f), t.load.once(`filecomplete-image-${c}`, () => {
-      console.log(`Texture loaded: ${c}`);
-    }), t.load.start(), t.load.once("complete", () => {
-      console.log(`Load complete for: ${c}`);
-    }), t.textures.exists(c) ? t.textures.get(c) : (console.log(`Failed to load texture: ${c}`), null);
+    if (r.type === "atlas") {
+      const u = { frames: {} };
+      Object.entries(r.frames).forEach(([h, g]) => {
+        u.frames[h] = {
+          frame: { x: g.x, y: g.y, w: g.width, h: g.height },
+          rotated: !1,
+          trimmed: !1,
+          sourceSize: { w: g.width, h: g.height },
+          spriteSourceSize: { x: 0, y: 0, w: g.width, h: g.height }
+        };
+      }), t.load.atlas(c, f, u);
+    } else r.type === "spritesheet" || r.type === "animation" ? t.load.spritesheet(c, f, {
+      frameWidth: r.frame_width,
+      frameHeight: r.frame_height
+    }) : t.load.image(c, f);
+    return t.load.start(), console.warn(
+      `getTexture("${s}") was called before that texture had loaded. It is loading now; ask again once the scene's load has completed — psdLoadComplete is the signal for that.`
+    ), null;
   };
 }
 function yt(o) {
@@ -1055,7 +1095,7 @@ function yt(o) {
     const i = o.getData(n);
     if (!i)
       return console.log(`No PSD data found for key: ${n}`), null;
-    const a = s.split("/"), r = R(i.original.layers, a);
+    const a = s.split("/"), r = O(i.original.layers, a);
     if (!r)
       return console.log(`Layer not found: ${s}`), null;
     if (!z(r))
@@ -1070,7 +1110,7 @@ function yt(o) {
     const c = t.add.image(r.x, r.y, l);
     return c.setOrigin(0, 0), c.setVisible(!1), {
       maskImage: c,
-      applyTo: (f) => I(f, c)
+      applyTo: (f) => N(f, c)
     };
   };
 }
@@ -1083,7 +1123,7 @@ function xt(o, e, t = {}) {
     minSpeed: 0.1,
     ignore: []
   }, ...t };
-  function d() {
+  function u() {
     f.useBounds && (typeof f.useBounds == "object" ? (console.log("using custom size"), e.setBounds(
       f.useBounds.x,
       f.useBounds.y,
@@ -1091,54 +1131,54 @@ function xt(o, e, t = {}) {
       f.useBounds.height
     )) : console.warn("useBounds object must have {x, y, width, height} format"));
   }
-  function h(m) {
+  function h(p) {
     const P = [];
-    let w = m;
-    for (; w; )
-      w.name && P.unshift(w.name), w = w.parentContainer || null;
+    let k = p;
+    for (; k; )
+      k.name && P.unshift(k.name), k = k.parentContainer || null;
     return P.join("/");
   }
-  function x(m) {
+  function g(p) {
     if (!f.ignore || f.ignore.length === 0)
       return !1;
-    const P = h(m), w = m.name || "";
+    const P = h(p), k = p.name || "";
     for (const A of f.ignore)
-      if (w === A || P === A || P.endsWith("/" + A) || P.startsWith(A + "/") || P === A || P.includes("/" + A + "/"))
+      if (k === A || P === A || P.endsWith("/" + A) || P.startsWith(A + "/") || P === A || P.includes("/" + A + "/"))
         return !0;
     return !1;
   }
-  function k(m) {
+  function $(p) {
     if (!f.ignore || f.ignore.length === 0)
       return !1;
-    const P = n.input.hitTestPointer(m);
-    for (const w of P)
-      if (x(w))
+    const P = n.input.hitTestPointer(p);
+    for (const k of P)
+      if (g(k))
         return !0;
     return !1;
   }
-  function v(m) {
-    i || k(m) || (s = !0, l.copy(m), a.copy(m), r.reset(), n.events.emit("draggableStart", e));
+  function v(p) {
+    i || $(p) || (s = !0, l.copy(p), a.copy(p), r.reset(), n.events.emit("draggableStart", e));
   }
-  function b(m) {
+  function b(p) {
     if (!s) return;
-    const P = m.x - a.x, w = m.y - a.y;
-    e.scrollX -= P / e.zoom, e.scrollY -= w / e.zoom, r.set(-P, -w), a.copy(m), n.events.emit("draggableActive", e);
+    const P = p.x - a.x, k = p.y - a.y;
+    e.scrollX -= P / e.zoom, e.scrollY -= k / e.zoom, r.set(-P, -k), a.copy(p), n.events.emit("draggableActive", e);
   }
-  function L() {
+  function _() {
     s = !1, f.easeDragging || r.reset(), n.events.emit("draggableComplete", e);
   }
   function M() {
     !s && f.easeDragging && (r.length() > f.minSpeed ? (e.scrollX += r.x / e.zoom, e.scrollY += r.y / e.zoom, r.scale(f.friction), n.events.emit("draggableActive", e)) : r.reset());
   }
-  function p() {
-    n.input.on("pointerdown", v), n.input.on("pointermove", b), n.input.on("pointerup", L), n.events.on("update", M);
+  function y() {
+    n.input.on("pointerdown", v), n.input.on("pointermove", b), n.input.on("pointerup", _), n.events.on("update", M);
   }
-  return p(), d(), {
+  return y(), u(), {
     isDragging: () => s,
     isPaused: () => i,
     getVelocity: () => r.clone(),
-    setOptions: (m) => {
-      Object.assign(f, m), d(), f.easeDragging || r.reset();
+    setOptions: (p) => {
+      Object.assign(f, p), u(), f.easeDragging || r.reset();
     },
     pause: () => {
       i = !0, s && (s = !1, r.reset(), n.events.emit("draggableComplete", e));
@@ -1153,71 +1193,71 @@ function bt(o, e, t = {}) {
   if (s.length === 0)
     return console.warn("No PSDs found for lazy loading"), {};
   const i = [];
-  if (s.forEach((u) => {
-    const g = o.getData(u);
-    if (g && g.lazyLoad && (g.lazyLoad.sprites && g.lazyLoad.sprites.forEach(($) => {
-      i.push({ ...$, _psdKey: u });
-    }), g.lazyLoad.tiles)) {
-      const $ = g.original.tile_slice_size ?? 150;
-      g.lazyLoad.tiles.forEach((_) => {
-        A(_, $).forEach((y) => {
-          i.push({ ...y, _psdKey: u });
+  if (s.forEach((d) => {
+    const m = o.getData(d);
+    if (m && m.lazyLoad && (m.lazyLoad.sprites && m.lazyLoad.sprites.forEach((w) => {
+      i.push({ ...w, _psdKey: d });
+    }), m.lazyLoad.tiles)) {
+      const w = m.original.tile_slice_size ?? 150;
+      m.lazyLoad.tiles.forEach((L) => {
+        A(L, w).forEach((x) => {
+          i.push({ ...x, _psdKey: d });
         });
       });
     }
   }), i.length === 0)
     return t.debug?.console && console.log("No lazy load items found in target PSDs:", s), {};
-  let a, r = null, l = [], c = /* @__PURE__ */ new Set(), f = null, d = null;
+  let a, r = null, l = [], c = /* @__PURE__ */ new Set(), f = null, u = null;
   function h() {
-    t.createBoundaryCamera && x(), k(), v(), (t.debug?.shape || t.debug?.label) && b(), M(), D();
+    t.createBoundaryCamera && g(), $(), v(), (t.debug?.shape || t.debug?.label) && b(), M(), D();
   }
-  function x() {
-    d = n.cameras.add(), d.setVisible(!1), d.setZoom(1), d.setScroll(e.scrollX, e.scrollY), d.setSize(e.width, e.height);
+  function g() {
+    u = n.cameras.add(), u.setVisible(!1), u.setZoom(1), u.setScroll(e.scrollX, e.scrollY), u.setSize(e.width, e.height);
   }
-  function k() {
-    const u = t.extendPreloadBounds || 0;
-    if (d) {
-      d.setScroll(e.scrollX, e.scrollY);
-      const g = e.width / e.zoom, $ = e.height / e.zoom, _ = e.scrollX + e.width / 2, y = e.scrollY + e.height / 2;
+  function $() {
+    const d = t.extendPreloadBounds || 0;
+    if (u) {
+      u.setScroll(e.scrollX, e.scrollY);
+      const m = e.width / e.zoom, w = e.height / e.zoom, L = e.scrollX + e.width / 2, x = e.scrollY + e.height / 2;
       a = new Phaser.Geom.Rectangle(
-        _ - g / 2 - u,
-        y - $ / 2 - u,
-        g + u * 2,
-        $ + u * 2
+        L - m / 2 - d,
+        x - w / 2 - d,
+        m + d * 2,
+        w + d * 2
       );
     } else {
-      const g = e.width / e.zoom, $ = e.height / e.zoom;
+      const m = e.width / e.zoom, w = e.height / e.zoom;
       a = new Phaser.Geom.Rectangle(
-        e.scrollX - u,
-        e.scrollY - u,
-        g + u * 2,
-        $ + u * 2
+        e.scrollX - d,
+        e.scrollY - d,
+        m + d * 2,
+        w + d * 2
       );
     }
   }
   function v() {
-    const u = (g) => {
-      const $ = n.add.rectangle(g.x, g.y, g.width, g.height);
-      return $.setOrigin(0, 0), $.setStrokeStyle(1, 65280), $.setDepth(1e3), { boundary: $, data: { ...g, loaded: !1 } };
+    const d = (m) => {
+      const w = n.add.rectangle(m.x, m.y, m.width, m.height);
+      return w.setOrigin(0, 0), w.setStrokeStyle(1, 65280), w.setDepth(1e3), { boundary: w, data: { ...m, loaded: !1 } };
     };
-    l = i.map(u), t.debug?.shape ? l.forEach((g) => g.boundary.setVisible(!0)) : l.forEach((g) => g.boundary.setVisible(!1)), t.debug?.label && l.forEach((g) => {
-      const $ = n.add.text(
-        g.boundary.x,
-        g.boundary.y - 20,
-        g.data.name,
+    l = i.map(d), t.debug?.shape ? l.forEach((m) => m.boundary.setVisible(!0)) : l.forEach((m) => m.boundary.setVisible(!1)), t.debug?.label && l.forEach((m) => {
+      const w = n.add.text(
+        m.boundary.x,
+        m.boundary.y - 20,
+        m.data.name,
         {
           fontSize: "12px",
           color: "#00ffff",
           backgroundColor: "#000000"
         }
       );
-      $.setOrigin(0, 1), $.setDepth(1001);
+      w.setOrigin(0, 1), w.setDepth(1001);
     });
   }
   function b() {
-    r = n.add.graphics(), r.setDepth(1e3), L();
+    r = n.add.graphics(), r.setDepth(1e3), _();
   }
-  function L() {
+  function _() {
     r && (r.clear(), r.lineStyle(2, 16711935, 1), r.strokeRect(
       a.x,
       a.y,
@@ -1226,109 +1266,109 @@ function bt(o, e, t = {}) {
     ));
   }
   function M() {
-    const u = l.filter(
-      ({ boundary: g, data: $ }) => !$.loaded && !c.has(p($)) && Phaser.Geom.Intersects.RectangleToRectangle(
-        g.getBounds(),
+    const d = l.filter(
+      ({ boundary: m, data: w }) => !w.loaded && !c.has(y(w)) && Phaser.Geom.Intersects.RectangleToRectangle(
+        m.getBounds(),
         a
       )
     );
-    u.length > 0 && (t.debug?.console && console.log(`LazyLoad: ${u.length} objects to load`), n.events.emit("lazyLoadStart", u.length), u.forEach(m));
+    d.length > 0 && (t.debug?.console && console.log(`LazyLoad: ${d.length} objects to load`), n.events.emit("lazyLoadStart", d.length), d.forEach(p));
   }
-  function p(u) {
-    if (!u) return "unknown";
-    const g = u.category || u.type;
-    return g === "tile" || g === "tileset" ? `tile_${u.tilesetName || u.name}_${u.col}_${u.row}` : `sprite_${u.name}_${Math.round(u.x)}_${Math.round(u.y)}`;
+  function y(d) {
+    if (!d) return "unknown";
+    const m = d.category || d.type;
+    return m === "tile" || m === "tileset" ? `tile_${d.tilesetName || d.name}_${d.col}_${d.row}` : `sprite_${d.name}_${Math.round(d.x)}_${Math.round(d.y)}`;
   }
-  function m({ data: u }) {
-    const g = p(u);
-    c.add(g);
-    const $ = u._psdKey;
-    t.debug?.console && console.log(`LazyLoad: Loading object ${g} from PSD ${$}`);
-    const _ = {
-      sprites: u.category === "sprite" ? [u] : [],
+  function p({ data: d }) {
+    const m = y(d);
+    c.add(m);
+    const w = d._psdKey;
+    t.debug?.console && console.log(`LazyLoad: Loading object ${m} from PSD ${w}`);
+    const L = {
+      sprites: d.category === "sprite" ? [d] : [],
       tiles: [],
       groups: [],
-      singleTiles: u.category === "tile" || u.category === "tileset" ? [u] : []
+      singleTiles: d.category === "tile" || d.category === "tileset" ? [d] : []
     };
-    oe(n, $, _, o), n.load.once("complete", () => {
-      P(u);
+    oe(n, w, L, o), n.load.once("complete", () => {
+      P(d);
     }), n.load.start();
   }
-  function P(u) {
-    const g = p(u);
-    if (c.delete(g), u.loaded = !0, t.debug?.console && console.log(`LazyLoad: Object loaded ${g}`), u.category === "sprite") {
-      const y = n.add.group();
-      he(n, u, o, y, () => {
-        y.getChildren().forEach((S) => {
-          S.setDepth && u.initialDepth !== void 0 && S.setDepth(u.initialDepth);
+  function P(d) {
+    const m = y(d);
+    if (c.delete(m), d.loaded = !0, t.debug?.console && console.log(`LazyLoad: Object loaded ${m}`), d.category === "sprite") {
+      const x = n.add.group();
+      he(n, d, o, x, () => {
+        x.getChildren().forEach((S) => {
+          S.setDepth && d.initialDepth !== void 0 && S.setDepth(d.initialDepth);
         }), n.children.sort("depth");
-      }, u._psdKey);
-    } else if (u.category === "tile" || u.category === "tileset") {
-      const y = w(n, u);
+      }, d._psdKey);
+    } else if (d.category === "tile" || d.category === "tileset") {
+      const x = k(n, d);
       le(
         n,
         {
-          x: u.x - y.x,
+          x: d.x - x.x,
           // Adjust for container position
-          y: u.y - y.y,
+          y: d.y - x.y,
           // Adjust for container position
-          key: `${u.tilesetName}_tile_${u.col}_${u.row}`,
-          initialDepth: u.initialDepth,
-          tilesetName: u.tilesetName,
-          col: u.col,
-          row: u.row
+          key: `${d.tilesetName}_tile_${d.col}_${d.row}`,
+          initialDepth: d.initialDepth,
+          tilesetName: d.tilesetName,
+          col: d.col,
+          row: d.row
         },
-        y
+        x
       );
     }
-    const $ = l.filter(({ data: y }) => y.loaded).length / l.length, _ = Array.from(c);
-    n.events.emit("lazyLoadProgress", $, _), t.debug?.console && console.log(
-      `LazyLoad: Progress ${$.toFixed(2)}, Remaining:`,
-      _
-    ), l.every(({ data: y }) => y.loaded) && (n.events.emit("lazyLoadingComplete"), t.debug?.console && console.log("LazyLoad: All objects loaded")), L();
+    const w = l.filter(({ data: x }) => x.loaded).length / l.length, L = Array.from(c);
+    n.events.emit("lazyLoadProgress", w, L), t.debug?.console && console.log(
+      `LazyLoad: Progress ${w.toFixed(2)}, Remaining:`,
+      L
+    ), l.every(({ data: x }) => x.loaded) && (n.events.emit("lazyLoadingComplete"), t.debug?.console && console.log("LazyLoad: All objects loaded")), _();
   }
-  function w(u, g) {
-    const $ = u.children.list.find(
-      (C) => C instanceof Phaser.GameObjects.Container && C.name === g.tilesetName
+  function k(d, m) {
+    const w = d.children.list.find(
+      (C) => C instanceof Phaser.GameObjects.Container && C.name === m.tilesetName
     );
-    if ($)
-      return $;
-    const _ = g.x - g.col * g.tile_slice_size, y = g.y - g.row * g.tile_slice_size, S = u.add.container(_, y);
-    return S.setName(g.tilesetName), S.setDepth(g.initialDepth), S;
+    if (w)
+      return w;
+    const L = m.x - m.col * m.tile_slice_size, x = m.y - m.row * m.tile_slice_size, S = d.add.container(L, x);
+    return S.setName(m.tilesetName), S.setDepth(m.initialDepth), S;
   }
-  function A(u, g) {
-    const $ = [];
-    for (let _ = 0; _ < u.columns; _++)
-      for (let y = 0; y < u.rows; y++)
-        $.push({
+  function A(d, m) {
+    const w = [];
+    for (let L = 0; L < d.columns; L++)
+      for (let x = 0; x < d.rows; x++)
+        w.push({
           category: "tile",
-          name: `${u.name}_tile_${_}_${y}`,
-          x: u.x + _ * g,
-          y: u.y + y * g,
-          width: g,
-          height: g,
-          tile_slice_size: g,
-          filetype: u.filetype || "png",
-          tilesetName: u.name,
-          col: _,
-          row: y,
-          initialDepth: u.initialDepth
+          name: `${d.name}_tile_${L}_${x}`,
+          x: d.x + L * m,
+          y: d.y + x * m,
+          width: m,
+          height: m,
+          tile_slice_size: m,
+          filetype: d.filetype || "png",
+          tilesetName: d.name,
+          col: L,
+          row: x,
+          initialDepth: d.initialDepth
         });
-    return $;
+    return w;
   }
   function D() {
-    const u = t.checkInterval || 300;
+    const d = t.checkInterval || 300;
     f = window.setInterval(() => {
-      N();
-    }, u);
+      I();
+    }, d);
   }
-  function N() {
-    k(), M(), (t.debug?.shape || t.debug?.label) && L();
+  function I() {
+    $(), M(), (t.debug?.shape || t.debug?.label) && _();
   }
   return h(), {
-    update: N,
+    update: I,
     destroy: () => {
-      f !== null && (window.clearInterval(f), f = null), l.forEach((u) => u.boundary.destroy()), r && r.destroy(), d && (n.cameras.remove(d), d = null);
+      f !== null && (window.clearInterval(f), f = null), l.forEach((d) => d.boundary.destroy()), r && r.destroy(), u && (n.cameras.remove(u), u = null);
     }
   };
 }
@@ -1343,7 +1383,7 @@ function $t(o, e, t, n = {}) {
   }
   return s;
 }
-function vt(o) {
+function wt(o) {
   return function(e) {
     let t, n;
     if (Array.isArray(e))
@@ -1392,40 +1432,40 @@ function vt(o) {
     }
     let r = "normal";
     const l = s;
-    let c, f, d, h;
+    let c, f, u, h;
     if (typeof l.getBounds == "function") {
       const b = l.getBounds();
-      c = b.centerX || b.x + b.width / 2, f = b.centerY || b.y + b.height / 2, d = b.width, h = b.height;
+      c = b.centerX || b.x + b.width / 2, f = b.centerY || b.y + b.height / 2, u = b.width, h = b.height;
     } else
-      c = l.x || 0, f = l.y || 0, d = l.width || l.displayWidth || 100, h = l.height || l.displayHeight || 100;
-    const x = a.add.rectangle(c, f, d, h, 0, 0);
-    x.setInteractive(), x.setDepth(Number.MAX_SAFE_INTEGER), x.setVisible(!0), t.normal && t.normal.setVisible(!0), t.hover && t.hover.setVisible(!1), t.active && t.active.setVisible(!1);
-    function k(b) {
+      c = l.x || 0, f = l.y || 0, u = l.width || l.displayWidth || 100, h = l.height || l.displayHeight || 100;
+    const g = a.add.rectangle(c, f, u, h, 0, 0);
+    g.setInteractive(), g.setDepth(Number.MAX_SAFE_INTEGER), g.setVisible(!0), t.normal && t.normal.setVisible(!0), t.hover && t.hover.setVisible(!1), t.active && t.active.setVisible(!1);
+    function $(b) {
       t.normal && t.normal.setVisible(!1), t.hover && t.hover.setVisible(!1), t.active && t.active.setVisible(!1);
-      const L = t[b];
-      L ? L.setVisible(!0) : t.normal && t.normal.setVisible(!0), r = b;
+      const _ = t[b];
+      _ ? _.setVisible(!0) : t.normal && t.normal.setVisible(!0), r = b;
     }
     const v = a.sys.game.device.input.touch;
-    return x.on("pointerdown", (b, L, M, p) => {
-      t.active && k("active"), n.mousePress && n.mousePress(i, { localX: L, localY: M, event: p }, b);
-    }), x.on("pointerup", (b, L, M, p) => {
-      t.active && (!v && t.hover && x.input?.isOver ? k("hover") : k("normal")), n.click && n.click(i, { localX: L, localY: M, event: p }, b);
-    }), !v && t.hover && (x.on("pointerover", (b, L, M, p) => {
-      k("hover"), n.mouseOver && n.mouseOver(i, { localX: L, localY: M, event: p }, b);
-    }), x.on("pointerout", (b, L) => {
-      r !== "active" && (k("normal"), n.mouseOut && n.mouseOut(i, { event: L }, b));
+    return g.on("pointerdown", (b, _, M, y) => {
+      t.active && $("active"), n.mousePress && n.mousePress(i, { localX: _, localY: M, event: y }, b);
+    }), g.on("pointerup", (b, _, M, y) => {
+      t.active && (!v && t.hover && g.input?.isOver ? $("hover") : $("normal")), n.click && n.click(i, { localX: _, localY: M, event: y }, b);
+    }), !v && t.hover && (g.on("pointerover", (b, _, M, y) => {
+      $("hover"), n.mouseOver && n.mouseOver(i, { localX: _, localY: M, event: y }, b);
+    }), g.on("pointerout", (b, _) => {
+      r !== "active" && ($("normal"), n.mouseOut && n.mouseOut(i, { event: _ }, b));
     })), r = "normal", {
       destroy: () => {
-        x.off("pointerover"), x.off("pointerout"), x.off("pointerdown"), x.off("pointerup"), x.destroy();
+        g.off("pointerover"), g.off("pointerout"), g.off("pointerdown"), g.off("pointerup"), g.destroy();
       },
       getCurrentState: () => r,
       showState: (b) => {
-        k(b);
+        $(b);
       }
     };
   };
 }
-function wt(o) {
+function vt(o) {
   return function(e, t, n = {}) {
     const s = e.scene;
     if (!s) {
@@ -1455,27 +1495,27 @@ function wt(o) {
     }
     if (!c || c.length === 0) {
       const M = f.getFrameNames();
-      M.length > 0 ? c = M : c = Array.from({ length: f.frameTotal }, (p, m) => m);
+      M.length > 0 ? c = M : c = Array.from({ length: f.frameTotal }, (y, p) => p);
     }
-    const d = s.add.group(), h = n.minInstances !== void 0 ? n.minInstances : 5, x = n.maxInstances !== void 0 ? n.maxInstances : 10, k = Phaser.Math.Between(h, x);
-    let v = 0, b = k * 10, L = 0;
-    for (; v < k && L < b; ) {
-      const M = Phaser.Math.Between(r.left, r.right), p = Phaser.Math.Between(r.top, r.bottom);
-      if (Phaser.Geom.Polygon.Contains(a, M, p)) {
-        const m = Phaser.Math.RND.pick(c), P = s.add.sprite(M, p, l, m);
+    const u = s.add.group(), h = n.minInstances !== void 0 ? n.minInstances : 5, g = n.maxInstances !== void 0 ? n.maxInstances : 10, $ = Phaser.Math.Between(h, g);
+    let v = 0, b = $ * 10, _ = 0;
+    for (; v < $ && _ < b; ) {
+      const M = Phaser.Math.Between(r.left, r.right), y = Phaser.Math.Between(r.top, r.bottom);
+      if (Phaser.Geom.Polygon.Contains(a, M, y)) {
+        const p = Phaser.Math.RND.pick(c), P = s.add.sprite(M, y, l, p);
         if (n.scaleRange) {
-          const w = Phaser.Math.FloatBetween(n.scaleRange[0], n.scaleRange[1]);
-          P.setScale(w);
+          const k = Phaser.Math.FloatBetween(n.scaleRange[0], n.scaleRange[1]);
+          P.setScale(k);
         }
         if (n.tint && n.tint.length > 0) {
-          const w = Phaser.Math.RND.pick(n.tint);
-          P.setTint(w);
+          const k = Phaser.Math.RND.pick(n.tint);
+          P.setTint(k);
         }
-        d.add(P), v++;
+        u.add(P), v++;
       }
-      L++;
+      _++;
     }
-    return console.log(`fillZone completed. Sprites placed: ${v}, Target: ${k}, Attempts: ${L}`), d;
+    return console.log(`fillZone completed. Sprites placed: ${v}, Target: ${$}, Attempts: ${_}`), u;
   };
 }
 function kt(o) {
@@ -1486,13 +1526,13 @@ function kt(o) {
       e.y + e.height / 2
     );
     const l = { x: e.x, y: e.y }, c = t.getData("points"), f = c ? new Phaser.Geom.Polygon(c) : t.getBounds();
-    let d = null;
-    const h = (p, m) => {
-      const P = j(f), w = new Phaser.Math.Vector2(p - P.x, m - P.y);
-      w.length() > r && w.setLength(r);
+    let u = null;
+    const h = (y, p) => {
+      const P = j(f), k = new Phaser.Math.Vector2(y - P.x, p - P.y);
+      k.length() > r && k.setLength(r);
       const D = {
-        x: P.x + w.x,
-        y: P.y + w.y
+        x: P.x + k.x,
+        y: P.y + k.y
       };
       return c ? Phaser.Geom.Polygon.Contains(
         f,
@@ -1514,14 +1554,14 @@ function kt(o) {
           f.bottom
         )
       };
-    }, x = (p, m) => {
+    }, g = (y, p) => {
       const P = j(f);
       return {
-        x: (p - P.x) / r,
-        y: (m - P.y) / r
+        x: (y - P.x) / r,
+        y: (p - P.y) / r
       };
-    }, k = (p, m) => p.x >= m.left && p.x <= m.right && p.y >= m.top && p.y <= m.bottom, v = (p) => {
-      d === null && k(p, e.getBounds()) && (d = p, i.events.emit("joystickStart", {
+    }, $ = (y, p) => y.x >= p.left && y.x <= p.right && y.y >= p.top && y.y <= p.bottom, v = (y) => {
+      u === null && $(y, e.getBounds()) && (u = y, i.events.emit("joystickStart", {
         [n]: {
           isActive: !0,
           position: { x: e.x, y: e.y },
@@ -1529,25 +1569,25 @@ function kt(o) {
           normalized: { x: 0, y: 0 }
         }
       }));
-    }, b = (p) => {
-      if (p === d) {
-        const { x: m, y: P } = h(p.x, p.y);
-        e.setPosition(m, P);
-        const w = {
-          x: m - l.x,
+    }, b = (y) => {
+      if (y === u) {
+        const { x: p, y: P } = h(y.x, y.y);
+        e.setPosition(p, P);
+        const k = {
+          x: p - l.x,
           y: P - l.y
-        }, A = x(m, P);
+        }, A = g(p, P);
         i.events.emit("joystickActive", {
           [n]: {
             isActive: !0,
-            position: { x: m, y: P },
-            change: w,
+            position: { x: p, y: P },
+            change: k,
             normalized: A
           }
         });
       }
-    }, L = (p) => {
-      p === d && (d = null, a ? i.tweens.add({
+    }, _ = (y) => {
+      y === u && (u = null, a ? i.tweens.add({
         targets: e,
         x: l.x,
         y: l.y,
@@ -1571,85 +1611,85 @@ function kt(o) {
             x: e.x - l.x,
             y: e.y - l.y
           },
-          normalized: x(
+          normalized: g(
             e.x,
             e.y
           )
         }
       }));
     };
-    i.input.on("pointerdown", v), i.input.on("pointermove", b), i.input.on("pointerup", L), i.input.on("pointerupoutside", L);
+    i.input.on("pointerdown", v), i.input.on("pointermove", b), i.input.on("pointerup", _), i.input.on("pointerupoutside", _);
     function M() {
-      i.input.off("pointerdown", v), i.input.off("pointermove", b), i.input.off("pointerup", L), i.input.off("pointerupoutside", L);
+      i.input.off("pointerdown", v), i.input.off("pointermove", b), i.input.off("pointerup", _), i.input.off("pointerupoutside", _);
     }
     return {
-      control: (p, m) => {
-        let P = new Phaser.Math.Vector2(), w = 0;
+      control: (y, p) => {
+        let P = new Phaser.Math.Vector2(), k = 0;
         const A = new Phaser.Math.Vector2(
-          p.x,
-          p.y
+          y.x,
+          y.y
         ), D = new Phaser.Math.Vector2(
           l.x,
           l.y
-        ), N = (y, S) => {
-          if (!m.directionLock) return [y, S];
-          if (m.directionLock === 4)
-            return Math.abs(y) > Math.abs(S) ? [y, 0] : [0, S];
-          if (m.directionLock === 8) {
-            const C = Math.atan2(S, y), G = Math.round(8 * C / (2 * Math.PI) + 8) % 8 * Math.PI / 4;
-            return [Math.cos(G), Math.sin(G)];
+        ), I = (x, S) => {
+          if (!p.directionLock) return [x, S];
+          if (p.directionLock === 4)
+            return Math.abs(x) > Math.abs(S) ? [x, 0] : [0, S];
+          if (p.directionLock === 8) {
+            const C = Math.atan2(S, x), E = Math.round(8 * C / (2 * Math.PI) + 8) % 8 * Math.PI / 4;
+            return [Math.cos(E), Math.sin(E)];
           }
-          return [y, S];
-        }, u = (y, S, C) => {
-          switch ([y, S] = N(y, S), m.type) {
+          return [x, S];
+        }, d = (x, S, C) => {
+          switch ([x, S] = I(x, S), p.type) {
             case "speed":
-              const V = m.maxSpeed || 300;
-              p.x += y * V * C / 1e3, p.y += S * V * C / 1e3;
+              const V = p.maxSpeed || 300;
+              y.x += x * V * C / 1e3, y.y += S * V * C / 1e3;
               break;
             case "velocity":
-              const G = p.body;
-              if (G) {
-                const E = m.force || 1;
-                G.setVelocity(y * E * 60, S * E * 60);
+              const E = y.body;
+              if (E) {
+                const G = p.force || 1;
+                E.setVelocity(x * G * 60, S * G * 60);
               }
               break;
             case "unit":
-              const J = i.time.now, Pe = m.repeatRate || 0, W = m.pixels || 100, Z = 0.2;
-              if ((Math.abs(y) > Z || Math.abs(S) > Z) && (w === 0 || J - w >= Pe)) {
-                const E = Math.atan2(S, y);
-                p.x += Math.round(Math.cos(E) * W), p.y += Math.round(Math.sin(E) * W), w = J;
+              const K = i.time.now, Pe = p.repeatRate || 0, W = p.pixels || 100, H = 0.2;
+              if ((Math.abs(x) > H || Math.abs(S) > H) && (k === 0 || K - k >= Pe)) {
+                const G = Math.atan2(S, x);
+                y.x += Math.round(Math.cos(G) * W), y.y += Math.round(Math.sin(G) * W), k = K;
               }
               break;
             case "tracked":
-              const H = m.multiplier || 1, $e = (y - D.x) * H, ve = (S - D.y) * H;
-              p.setPosition(
+              const Z = p.multiplier || 1, $e = (x - D.x) * Z, we = (S - D.y) * Z;
+              y.setPosition(
                 A.x + $e,
-                A.y + ve
+                A.y + we
               );
               break;
           }
-        }, g = (y) => {
-          if (y[n])
-            if (m.type === "tracked") {
-              const S = y[n].position;
-              u(S.x, S.y, 0);
+        }, m = (x) => {
+          if (x[n])
+            if (p.type === "tracked") {
+              const S = x[n].position;
+              d(S.x, S.y, 0);
             } else
-              P.set(y[n].normalized.x, y[n].normalized.y), w === 0 && u(P.x, P.y, 0);
-        }, $ = (y) => {
-          if (y[n])
-            if (P.reset(), w = 0, m.type === "velocity") {
-              const S = p.body;
+              P.set(x[n].normalized.x, x[n].normalized.y), k === 0 && d(P.x, P.y, 0);
+        }, w = (x) => {
+          if (x[n])
+            if (P.reset(), k = 0, p.type === "velocity") {
+              const S = y.body;
               S && S.setVelocity(0, 0);
-            } else m.type === "tracked" && s.bounceBack && p.setPosition(
+            } else p.type === "tracked" && s.bounceBack && y.setPosition(
               A.x,
               A.y
             );
-        }, _ = (y, S) => {
-          m.type !== "tracked" && (P.x !== 0 || P.y !== 0) && u(P.x, P.y, S);
+        }, L = (x, S) => {
+          p.type !== "tracked" && (P.x !== 0 || P.y !== 0) && d(P.x, P.y, S);
         };
-        return i.events.on("joystickActive", g), i.events.on("joystickRelease", $), i.events.on("update", _), {
+        return i.events.on("joystickActive", m), i.events.on("joystickRelease", w), i.events.on("update", L), {
           destroy: () => {
-            M(), i.events.off("joystickActive", g), i.events.off("joystickRelease", $), i.events.off("update", _);
+            M(), i.events.off("joystickActive", m), i.events.off("joystickRelease", w), i.events.off("update", L);
           }
         };
       },
@@ -1660,12 +1700,12 @@ function kt(o) {
 function St(o, e, t) {
   let n = new Phaser.Math.Vector2(), s = Number.MAX_VALUE;
   for (let i = 0; i < o.points.length; i++) {
-    const a = o.points[i], r = o.points[(i + 1) % o.points.length], l = Lt(a, r, e, t), c = Phaser.Math.Distance.Between(e, t, l.x, l.y);
+    const a = o.points[i], r = o.points[(i + 1) % o.points.length], l = _t(a, r, e, t), c = Phaser.Math.Distance.Between(e, t, l.x, l.y);
     c < s && (s = c, n = l);
   }
   return n;
 }
-function Lt(o, e, t, n) {
+function _t(o, e, t, n) {
   const s = e.x - o.x, i = e.y - o.y, a = ((t - o.x) * s + (n - o.y) * i) / (s * s + i * i), r = Phaser.Math.Clamp(a, 0, 1);
   return new Phaser.Math.Vector2(
     o.x + r * s,
@@ -1708,16 +1748,16 @@ function Mt(o) {
         break;
     }
     r += a.targetOffset[0], l += a.targetOffset[1];
-    const d = r - e.width / 2, h = l - e.height / 2, x = d - e.scrollX, k = a.speed;
+    const u = r - e.width / 2, h = l - e.height / 2, g = u - e.scrollX, $ = a.speed;
     let v = Phaser.Math.Easing.Linear;
     a.easing === !0 ? v = Phaser.Math.Easing.Cubic.InOut : typeof a.easing == "function" && (v = a.easing), s.events.emit("panToStart"), s.tweens.add({
       targets: e,
-      scrollX: d,
+      scrollX: u,
       scrollY: h,
-      duration: k,
+      duration: $,
       ease: v,
       onUpdate: () => {
-        const b = 1 - (e.scrollX - d) / x;
+        const b = 1 - (e.scrollX - u) / g;
         s.events.emit("panToProgress", b);
       },
       onComplete: () => {
@@ -1726,7 +1766,7 @@ function Mt(o) {
     });
   };
 }
-function _t(o) {
+function Lt(o) {
   return function(e) {
     const {
       camera: t,
@@ -1777,14 +1817,14 @@ function _t(o) {
 }
 function At(o) {
   return {
-    button: vt(),
-    fillZone: wt(),
+    button: wt(),
+    fillZone: vt(),
     joystick: kt(),
     panTo: Mt(),
-    parallax: _t()
+    parallax: Lt()
   };
 }
-class zt extends we.Plugins.BasePlugin {
+class zt extends ve.Plugins.BasePlugin {
   psdData = {};
   options;
   load;
@@ -1797,7 +1837,7 @@ class zt extends we.Plugins.BasePlugin {
     super(e), this.options = {}, console.log(
       "%c✨ PSD-to-Phaser v0.0.6 ✨",
       "background: black; color: white; padding: 1px 3px; border-radius: 2px;"
-    ), this.load = Re(this), this.place = mt(this), this.getTexture = pt(this), this.getMask = yt(this), this.use = At(), this.createCamera = (t, n, s) => $t(this, t, n, s);
+    ), this.load = Oe(this), this.place = mt(this), this.getTexture = pt(this), this.getMask = yt(this), this.use = At(), this.createCamera = (t, n, s) => $t(this, t, n, s);
   }
   init(e = {}) {
     this.options = {

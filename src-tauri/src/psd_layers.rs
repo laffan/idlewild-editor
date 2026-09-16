@@ -47,6 +47,13 @@ pub struct PsdLayerInfo {
     pub y: i32,
     /// What psd-to-json will make of it, from the pipe prefix.
     pub category: String,
+    /// The third segment, when there is one: `atlas`, `spritesheet`,
+    /// `animation`, `jpg`. It is what decides whether a group is a folder of
+    /// layers or a single composited image, so the list has to show it —
+    /// an atlas listed as "group · 6 layers" is a file the panel is wrong
+    /// about.
+    #[serde(rename = "type")]
+    pub layer_type: Option<String>,
     /// Whether this row is a group holding the rows indented under it.
     pub is_group: bool,
     /// How deep it sits: zero at the top level, one inside a group.
@@ -187,6 +194,7 @@ pub fn read(project_id: &str, key: &str) -> Result<PsdLayerList, String> {
                     x: layer.layer_left(),
                     y: layer.layer_top(),
                     category: category_of(layer.name()),
+                    layer_type: type_of(layer.name()),
                     is_group: false,
                     depth: row.depth,
                 }
@@ -207,6 +215,7 @@ pub fn read(project_id: &str, key: &str) -> Result<PsdLayerList, String> {
                     x: left,
                     y: top,
                     category: category_of(group.name()),
+                    layer_type: type_of(group.name()),
                     is_group: true,
                     depth: row.depth,
                 }
@@ -593,6 +602,25 @@ fn rename_segment(layer_name: &str, from: &str, to: &str) -> String {
         .join("|")
         .trim()
         .to_string()
+}
+
+/// The type segment of a layer name, when the name carries one.
+///
+/// Only the four-segment form has a type — `S | confetti | atlas |` — which is
+/// the same rule `parser.rs` in psd-to-json applies, and the reason a
+/// three-segment name's third field is attributes rather than a type.
+///
+/// Taken as typed rather than folded to lower case, because that is what the
+/// pipeline does with it: psd-to-json copies the segment through and
+/// psd-to-phaser matches it against `"atlas"` exactly. `Atlas` is therefore a
+/// group that will not become an atlas, and a panel that tidied the spelling
+/// here would be promising something the export does not deliver.
+pub(crate) fn type_of(name: &str) -> Option<String> {
+    let parts: Vec<&str> = name.split('|').map(str::trim).collect();
+    if parts.len() != 4 || parts[2].is_empty() {
+        return None;
+    }
+    Some(parts[2].to_string())
 }
 
 pub(crate) fn category_of(name: &str) -> String {
