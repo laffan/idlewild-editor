@@ -128,7 +128,7 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
     // The way into PSD Edit mode, on every row there is anything to draw in.
     // Beside the extrusion's cube rather than instead of it, and for the same
     // reason: a row that leads somewhere says so on the row.
-    paintable(row.source, owner)
+    paintable(row.source, owner, enclosing(ctx.rows, ctx.rows.indexOf(row)))
       ? actionEl(ICONS.pen, `Draw in "${row.source.name}"`, () =>
           ctx.onEditPsd(row.source),
         )
@@ -151,12 +151,43 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
  * anything painted over one would disappear the next time the solid behind it
  * was pulled. That last case is the one worth being firm about — it would
  * look like it worked, right up until it quietly did not.
+ *
+ * So is a frame of a composited group, for the same reason in a different
+ * shape. A child of `S | confetti | atlas |` is a sprite by its name and has
+ * no artwork of its own anywhere downstream: psd-to-json folds it into the
+ * atlas and exports no PNG for it, and psd-to-phaser's categoriser stops at
+ * the atlas and loads no texture under its name. Offering the pen there opens
+ * PSD Edit mode over a layer whose picture cannot be found — a row that leads
+ * nowhere, which is exactly what a row that leads somewhere should not be.
+ * `inside` is the group enclosing the row, or null at the top level.
  */
 export function paintable(
   layer: PsdLayerInfo,
   owner: OwnedLayer | null,
+  inside?: PsdLayerInfo | null,
 ): boolean {
-  return !owner && !layer.isGroup && layer.category === "sprite";
+  if (owner || layer.isGroup || layer.category !== "sprite") return false;
+  return !inside || !composites(inside);
+}
+
+/** Whether a group is exported as one image built from what is inside it. */
+function composites(group: PsdLayerInfo): boolean {
+  return group.category === "sprite" || group.category === "tileset";
+}
+
+/**
+ * The group a row sits directly inside, or null at the top level.
+ *
+ * The list is flat and carries depth, the way Photoshop's own panel reads, so
+ * the enclosing group is the nearest row above this one that is shallower.
+ */
+export function enclosing(rows: readonly Row[], at: number): PsdLayerInfo | null {
+  if (at < 0) return null;
+  const depth = rows[at]?.depth ?? 0;
+  for (let i = at - 1; i >= 0; i--) {
+    if (rows[i].depth < depth) return rows[i].source;
+  }
+  return null;
 }
 
 /**

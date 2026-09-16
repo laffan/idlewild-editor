@@ -216,3 +216,52 @@ describe("groupLabel", () => {
     );
   });
 });
+
+/**
+ * The pen on a frame of a composited group.
+ *
+ * A child of `S | confetti | atlas |` is a sprite by its name and has no
+ * artwork of its own anywhere downstream — psd-to-json folds it into the atlas
+ * and exports no PNG, psd-to-phaser stops at the atlas and loads no texture.
+ * The pen there opens PSD Edit mode over a picture that cannot be found.
+ */
+describe("paintable inside a composited group", () => {
+  function row(
+    name: string,
+    category: PsdLayerInfo["category"],
+    depth: number,
+    type: string | null = null,
+    isGroup = false,
+  ): PsdLayerInfo {
+    return {
+      index: 0, name, category, type,
+      visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
+      isGroup, depth,
+    };
+  }
+
+  const atlas = row("S | confetti | atlas |", "sprite", 0, "atlas", true);
+  const tiles = row("T | ground", "tileset", 0, null, true);
+  const folder = row("G | town", "group", 0, null, true);
+  const frame = row("S | purple", "sprite", 1);
+
+  it("declines a frame of an atlas", () => {
+    expect(paintable(frame, null, atlas)).toBe(false);
+  });
+
+  it("declines a layer inside a tileset", () => {
+    expect(paintable(frame, null, tiles)).toBe(false);
+  });
+
+  it("still offers a sprite inside a real group", () => {
+    expect(paintable(frame, null, folder)).toBe(true);
+  });
+
+  it("still offers a sprite at the top level", () => {
+    expect(paintable(row("S | hero", "sprite", 0), null, null)).toBe(true);
+  });
+
+  it("answers as before when nothing says what encloses it", () => {
+    expect(paintable(row("S | hero", "sprite", 0), null)).toBe(true);
+  });
+});
