@@ -500,7 +500,7 @@ describe("the minimap's stylesheet", () => {
  * The two library editors' toolbars, which are 210 pixels wide.
  *
  * Both rules here are about that width. The sheet's own segmented control is
- * built for the New Game sheet, where a row is the width of the page, and at
+ * built for the New Project sheet, where a row is the width of the page, and at
  * that size Draw / Select / Pan wrapped onto three lines; and the ways out of
  * an editor are a group held at the right-hand end of the action row, away
  * from the Undo and Redo that are about the work rather than about leaving.

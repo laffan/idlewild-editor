@@ -1,7 +1,7 @@
 /**
  * Home screen: the project list. A card per project showing its current
  * state as a thumbnail; long-press for rename and delete; Select, Open and New
- * Game top right.
+ * Project top right.
  *
  * Open reads a `.idlewild` file — the archive Publish's *Export project*
  * writes — back in as a project of its own. It lands in the list like any
@@ -30,7 +30,7 @@ import {
   describeCount,
   duplicateProjects,
 } from "./home-select";
-import { openNewGame } from "./new-game";
+import { openNewProject } from "./new-project";
 
 export interface HomeCallbacks {
   onOpenProject: (meta: ProjectMeta) => void;
@@ -141,7 +141,7 @@ export function renderHome(
     {
       class: "btn btn-primary",
       onClick: () =>
-        openNewGame(async (choice) => {
+        openNewProject(async (choice) => {
           try {
             const meta = await projects.create(
               choice.name,
@@ -169,7 +169,7 @@ export function renderHome(
         }),
     },
     icon(ICONS.plus, 17, "#fff"),
-    h("span", { text: "New Game" }),
+    h("span", { text: "New Project" }),
   );
 
   clear(container);
@@ -302,7 +302,7 @@ export function renderHome(
       grid.appendChild(
         h("div", {
           class: "home-empty",
-          text: "No projects yet. Start one with New Game.",
+          text: "No projects yet. Start one with New Project.",
         }),
       );
       refreshSelection();

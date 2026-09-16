@@ -47,6 +47,7 @@ Extension of [README.md](README.md).
 │                  sees it                                       │
 │  publish.rs      zip export, both runtimes included            │
 │  export_assets.rs  chosen PSDs alone: sources, output, or both │
+│  import_assets.rs  the same door inward, several files at once │
 │  game_config.rs  the document, as the exported game reads it   │
 │  file_server.rs  tiny_http over the project store              │
 └───────────────────────────────────────────────────────────────┘
@@ -276,7 +277,7 @@ shipping six hundred one-pixel division lines into a PSD.
 `size` survives as the project's nominal unit even where nothing rounds to
 it — the played character is measured in it, and so is the lattice its
 navigation walks, in the template's `shared/character.js` as it was in the editor's
-own play mode. That is what the New Game sheet's grid scale still means on a
+own play mode. That is what the New Project sheet's grid scale still means on a
 blank canvas, and what the line under the control says.
 
 The one place the substitution does not work is a **fill**. A fill stores the
@@ -305,7 +306,7 @@ character stands *on* — a floor plan or a cross-section, the same geometry
 either way.
 
 Isometric and platformer is the one pair not offered. Gravity has no
-direction on a diamond grid seen from above, so the New Game sheet greys the
+direction on a diamond grid seen from above, so the New Project sheet greys the
 option out and `create_project` refuses it rather than scaffolding something
 that cannot work.
 
@@ -323,7 +324,7 @@ carries four fields, and they are not the same kind of thing.
 | `pixelArt` | nearest-neighbour textures rather than bilinear ones |
 | `roundPixels` | draw on whole pixels |
 | `defaultZoom` | the zoom a scene with no camera of its own opens at |
-| `character` | whether New Game scaffolded a character controller |
+| `character` | whether New Project scaffolded a character controller |
 
 The first three are **settings**. Each reaches two places, and neither place is
 told by the other: the editor's own Phaser game, through `game/boot.ts` at
@@ -1155,7 +1156,9 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
 | Game tree | `list_game_files`, `read_game_file`, `write_game_file`, `create_game_file`, `create_game_dir`, `move_game_path`, `copy_game_path`, `delete_game_path` |
 | PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `rename_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `add_psd_layer`, `paint_psd_layer`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+| Clipboard | `read_clipboard`, `copy_psd_to_clipboard` |
 | Publish | `publish_zip`, `save_bytes` |
+| Import Assets | `free_psd_key`, `import_psd_from_project` |
 | Server | `get_server_port`, `platform` |
 
 `import_image`, `import_image_bytes` and `create_psd_from_rgba` take an
@@ -1913,6 +1916,76 @@ which answered.
 `tauri-plugin-clipboard-manager` went with this. It was the desktop route and
 its iOS half implements text only, which is exactly the gap this closes; a
 plugin nothing calls is worse than no plugin.
+
+### Copying is not pasting backwards
+
+⌘V worked from the day the shell learnt to read the pasteboard. ⌘C did not, so
+PSDs only ever travelled one way — into a project and never out of one — and
+carrying a file to a second project meant Share PSD, a trip through Files, and
+Import from Files at the other end.
+
+**There is no `copy` event to take.** That is the asymmetry, and it is not the
+iPad's: the browser fires `copy` for a **selection**, and a placed PSD is not
+one. Nothing in the scene is ever the focused element — every pointer handler
+over the canvas calls `preventDefault` — and there is no range for WebKit to
+serialise, so no event arrives carrying anything out, on either platform. The
+keystroke is all there is, which is why `listenForCopyShortcut` is bound
+everywhere rather than only where `listenForPasteShortcut` is. `isPasteShortcut`
+and `isCopyShortcut` are one reader with two letters now, auto-repeat guard and
+all: held down, both keys repeat, and one press is one file.
+
+**It stands down for somebody else's copy**, and there are three of those. The
+caret in a field or in the code editor (`isTyping`, as every shortcut here
+asks). A range of text selected anywhere on the page — reading a line out of the
+console and copying it is a copy of the line, and the drawer is deliberately
+selectable. And no PSD selected, in which case there is nothing here to take. So
+`onCopy` answers whether it took the gesture and `preventDefault` is called only
+then, rather than the listener swallowing every ⌘C over the shell.
+
+**What goes on the pasteboard is a `public.file-url` naming the PSD where it lies
+in the store.** That is the first thing `read_file_url` looks for, and the only
+route that knows the artwork's real name, which is the whole reason to prefer it:
+a `tower.psd` copied in one project arrives in the next as `tower` rather than as
+`pasted-<base36>`, because a PSD's bytes carry no filename. It also points at the
+file rather than a snapshot of it, so a PSD edited between the ⌘C and the ⌘V
+arrives edited.
+
+On **macOS** the bytes go on beside it under `com.adobe.photoshop-image`, the
+same type the read prefers, so the same ⌘C pastes into Photoshop as a document
+rather than as a file reference. `clearContents` then `declareTypes:owner:` then
+`setData:forType:` per type, because `setData:forType:` writes only a type that
+has been declared and a write that did not clear first would leave whatever was
+there before offering itself alongside.
+
+On **iPadOS** it is the URL alone. `setData:forPasteboardType:` sets one
+representation on the pasteboard's first item, and the documented way to offer
+several is `setItems:` — so two types there means building an `NSDictionary` of
+them or risking the second call replacing the first. The URL is the half that
+matters, because the paste this exists for is Idlewild's own and a URL into the
+app's own container is one the app can read; *Share PSD* is already how a file
+reaches another app there. And the command is deliberately not `async`, for the
+same reason `read_clipboard` is not: Tauri runs a synchronous command on the main
+thread, which is where `UIPasteboard` has to be touched.
+
+`file_url` is the inverse of `psd_write::source_path` and lives in
+`clipboard.rs` rather than beside it, because this is the only thing that needs
+it — a path handed *back* by a picker is already a URL, and the store is the one
+place a URL has to be built. Everything outside the unreserved set is escaped,
+`/` apart, so an app data directory called `Application Support` survives; the
+test is the **round trip** through the real decoder rather than the spelling of
+the escape.
+
+**There is no webview fallback, and that is not an omission.** A page may put
+plain text, HTML and a PNG on the clipboard and nothing else, so there is no
+route a PSD could take through it — `copyPsd` is the shell or it is nothing, and
+on a platform with no pasteboard this knows how to write it says so rather than
+quietly copying a flattened picture instead of the file.
+
+A PSD pasted back into the **same** project is an import under the same name,
+which overwrites that key with its own bytes and places a second unit: a copy of
+the thing on the grid, sharing the file. That is an *instance*, which is what an
+option-drag already makes, and it is the honest reading of copy-and-paste inside
+one project.
 
 ### Dropping is pasting with a pointer
 
@@ -2866,6 +2939,14 @@ A published site cannot give back the file a sprite was drawn in. That is the
 whole reason the second format exists, and why `psd/` is in one and not the
 other.
 
+There are two ways **in**, and they are not exits turned round. **Open** reads a
+`.idlewild` back as a project of its own, which is what makes the second row a
+round trip; **Import Assets** brings artwork into the project you are in, off the
+filesystem or out of another project in this store — see *Import Assets, which is
+that door inward*. Nothing reads an Export Assets zip back: what is in one is
+`psd/<key>.psd` and `assets/<key>/…` under a project's own name, and a person who
+has one of those has files a picker can already reach.
+
 All three are written straight to the path the save dialog returned
 (`publish::publish_site`, `archive::export_project`,
 `export_assets::export_assets_zip`, each living with the code that builds it the
@@ -2961,7 +3042,7 @@ that did — so an archive assembled by hand still opens.
 
 ### Where it is in the app
 
-**Open**, on the home screen beside New Game. The picker is unfiltered on a
+**Open**, on the home screen beside New Project. The picker is unfiltered on a
 touch device and filtered on a desktop, the same split as the editor's Add
 Image and for the same reason: iPadOS reads the filter list to decide *which
 picker* to show, and an extension it has never heard of is not a reliable way
@@ -2971,6 +3052,77 @@ to ask for the document browser.
 open would put Idlewild in macOS's "Open with" for a file it then ignores; the
 declaration and the `RunEvent::Opened` / deep-link handling behind it belong
 together, and neither has been exercised on either platform yet.
+
+## Import Assets, which is that door inward
+
+Export Assets hands the artwork back. What was missing is the same door the
+other way for **more than one file**: Add Image asks for a file, a paste carries
+one, a drop lands one, so a tileset drawn as nine PSDs in another project was
+nine trips through a picker. So it is a menu item beside Export Assets — neither
+is a publish, and both are about pictures rather than about a program.
+
+**Two routes, and they are the two that are not already served.** *Files* is the
+filesystem, with `multiple: true`; *another project* is the rest of this app's
+store. The photo library and the clipboard are deliberately absent: both are one
+image at a time by their nature, and both already have a route of their own in
+Add Image and in ⌘V, which is where anybody looks for them.
+
+The sheet is a **list of routes** rather than a form, the way Add Image, Publish
+and Re-parse are, because what somebody came here to say is *where from* and each
+answer needs something different next. Files needs a picker and nothing else; a
+project needs a project and a set of ticks, so that route opens two more steps in
+the same sheet. The project list leaves *this* project out rather than greying it
+in: copying a file over itself is not what this is for, and a second copy inside
+one project already has a route in **Make Unique**, which gives it a name that
+reads as a copy of what it came from.
+
+**Neither route is a new import.** A file off the filesystem goes through the
+*paste* path — `read_dropped_file` for the bytes, then `importPasted` — and a
+PSD out of another project is copied inside the store by
+`import_psd_from_project` and placed. Two things follow from that, and both are
+the point. Going through the paste path is what gets the **two orienting marks**
+written: they describe where the artwork sits on the grid, and the grid is the
+editor's, so a file imported by path arrives with no anchor and says *No anchor*
+in the inspector ever after. And a PSD copied between projects needs no marks at
+all, because it is already carrying its own — the same reason a `.psd` from Files
+is copied rather than rewritten.
+
+The cost of the first is that a padded raster is **cropped** to the pixels in it,
+as a drop is and as Add Image is not. A drop off Finder is the same file arriving
+by another gesture and it is cropped too, so this sides with the gesture rather
+than with the sheet. See *A paste is cropped to the picture in it*.
+
+**Nothing is written over.** Everywhere else a name decides a key outright, which
+is what makes bringing `roof.png` home a replacement rather than a second copy.
+Here a collision is two files that happen to share a name, and quietly writing
+one over the other is the one outcome nobody could have asked for — so
+`psd_pipeline::free_key` steps to `roof-2`. It is asked for over the bridge
+rather than worked out in the frontend, because the rule for what survives being
+a filename is `sanitise_stem`'s and a second copy of it on this side would be a
+second answer. `next_free_key` beside it is the same question with a different
+answer for **Make Unique**: `roof-copy`, a name somebody can follow back.
+
+**Nothing lands on top of anything else.** Twelve files on the space in the
+middle of the view would look like one file, so `importAll` steps each one clear
+of the last — by the width of what actually landed plus a grid space, in **world
+pixels**, converted back to a cell. World pixels rather than a step in `cx`
+because on a diamond grid stepping `cx` walks away from the camera rather than
+across the screen. A file that failed to import does not move the cursor: there
+is nothing standing there to step around. They go one at a time, which the
+pipeline would enforce anyway (`psd_pipeline::exclusive`), and each import's own
+width is what decides where the next one goes.
+
+**What a copy between projects does not carry** is the *document's* record of the
+file: an extruded PSD arrives as its artwork without the solid behind it, and a
+hand-edited collider arrives as the default guessed from the footprint. Both live
+in the other project's `doc.json`, which is about a canvas rather than about a
+file — and the export that does carry them is `.idlewild`, which brings the whole
+project rather than one PSD out of it.
+
+The menu's own wiring moved to `editor/header-wiring.ts` with this, the way the
+properties sidebar's lives in `inspect-wiring.ts`: two more destinations put
+`editor.ts` over the 700-line rule, and a header that only forwards is exactly
+the shape that split is for.
 
 ## Select, on the home screen
 
@@ -3051,10 +3203,20 @@ inspected as a `PathBuf`, because the mapping from URL to file is the one
 place where a wrong answer looks like a PSD with nothing in it. It runs
 against the real store and cleans up after itself, including on failure.
 
+`import_assets.rs` carries its own two, which are the contract Import Assets
+places against: that a bulk import never writes over a file the project already
+has — including when the name only collides *after* the sanitiser has had it —
+and that a PSD pulled out of another project lands byte-identical, under a key of
+its own, with the pipeline run over it and the file it did not replace still
+standing there.
+
 The pasteboard is split so that most of it is testable anywhere: which type to
-take, what extension it maps to, and what a buffer's own signature says it is
-are plain functions with tests beside them, and only the two calls that
-actually touch `UIPasteboard` and `NSPasteboard` are behind a `cfg`. Those two
+take, what extension it maps to, what a buffer's own signature says it is, and —
+for the write half — that the `file://` URL ⌘C puts on the pasteboard is one
+`psd_write::source_path` takes straight back, which is the round trip rather than
+the spelling of an escape. All plain functions with tests beside them, and only
+the calls that actually touch `UIPasteboard` and `NSPasteboard` are behind a
+`cfg`. Those two
 compile on no other platform, so on Linux the module builds its "no pasteboard
 here" arm instead and the frontend falls back to the webview — which is the
 same code path a Windows build would take. `cargo check --target
@@ -3069,7 +3231,12 @@ what a manifest says is hidden and what a placement records about it,
 undo's three answers about a write and what a restored document is,
 what each canvas mode counts as one step of its own, whether a selection still
 names something, the unit arithmetic
-behind a placed PSD and how many objects share one of its files, how a texture
+behind a placed PSD and how many objects share one of its files, which of its
+layers have wandered off the space the file puts them on and that putting one
+back lands on the pixel the drag picked it up from — asserted by running the
+drag first, because the two have to agree and numbers typed out by hand would go
+on passing if the drag changed under them — what a ⌘C and a ⌘V are as
+keystrokes, how a texture
 is keyed and what dropping a PSD's is allowed to reach, that Make Unique moves
 every layer of the object rather than the row that was selected, what the
 inspector remembers about a folded section, what a bulk delete asks and how it
@@ -3099,7 +3266,11 @@ the panels and the sheets can be opened, driven and screenshotted without a
 Mac or an iPad. It boots a fixture document with three layers, one placement
 and one boundary, and reads `window.__platform`, `window.__pick`,
 `window.__manifest` and `window.__options` so the platform split, the re-import
-path and a pixel-art project can be exercised from a script. Its query string picks the fixture's template and
+path and a pixel-art project can be exercised from a script. `window.__projects`
+puts other projects in the store, which is what Import Assets' second route
+needs to have anywhere to go, and `window.__movedRoof` stands the fixture's roof
+two spaces off its walls — the one state in which **Reset Layer Position** is
+drawn, and not one a harness with no asset server can reach by dragging. Its query string picks the fixture's template and
 style — `?template=blank&style=platformer&grid=32` — and `?safe=44` writes
 stand-in values over the safe-area tokens, which is the only way to look at
 the iPad's insets from a desktop browser. Drawing is drivable there too: CDP's
@@ -3534,7 +3705,7 @@ and while a sheet is up they are about the wrong history and the wrong camera.
 
 **The toolbar is 210 pixels wide, and three things follow from that.** The mode
 row — Draw / Select / Pan — takes the chips' metrics rather than the sheet's own
-segmented control, which is built for the New Game sheet where a row is the
+segmented control, which is built for the New Project sheet where a row is the
 width of the page and at 15px with 20px of padding either side wrapped three
 options onto three lines. The brush's **size** sits directly under the *Brush*
 heading rather than below two rows of buttons, because it is the number that
@@ -3760,6 +3931,63 @@ it: the document layer it is removed from, and the PSD layers that go. It says
 the file has been opened up and only that row goes — `Remove "roof" from
 layer`. That is the same question `doomedPlacements` answers, asked where it is
 about to be acted on.
+
+### A layer that has wandered, and the way back
+
+Opening a unit up is the one gesture that can leave a PSD's layers somewhere the
+file does not put them, and until now it was a one-way door. Nothing on the
+canvas could say a layer had moved — a roof dragged half a space sideways looks
+exactly like a roof drawn half a space sideways — and a **re-parse does not put
+it back**, which is the part worth being clear about: `reviseExisting`
+recomputes each placement from *its own* anchor cell, and moving a layer is
+precisely a change to that cell. So the arrangement was gone, silently, with the
+file still saying something else.
+
+**The document already knows.** Every placement one `placePsd` makes is anchored
+to the same grid space, and the file's own arrangement is then carried by each
+placement's offset from that space — `positionFrom` over the layer's position
+inside the canvas. That offset survives everything the canvas does to a *whole*
+unit: a drag moves every anchor by the same cell step, and a resize scales every
+member against the union box and moves every anchor by the same step again. So a
+unit whose members disagree about which space they are on is exactly a unit
+somebody has moved a layer in, and `displacedMembers` in `game/layer-home.ts` is
+that tally. No manifest is read, and the common answer — nothing has moved — is
+one pass over three placements, which is what lets the inspector ask it on every
+render.
+
+It decides what putting them back *means*, too. Each displaced member keeps the
+offset it is holding — that offset is still the PSD's own — and is carried onto
+the space the rest of the file stands on, which is the drag run backwards: a
+layer nudged three spaces and reset lands on the pixel it left from, however the
+placement has been resized since. Recomputing from the manifest instead would
+have been a second answer to a question the document had already answered, and a
+wrong one for a file that has been through Photoshop since.
+
+**Which space is "the rest of the file" is a vote.** `unitAnchor` takes the
+space most of the unit's layers still agree about, because four layers with one
+dragged away name the space the other three are on. An even split falls to the
+**back-most** layer's space — the back of a PSD's stack is the ground of whatever
+is drawn in it, walls under a roof and an extrusion's silhouette under its
+shading — so a two-layer file whose roof was nudged puts the roof back rather
+than carrying the walls after it. It is a tie-break rather than a claim about
+intent, and it is honest about the case it cannot get right: move the *ground*
+layer of a two-layer file, reset, and the other layer follows it, because the
+document holds nothing that could tell that apart from the first case. What
+comes back either way is the file's arrangement.
+
+**Reset Layer Position** is therefore a row of its own directly over the layer
+list rather than a fourth button in the row above it (`resetPositionsRow`). Those
+three are always there and are about the file; this is usually absent and is
+about the document, and its *appearing* is the whole notice. It asks before
+acting — `editor/layer-positions.ts` — because it is work somebody did that will
+not exist afterwards, and it names the layers while the list is short enough to
+read. The write is one `history.group`, like the drag that made the mess, so undo
+reaches it in one step.
+
+The unit is read out of the selection **before** the sheet goes up and acted on
+by id afterwards. A sheet is a round trip through the user and the selection is
+free to move under it; a unit that has gone in the meantime is dropped rather
+than half-reset.
 
 ## Three kinds of layer
 
@@ -4736,7 +4964,7 @@ in the exported sprite, a bigger box for `defaultCollider` to read, and a
 converted fill blocking a ring of spaces around itself.
 
 A blank project's cell is one pixel, so there the margin is the nominal grid
-size the New Game sheet set — the same fallback `size` serves everywhere else
+size the New Project sheet set — the same fallback `size` serves everywhere else
 nothing rounds to it.
 
 The size the command **reports** is the file's, not the buffer's. The three
@@ -6168,7 +6396,7 @@ function for the same project, which is a rule somebody had to keep. Now they
 are equal because there is one answer.
 
 What it buys directly is a **switch**. Project Options could previously only
-*report* whether New Game had written a character, because unticking a box
+*report* whether New Project had written a character, because unticking a box
 cannot take one out of code that already has it. It is a toggle now, and
 turning it on is a save — the prefab is scaffolded whether or not it is
 spawned, so there is a `js/prefabs/character.js` waiting rather than a file to
@@ -6417,6 +6645,17 @@ console is a record of what happened rather than a document.
 
 ## Known gaps
 
+- ⌘C on an iPad puts a `public.file-url` on the pasteboard and nothing else, so
+  what it copies is pasteable into Idlewild and not into another app — which is
+  the half the gesture is for, and *Share PSD* is the other half. Offering the
+  bytes beside it there means an `NSDictionary` through `setItems:`, since
+  `setData:forPasteboardType:` sets one representation on the first item. See
+  *Copying is not pasting backwards*.
+- A PSD imported out of another project arrives as its artwork alone: the
+  document's record of it — the solid behind an extruded layer, a collider
+  somebody edited — lives in that project's `doc.json` and does not travel. The
+  export that carries them is `.idlewild`, which brings the whole project, and
+  there is no half-way format between the two.
 - Pattern fills store their PSD key and render as a tint; the texture is not
   yet sampled into the fill. That is a *fill* whose texture is a **PSD in the
   project**, and it is a third sense of the word, unrelated to a pattern layer

@@ -57,7 +57,7 @@ impl Genre {
 ///
 /// Three of the four are settings the editor and the game both read, and the
 /// editor can change them afterwards — Project Options has them. The fourth,
-/// `character`, is a fact about what New Game wrote: a project's `game/` tree
+/// `character`, is a fact about what New Project wrote: a project's `game/` tree
 /// is its own copy, so unticking the box later would not take a character out
 /// of code that already has one. It is kept because the scaffold has to be
 /// reproducible — a managed block's Reset asks for this file as it was first
@@ -80,7 +80,7 @@ pub struct GameOptions {
     /// The zoom a scene opens at, in the editor and in the game.
     #[serde(default = "one")]
     pub default_zoom: f64,
-    /// Whether New Game scaffolded a character controller.
+    /// Whether New Project scaffolded a character controller.
     #[serde(default = "yes")]
     pub character: bool,
 }

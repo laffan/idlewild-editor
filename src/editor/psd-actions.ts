@@ -22,11 +22,13 @@
 
 import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import type { DocStore } from "../lib/doc-store";
+import type { Grid } from "../lib/grid";
 import { psd, publish } from "../lib/ipc";
 import * as log from "../lib/log";
 import { isMobile } from "../lib/platform";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
+import { resetLayerPositions } from "./layer-positions";
 import { psdLayerOwner } from "./psd-layer-owner";
 import { PsdLayerEditor } from "./psd-layers";
 import type { PsdLayerInfo } from "../lib/ipc";
@@ -322,6 +324,8 @@ export interface PsdLayersOptions {
   projectId: string;
   os: string;
   store: DocStore;
+  /** The geometry a reset puts a moved layer back onto. */
+  grid: Grid;
   /** The round trip out to Photoshop and back — the actions above. */
   file: PsdFileActions;
   scene: () => WorldScene | null;
@@ -356,6 +360,10 @@ export function createPsdLayersFactory(
         if (open.adjustingUnit) open.stopAdjusting();
         else open.startAdjusting();
       },
+      // The other half of opening a PSD up: the way back from a layer moved
+      // somewhere you did not mean. It asks first — see layer-positions.ts.
+      onResetPositions: () =>
+        void resetLayerPositions({ store, grid: options.grid, scene }),
       onEditPsd: (layer) => options.onEditPsd(key, layer),
       openLabel: openPsdLabel(os),
       refreshLabel: refreshPsdLabel(os),

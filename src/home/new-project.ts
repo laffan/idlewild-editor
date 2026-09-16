@@ -1,6 +1,12 @@
 /**
- * The New Game sheet: pick a template, a style, a grid scale and how the
+ * The New Project sheet: pick a template, a style, a grid scale and how the
  * project renders, then name it.
+ *
+ * It was **New Game**, and the name was a claim the sheet does not make. What
+ * comes out of it is a project — a grid, a pile of PSDs and a `game/` tree —
+ * and plenty of them are a tileset, a background or a set of sprites for
+ * somewhere else, which is the whole reason Export Assets exists. The button on
+ * the home screen says *New Project* and so does this.
  *
  * Two axes decide the program. The *template* is the shape of the space you
  * build in — diamonds, squares, or nothing at all. The *style* is the game that
@@ -37,7 +43,7 @@ const SCALES = [8, 16, 32, 64, 128, 256];
 /** What the zoom control offers, and what a pixel-art project usually wants. */
 const ZOOMS = [1, 2, 3, 4];
 
-export interface NewGameChoice {
+export interface NewProjectChoice {
   name: string;
   projection: Projection;
   genre: Genre;
@@ -45,8 +51,8 @@ export interface NewGameChoice {
   options: GameOptions;
 }
 
-export function openNewGame(
-  onCreate: (choice: NewGameChoice) => void,
+export function openNewProject(
+  onCreate: (choice: NewProjectChoice) => void,
 ): void {
   let projection: Projection = "isometric";
   let genre: Genre = "topdown";
@@ -54,7 +60,7 @@ export function openNewGame(
   const options: GameOptions = { ...DEFAULT_OPTIONS };
 
   const sheet = openSheet({
-    title: "New Game",
+    title: "New Project",
     subtitle: "Template, style, grid scale and rendering",
     light: true,
     width: 620,

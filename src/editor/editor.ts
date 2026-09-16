@@ -29,15 +29,13 @@ import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { openNewBackground, type BackgroundDeps } from "./background-actions";
 import { createPatternShapes } from "./pattern-actions";
 import { layerKind } from "../lib/layer-kinds";
-import { generatePsdForRegion } from "./fill-actions";
+import { addImageToRegion, generatePsdForRegion } from "./fill-actions";
 import { createConversions } from "./conversions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
 import { libraryPointer, libraryStyle } from "./stamp-box";
-import { anchorCell, IMPORT_SCALE, marksForSelection } from "./import-anchor";
 import { createDeletes } from "./layer-actions";
-import { openExportAssets } from "./export-assets";
-import { openAddImage, openPublish } from "./sheets";
+import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
 import { addSweptZone } from "./zone-actions";
@@ -229,6 +227,7 @@ export async function mountEditor(
     projectId: meta.id,
     os,
     store,
+    grid,
     file: psdFile,
     scene: () => handle?.scene ?? null,
     onExtrude: () => extrude.resume(),
@@ -239,23 +238,9 @@ export async function mountEditor(
     onFill: () => handle?.scene.fillSelection(inspector.fillPaint, false),
     onAddImage: () => {
       const selection = handle?.scene.getSelection();
-      if (selection?.kind !== "region") return;
-      const anchor = anchorCell(selection.from, selection.to);
-      // The selection travels into the PSD as its orienting marks, and the
-      // anchor mark that comes back out is what the placement lines up on.
-      openAddImage(
-        meta.id,
-        os,
-        (result) => {
-          void handle?.scene.placePsd(
-            result.key,
-            result.manifest,
-            anchor,
-            IMPORT_SCALE,
-          );
-        },
-        marksForSelection(grid, selection.from, selection.to),
-      );
+      const scene = handle?.scene;
+      if (selection?.kind !== "region" || !scene) return;
+      addImageToRegion(meta.id, os, grid, scene, selection.from, selection.to);
     },
     onGeneratePsd: () => {
       const selection = handle?.scene.getSelection();
@@ -313,19 +298,22 @@ export async function mountEditor(
     inspector,
   });
 
+  // Undo, the three sections, and the six things behind the menu — wired in
+  // `header-wiring.ts`, the way the properties sidebar's controls are.
   const header = new EditorHeader(
     meta.name,
     `${meta.gridSize} px · ${meta.projection}`,
-    {
-      onBack: () => void leave(),
-      onUndo: () => history?.undo(),
-      onRedo: () => history?.redo(),
-      onMode: (next) => setMode(next),
-      onPasteImage: () => intake.paste(),
-      onPublish: () => openPublish(meta.id, meta.name),
-      onExportAssets: () => openExportAssets(meta.id, meta.name),
-      onOptions: () => render.open(store.layers.length),
-    },
+    headerCallbacks({
+      meta,
+      os,
+      grid,
+      leave: () => void leave(),
+      history: () => history,
+      setMode: (next) => setMode(next),
+      intake: () => intake,
+      scene: () => handle?.scene ?? null,
+      openOptions: () => render.open(store.layers.length),
+    }),
   );
 
   // Fill / Undo corner / Cancel, floating beside a shape being tapped out with
@@ -414,6 +402,7 @@ export async function mountEditor(
   const intake = startIntake({
     projectId: meta.id,
     grid,
+    store,
     os,
     canvas: canvasWrap,
     scene: () => handle?.scene ?? null,

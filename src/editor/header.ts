@@ -12,10 +12,15 @@
  * a thing you could be half in — the panel open behind a mode that did not know
  * about it. It is a section now, left to right in the order you work.
  *
- * Publish, Export Assets and Project Options stay in the hamburger's menu. They
- * are destinations rather than modes — you come back from them to where you
- * were — and folding them in leaves the header carrying the project, undo and
- * redo, and the mode it is in.
+ * Publish, Export Assets, Import Assets and Project Options stay in the
+ * hamburger's menu. They are destinations rather than modes — you come back
+ * from them to where you were — and folding them in leaves the header carrying
+ * the project, undo and redo, and the mode it is in.
+ *
+ * Copy PSD and Paste Image are in there for a different reason: both have a
+ * keyboard shortcut and neither has a keyboard on an iPad. They are the two
+ * ends of one gesture, so they are listed as a pair and in the order they are
+ * used.
  *
  * Undo and redo sit next to that toggle rather than in the menu because they
  * are the two buttons an iPad needs most: ⌘Z wants a keyboard, and the device
@@ -35,9 +40,13 @@ export interface HeaderCallbacks {
   onMode: (mode: EditorMode) => void;
   /** Import whatever image is on the clipboard, into the middle of the view. */
   onPasteImage: () => void;
+  /** Put the selected PSD on the clipboard, so another project can paste it. */
+  onCopyPsd: () => void;
   onPublish: () => void;
   /** Some of the project's PSDs, on their own — assets, sources, or both. */
   onExportAssets: () => void;
+  /** Artwork from the filesystem or from another project in this app. */
+  onImportAssets: () => void;
   onOptions: () => void;
 }
 
@@ -167,8 +176,14 @@ export class EditorHeader {
     this.menu = openMenu(
       this.menuButton,
       [
-        // ⌘V does this too, on the machines that have a ⌘ — which an iPad
-        // does not, and an iPad is what this editor is mostly used on.
+        // ⌘C and ⌘V do these two, on the machines that have a ⌘ — which an
+        // iPad does not, and an iPad is what this editor is mostly used on.
+        // Copy first, because the pair reads in the order it is used.
+        {
+          label: "Copy PSD",
+          glyph: ICONS.copy,
+          onSelect: callbacks.onCopyPsd,
+        },
         {
           label: "Paste Image",
           glyph: ICONS.file,
@@ -183,6 +198,14 @@ export class EditorHeader {
           label: "Export Assets",
           glyph: ICONS.image,
           onSelect: callbacks.onExportAssets,
+        },
+        // And its inverse, which is the way artwork gets *in* other than one
+        // file at a time through Add Image: several at once, off the
+        // filesystem or out of another project in this app.
+        {
+          label: "Import Assets",
+          glyph: ICONS.folder,
+          onSelect: callbacks.onImportAssets,
         },
         {
           label: "Project Options",

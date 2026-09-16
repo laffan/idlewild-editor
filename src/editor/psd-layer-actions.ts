@@ -14,11 +14,34 @@
  * makes will appear — which is at the top, because a new layer goes on top of
  * a stack the way it does in Photoshop.
  *
+ * **Reset Layer Position** is the other exception, and it is not part of that
+ * row either: it is a correction rather than a standing action, it is drawn
+ * only while a layer of this PSD is standing somewhere the file does not put
+ * it, and its being there at all is the only thing that says so. It goes
+ * directly over the list.
+ *
  * Nothing here holds state. The editor owns what these do; the list owns when
  * to draw them.
  */
 
 import { h } from "../lib/dom";
+
+/**
+ * What the canvas and the document have made of the placement a layer list
+ * belongs to.
+ *
+ * Neither fact is about the file, which is why the list is *told* them rather
+ * than reading them: `members` and `adjusting` are how many layers of it stand
+ * on the canvas as one thing and whether it has been opened up, and
+ * `displaced` is how many of them have been moved off the space the file puts
+ * them on — `game/layer-home.ts`. Between them they decide which of the two
+ * rows below are drawn at all.
+ */
+export interface PlacedState {
+  members: number;
+  adjusting: boolean;
+  displaced: number;
+}
 
 /** What the row above the list currently has to say. */
 export interface PsdHeadState {
@@ -81,6 +104,47 @@ export function psdHeadRow(
     }),
   );
   return row;
+}
+
+/**
+ * **Reset Layer Position**, directly above the list, and only when there is
+ * something to put back.
+ *
+ * A row of its own rather than a fourth button beside the three above it. It
+ * is not one of that set — those three are always there and are about the
+ * file, and this is a correction that is usually absent and is about the
+ * *document* — and its appearing is the only thing on screen that says a layer
+ * of this PSD has been moved off the space the file puts it on. The canvas
+ * cannot say it: a roof dragged half a space sideways looks exactly like a
+ * roof drawn half a space sideways.
+ *
+ * `displaced` is how many layers are out of place — `game/layer-home.ts` — so
+ * the label names one layer or several, the way *Remove PSD from layer* names
+ * what it takes.
+ *
+ * Returns null when nothing has moved, so the caller appends whatever it gets
+ * rather than asking the question twice.
+ */
+export function resetPositionsRow(
+  displaced: number,
+  onReset: () => void,
+): HTMLElement | null {
+  if (displaced <= 0) return null;
+  const one = displaced === 1;
+  return h(
+    "div",
+    { class: "psd-layers-reset" },
+    h("button", {
+      class: "panel-btn warn",
+      text: one ? "Reset Layer Position" : "Reset Layer Positions",
+      title:
+        `${one ? "One layer of" : `${displaced} layers of`} this PSD ` +
+        `${one ? "is" : "are"} not standing where the file puts ` +
+        `${one ? "it" : "them"}. This puts ${one ? "it" : "them"} back, and ` +
+        `throws away the ${one ? "move" : "moves"}.`,
+      onClick: onReset,
+    }),
+  );
 }
 
 /**

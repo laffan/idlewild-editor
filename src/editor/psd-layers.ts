@@ -43,6 +43,8 @@ import {
 import {
   newLayerButton,
   psdHeadRow,
+  resetPositionsRow,
+  type PlacedState,
   type PsdHeadState,
 } from "./psd-layer-actions";
 import { manifestName, type OwnedLayer } from "./psd-layer-owner";
@@ -71,6 +73,13 @@ export interface PsdLayerEditorCallbacks {
   onRefresh: () => void;
   /** Open the placed PSD up into its layers on the canvas, or close it. */
   onToggleAdjust: () => void;
+  /**
+   * Put the layers that have been moved back where the PSD has them.
+   *
+   * Asks first, because it throws the moves away — see
+   * `editor/layer-positions.ts`, which is what the button actually reaches.
+   */
+  onResetPositions: () => void;
   /** Draw into one sprite layer of this file — see `paintable`. */
   onEditPsd: (layer: PsdLayerInfo) => void;
   /**
@@ -113,6 +122,7 @@ export class PsdLayerEditor {
   private readonly status: HTMLElement;
   private readonly canvas: HTMLElement;
   private readonly head: HTMLElement;
+  private readonly resetRow: HTMLElement;
   private readonly list: HTMLElement;
   private readonly newRow: HTMLElement;
   private readonly foot: HTMLElement;
@@ -124,11 +134,12 @@ export class PsdLayerEditor {
    * What the canvas is doing with this PSD, as the inspector last said.
    *
    * Pushed in rather than read out: this list knows about a *file*, and
-   * whether the placement of it is open for layer-by-layer moves is a fact
-   * about the canvas. Null while nothing has said — a file with one layer,
-   * or one nothing has placed.
+   * whether the placement of it is open for layer-by-layer moves — and
+   * whether any of its layers have been moved off the space the file puts
+   * them on — are facts about the document and the canvas. Null while nothing
+   * has said: a file with one layer, or one nothing has placed.
    */
-  private adjust: { members: number; adjusting: boolean } | null = null;
+  private placed: PlacedState | null = null;
   /**
    * The groups that are folded shut, by the name the file holds them under.
    *
@@ -151,9 +162,11 @@ export class PsdLayerEditor {
     this.callbacks = callbacks;
 
     this.status = h("div", { class: "psd-layers-status m" });
-    // Three slots the panel refills rather than three panels: the row above
-    // the list changes with the canvas, and the one below it with the file.
+    // Four slots the panel refills rather than four panels: the row above the
+    // list changes with the canvas, so does the correction directly over it,
+    // and the one below the list changes with the file.
     this.head = h("div", { class: "psd-layers-head-slot" });
+    this.resetRow = h("div", { class: "psd-layers-reset-slot" });
     this.list = h("div", { class: "psd-layer-list" });
     this.newRow = h("div", { class: "psd-layers-new-slot" });
     this.foot = h("div", { class: "psd-layers-foot" });
@@ -169,6 +182,7 @@ export class PsdLayerEditor {
       this.canvas,
       this.head,
       this.status,
+      this.resetRow,
       this.list,
       this.newRow,
       this.foot,
@@ -205,19 +219,21 @@ export class PsdLayerEditor {
   }
 
   /**
-   * Say what the canvas is doing with the placement this list belongs to, so
-   * the head can offer the switch between the two.
+   * Say what the canvas and the document are doing with the placement this
+   * list belongs to, so the rows above the stack can offer the switch between
+   * the two and the way back from a layer that has been moved.
    *
-   * Told on every inspector render rather than once, because the answer
-   * changes without the file changing: a double-tap on the canvas opens a PSD
-   * up, and this list is built once and kept until the selection moves to a
-   * different file.
+   * Told on every inspector render rather than once, because both answers
+   * change without the file changing: a double-tap on the canvas opens a PSD
+   * up and a drag inside one moves a layer, while this list is built once and
+   * kept until the selection moves to a different file.
    */
-  setAdjust(state: { members: number; adjusting: boolean } | null): void {
+  setPlaced(state: PlacedState | null): void {
     const same =
-      this.adjust?.members === state?.members &&
-      this.adjust?.adjusting === state?.adjusting;
-    this.adjust = state;
+      this.placed?.members === state?.members &&
+      this.placed?.adjusting === state?.adjusting &&
+      this.placed?.displaced === state?.displaced;
+    this.placed = state;
     if (!same) this.renderHead();
   }
 
@@ -303,12 +319,19 @@ export class PsdLayerEditor {
     this.updateFoot();
   }
 
-  /** The row of buttons above the list — see psd-layer-actions.ts. */
+  /**
+   * The two rows above the list — see psd-layer-actions.ts.
+   *
+   * The button row is always there. The reset is a correction, and it is drawn
+   * only while a layer of this PSD is standing somewhere the file does not put
+   * it, so the slot over the list is usually empty.
+   */
   private renderHead(): void {
     clear(this.head);
+    clear(this.resetRow);
     const state: PsdHeadState = {
-      members: this.adjust?.members ?? 0,
-      adjusting: this.adjust?.adjusting ?? false,
+      members: this.placed?.members ?? 0,
+      adjusting: this.placed?.adjusting ?? false,
       openLabel: this.callbacks.openLabel,
       refreshLabel: this.callbacks.refreshLabel,
     };
@@ -319,6 +342,10 @@ export class PsdLayerEditor {
         onRefresh: () => this.callbacks.onRefresh(),
       }),
     );
+    const reset = resetPositionsRow(this.placed?.displaced ?? 0, () =>
+      this.callbacks.onResetPositions(),
+    );
+    if (reset) this.resetRow.appendChild(reset);
   }
 
   /**

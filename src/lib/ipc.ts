@@ -249,6 +249,16 @@ export const platform = () => invoke<string>("platform");
  */
 export const clipboard = {
   read: () => invoke<ClipboardRead>("read_clipboard"),
+  /**
+   * And the other direction: put one of a project's PSDs on the pasteboard, so
+   * ⌘V in another project brings it in.
+   *
+   * The webview cannot do this either — a page may write plain text, HTML and
+   * a PNG, and a PSD is none of those — so the shell writes it as the file it
+   * is. See `editor/clipboard.ts`.
+   */
+  copyPsd: (id: string, key: string) =>
+    invoke<void>("copy_psd_to_clipboard", { id, key }),
 };
 
 /**
@@ -520,6 +530,27 @@ export const psd = {
    */
   duplicate: (id: string, key: string) =>
     invoke<ImportResult>("duplicate_psd", { id, key }),
+  /**
+   * The key a **bulk** import should write under: the name somebody offered, or
+   * the first free step from it — `roof`, then `roof-2`.
+   *
+   * Asked for rather than worked out here, because the rule for what survives
+   * being a filename is Rust's (`sanitise_stem`) and a second copy of it on
+   * this side would be a second answer. Only Import Assets wants it: every
+   * other route lets a name decide a key outright, which is what makes
+   * bringing a file home a replacement rather than a second copy.
+   */
+  freeKey: (id: string, name: string) =>
+    invoke<string>("free_psd_key", { id, name }),
+  /**
+   * Copy a PSD out of another project in this app and process it here.
+   *
+   * The bytes never cross the bridge — both projects are directories in the
+   * same store — and a PSD carries its own anchor mark, so what lands is the
+   * file that left. See `src-tauri/src/import_assets.rs`.
+   */
+  importFromProject: (id: string, fromId: string, key: string) =>
+    invoke<ImportResult>("import_psd_from_project", { id, fromId, key }),
   /**
    * Rename a PSD and re-run the pipeline under the new key. `name` is raw
    * user input; the key that actually resulted comes back on the result, so

@@ -27,6 +27,7 @@ import type { PanelSurface } from "./inspect-panels";
 import { scaleOf, sizeControls } from "./inspect-transform";
 import type { PsdLayerEditor } from "./psd-layers";
 import { instanceCount } from "../game/instances";
+import { displacedMembers } from "../game/layer-home";
 import { layerName } from "../lib/manifest";
 import { unitMembers, unitOf } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
@@ -198,7 +199,14 @@ export function renderPlacement(
   // one row directly above it now. See psd-layer-actions.ts.
   const psdLayers = host.psdLayers(placement.psdKey);
   panel.body.appendChild(psdLayers.root);
-  psdLayers.setAdjust({ members: members.length, adjusting: open });
+  // And whether any of those layers have been moved off the space the file
+  // puts them on, which is the one thing the canvas cannot show: the list
+  // draws **Reset Layer Position** over the stack when they have.
+  psdLayers.setPlaced({
+    members: members.length,
+    adjusting: open,
+    displaced: displacedMembers(members).length,
+  });
 
   // Last of the named sections. A collider is the one thing here that is not
   // about the picture — it is what the picture *stops*, which is a question

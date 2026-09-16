@@ -54,6 +54,36 @@ pub fn psd_path(project_id: &str, key: &str) -> Result<PathBuf, String> {
     Ok(store::psd_dir(project_id)?.join(format!("{}.psd", safe_key(key)?)))
 }
 
+/// The first key a project has not got, starting from a name somebody offered.
+///
+/// `tower`, then `tower-2`, `tower-3`. It is **not** what an import from Files
+/// or a paste does: there a name decides a key outright, so bringing `roof.png`
+/// home twice replaces the file, which is what makes a round trip out to
+/// Photoshop a round trip rather than a second copy.
+///
+/// What needs this is a *bulk* import — Import Assets, which takes several
+/// files at once, off the filesystem or out of another project. There a name
+/// collision is not somebody bringing a file home; it is two files that happen
+/// to be called the same thing, and quietly writing one over the other is the
+/// one outcome nobody could have asked for. See `import_assets.rs`.
+///
+/// `next_free_key` beside it is the other half of the same question, asked with
+/// a different answer: **Make Unique** wants a name that reads as a copy of
+/// what it came from, so it produces `tower-copy`.
+pub fn free_key(project_id: &str, name: &str) -> Result<String, String> {
+    let base = crate::psd_write::sanitise_stem(name);
+    if !psd_path(project_id, &base)?.exists() {
+        return Ok(base);
+    }
+    for n in 2..1000 {
+        let candidate = format!("{base}-{n}");
+        if !psd_path(project_id, &candidate)?.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(format!("Too many files called {base} in this project"))
+}
+
 pub fn output_dir(project_id: &str, key: &str) -> Result<PathBuf, String> {
     Ok(store::assets_dir(project_id)?.join(safe_key(key)?))
 }

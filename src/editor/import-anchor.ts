@@ -93,7 +93,7 @@ export function hairline(zoom: number): number {
  * from what the artwork covers, does not change either.
  *
  * A blank project's cell is one pixel, which is no margin at all, so it takes
- * the nominal unit the New Game sheet set instead — the same fallback `size`
+ * the nominal unit the New Project sheet set instead — the same fallback `size`
  * serves everywhere else nothing rounds to it.
  */
 export function psdMargin(grid: Grid): { x: number; y: number } {

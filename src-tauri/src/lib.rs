@@ -7,6 +7,7 @@ mod export_assets;
 mod file_server;
 mod game_config;
 mod game_files;
+mod import_assets;
 mod project;
 mod psd_background;
 mod psd_layers;
@@ -43,6 +44,25 @@ fn platform() -> &'static str {
 #[tauri::command]
 fn read_clipboard() -> Result<clipboard::ClipboardRead, String> {
     clipboard::read()
+}
+
+/// Put one of a project's PSDs on the system pasteboard.
+///
+/// The other half of the paste above, and the reason ⌘C now means something on
+/// the canvas: what goes on is a `public.file-url` naming the file in the
+/// store — the route the read prefers, and the only one that carries the
+/// artwork's name — with the bytes beside it on macOS. See clipboard.rs.
+///
+/// Not `async`, for the same reason `read_clipboard` is not: Tauri runs a
+/// synchronous command on the main thread, which is where `UIPasteboard` has
+/// to be touched.
+#[tauri::command]
+fn copy_psd_to_clipboard(id: String, key: String) -> Result<(), String> {
+    let path = psd_pipeline::psd_path(&id, &key)?;
+    if !path.exists() {
+        return Err(format!("No PSD named {key} in this project"));
+    }
+    clipboard::write_file(&path)
 }
 
 /// A file the OS handed over by path, as bytes the frontend can measure.
@@ -92,7 +112,7 @@ fn list_projects() -> Result<Vec<ProjectMeta>, String> {
 /// means top down, which is what every project made before it was. `options`
 /// is optional for the same reason, and means the defaults — no pixel
 /// snapping, zoom 1, and a character controller, which is what every project
-/// scaffolded before New Game asked.
+/// scaffolded before New Project asked.
 #[tauri::command]
 fn create_project(
     name: String,
@@ -644,6 +664,7 @@ pub fn run() {
             import_image,
             import_image_bytes,
             read_clipboard,
+            copy_psd_to_clipboard,
             read_dropped_file,
             create_psd_from_rgba,
             psd_background::create_background_psd,
@@ -668,6 +689,8 @@ pub fn run() {
             publish::publish_site,
             export_assets::export_assets_zip,
             export_assets::list_project_psds,
+            import_assets::free_psd_key,
+            import_assets::import_psd_from_project,
             archive::export_project,
             archive::import_project,
             save_bytes,

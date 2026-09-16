@@ -1,5 +1,5 @@
 /**
- * What a paste puts on the canvas.
+ * What a paste puts on the canvas, and what a copy takes off it.
  *
  * The clipboard is already one of Add Image's three routes, but reaching it
  * meant opening a sheet and choosing it — and everything else in this editor
@@ -137,10 +137,73 @@ export function listenForPasteShortcut(
 
 /** Whether a keystroke is that shortcut, modifiers and repeats included. */
 export function isPasteShortcut(event: KeyboardEvent): boolean {
+  return isClipboardShortcut(event, "KeyV", "v");
+}
+
+/** And ⌘C, which is the other half of it — see `listenForCopyShortcut`. */
+export function isCopyShortcut(event: KeyboardEvent): boolean {
+  return isClipboardShortcut(event, "KeyC", "c");
+}
+
+function isClipboardShortcut(
+  event: KeyboardEvent,
+  code: string,
+  letter: string,
+): boolean {
   if (!(event.metaKey || event.ctrlKey) || event.altKey) return false;
-  // Held down, ⌘V repeats. One press is one image.
+  // Held down, both of these repeat. One press is one file.
   if (event.repeat) return false;
   // `code` is the physical key and `key` is what it produced; a keyboard laid
   // out for another language answers one of the two.
-  return event.code === "KeyV" || event.key.toLowerCase() === "v";
+  return event.code === code || event.key.toLowerCase() === letter;
+}
+
+/** What ⌘C reaches, and whether there was anything for it to take. */
+export interface CopyShortcutCallbacks {
+  enabled: () => boolean;
+  /**
+   * Put whatever is selected on the clipboard, and say whether anything went.
+   *
+   * The answer decides whether the keystroke is consumed: a ⌘C the editor has
+   * nothing to answer with has to reach the page, or the console drawer and
+   * every name in the panels would stop being copyable.
+   */
+  onCopy: () => boolean;
+}
+
+/**
+ * ⌘C on the canvas, which puts the selected PSD on the system clipboard.
+ *
+ * A keystroke rather than the DOM's `copy` event, and on every platform rather
+ * than only on the one without a paste event. The reason is the same on both:
+ * the browser fires `copy` for a *selection*, and a placed PSD is not one —
+ * nothing in the scene is ever the focused element, and there is no range for
+ * WebKit to serialise. So there is no event to carry the file out, the way
+ * there is one to carry an image in. The shell writes the pasteboard and this
+ * only has to say when.
+ *
+ * It stands down for three things, and each of them is somebody else's copy: a
+ * field or the code editor has the caret, the page has text selected — reading
+ * a line out of the console and copying it is a copy of the line — or the
+ * canvas has no PSD selected, in which case there is nothing here to take.
+ */
+export function listenForCopyShortcut(
+  callbacks: CopyShortcutCallbacks,
+): () => void {
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (!isCopyShortcut(event)) return;
+    if (!callbacks.enabled() || isTyping(event.target)) return;
+    if (hasTextSelected()) return;
+    if (!callbacks.onCopy()) return;
+    event.preventDefault();
+  };
+
+  document.addEventListener("keydown", onKeyDown);
+  return () => document.removeEventListener("keydown", onKeyDown);
+}
+
+/** Whether the page has a range of text the browser would copy instead. */
+function hasTextSelected(): boolean {
+  const selection = window.getSelection?.();
+  return !!selection && !selection.isCollapsed && selection.toString() !== "";
 }

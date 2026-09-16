@@ -1,5 +1,6 @@
 /**
- * Getting a file off the clipboard when nothing has been pasted.
+ * Getting a file off the clipboard when nothing has been pasted, and putting
+ * one on it.
  *
  * A paste *event* carries its data with it — that is `paste.ts`, and it is
  * the whole story on a Mac. Asking cold is a different problem, and on an
@@ -21,6 +22,12 @@
  * subset. The webview stays as the fallback for anywhere that command cannot
  * answer — the browser harness, and any platform without a pasteboard this
  * knows how to read.
+ *
+ * Copying has the same shape and no fallback at all. A page may put plain
+ * text, HTML and a PNG on the clipboard and nothing else, so there is no
+ * webview route for a PSD to take — `copyPsd` is the shell or it is nothing,
+ * and on a platform with no pasteboard this knows how to write it says so
+ * rather than quietly copying a flattened picture instead of the file.
  */
 
 import { clipboard, fromBase64 } from "../lib/ipc";
@@ -36,6 +43,25 @@ const MIME: Record<string, string> = {
   tiff: "image/tiff",
   gif: "image/gif",
 };
+
+/**
+ * Put one of the project's PSDs on the clipboard, as the file it is.
+ *
+ * What goes on is the file in the store — see `src-tauri/src/clipboard.rs` —
+ * which is what lets the paste on the other side name it `tower` rather than
+ * `pasted-m2k9f1`: the pasteboard carries a URL with the artwork's own name on
+ * it, and that is the first thing the read half looks for.
+ *
+ * Throws rather than reporting, because the two callers say different things
+ * about it: ⌘C is quiet unless it failed, and the menu item is a request
+ * somebody made.
+ */
+export async function copyPsdToClipboard(
+  projectId: string,
+  key: string,
+): Promise<void> {
+  await clipboard.copyPsd(projectId, key);
+}
 
 /**
  * The first image on the clipboard, as a file.
