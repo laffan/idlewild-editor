@@ -8,32 +8,43 @@
 //! that list into a staging directory. A site that was right in a zip and wrong
 //! on a server would be a difference nobody finds until it is live.
 //!
-//! ## Both shell out, and that is a choice with a cost
+//! ## Neither of them runs a program, and that is the whole iPad story
 //!
-//! rsync and git are run as programs. rsync has no library worth the name, and
-//! a GitHub publish through the REST API would mean an HTTP client, a TLS
-//! stack, and a reimplementation of blobs, trees, commits and refs — for a
-//! result `git` already gets right. The cost is that **publishing is a desktop
-//! capability**: iPadOS gives an app no way to run either binary, so `can_run`
-//! answers false there and the sheet says so rather than offering a button that
-//! cannot work. The zip exports remain the iPad's route, which is what they
-//! have always been. See *Known gaps* in the technical README.
+//! The first version of this ran `rsync` and `git`. That made publishing a
+//! desktop capability, because iOS does not let a third-party app create a
+//! child process: `fork`, `exec` and `posix_spawn` are denied by the sandbox
+//! and `Foundation.Process` is not in the SDK. All of that is true and
+//! permanent — and none of it is a constraint on *publishing*, which was the
+//! mistake. Every iOS app that does this work links the functionality instead
+//! of spawning the tool: Working Copy is libgit2 through objective-git,
+//! a-Shell's commands are dylibs in its own bundle loaded by `ios_system`, iSH
+//! emulates a machine. Link the library, do not spawn the binary.
+//!
+//! So:
+//!
+//! - **GitHub is libgit2**, vendored and compiled for whatever target Cargo is
+//!   pointed at, using SecureTransport on Apple platforms. Same code on a Mac
+//!   and an iPad. See `deploy_github`.
+//! - **The server half is SFTP over our own SSH connection**, in Rust, because
+//!   rsync is the one tool here with no library form — the delta algorithm is
+//!   published as a library, the sending half of the wire protocol is not. See
+//!   `deploy_ssh` for that argument in full and for what is lost.
+//!
+//! There is no `can_run` any more. Both platforms can.
 //!
 //! ## What a publish must never do
 //!
-//! - **Leak the token.** It reaches git through the environment and a
-//!   credential helper, never through argv and never inside a URL — git prints
-//!   a URL back at you in half its error messages. `redact` is the belt to that
-//!   braces: nothing returned from here has been near the secret without it.
-//! - **Be a shell.** Every argument is a separate element of `Command`'s argv,
-//!   so nothing a person typed into a hostname box is ever parsed by a shell.
-//!   rsync's remote path is the one thing that *is* expanded by a shell — the
-//!   remote one — and `--protect-args` is what stops that.
-//! - **Hang.** `BatchMode=yes` for ssh and `GIT_TERMINAL_PROMPT=0` for git:
-//!   a credential that does not work must fail, not sit at a prompt nobody can
-//!   see behind a modal sheet.
+//! - **Leak a secret.** Neither credential is ever in a URL or a command line,
+//!   because there is no command line. `redact` stays as the belt to those
+//!   braces: libgit2 quotes the remote in some of its messages.
+//! - **Trust whatever answers.** Owning the SSH client means owning the host
+//!   key check that `ssh` would have done, and `Ok(true)` there is a
+//!   man-in-the-middle bug. `deploy_ssh::Trust` is trust-on-first-use.
+//! - **Hang.** Nothing here can reach a password prompt: the ssh key is
+//!   supplied from the settings and libgit2 gets its credentials from a
+//!   callback, so a credential that does not work fails rather than waiting.
 
-use crate::project::{ProjectMeta, TargetKind};
+use crate::project::TargetKind;
 use crate::publish_targets;
 use std::path::{Path, PathBuf};
 
@@ -50,40 +61,22 @@ pub struct Report {
     pub dry_run: bool,
 }
 
-/// Whether this platform can publish at all, and why not when it cannot.
-pub fn can_run() -> (bool, String) {
-    if cfg!(any(target_os = "ios", target_os = "android")) {
-        return (
-            false,
-            "Publishing over rsync or to GitHub runs the rsync and git programs, \
-             which this platform does not let an app do. Export a zip instead."
-                .to_string(),
-        );
-    }
-    (true, String::new())
-}
-
 /// Publish a project to wherever it is pointed.
 ///
-/// `dry_run` rehearses: rsync says what it would send without sending it, and
-/// a GitHub publish checks the repository and the branch are reachable with the
-/// token stored, without committing anything. It is the same command because
-/// the useful question — "is this set up right?" — is one somebody asks with
-/// their finger already on Publish.
+/// `dry_run` rehearses: the server half says which files it would send
+/// without sending them, and GitHub is asked whether the repository and branch
+/// are reachable with the token stored, without committing anything. It is the
+/// same command because the useful question — "is this set up right?" — is one
+/// somebody asks with their finger already on Publish.
 ///
-/// **`(async)` is load-bearing.** A synchronous Tauri command runs on the
-/// **main thread**, which is the accident the PSD pipeline had to be dug out
-/// of — see `psd_pipeline::exclusive`. This one stages tens of megabytes and
-/// then waits on a network transfer that can take a minute, so without it the
-/// window would stop drawing for the whole of a publish and any progress shown
-/// would be a still picture.
-#[tauri::command(async)]
-pub fn publish_to_target(id: String, dry_run: bool) -> Result<Report, String> {
-    let (ok, reason) = can_run();
-    if !ok {
-        return Err(reason);
-    }
-
+/// **An `async fn`, and that is load-bearing.** A synchronous Tauri command
+/// runs on the **main thread** — the accident the PSD pipeline had to be dug
+/// out of, see `psd_pipeline::exclusive` — and this one stages tens of
+/// megabytes and then waits on a network transfer. The SSH half is async and
+/// is awaited; libgit2 is blocking and goes to `spawn_blocking`, so neither
+/// one parks a runtime thread on a socket.
+#[tauri::command]
+pub async fn publish_to_target(id: String, dry_run: bool) -> Result<Report, String> {
     let meta = crate::store::read_meta(&id)?;
     if !meta.publish.is_set() {
         return Err("This project has no publish target yet".into());
@@ -97,6 +90,7 @@ pub fn publish_to_target(id: String, dry_run: bool) -> Result<Report, String> {
                 .servers
                 .iter()
                 .find(|server| server.id == meta.publish.server)
+                .cloned()
                 .ok_or_else(|| {
                     // The server was deleted out from under the project, which
                     // is the one way a saved target can stop naming anything.
@@ -104,60 +98,73 @@ pub fn publish_to_target(id: String, dry_run: bool) -> Result<Report, String> {
                      another in Publish → Where this publishes."
                         .to_string()
                 })?;
-            with_site(&meta, |site, _work| {
-                crate::deploy_rsync::push(server, &meta.publish, site, dry_run)
-            })
+            // Staged here rather than in a helper the two share: one of these
+            // is async and the other is not, and a closure that had to be both
+            // was more machinery than the four lines it saved.
+            let root = staging_dir(&meta.id)?;
+            let site = root.join("site");
+            let result = match stage(&meta.id, &site) {
+                Ok(()) => crate::deploy_ssh::push(&server, &meta.publish, &site, dry_run).await,
+                Err(e) => Err(e),
+            };
+            let _ = std::fs::remove_dir_all(&root);
+            result
         }
         TargetKind::Github => {
             let settings = publish_targets::read();
             let account = settings
                 .github
                 .ok_or_else(|| "Sign in to GitHub first, in Publish.".to_string())?;
+            let target = meta.publish.clone();
             // A GitHub rehearsal is one question over the network, so it does
-            // not stage the site at all. rsync's is the other way round — it
-            // compares file lists — which is why only one of them short-cuts.
+            // not stage the site at all. The server half is the other way
+            // round — it compares file lists — which is why only one of them
+            // short-cuts.
             if dry_run {
-                return crate::deploy_github::check(&account, &meta.publish);
+                return blocking(move || crate::deploy_github::check(&account, &target)).await;
             }
-            with_site(&meta, |site, work| {
-                crate::deploy_github::push(&account, &meta.publish, site, &meta.name, work)
+            let name = meta.name.clone();
+            let id = meta.id.clone();
+            blocking(move || {
+                let root = staging_dir(&id)?;
+                let site = root.join("site");
+                // A second directory beside it, because a GitHub push clones
+                // the branch it is about to commit onto.
+                let work = root.join("repo");
+                let result = stage(&id, &site).and_then(|_| {
+                    crate::deploy_github::push(&account, &target, &site, &name, &work)
+                });
+                let _ = std::fs::remove_dir_all(&root);
+                result
             })
+            .await
         }
     }
 }
 
-/// Write the site into a staging directory, run something over it, then take
-/// the directory away again.
+/// Run blocking work off the runtime's own threads.
 ///
-/// Staged rather than pushed from the store directly, because a published site
-/// is not a directory that exists anywhere: it is `game/` and `assets/` and two
-/// vendored runtimes and a generated config, assembled. rsync and git both want
-/// a tree to look at, so one is built for them.
-///
-/// The staging directory is removed whether the push worked or not — a failed
-/// publish leaving a second copy of every asset in the app's data directory is
-/// how a device runs out of room.
-fn with_site<F>(meta: &ProjectMeta, run: F) -> Result<Report, String>
+/// libgit2 is a C library and blocks; awaiting it on a runtime thread would
+/// park that thread on a socket for the length of a clone. A panic inside
+/// comes back as a failed publish rather than as a poisoned runtime.
+async fn blocking<F>(work: F) -> Result<Report, String>
 where
-    F: FnOnce(&Path, &Path) -> Result<Report, String>,
+    F: FnOnce() -> Result<Report, String> + Send + 'static,
 {
-    let root = staging_dir(&meta.id)?;
-    let site = root.join("site");
-    // A second directory beside it, for the one publish that needs somewhere
-    // to work: a GitHub push clones the branch it is about to commit onto.
-    // rsync is handed nothing and ignores it.
-    let work = root.join("repo");
-    let result = stage(&meta.id, &site).and_then(|_| run(&site, &work));
-    let _ = std::fs::remove_dir_all(&root);
-    result
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| format!("The publish did not finish: {e}"))?
 }
 
-/// A directory of this project's own, emptied first.
+/// A staging directory of this project's own, emptied first.
 ///
 /// Under the app's data directory rather than the system temp: the site is
 /// tens of megabytes of sprite sheets, and it is written beside the store it
 /// was read from, on the same filesystem, where the platform will not clear it
 /// out from under a transfer in progress.
+///
+/// Removed again whether the publish worked or not — a failed publish leaving
+/// a second copy of every asset behind is how a device runs out of room.
 pub fn staging_dir(project_id: &str) -> Result<PathBuf, String> {
     // Through `project_dir`, whose whole job is refusing an id that would
     // climb out of the store — this joins the same untrusted string.
@@ -172,6 +179,11 @@ pub fn staging_dir(project_id: &str) -> Result<PathBuf, String> {
 
 /// The published site, written into `dest`.
 ///
+/// Staged rather than pushed from the store directly, because a published site
+/// is not a directory that exists anywhere: it is `game/` and `assets/` and two
+/// vendored runtimes and a generated config, assembled. Both deploys want a
+/// tree to look at, so one is built for them.
+///
 /// The zip's root directory is deliberately dropped: an archive unpacks into a
 /// directory named after the project, and a server's document root or a
 /// repository's branch is already the place the site goes. Publishing into
@@ -180,8 +192,8 @@ pub fn staging_dir(project_id: &str) -> Result<PathBuf, String> {
 pub fn stage(project_id: &str, dest: &Path) -> Result<(), String> {
     let (_root, entries) = crate::publish::site_entries(project_id)?;
     for entry in entries {
-        // Every `rel` is built here from a directory walk of the store, never
-        // from anything a person typed — but it is joined to a path, so it is
+        // Every `rel` is built from a directory walk of the store, never from
+        // anything a person typed — but it is joined to a path, so it is
         // checked like every other relative path in this app.
         let path = dest.join(crate::store::safe_relative(&entry.rel)?);
         if let Some(parent) = path.parent() {
@@ -191,58 +203,16 @@ pub fn stage(project_id: &str, dest: &Path) -> Result<(), String> {
         // from: a processed project is tens of megabytes of sprite sheets, and
         // there is no reason for any of them to be a `Vec<u8>` on the way.
         match &entry.source {
-            crate::publish::SiteSource::Disk(from) => {
-                std::fs::copy(from, &path)
-                    .map(|_| ())
-                    .map_err(|e| format!("Cannot copy {} to {}: {e}", from.display(), path.display()))
-            }
+            crate::publish::SiteSource::Disk(from) => std::fs::copy(from, &path)
+                .map(|_| ())
+                .map_err(|e| {
+                    format!("Cannot copy {} to {}: {e}", from.display(), path.display())
+                }),
             crate::publish::SiteSource::Generated(bytes) => std::fs::write(&path, bytes)
                 .map_err(|e| format!("Cannot write {}: {e}", path.display())),
         }?;
     }
     Ok(())
-}
-
-// ── running a program, and saying what it said ──────────────────────────────
-
-/// Run a program and hand back what it printed, whichever stream it used.
-///
-/// Both streams, because rsync says what it transferred on stdout and why it
-/// could not on stderr, and a publish that failed with an empty message is a
-/// publish nobody can fix.
-pub fn run(
-    program: &str,
-    args: &[String],
-    env: &[(&str, String)],
-    cwd: Option<&Path>,
-) -> Result<String, String> {
-    let mut command = std::process::Command::new(program);
-    command.args(args);
-    for (key, value) in env {
-        command.env(key, value);
-    }
-    if let Some(dir) = cwd {
-        command.current_dir(dir);
-    }
-
-    let output = command.output().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            format!("`{program}` is not installed, or is not on this app's PATH")
-        } else {
-            format!("Could not run {program}: {e}")
-        }
-    })?;
-
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if output.status.success() {
-        Ok(text)
-    } else {
-        Err(text)
-    }
 }
 
 /// Take a secret out of anything about to be shown to somebody.

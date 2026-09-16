@@ -899,25 +899,41 @@ remaining pieces are wired to real slots rather than mocked.
   **Check it first** is beside Publish and does the same run without sending
   anything: rsync says what it would transfer, and GitHub is asked whether the
   token can reach that repository and whether the branch is there yet
+- **Both of them work on an iPad**, which took doing. iOS does not let an app
+  run another program — no `fork`, no `exec` — so shelling out to `rsync` and
+  `git` made publishing a desktop feature. But that is a limit on *running
+  binaries*, not on publishing: every iOS app that does this work links the
+  functionality instead. Working Copy is libgit2; a-Shell's commands are
+  libraries inside its own bundle. So the GitHub half **is** libgit2, compiled
+  into the app, and the server half speaks SSH itself. Same code on both
+  platforms
 - **The GitHub publish commits, it does not force-push.** The quick way to ship
   a built site is to make a repository out of the output and force-push it,
   which works right up until somebody types `main` into the branch box. This
   clones the branch, replaces what is at the path being published to, commits
   and pushes — so nothing outside that path is touched, no history is rewritten
   and a mistake is one revert away. `gh-pages` is the default because the
-  alternative default is the branch holding your source. The token is kept on
-  the device in a file only you can read, reaches git through the environment
-  rather than through a URL, and is redacted out of anything the app prints
-- **rsync uses your ssh key, and asks before it deletes.** Set the key up with
-  `ssh-copy-id`; a server that wants a password is refused in a second rather
-  than hanging behind a sheet with a spinner on it. Deleting what is at the far
-  end and not in the site is a switch on the target, off by default — right for
-  a directory holding nothing but this game, and also how a neighbouring app's
-  files go
-- Both of those run the `rsync` and `git` programs, so they are **a desktop
-  thing**: iPadOS does not let an app run either, and the sheet says so there
-  rather than offering a button that cannot work. The two zips below are that
-  platform's route, as they have always been
+  alternative default is the branch holding your source. Everything in the site
+  is staged, `.gitignore` included: a stray ignore rule saying `assets/` would
+  otherwise publish a game with no artwork in it and tell nobody
+- **The server half is SFTP, and it only sends what changed.** rsync is the one
+  tool here with no library form — the delta algorithm is published as one, the
+  sending half of its wire protocol is not — so an iPad could not link it the
+  way it links libgit2. SFTP over an SSH connection the app makes itself is the
+  same job: a publish leaves a manifest of every file's hash beside the site,
+  reads it back next time, and sends only what differs. What is lost against
+  real rsync is the diff *within* a changed file, which for a static site is
+  not much. Deleting what the site no longer has is a switch, off by default —
+  right for a directory holding nothing but this game, and also how a
+  neighbouring app's files go
+- **Your ssh key is imported, not pointed at, and the host key is checked.**
+  Pick your private key once and it is kept on the device — there is no
+  `~/.ssh` on an iPad to read at publish time. The first connection to a server
+  records its host key fingerprint and shows it to you; every connection after
+  that insists on the same one, and a publish stops dead if it changes.
+  Getting past that takes a deliberate **Forget key**, because the difference
+  between a rebuilt server and somebody in the middle of the connection is not
+  something this app can work out
 - Publish's two other exits. **Export site** is a zip you can serve: the game, its
   processed assets and both runtimes, so the exported game opens showing what
   the editor showed. **Export project** is a `.idlewild` file — the project
@@ -974,12 +990,14 @@ remaining pieces are wired to real slots rather than mocked.
   between them — today the template places the open one
 - Sloped ground for the platformer: a blocking boundary is currently taken as
   its bounding box
-- Publishing from an iPad. rsync and GitHub both run a program, which iPadOS
-  does not allow — a GitHub publish over the REST API would work there, and is
-  a rewrite of blobs, trees, commits and refs rather than a flag
-- The system keychain for the GitHub token. It is in a file only you can read,
-  beside the projects; Keychain and its iOS counterpart are a dependency and a
-  platform pair that have not been taken on yet
+- True rsync, rather than SFTP with a manifest beside it. A changed file is
+  sent whole rather than as a diff against what is already there. The sending
+  half of rsync's wire protocol is not published as a library by anyone and is
+  defined by rsync's own source rather than a specification, so it is a project
+  rather than a dependency
+- The system keychain for the GitHub token and the ssh key. Both are in a file
+  only you can read, beside the projects; Keychain and its iOS counterpart are
+  a dependency and a platform pair that have not been taken on yet
 - Opening a `.idlewild` straight from Files or the Finder — the format is
   real, but it is not declared to the system and nothing handles a file the OS
   hands the app

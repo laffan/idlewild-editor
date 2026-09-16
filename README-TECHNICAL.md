@@ -49,7 +49,7 @@ Extension of [README.md](README.md).
 │  game_search.rs  ⇧⌘F, over that same tree                      │
 │  publish.rs      what a published site is made of, and the zip │
 │  deploy.rs       that site, staged and pushed somewhere real   │
-│  deploy_rsync.rs   one rsync run, over ssh                     │
+│  deploy_ssh.rs     the site over SFTP, on our own connection   │
 │  deploy_github.rs  clone the branch, replace the path, commit  │
 │  publish_targets.rs  the logins, which are the device's        │
 │  export_assets.rs  chosen PSDs alone: sources, output, or both │
@@ -2924,64 +2924,141 @@ platform pair that have not been taken on, and until they are, a token lives in
 a file only this user can read, in the directory that already holds every
 project's source. Anything that can read it can already read those.
 
-### Both shell out, which makes publishing a desktop capability
+### Neither of them runs a program, and that is the whole iPad story
 
-rsync has no library worth the name, and a GitHub publish through the REST API
-would mean an HTTP client, a TLS stack, and a reimplementation of blobs, trees,
-commits and refs for a result `git` already gets right. The cost is that
-iPadOS gives an app no way to run either binary, so `deploy::can_run` answers
-false there and the sheet says so rather than offering a button that cannot
-work. The two zips remain the iPad's route, which is what they have always
-been. See *Known gaps*.
+The first version of this ran `rsync` and `git`, which made publishing a
+desktop capability. The reason given was that iOS does not let a third-party
+app create a child process — `fork`, `exec` and `posix_spawn` are denied by the
+sandbox, `Foundation.Process` is not in the SDK — and that part is true and
+permanent.
 
-Three rules hold across both:
+The conclusion drawn from it was wrong. It is a constraint on **running
+binaries**, not on publishing, and every iOS app that does this kind of work
+routes around it the same way: by linking the functionality instead of spawning
+the tool. Working Copy is libgit2 through objective-git. a-Shell's commands are
+dylibs inside its own bundle, loaded by `ios_system`, which exists precisely to
+be a `system()` that App Store rules allow. iSH emulates an x86 machine and
+implements the Linux syscalls itself, so the `fork` happens inside the
+emulator. None of them spawns a process, and all of them run shells and git.
 
-- **The token never reaches argv.** It goes to git in the environment, read by
-  a one-line credential helper — `https://token@github.com/…` is the usual
-  trick and it puts the secret in `ps` and in half of git's own error
-  messages, because git echoes the remote back at you whenever it cannot reach
-  it. `deploy::redact` is the belt to that braces: nothing returned from a
-  publish has been near the secret without going through it.
-- **Nothing is a shell.** Every argument is a separate element of `Command`'s
-  argv, so a hostname somebody typed is never parsed by a shell. rsync's remote
-  path is the one string that *is* expanded by a shell — the remote one — and
-  `--protect-args` is what stops that; without it a directory with a space in
-  it becomes two arguments and the site lands in neither.
-- **Nothing hangs.** `BatchMode=yes` for ssh and `GIT_TERMINAL_PROMPT=0` for
-  git. A credential that does not work has to fail, not sit at a prompt on a
-  stdin nobody can see, behind a modal sheet with a spinner on it.
+So:
 
-`publish_to_target` is `#[tauri::command(async)]`, and that is load-bearing for
-the same reason the PSD commands are: a synchronous command runs on the **main
+- **GitHub is libgit2**, through the `git2` crate with `vendored-libgit2`.
+  `libgit2-sys` builds the C from source for whatever target Cargo is pointed
+  at and defines `GIT_SECURE_TRANSPORT` for any target containing `apple`, so
+  an iOS build uses the system TLS stack rather than shipping one. The one
+  papercut is that git2-rs gates `openssl-sys` on
+  `all(unix, not(target_os = "macos"))`, which iOS matches even though libgit2
+  will not use it there — hence `vendored-openssl`, so the dependency is
+  satisfiable rather than merely unused.
+- **The server half is SFTP over our own SSH connection**, with `russh` and
+  `russh-sftp`. Raw sockets are unrestricted on iOS — App Transport Security
+  governs `NSURLSession` and WebKit, not sockets — which is how every SSH
+  client on the App Store works. `ring` rather than russh's default
+  `aws-lc-rs`, because `ring` is what rustls uses everywhere and cross-compiles
+  to `aarch64-apple-ios` as a matter of routine.
+
+There is no `can_run` any more. Both platforms can.
+
+Two rules hold across both:
+
+- **No secret is ever in a URL or a command line**, because there is no command
+  line. The token reaches libgit2 through a credentials callback as
+  `x-access-token:<token>`, GitHub's own scheme for a PAT over HTTPS; the ssh
+  key is handed to russh as a parsed `PrivateKey`. `deploy::redact` stays as the
+  belt to those braces, because libgit2 quotes the remote in some of its
+  messages.
+- **Nothing hangs.** Neither path can reach a password prompt: there is no
+  terminal to reach one on. A credential that does not work fails.
+
+`publish_to_target` is an `async fn`, and that is load-bearing for the same
+reason the PSD commands are `(async)`: a synchronous command runs on the **main
 thread** — see *One PSD job at a time* — and this one stages tens of megabytes
-and then waits on a network transfer.
+and then waits on a network transfer. The SSH half is async and is awaited;
+libgit2 is a blocking C library and goes through `spawn_blocking`, so neither
+parks a runtime thread on a socket.
 
-### rsync, and the two flags that are choices
+### SFTP, a manifest, and the host key
 
-```text
--r -l -t          recurse, keep symlinks, keep modified times
--z                compress in flight
---protect-args    the remote shell does not get to re-split the path
---delete          only when the target asks for it
-```
+**rsync is the one tool here with no library form**, and that is the actual
+obstacle rather than the sandbox. `librsync` and `fast_rsync` are the delta
+*algorithm* — the rolling checksum. The Rust wire-protocol crates, `arrsync`
+and `rsyn`, implement the listing and downloading half against `rsyncd`;
+nothing implements the sending client. And rsync's protocol is defined by
+rsync's source rather than by a specification, so writing the sender is a
+project rather than a dependency. libgit2 could simply be linked; rsync could
+not.
 
-**`-a` is deliberately not used.** Archive mode carries permissions, ownership
-and groups, and a published site wants none of them: the files were written
-into a staging directory by this app a second ago, so their modes describe this
-machine's umask rather than anything a web server should serve. Pushing them
-makes a document root's permissions a function of whichever device published
-last.
+SFTP over an SSH connection we make ourselves is the same job with the same
+outcome. What it costs is the diff *within* a changed file — a changed file is
+sent whole.
 
-**`--delete` is a switch on the target, off by default.** Deleting what is at
-the far end and not here is exactly right for a directory holding nothing but
-this site, and is also how somebody loses a `.well-known` or a neighbouring
-app. The sheet says which it is doing.
+**What is put back is skipping the files that have not changed**, which is most
+of the practical benefit. A publish leaves an `IDLEWILD-MANIFEST` beside the
+site listing every file's SHA-256, reads it back next time, and sends only what
+differs. Hashed rather than compared by size and modified time, because the
+staging directory is written fresh for every publish: every file's mtime is
+*now* and says nothing at all. A manifest that is missing or unreadable means
+send everything, rather than fail — the worst a mangled one can do is make a
+publish send more than it had to, and refusing to publish over a file whose
+only job is to be an optimisation would be the wrong way round.
 
-An empty directory is refused rather than defaulted: rsync reads `host:` as the
-login's home, and publishing a site over somebody's home directory because a
-field was blank is not a thing to do. A leading dash is refused in the host,
-the user and the directory, because rsync reads one as an option wherever it
-appears.
+The name has no dot in it on purpose. A hidden file nobody knows about, in a
+directory somebody else's web server is serving, is worse manners than an
+obvious one.
+
+**Tidy up walks the far end rather than trusting the manifest.** A file the
+manifest never knew about is exactly what that switch is for, and a prune that
+only removed what it had put there would leave the last hand-uploaded copy of
+the site sitting underneath this one for good. It stays off by default: right
+for a directory holding nothing but this site, and also how somebody loses a
+`.well-known`.
+
+An empty directory is refused rather than defaulted, as it was under rsync and
+for the same reason: it would mean the login's home directory, and publishing a
+site over somebody's home directory because a field was blank is not a thing to
+do.
+
+### The host key, which is ours to check now
+
+Owning the SSH client means owning the check `ssh` would have done, and getting
+it wrong here is a vulnerability rather than a bug: accepting any key at all
+means a publish can be handed to whoever answers on that address. russh's
+`check_server_key` defaults to rejecting everything and says so in its own
+documentation; the tempting thing to write is `Ok(true)`, which is that bug.
+
+It is **trust on first use**, with no terminal to ask at. The first connection
+records the SHA-256 fingerprint it saw and every connection after it insists on
+the same one. `deploy_ssh::trusts` is that decision on its own, in three lines,
+because it should be readable without an SSH session around it.
+
+Three details that are not obvious:
+
+- **The fingerprint is captured even when the connection then fails**, and that
+  is the case that matters: a refused host key *is* a failure, and the message
+  has to name both fingerprints rather than being whatever russh calls a
+  rejected key exchange.
+- **It is recorded once the connection stands, not once the publish succeeds.**
+  A server that then refuses the key has still proved which server it is, and
+  being asked to accept the same new host key twice is being asked twice.
+- **A certificate is fingerprinted like a bare key.** Checking one properly
+  means carrying the issuing authority's key, which nothing in this app has
+  anywhere to get, so a server presenting a certificate to a client that knows
+  nothing about the authority gets the same trust-on-first-use answer.
+
+Getting past a changed fingerprint takes a deliberate *Forget key* on the
+server's row, with its own confirmation naming the two possibilities. It is not
+a checkbox on the publish that failed, because that is the shape that trains
+people to click through the one warning that mattered.
+
+**The key itself is imported rather than pointed at**, and that is the iPad
+again: there is no `~/.ssh` there, and a file picked out of Files hands back a
+security-scoped URL that is not readable on the next launch. So the picker
+names a file once, Rust reads it, checks it parses with the passphrase given —
+so "that is not a key" is said while the picker is still fresh in mind rather
+than at a publish — and stores the key. It is parsed again at every connection
+rather than kept decoded, because a private key held in memory for the life of
+the app is a private key in every crash report.
 
 ### GitHub commits onto the branch, it does not replace it
 
@@ -3008,19 +3085,32 @@ is a file that should stop being served, and a publish that only ever adds
 leaves a deleted scene's assets live for good. At the repository root that
 means everything but `.git`, which is the clone itself.
 
-`git status --porcelain` is how "nothing changed" is told from "something went
-wrong": `git commit` *fails* when there is nothing staged, and a publish
-reporting a failure because the site had not changed is a publish nobody
-trusts.
+**The index is built with `FORCE`, on purpose.** `git add -A` — which is what
+this used to run — honours `.gitignore`. For a *site publish* that is a trap
+rather than a feature: a `.gitignore` on the branch saying `assets/` would
+silently publish a game with no artwork in it, and nothing would report
+anything. What is staged is exactly what the site is. The index is cleared
+first, too, so a file the site no longer has leaves the index with it —
+`add_all` only ever adds.
+
+"Nothing changed" is told from "something went wrong" by comparing the new
+tree's id against the parent commit's. Two commits with the same tree is
+exactly what nothing changed *means*, and it is a better test than the
+`git status --porcelain` the shelling-out version used: `git commit` fails when
+nothing is staged, and a publish reporting a failure because the site had not
+changed is a publish nobody trusts.
 
 ### A rehearsal is the same command
 
 `dry_run` is a parameter rather than a second command, because the useful
 question — "is this pointed where I think it is?" — is one people ask with a
-finger already on Publish. rsync says what it would send; a GitHub check is
-`git ls-remote`, which needs the token to be valid, the account to be able to
-see the repository, and the network to be there. That is every way a publish
-fails that is not about the site itself.
+finger already on Publish. The server half lists what it would send, which
+means staging the site and reading the far end's manifest. The GitHub half is
+`ls-remote` through libgit2, which needs the token to be valid, the account to
+be able to see the repository, and the network to be there — every way a
+publish fails that is not about the site itself — and it deliberately does
+**not** stage the site, because staging tens of megabytes to then ask one
+question would make "Check it first" the slow half of the pair.
 
 ### What cannot be tested here
 
@@ -3028,11 +3118,19 @@ A transfer wants a server and a repository, and a suite that reached the
 network would be a suite that fails on a train. `tests/deploying.rs` pins
 everything a bad publish is made of *before* it leaves: the staged site being
 the site the zip carries, a staging directory emptied so a failed publish does
-not leave its half-written copy for the next one, a hostname rsync would read
-as an option, a branch name git would refuse, a path that climbs out of the
-clone, and a token surviving into something somebody reads. Those are worth
-pinning precisely because the failure they prevent happens on somebody's live
-server rather than in this process.
+not leave its half-written copy for the next one, a directory that would land
+on somebody's home, a branch name git would refuse, a path that climbs out of
+the clone, the manifest diff sending what differs and nothing else, and a token
+surviving into something somebody reads. Those are worth pinning precisely
+because the failure they prevent happens on somebody's live server rather than
+in this process — and, for `trusts`, because a mistake in it is a vulnerability
+rather than a bug.
+
+What is **not** covered by any of it is the iOS build. There is no macOS or
+Xcode in the environment this was written in, so `aarch64-apple-ios` has never
+been compiled: the crate selection is argued from how `libgit2-sys` and `ring`
+behave on Apple targets rather than from having watched them do it. That is the
+one claim here to check first on a real device.
 
 ## One file per scene, named after it
 
@@ -6924,24 +7022,31 @@ console is a record of what happened rather than a document.
 
 ## Known gaps
 
-- **Publishing to a server or to GitHub does not work on an iPad**, which is
-  the device this editor is mainly developed on. Both run a program — `rsync`
-  and `git` — and iPadOS gives an app no way to. A GitHub publish over the REST
-  API would work there, and is a reimplementation of blobs, trees, commits and
-  refs rather than a flag; rsync has no such door at all. The sheet says so on
-  that platform rather than offering a button that cannot work, and the two zip
-  exports are its route.
-- **The GitHub token is in a file, not in the system keychain.** `publish.json`
-  is `0600`, beside the project store — anything that can read it can already
-  read every project's source — but Keychain and its iOS counterpart are the
-  right answer and are a dependency and a platform pair that have not been
-  taken on.
-- **rsync stores no password, only a key.** The identity is the ssh agent's or
-  a key file named on the server's row, and a server that wants a password is
-  refused rather than waited on. Storing one would mean either `sshpass` or
-  writing a password to disk, and `ssh-copy-id` is the answer everybody already
-  has — but it does mean a host that only takes passwords cannot be published
-  to from here.
+- **The server publish is SFTP, not rsync**, so a changed file is sent whole
+  rather than as a diff against what is already there. The manifest recovers
+  skipping unchanged files, which is most of the benefit, and not the rest. The
+  sending half of rsync's wire protocol is published as a library by nobody and
+  is defined by rsync's own source rather than a specification.
+- **The iOS build has never been compiled.** There is no macOS or Xcode in the
+  environment this was written in. `libgit2-sys` defining `GIT_SECURE_TRANSPORT`
+  for `apple` targets, `ring` cross-compiling to `aarch64-apple-ios`, and
+  `vendored-openssl` covering git2-rs's `not(target_os = "macos")` gate are all
+  arguments from how those crates are built rather than from having watched
+  them build. It is the first thing to check on a device.
+- **The GitHub token and the ssh key are in a file, not in the system
+  keychain.** `publish.json` is `0600`, beside the project store — anything that
+  can read it can already read every project's source — but Keychain and its
+  iOS counterpart are the right answer, and are a dependency and a platform
+  pair that have not been taken on. The key's passphrase sitting beside the key
+  is the sharper half of that: it is the difference between somebody who has
+  the file having a key and having a *usable* key.
+- **An ssh password is not an option, only a key.** Storing one would mean
+  carrying a password to disk with nothing better to put it in, and
+  `ssh-copy-id` is the answer everybody already has — but it does mean a host
+  that only takes passwords cannot be published to from here.
+- **A server certificate is trusted on first use like a bare key.** Checking one
+  properly means carrying the issuing authority's key, and nothing in this app
+  has anywhere to get one.
 - **A publish target does not travel in a `.idlewild` file.** It names a server
   by an id that exists only in this install's settings, and `meta.json` does not
   travel anyway. A project opened on another machine has to be pointed

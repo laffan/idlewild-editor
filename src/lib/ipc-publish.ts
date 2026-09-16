@@ -61,23 +61,42 @@ export const publish = {
   // `deploy.rs` for what actually pushes.
 
   /**
-   * The servers, the GitHub account's name, and whether this platform can
-   * publish at all.
+   * The servers and the GitHub account's name.
    *
-   * **No token comes back.** A secret handed to a webview is a secret in a
-   * webview's memory, and nothing here needs it: the deploys run in Rust.
+   * **No secret comes back** — not the token, not the ssh key, not its
+   * passphrase. A secret handed to a webview is a secret in a webview's memory
+   * for as long as a sheet is open, and nothing here needs one: both publishes
+   * run in Rust.
    */
   settings: () => invoke<PublishSettings>("read_publish_settings"),
-  /** Add a server or change one. Answers with its id, which Rust makes. */
+  /**
+   * Add a server or change one. Answers with its id, which Rust makes.
+   *
+   * `keyFile` is a path to read **now**, not a path to keep: Rust reads it,
+   * checks it parses as an ssh private key, and stores the key itself. That is
+   * what makes an iPad work — there is no `~/.ssh` there to point into, and a
+   * file picked out of Files hands back a URL that is not readable again on
+   * the next launch. Leaving it out on an edit keeps the key already stored.
+   */
   saveServer: (server: {
     id?: string;
     label: string;
     host: string;
     user: string;
     port?: number;
-    identityFile?: string;
+    keyFile?: string;
+    passphrase?: string;
   }) => invoke<string>("save_publish_server", server),
   deleteServer: (id: string) => invoke<void>("delete_publish_server", { id }),
+  /**
+   * Forget a server's host key, which is the only way past one that changed.
+   *
+   * Deliberately a separate, deliberate act rather than a checkbox on the
+   * publish that failed: a changed host key is either a rebuilt server or
+   * somebody standing in the middle of the connection, and the difference is
+   * not something this app can work out.
+   */
+  forgetHostKey: (id: string) => invoke<void>("forget_host_key", { id }),
   /**
    * Keep a GitHub personal access token.
    *
@@ -103,25 +122,31 @@ export const publish = {
     invoke<PublishReport>("publish_to_target", { id, dryRun }),
 };
 
-/** One server this install can rsync to. */
+/** One server this install can publish to over SSH. */
 export interface PublishServer {
   id: string;
   label: string;
   host: string;
   user: string;
   port?: number | null;
-  identityFile?: string | null;
+  /** The name of the file the key was imported from, for the row to say so. */
+  keySource: string;
+  /** Whether there is a key at all. A server without one cannot publish. */
+  hasKey: boolean;
+  /**
+   * The host key fingerprint, learned on the first connection, or empty
+   * before there has been one. Not a secret: it is shown, because comparing it
+   * against what the server says about itself is the only way anybody can
+   * check that the first connection was not already the wrong one.
+   */
+  hostKey: string;
 }
 
-/** What the app knows about who is publishing — never the token itself. */
+/** What the app knows about who is publishing — never a secret itself. */
 export interface PublishSettings {
   servers: PublishServer[];
   /** The GitHub account's name, when one is signed in. */
   github: string | null;
-  /** Whether rsync and git can be run here at all. False on iPadOS. */
-  canDeploy: boolean;
-  /** Why not, when they cannot. */
-  reason: string;
 }
 
 /** What a publish did, or would have done. */

@@ -5,7 +5,7 @@ mod archive;
 mod clipboard;
 mod deploy;
 mod deploy_github;
-mod deploy_rsync;
+mod deploy_ssh;
 mod export_assets;
 mod file_server;
 mod game_config;
@@ -576,6 +576,7 @@ pub fn run() {
             publish_targets::delete_publish_server,
             publish_targets::save_github_login,
             publish_targets::clear_github_login,
+            publish_targets::forget_host_key,
             publish_targets::read_publish_target,
             publish_targets::save_publish_target,
             deploy::publish_to_target,

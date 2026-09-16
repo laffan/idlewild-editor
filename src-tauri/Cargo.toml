@@ -18,6 +18,51 @@ uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tiny_http = "0.12"
 
+# Publishing somewhere real, as libraries rather than as programs.
+#
+# iOS does not let a third-party app create a child process — `fork`, `exec`
+# and `posix_spawn` are all denied by the sandbox, and `Foundation.Process` is
+# not in the SDK. That is a real and permanent constraint, and it is the reason
+# the first version of this feature was desktop-only. It is not, however, a
+# constraint on *publishing*: every iOS app that does this work links the
+# functionality instead of spawning the tool. Working Copy is libgit2 through
+# objective-git; a-Shell's commands are dylibs in its own bundle, loaded by
+# `ios_system`. So are these.
+#
+# `git2` is libgit2, vendored and built from source, which is what makes the
+# iPad build possible at all: `libgit2-sys` defines GIT_SECURE_TRANSPORT for
+# any target containing "apple", so an iOS build uses the system TLS stack
+# rather than needing one shipped. `vendored-openssl` is there for the *other*
+# targets — git2-rs gates openssl-sys on `all(unix, not(target_os = "macos"))`,
+# which iOS matches even though libgit2 will not use it, so the dependency has
+# to be satisfiable rather than merely unused. `ssh` is deliberately off: this
+# reaches GitHub over HTTPS with a token, and leaving it off keeps libssh2 out
+# of the tree entirely.
+git2 = { version = "0.21", default-features = false, features = [
+    "vendored-libgit2",
+    "vendored-openssl",
+    "https",
+] }
+
+# SSH, in Rust, for the same reason. rsync is the one tool here with no library
+# form — `librsync` and `fast_rsync` are the delta algorithm, and the wire
+# protocol crates (`arrsync`, `rsyn`) implement the downloading half against
+# rsyncd — so the binary could not simply be linked the way libgit2 could.
+# SFTP over our own SSH connection is the same job with the same outcome, on
+# every platform, and raw sockets are unrestricted on iOS. See `deploy_ssh.rs`.
+#
+# `ring` rather than russh's default `aws-lc-rs` backend, and that choice is
+# about the iPad: `ring` is what rustls uses everywhere and cross-compiles to
+# `aarch64-apple-ios` as a matter of routine, where `aws-lc-sys` wants CMake
+# and a good deal more persuasion for an Apple mobile target.
+russh = { version = "0.63", default-features = false, features = [
+    "ring",
+    "rsa",
+    "flate2",
+] }
+russh-sftp = "3"
+tokio = { version = "1", features = ["rt", "net", "io-util", "time", "fs"] }
+
 # The PSD pipeline, shared with Phaser Bench.
 #
 # TEMPORARILY PINNED AHEAD OF MAIN, and meant to come off. The branch carries

@@ -257,16 +257,13 @@
    row grid above: a key column, a value, and whatever control the row is. Two
    things they need that the rows do not already give. */
 
-/* A platform that cannot publish saying so, at the top of the sheet. Shown
-   rather than hiding the sheet — the details are still worth typing on the
-   device the project is on, and a sheet that simply was not there would read
-   as a feature that does not exist. */
-.publish-note {
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--chrome-rule);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  font-size: 12px;
-  line-height: 1.5;
+/* A server's host key fingerprint, on its row. In the code face because it is
+   a string somebody compares character by character against what the server
+   says about itself, and a proportional font is the wrong tool for that. */
+.publish-fingerprint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  word-break: break-all;
 }
 
 /* The sentence about a token and the button that takes it, on one row. The

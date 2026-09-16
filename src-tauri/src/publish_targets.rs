@@ -30,11 +30,22 @@
 //! a secret handed to a webview is a secret in a webview's memory, and nothing
 //! in the frontend needs it: the deploys run here.
 //!
-//! **rsync authenticates over ssh, and this stores no password.** The identity
-//! is a key — the agent's, or a file named here — and `BatchMode=yes` means a
-//! server that wants a password is refused rather than waited on. Storing an
-//! ssh password would mean either `sshpass` or writing one to disk, and
-//! `ssh-copy-id` is the answer everyone already has.
+//! **The server half authenticates with an ssh key, and the key itself is
+//! kept here.** Not a path to it. That is a deliberate change from pointing at
+//! `~/.ssh/id_ed25519`, and it is what makes the iPad work: there is no
+//! `~/.ssh` there to point into, and a file picked out of Files hands back a
+//! security-scoped URL that is not readable again on the next launch. So a key
+//! is *imported* — read once, checked that it parses, and stored — and
+//! `key_source` remembers where it came from only so the row can say so.
+//!
+//! The same caveat as the token applies, and more sharply, because an ssh key
+//! opens more doors than a scoped PAT: it is a file only this user can read, in
+//! the directory that already holds every project's source. An encrypted key's
+//! passphrase is stored beside it, which is the part worth thinking about
+//! twice — it is the difference between "somebody who has this file has a key"
+//! and "somebody who has this file has a usable key". It is optional, and a key
+//! with no passphrase is the common case on a machine that is already
+//! encrypted at rest.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -44,7 +55,7 @@ use std::path::PathBuf;
 /// A list rather than one, because a host is not an identity: a staging box
 /// and a live one are two destinations under the same login, and a project
 /// names which of them it means.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Server {
     /// Made here, not by the frontend — a project's target names one of these.
@@ -58,27 +69,93 @@ pub struct Server {
     /// The ssh port, when it is not 22.
     #[serde(default)]
     pub port: Option<u16>,
-    /// A private key file, or none to let ssh use the agent and its defaults.
+    /// Where the key was imported from, so the row can say. Never read again.
     #[serde(default)]
-    pub identity_file: Option<String>,
+    pub key_source: String,
+    /// The private key itself, in its original PEM. Never leaves Rust.
+    #[serde(default)]
+    pub key: String,
+    /// The passphrase, for a key that has one. Never leaves Rust.
+    #[serde(default)]
+    pub passphrase: String,
+    /// The server's host key fingerprint, learned on the first connection.
+    ///
+    /// Trust on first use, which is what `ssh` itself does with an unknown
+    /// host — except that there is no terminal here to ask, so the first
+    /// connection records what it saw and every one after it insists on the
+    /// same answer. Empty until then. Not a secret: it is shown on the row,
+    /// because comparing it against what the server says it is is the only way
+    /// anybody can check the first connection was not already the wrong one.
+    #[serde(default)]
+    pub host_key: String,
 }
 
 impl Server {
-    /// `user@host`, or just the host when no user was given — which is ssh's
-    /// own rule: no user means the one you are logged in as.
-    pub fn address(&self) -> String {
-        if self.user.is_empty() {
-            self.host.clone()
-        } else {
-            format!("{}@{}", self.user, self.host)
-        }
-    }
-
     pub fn name(&self) -> &str {
         if self.label.is_empty() {
             &self.host
         } else {
             &self.label
+        }
+    }
+
+    /// The port to dial, which is 22 unless somebody said otherwise.
+    pub fn port_or_default(&self) -> u16 {
+        self.port.unwrap_or(22)
+    }
+
+    /// The key, parsed and decrypted, ready to authenticate with.
+    ///
+    /// Parsed at every connection rather than kept decoded: a private key held
+    /// in memory for the life of the app is a private key in every crash
+    /// report, and parsing one is microseconds.
+    pub fn private_key(&self) -> Result<russh::keys::PrivateKey, String> {
+        if self.key.is_empty() {
+            return Err(format!(
+                "{} has no ssh key. Import one in Servers and accounts.",
+                self.name()
+            ));
+        }
+        let passphrase = (!self.passphrase.is_empty()).then_some(self.passphrase.as_str());
+        russh::keys::decode_secret_key(&self.key, passphrase).map_err(|e| {
+            format!(
+                "The ssh key for {} could not be read: {e}. An encrypted key \
+                 needs its passphrase on the same row.",
+                self.name()
+            )
+        })
+    }
+}
+
+/// A server as the frontend sees it: everything except the key and its
+/// passphrase.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerView {
+    pub id: String,
+    pub label: String,
+    pub host: String,
+    pub user: String,
+    pub port: Option<u16>,
+    pub key_source: String,
+    /// Whether there is a key at all — the row says so, and a server without
+    /// one cannot publish.
+    pub has_key: bool,
+    /// The host key fingerprint, or empty before the first connection.
+    pub host_key: String,
+}
+
+impl From<&Server> for ServerView {
+    fn from(server: &Server) -> Self {
+        ServerView {
+            id: server.id.clone(),
+            label: server.label.clone(),
+            host: server.host.clone(),
+            user: server.user.clone(),
+            port: server.port,
+            key_source: server.key_source.clone(),
+            has_key: !server.key.is_empty(),
+            host_key: server.host_key.clone(),
         }
     }
 }
@@ -104,17 +181,13 @@ pub struct Settings {
     pub github: Option<Github>,
 }
 
-/// What the frontend is told: everything except the secret.
+/// What the frontend is told: everything except the secrets.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsView {
-    pub servers: Vec<Server>,
+    pub servers: Vec<ServerView>,
     /// The account's name, when one is signed in.
     pub github: Option<String>,
-    /// Whether this platform can run a publish at all — see `deploy::can_run`.
-    pub can_deploy: bool,
-    /// Why not, when it cannot. Empty when it can.
-    pub reason: String,
 }
 
 fn settings_path() -> Result<PathBuf, String> {
@@ -164,13 +237,43 @@ fn restrict(_path: &std::path::Path) {}
 #[tauri::command]
 pub fn read_publish_settings() -> SettingsView {
     let settings = read();
-    let (can_deploy, reason) = crate::deploy::can_run();
     SettingsView {
-        servers: settings.servers,
+        servers: settings.servers.iter().map(ServerView::from).collect(),
         github: settings.github.map(|account| account.login),
-        can_deploy,
-        reason,
     }
+}
+
+/// Remember what a server's host key turned out to be.
+///
+/// Called once, after the first connection that saw one — see
+/// `deploy_ssh::Trust`. A server that has since been deleted is not an error:
+/// the publish it was learned during has already finished.
+pub fn learn_host_key(id: &str, fingerprint: &str) -> Result<(), String> {
+    let mut settings = read();
+    let Some(server) = settings.servers.iter_mut().find(|s| s.id == id) else {
+        return Ok(());
+    };
+    if server.host_key == fingerprint {
+        return Ok(());
+    }
+    server.host_key = fingerprint.to_string();
+    write(&settings)
+}
+
+/// Forget it again, which is the only way past a fingerprint that has changed.
+///
+/// Deliberately its own command rather than a checkbox on the publish that
+/// failed: a changed host key is either a rebuilt server or somebody standing
+/// in the middle of the connection, and the difference is not something this
+/// app can work out. Making it a separate, deliberate act is the whole
+/// protection.
+#[tauri::command]
+pub fn forget_host_key(id: String) -> Result<(), String> {
+    let mut settings = read();
+    if let Some(server) = settings.servers.iter_mut().find(|s| s.id == id) {
+        server.host_key.clear();
+    }
+    write(&settings)
 }
 
 /// Add a server, or change one. Answers with its id.
@@ -178,6 +281,12 @@ pub fn read_publish_settings() -> SettingsView {
 /// The id is made here rather than taken from the frontend: it is what a
 /// project's target names, and a caller that could choose it could point two
 /// projects at each other's servers by typing the same string twice.
+/// `key_file` is a path to read **now**, not a path to keep.
+///
+/// It is read here, checked that it parses as an ssh private key with the
+/// passphrase given, and its text is stored. Passing `None` on an edit keeps
+/// whatever key the server already had, so changing a label does not mean
+/// finding the key file again.
 #[tauri::command]
 pub fn save_publish_server(
     id: Option<String>,
@@ -185,30 +294,56 @@ pub fn save_publish_server(
     host: String,
     user: String,
     port: Option<u16>,
-    identity_file: Option<String>,
+    key_file: Option<String>,
+    passphrase: Option<String>,
 ) -> Result<String, String> {
     let host = host.trim().to_string();
     if host.is_empty() {
         return Err("A server needs a host".into());
     }
-    // rsync reads a leading dash as an option, wherever it appears, and these
-    // two reach its argv — see `deploy_rsync`, which refuses them again.
-    if host.starts_with('-') || user.starts_with('-') {
-        return Err("A host or user cannot start with a dash".into());
-    }
 
     let mut settings = read();
     let id = id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let server = Server {
+    let existing = settings.servers.iter().find(|s| s.id == id).cloned();
+    let passphrase = passphrase
+        .map(|p| p.trim().to_string())
+        .or_else(|| existing.as_ref().map(|s| s.passphrase.clone()))
+        .unwrap_or_default();
+
+    // Keep the host key across an edit: a label change is not a reason to
+    // start trusting whatever answers on that address next time.
+    let mut server = Server {
         id: id.clone(),
         label: label.trim().to_string(),
         host,
         user: user.trim().to_string(),
         port,
-        identity_file: identity_file.filter(|path| !path.trim().is_empty()),
+        key_source: existing.as_ref().map(|s| s.key_source.clone()).unwrap_or_default(),
+        key: existing.as_ref().map(|s| s.key.clone()).unwrap_or_default(),
+        passphrase,
+        host_key: existing.as_ref().map(|s| s.host_key.clone()).unwrap_or_default(),
     };
+
+    if let Some(path) = key_file.filter(|p| !p.trim().is_empty()) {
+        let path = crate::psd_write::source_path(&path);
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
+        // Checked before it is stored, so "that is not a key" is said while
+        // the file picker is still fresh in mind rather than at a publish.
+        let pass = (!server.passphrase.is_empty()).then_some(server.passphrase.as_str());
+        russh::keys::decode_secret_key(&text, pass).map_err(|e| {
+            format!("{} is not an ssh private key this app can read: {e}", path.display())
+        })?;
+        server.key = text;
+        server.key_source = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("imported key")
+            .to_string();
+    }
+
     match settings.servers.iter_mut().find(|s| s.id == id) {
-        Some(existing) => *existing = server,
+        Some(slot) => *slot = server,
         None => settings.servers.push(server),
     }
     write(&settings)?;

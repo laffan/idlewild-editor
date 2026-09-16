@@ -14,11 +14,19 @@
  * so a field could be pre-filled is a token in a webview's memory for as long
  * as the sheet is open, and nothing here needs it: the publishes run in Rust.
  *
- * **rsync authenticates over ssh, and nothing here stores a password.** The
- * identity is a key — the agent's, or a file named on the row — and a server
- * that wants a password is refused rather than waited on. `ssh-copy-id` is the
- * answer everybody already has, and storing an ssh password would mean either
- * `sshpass` or writing one to disk.
+ * **A server's key is imported, not pointed at.** That is what makes the iPad
+ * work: there is no `~/.ssh` there to reference, and a file picked out of
+ * Files hands back a security-scoped URL that is not readable again on the
+ * next launch. So the picker's job is to name a file *once* — Rust reads it,
+ * checks it parses, and keeps the key. The row then says which file it came
+ * from, and editing a server without picking again keeps the key it has.
+ *
+ * **The host key is shown once there is one.** With its own SSH client the app
+ * owns the check `ssh` would have done, and it is trust-on-first-use with no
+ * terminal to ask at — so the fingerprint is put on the row afterwards, where
+ * somebody can compare it against what the server says about itself. *Forget*
+ * is the only way past one that has changed, and it is deliberately a separate
+ * act rather than a button on the publish that failed.
  */
 
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -56,23 +64,11 @@ export function openPublishLogins(onChanged: () => void = () => {}): void {
       return;
     }
     body.replaceChildren(
-      ...(settings.canDeploy ? [] : [note(settings.reason)]),
       ...github(settings, reload, onChanged),
       ...servers(settings, reload, onChanged),
     );
   };
   void reload();
-}
-
-/**
- * A platform that cannot publish says so once, at the top.
- *
- * Shown rather than hiding the sheet: the settings are still worth typing on
- * an iPad — they are on the same device the project is on — and a sheet that
- * simply was not there would read as a feature that does not exist.
- */
-function note(text: string): HTMLElement {
-  return h("div", { class: "publish-note", text });
 }
 
 // ── GitHub ──────────────────────────────────────────────────────────────────
@@ -111,6 +107,9 @@ function github(
   const login = field("Account", "your GitHub username");
   const token = field("Token", "ghp_… or github_pat_…");
   token.input.type = "password";
+  // A token is not a login this field should offer to remember: the browser's
+  // own password manager has no business in an app's settings file.
+  token.input.autocomplete = "off";
 
   return [
     h("div", { class: "sheet-row" }, heading, h("div", { class: "sheet-row-value", text: "Not signed in" })),
@@ -181,7 +180,7 @@ function serverRow(
   const where = [
     server.user ? `${server.user}@${server.host}` : server.host,
     server.port ? `port ${server.port}` : "",
-    server.identityFile ? "key on file" : "agent key",
+    server.hasKey ? `key: ${server.keySource || "imported"}` : "no key yet",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -190,7 +189,25 @@ function serverRow(
     "div",
     { class: "sheet-row" },
     h("div", { class: "sheet-row-key m", text: server.label || server.host }),
-    h("div", { class: "sheet-row-value m", text: where }),
+    h(
+      "div",
+      { class: "sheet-row-value seg-stack" },
+      h("span", { class: "m", text: where }),
+      // The fingerprint, once there is one. On the row rather than behind a
+      // disclosure, because the whole value of trust-on-first-use is that
+      // somebody can check afterwards what was trusted.
+      server.hostKey
+        ? h("span", { class: "check-hint publish-fingerprint", text: server.hostKey })
+        : h("span", { class: "check-hint", text: "Host key learned on the first publish." }),
+    ),
+    server.hostKey
+      ? h("button", {
+          class: "btn btn-ghost",
+          title: "Trust whatever key this server offers next time",
+          text: "Forget key",
+          onClick: () => void forgetHostKey(server, reload, onChanged),
+        })
+      : null,
     h("button", {
       class: "btn btn-ghost",
       text: "Edit",
@@ -202,6 +219,36 @@ function serverRow(
       onClick: () => void removeServer(server, reload, onChanged),
     }),
   );
+}
+
+/**
+ * Stop insisting on the host key this server had.
+ *
+ * Asked about rather than done, and the question says what the two
+ * possibilities are, because this is the one control here that can turn a
+ * refused connection into a successful publish to the wrong machine.
+ */
+async function forgetHostKey(
+  server: PublishServer,
+  reload: () => void,
+  onChanged: () => void,
+): Promise<void> {
+  const sure = await confirmSheet(
+    `Forget the host key for ${server.host}?`,
+    "The next publish will trust whatever answers on that address and record " +
+      "it. Do this if you know the server was rebuilt — not to get past a " +
+      "warning you were not expecting.",
+    "Forget it",
+    false,
+  );
+  if (!sure) return;
+  try {
+    await publish.forgetHostKey(server.id);
+    onChanged();
+    reload();
+  } catch (err) {
+    log.error("Could not forget the host key:", err);
+  }
 }
 
 /**
@@ -226,33 +273,54 @@ async function editServer(
   const host = field("Host", "example.com", server?.host ?? "");
   const user = field("User", "your login on that server", server?.user ?? "");
   const port = field("Port", "22", server?.port ? String(server.port) : "");
-  const key = field("Key file", "leave empty to use the ssh agent", server?.identityFile ?? "");
+  const passphrase = field("Passphrase", "only if the key has one");
+  passphrase.input.type = "password";
+  passphrase.input.autocomplete = "off";
 
-  const choose = h("button", {
-    class: "btn btn-ghost",
-    text: "Choose…",
-    onClick: () => {
-      void openFileDialog({ multiple: false, pickerMode: "document" })
-        .then((picked) => {
-          if (typeof picked === "string") key.input.value = picked;
-        })
-        .catch((err) => log.error("Could not pick a key file:", err));
-    },
+  // The path is held here rather than in a field: it is read once, on Save,
+  // and what is kept afterwards is the key rather than the path. A box showing
+  // a path that nothing will ever read again would be a box that lies.
+  let keyFile: string | null = null;
+  const keyState = h("div", {
+    class: "sheet-row-value m",
+    text: server?.hasKey
+      ? `Using ${server.keySource || "an imported key"}`
+      : "No key yet",
   });
-  key.row.appendChild(choose);
+  const keyRow = h(
+    "div",
+    { class: "sheet-row" },
+    h("div", { class: "sheet-row-key m", text: "SSH KEY" }),
+    keyState,
+    h("button", {
+      class: "btn btn-ghost",
+      text: server?.hasKey ? "Replace…" : "Import…",
+      onClick: () => {
+        void openFileDialog({ multiple: false, pickerMode: "document" })
+          .then((picked) => {
+            if (typeof picked !== "string") return;
+            keyFile = picked;
+            keyState.textContent = `Importing ${picked.split("/").pop() ?? picked}`;
+          })
+          .catch((err) => log.error("Could not pick a key file:", err));
+      },
+    }),
+  );
 
   sheet.body.append(
     label.row,
     host.row,
     user.row,
     port.row,
-    key.row,
+    keyRow,
+    passphrase.row,
     h("div", {
       class: "field-hint",
       text:
-        "Publishing uses your ssh key — set one up with ssh-copy-id first. A " +
-        "server that asks for a password is refused rather than waited on, so " +
-        "a publish fails in a second instead of hanging.",
+        "Pick your private key — id_ed25519, not id_ed25519.pub — and its " +
+        "public half needs to be in that account's authorized_keys already; " +
+        "ssh-copy-id is the usual way. The key is copied onto this device so " +
+        "it works on an iPad, where there is no ~/.ssh to read at publish time.",
     }),
   );
 
@@ -269,7 +337,8 @@ async function editServer(
             host: host.input.value.trim(),
             user: user.input.value.trim(),
             port: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
-            identityFile: key.input.value.trim() || undefined,
+            keyFile: keyFile ?? undefined,
+            passphrase: passphrase.input.value || undefined,
           })
           .then(() => {
             sheet.close();

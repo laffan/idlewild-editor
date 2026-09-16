@@ -391,12 +391,12 @@ export function openPublish(projectId: string, projectName: string): void {
  * The rows about publishing somewhere real, once it is known whether there is
  * anywhere.
  *
- * Three shapes. **Nothing set up** is one row that opens the destination
- * sheet. **Set up, on a machine that can publish** is Publish, a rehearsal
- * beside it, and the way back to the settings. **Set up, on a platform that
- * cannot run rsync or git** — an iPad — says so plainly rather than offering a
- * button that fails: the two zips under it are that platform's route and
- * always have been.
+ * Two shapes. **Nothing set up** is one row that opens the destination sheet.
+ * **Set up** is Publish, a rehearsal beside it, and the way back to the
+ * settings. There is no third shape any more: this used to say that an iPad
+ * could not publish, which was true of an implementation that ran `rsync` and
+ * `git` as programs and is not true of one that links libgit2 and speaks SSH
+ * itself. Both platforms take the same two rows.
  *
  * The rehearsal is there because the question it answers — "is this pointed
  * where I think it is?" — is one people ask with a finger already on Publish,
@@ -426,7 +426,7 @@ async function showDestination(
   const where = describeTarget(target, server?.label || server?.host);
   const set = targetIsSet(target);
 
-  if (set && settings.canDeploy) {
+  if (set) {
     rows.push(
       option("Publish", where, () => {
         close();
@@ -437,8 +437,6 @@ async function showDestination(
         void send(projectId, where, true);
       }),
     );
-  } else if (set) {
-    rows.push(option(`Set up for ${where}`, settings.reason, refresh));
   }
 
   rows.push(
