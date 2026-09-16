@@ -19,7 +19,17 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tiny_http = "0.12"
 
 # The PSD pipeline, shared with Phaser Bench.
-psd-to-json = { git = "https://github.com/laffan/psd-to-json-rust" }
+#
+# TEMPORARILY PINNED AHEAD OF MAIN, and meant to come off. The branch carries
+# the fix for composited groups exporting their children twice: an atlas whose
+# frames are named the way this editor names layers — `S | purple` — wrote a
+# PNG per frame, hung a `children` array off a single-image layer, and keyed
+# its frames `"S | purple"`, which is a frame no game code can ask for. Without
+# it an atlas built here still comes out wrong, however right the rest of the
+# chain is. Drop the `branch` once that lands on psd-to-json-rust's main, and
+# run `cargo update -p psd-to-json` — the lockfile holds an exact commit, so
+# merging alone does not move it.
+psd-to-json = { git = "https://github.com/laffan/psd-to-json-rust", branch = "claude/focused-einstein-ie5qey" }
 psd = { git = "https://github.com/laffan/psd", branch = "master" }
 # TIFF and GIF are here for the clipboard rather than for the file pickers:
 # a macOS pasteboard offers TIFF where it offers anything, and an image the
