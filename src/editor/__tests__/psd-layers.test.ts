@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { manifestName, psdLayerOwner } from "../psd-layer-owner";
-import { groupLabel, paintable } from "../psd-layer-row";
+import { groupLabel, layerLabel, paintable } from "../psd-layer-row";
 import type { PsdLayerInfo } from "../../lib/ipc";
 
 /**
@@ -263,5 +263,72 @@ describe("paintable inside a composited group", () => {
 
   it("answers as before when nothing says what encloses it", () => {
     expect(paintable(row("S | hero", "sprite", 0), null)).toBe(true);
+  });
+});
+
+/**
+ * What a single layer's row says it is.
+ *
+ * The size, as it always did — and the type, which the line used to drop.
+ * Dropping it mattered most where the type cannot work: `atlas`,
+ * `spritesheet` and `animation` are each built out of a *group's* children,
+ * so a lone layer wearing one of those names produces no atlas at all.
+ * psd-to-json writes a plain sprite and a note nobody reads, and the author
+ * is left with a layer called an atlas that is not one.
+ */
+describe("layerLabel", () => {
+  function layer(
+    category: PsdLayerInfo["category"],
+    type: string | null,
+  ): PsdLayerInfo {
+    return {
+      index: 0, name: "thing", category, type,
+      visible: true, opacity: 255, width: 128, height: 160, x: 0, y: 0,
+      isGroup: false, depth: 0,
+    };
+  }
+
+  it("shows category and size, as it always did", () => {
+    expect(layerLabel(layer("sprite", null))).toBe("sprite · 128 × 160");
+    expect(layerLabel(layer("point", null))).toBe("point · 128 × 160");
+    expect(layerLabel(layer("zone", null))).toBe("zone · 128 × 160");
+    expect(layerLabel(layer("ignored", null))).toBe("ignored · 128 × 160");
+  });
+
+  it("says a composited type on a lone layer needs a group", () => {
+    expect(layerLabel(layer("sprite", "atlas"))).toBe("atlas · needs a group");
+    expect(layerLabel(layer("sprite", "spritesheet"))).toBe(
+      "spritesheet · needs a group",
+    );
+    expect(layerLabel(layer("sprite", "animation"))).toBe(
+      "animation · needs a group",
+    );
+  });
+
+  it("shows a tile type, which a lone tileset layer can have", () => {
+    expect(layerLabel(layer("tileset", "jpg"))).toBe("tileset · jpg · 128 × 160");
+    expect(layerLabel(layer("tileset", null))).toBe("tileset · 128 × 160");
+  });
+
+  /** A spelling the pipeline will not match is not a type it should announce. */
+  it("does not warn about a type the pipeline ignores anyway", () => {
+    expect(layerLabel(layer("sprite", "Atlas"))).toBe("sprite · 128 × 160");
+    expect(layerLabel(layer("sprite", "wobble"))).toBe("sprite · 128 × 160");
+  });
+});
+
+/** A group carrying a tile type says so too. */
+describe("groupLabel with a tile type", () => {
+  it("keeps the category and adds the format", () => {
+    expect(
+      groupLabel(
+        {
+          index: 0, name: "ground", category: "tileset", type: "jpg",
+          visible: true, opacity: 255, width: 10, height: 10, x: 0, y: 0,
+          isGroup: true, depth: 0,
+        },
+        3,
+      ),
+    ).toBe("tileset · jpg · 3 layers merged");
   });
 });

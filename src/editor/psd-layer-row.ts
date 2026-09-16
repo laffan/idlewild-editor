@@ -117,9 +117,7 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
         ? foldEl(row, ctx)
         : h("div", {
             class: "psd-layer-meta m",
-            text:
-              `${row.source.category} · ` +
-              `${row.source.width} × ${row.source.height}`,
+            text: layerLabel(row.source),
           }),
     ),
     owner?.action
@@ -235,6 +233,21 @@ function actionEl(
 }
 
 /**
+ * The sprite types that are built out of a group's children.
+ *
+ * All three are matched as typed, because that is what the pipeline does with
+ * the segment: psd-to-json copies it through and psd-to-phaser compares it
+ * against `"atlas"` exactly. `Atlas` is a group that will not become an atlas,
+ * and a row that tidied the spelling would promise something the export does
+ * not deliver.
+ */
+const COMPOSITED = ["atlas", "spritesheet", "animation"];
+
+function many(n: number, one: string, more: string): string {
+  return `${n} ${n === 1 ? one : more}`;
+}
+
+/**
  * What a group *is*, for the second line of its row.
  *
  * Not every group is a folder. `S | confetti | atlas |` is a group in
@@ -249,25 +262,45 @@ function actionEl(
  */
 export function groupLabel(layer: PsdLayerInfo, layers: number): string {
   const { category, type } = layer;
-  const many = (n: number, one: string, more: string) =>
-    `${n} ${n === 1 ? one : more}`;
 
   if (category === "sprite") {
-    switch (type) {
-      case "atlas":
-        return `atlas · ${many(layers, "frame", "frames")}`;
-      case "spritesheet":
-        return `spritesheet · ${many(layers, "frame", "frames")}`;
-      case "animation":
-        return `animation · ${many(layers, "frame", "frames")}`;
-      default:
-        return `sprite · ${many(layers, "layer", "layers")} merged`;
+    if (type && COMPOSITED.includes(type)) {
+      return `${type} · ${many(layers, "frame", "frames")}`;
     }
+    return `sprite · ${many(layers, "layer", "layers")} merged`;
   }
   if (category === "tileset") {
-    return `tileset · ${many(layers, "layer", "layers")} merged`;
+    // The tile type is a file format rather than a different kind of thing,
+    // so it sits between the two rather than replacing the category.
+    const kind = type ? `tileset · ${type}` : "tileset";
+    return `${kind} · ${many(layers, "layer", "layers")} merged`;
   }
   return `group · ${many(layers, "layer", "layers")}`;
+}
+
+/**
+ * The same line for a row that is a single layer rather than a group.
+ *
+ * The size, as before — and the type, which this line used to drop on the
+ * floor. Dropping it was worst in the one case where it is load-bearing:
+ * `atlas`, `spritesheet` and `animation` are each built out of a *group's*
+ * children, so a single layer wearing one of those names produces no atlas at
+ * all. psd-to-json writes a plain sprite and a `note` nobody reads, and the
+ * author is left with a layer named `atlas` that is not one and a panel that
+ * agreed with them. Saying what is missing is the difference between a bug
+ * they can see and a bug they cannot.
+ */
+export function layerLabel(layer: PsdLayerInfo): string {
+  const { category, type, width, height } = layer;
+  const size = `${width} × ${height}`;
+
+  if (category === "sprite" && type && COMPOSITED.includes(type)) {
+    return `${type} · needs a group`;
+  }
+  if (category === "tileset" && type) {
+    return `tileset · ${type} · ${size}`;
+  }
+  return `${category} · ${size}`;
 }
 
 /**
