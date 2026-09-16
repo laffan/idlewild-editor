@@ -22,8 +22,9 @@ document arrive at the runtime the same way.
 Publishing hands you either a zipped runnable site or a `.idlewild` file — the
 whole project, source PSDs included, to open somewhere else — and Export Assets
 hands back the artwork on its own, for the PSDs that are wanted somewhere that
-is not a game. Direct publishing to a web server over rsync is planned and
-explicitly out of scope for now.
+is not a game. Import Assets is that door the other way, for the files and the
+other projects the artwork is coming from. Direct publishing to a web server
+over rsync is planned and explicitly out of scope for now.
 
 ## Status
 
@@ -40,7 +41,7 @@ remaining pieces are wired to real slots rather than mocked.
   to read and counting them when it is not. There is no ⌘-click on an iPad and
   no rubber band over a grid of cards, so the mode is the honest shape; the
   card's own menu is untouched, and stays the only way to Rename
-- New Game: template (isometric, orthogonal, blank), style (top down,
+- New Project: template (isometric, orthogonal, blank), style (top down,
   platformer) and grid scale (8–256 px — 8 and 16 are there for pixel art,
   where a space is a sprite rather than a room). Blank has no lattice: a
   selection is the exact rectangle it was dragged across, and a fill on it is
@@ -84,8 +85,9 @@ remaining pieces are wired to real slots rather than mocked.
   sorts the way you meant it to. WASD does the same, and both move up, down,
   left and right on the *screen* rather than along the grid's diagonals
 - A full-width header carrying the project, undo and redo, and the
-  **Draw / Code / Play** toggle, with Publish, Export Assets and Project Options
-  behind its menu. It insets itself out of the iPad's status bar, as the console drawer
+  **Draw / Code / Play** toggle, with Publish, Export Assets, Import Assets and
+  Project Options behind its menu — and Copy PSD and Paste Image, which are
+  there because an iPad has no ⌘. It insets itself out of the iPad's status bar, as the console drawer
   does out of the home indicator
 - Infinite grid, two-finger zoom, tap-to-pick. The lattice is a hairline
   whatever the camera is doing: a line one *screen* pixel wide, so a project
@@ -162,6 +164,15 @@ remaining pieces are wired to real slots rather than mocked.
 - A placed PSD moves as one thing: every layer it came in with drags and
   resizes together, keeping the arrangement it was built with. Double-tap to
   open it up and move a single layer, and tap away to close it again
+- **And a way back from that.** A layer moved while a PSD is open is no longer
+  where the file puts it, and nothing on the canvas can say so — a roof dragged
+  half a space sideways looks exactly like a roof drawn half a space sideways.
+  So **Reset Layer Position** appears directly over the file's layer list when
+  any of its layers have wandered, and its being there at all is the notice. It
+  asks first, because it throws the moves away, and names what goes; one undo
+  step puts them back if the answer was wrong. A re-parse does not do this and
+  never did: reconciliation puts each layer back where *its own* grid space
+  says, which is the thing the move changed
 - Resizable sidebars and console drawer, persisted per install
 - Add Image from Files, Photos or the clipboard → PSD → psd-to-json → placed,
   at half size because everything drawn on a retina machine is 2×
@@ -171,6 +182,15 @@ remaining pieces are wired to real slots rather than mocked.
   through the shell rather than the webview, which is what makes a PSD copied
   in Files reachable at all on an iPad, where ⌘V is taken as a keyboard
   shortcut because the webview delivers no paste event over a canvas
+- **And copy one back out, with ⌘C.** Pasting a PSD worked from the start and
+  copying one did not, so files only ever travelled one way: into a project and
+  never out of it. Select a placed PSD, press ⌘C — or Copy PSD in the menu,
+  which is the iPad's route — open another project and ⌘V, and the file is
+  there. What goes on the clipboard is the PSD itself rather than a picture of
+  it, so what arrives is the layer stack somebody drew, under its own name:
+  `tower`, not `pasted-m2k9f1`. On a Mac the bytes go on beside the file, so the
+  same ⌘C pastes into Photoshop as a document. A ⌘C with text selected, or with
+  the caret in a field, is still a copy of the text
 - Drag a file onto the canvas and it lands where you let go of it, imported
   exactly as a paste is. Drag it over an image already there and that image
   lights up: dropping on it offers to put the new file behind it instead,
@@ -864,7 +884,16 @@ remaining pieces are wired to real slots rather than mocked.
   source PSDs, which is what opens in Photoshop, or both. It lists what is in
   `psd/` rather than what the document places, because a file whose placement
   you deleted is still a file you drew
-- **Open**, beside New Game on the home screen, reads a `.idlewild` back in as
+- **Import Assets**, beside it, is the way in for more than one file at a time.
+  Add Image asks for a file, a paste carries one and a drop lands one, so a
+  tileset drawn as nine PSDs somewhere else was nine trips through a picker.
+  Two routes: **Files**, where you pick as many as you like, and **another
+  project in this app** — choose the project, tick its PSDs, and they arrive as
+  the files they are, anchor marks and all. They land in a row across the middle
+  of the view rather than in a heap on one space, and nothing is written over:
+  a second `roof` becomes `roof-2`, because two files that happen to share a
+  name are two files rather than one coming home
+- **Open**, beside New Project on the home screen, reads a `.idlewild` back in as
   a project of its own. Everything comes with it, including the solids behind
   extruded layers — so a shape you pulled on one machine is a shape you can go
   on pulling on another

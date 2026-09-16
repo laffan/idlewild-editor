@@ -10,11 +10,17 @@
  * What a paste has to work out for itself is *where it landed*, since there
  * was no grid selection behind it. The artwork goes in the middle of the
  * view, and the spaces it covers there become its footprint.
+ *
+ * `importPasted` hands back what landed, or null when nothing did. A paste
+ * ignores it — the console already says what happened, and there is nothing to
+ * do about a paste that failed — but Import Assets brings several files in one
+ * gesture and steps each one clear of the last, so it has to know how wide the
+ * one before it turned out to be. See `editor/import-assets.ts`.
  */
 
 import { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
-import type { AnchorMarks } from "../lib/ipc";
+import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { Cell, Rect } from "../lib/types";
 import { clipboardImage } from "./clipboard";
@@ -65,7 +71,7 @@ export async function importPasted(
   name: string,
   file: File,
   landing?: Cell,
-): Promise<void> {
+): Promise<ImportResult | null> {
   try {
     const trimmed = await trimTransparent(file);
     const bytes = new Uint8Array(await trimmed.file.arrayBuffer());
@@ -83,8 +89,10 @@ export async function importPasted(
     );
     log.info(`Imported ${result.key} (${result.width}×${result.height})`);
     await target.placePsd(result.key, result.manifest, plan?.anchor ?? at, IMPORT_SCALE);
+    return result;
   } catch (err) {
     log.error("Could not paste that:", err);
+    return null;
   }
 }
 

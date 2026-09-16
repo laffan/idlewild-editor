@@ -1,4 +1,4 @@
-//! Reading the system pasteboard, because the webview will not.
+//! The system pasteboard, in both directions, because the webview will not.
 //!
 //! `navigator.clipboard.read()` is served by WebKit, and WebKit hands a page
 //! only a *web-safe* subset of what the pasteboard holds: plain text, HTML,
@@ -17,6 +17,28 @@
 //! It runs on the main thread because these commands are declared without
 //! `async`, which is what Tauri runs there — UIKit requires it, and AppKit
 //! prefers it.
+//!
+//! ## Writing, which is ⌘C
+//!
+//! Pasting a PSD worked from the day the read above did; copying one did not,
+//! so the gesture only ever went one way and a file could be carried *into* a
+//! project and never out of one. What ⌘C puts on the pasteboard is a
+//! **`public.file-url` naming the PSD where it lies in the store** — which is
+//! the route `read_file_url` already takes first, and the only one that knows
+//! the artwork's real name, so a `tower.psd` copied in one project arrives in
+//! the next as `tower` rather than as `pasted-m2k9f1`.
+//!
+//! On macOS the PSD's bytes go on beside it, under the same
+//! `com.adobe.photoshop-image` the read prefers, so a copy out of Idlewild
+//! pastes into Photoshop as a document rather than as a file reference. On
+//! iPadOS it is the URL alone: `setData:forPasteboardType:` sets one
+//! representation on the pasteboard's first item and the documented way to
+//! offer several is `setItems:`, so writing two there means either building an
+//! `NSDictionary` of them or risking the second call replacing the first. The
+//! URL is the half that matters, because the paste this is for is Idlewild's
+//! own — and *Share PSD* is already the way a file reaches another app there.
+
+use std::path::Path;
 
 use serde::Serialize;
 
@@ -110,6 +132,10 @@ pub fn sniff(bytes: &[u8]) -> Option<&'static str> {
     None
 }
 
+/// The pasteboard type a PSD's own bytes go on, which is what the read above
+/// prefers over a flattened preview beside it.
+const PSD_UTI: &str = "com.adobe.photoshop-image";
+
 /// Whether a path off the pasteboard names something the pipeline can import.
 pub fn importable_path(path: &std::path::Path) -> bool {
     path.extension()
@@ -195,6 +221,48 @@ fn read_file_url() -> Option<ClipboardFile> {
     Some(encode(name, FILE_URL, &bytes))
 }
 
+/// Put a file on the pasteboard, as the file it is.
+///
+/// One `public.file-url` everywhere, and the bytes beside it on macOS — see
+/// the note at the top of this file for why the two platforms differ. The URL
+/// names the file *in the store* rather than a copy of it, so a paste reads
+/// whatever the file says at the moment it is pasted: a PSD edited between the
+/// ⌘C and the ⌘V arrives edited, which is the answer a stale snapshot could
+/// not give.
+pub fn write_file(path: &Path) -> Result<(), String> {
+    let url = file_url(path);
+    platform::begin_write(&[FILE_URL, PSD_UTI])?;
+    platform::write(FILE_URL, url.as_bytes())?;
+    // Read only where the bytes are going somewhere. On iPadOS they are not,
+    // and a fifty-megabyte PSD read to be thrown away is the one cost worth
+    // avoiding on the device this editor is mostly used on.
+    if cfg!(target_os = "macos") {
+        let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {path:?}: {e}"))?;
+        platform::write(PSD_UTI, &bytes)?;
+    }
+    Ok(())
+}
+
+/// A path as a `file://` URL, which is what a pasteboard means by a file.
+///
+/// The inverse of `psd_write::source_path`, and here rather than beside it
+/// because this is the only thing that needs it: a path handed *back* by a
+/// picker is already a URL, and the app's own store is the one place a URL has
+/// to be built. Everything outside the unreserved set is escaped, `/` apart,
+/// so an app data directory called `Application Support` survives the trip.
+pub fn file_url(path: &Path) -> String {
+    let mut out = String::from("file://");
+    for byte in path.to_string_lossy().as_bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                out.push(*byte as char);
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
 fn encode(name: String, uti: &str, bytes: &[u8]) -> ClipboardFile {
     use base64::Engine;
     ClipboardFile {
@@ -209,7 +277,7 @@ fn encode(name: String, uti: &str, bytes: &[u8]) -> ClipboardFile {
 #[cfg(target_os = "macos")]
 mod platform {
     use objc2_app_kit::NSPasteboard;
-    use objc2_foundation::NSString;
+    use objc2_foundation::{NSArray, NSData, NSString};
 
     pub fn types() -> Result<Vec<String>, String> {
         let pasteboard = NSPasteboard::generalPasteboard();
@@ -225,11 +293,40 @@ mod platform {
             .dataForType(&NSString::from_str(uti))
             .map(|data| data.to_vec())
     }
+
+    /// Empty the pasteboard and say what is about to go on it.
+    ///
+    /// Both halves are required rather than tidy: `setData:forType:` writes
+    /// only a type that has been declared, and a write that did not clear
+    /// first would leave whatever was there before offering itself alongside.
+    pub fn begin_write(utis: &[&str]) -> Result<(), String> {
+        let pasteboard = NSPasteboard::generalPasteboard();
+        let _ = pasteboard.clearContents();
+        // Inferred rather than annotated: `objc2` itself is not a dependency
+        // of this crate, only the two framework crates that re-export what
+        // they need from it, so `Retained` has no path to name here.
+        let declared: Vec<_> = utis.iter().map(|uti| NSString::from_str(uti)).collect();
+        let list = NSArray::from_retained_slice(&declared);
+        // Safe: no owner is passed, so nothing is asked to provide a type
+        // lazily and the pasteboard never calls back into this process.
+        let _ = unsafe { pasteboard.declareTypes_owner(&list, None) };
+        Ok(())
+    }
+
+    pub fn write(uti: &str, bytes: &[u8]) -> Result<(), String> {
+        let pasteboard = NSPasteboard::generalPasteboard();
+        let data = NSData::with_bytes(bytes);
+        let uti_string = NSString::from_str(uti);
+        if pasteboard.setData_forType(Some(&data), &uti_string) {
+            return Ok(());
+        }
+        Err(format!("The pasteboard would not take {uti}"))
+    }
 }
 
 #[cfg(target_os = "ios")]
 mod platform {
-    use objc2_foundation::NSString;
+    use objc2_foundation::{NSData, NSString};
     use objc2_ui_kit::UIPasteboard;
 
     pub fn types() -> Result<Vec<String>, String> {
@@ -247,6 +344,20 @@ mod platform {
             .dataForPasteboardType(&NSString::from_str(uti))
             .map(|data| data.to_vec())
     }
+
+    /// Nothing to declare: `setData:forPasteboardType:` replaces what the
+    /// pasteboard is holding by itself, and there is no owner to register.
+    pub fn begin_write(_utis: &[&str]) -> Result<(), String> {
+        Ok(())
+    }
+
+    pub fn write(uti: &str, bytes: &[u8]) -> Result<(), String> {
+        let pasteboard = UIPasteboard::generalPasteboard();
+        let data = NSData::with_bytes(bytes);
+        let uti_string = NSString::from_str(uti);
+        pasteboard.setData_forPasteboardType(&data, &uti_string);
+        Ok(())
+    }
 }
 
 /// Everywhere else — the dev harness's Linux and Windows — there is no
@@ -263,6 +374,20 @@ mod platform {
 
     pub fn data(_uti: &str) -> Option<Vec<u8>> {
         None
+    }
+
+    pub fn begin_write(_utis: &[&str]) -> Result<(), String> {
+        Err(format!(
+            "Writing the system clipboard is not supported on {}",
+            std::env::consts::OS
+        ))
+    }
+
+    pub fn write(_uti: &str, _bytes: &[u8]) -> Result<(), String> {
+        Err(format!(
+            "Writing the system clipboard is not supported on {}",
+            std::env::consts::OS
+        ))
     }
 }
 
@@ -304,6 +429,33 @@ mod tests {
         assert_eq!(sniff(b"GIF89a...."), Some("gif"));
         assert_eq!(sniff(b"hello"), None);
         assert_eq!(sniff(b""), None);
+    }
+
+    #[test]
+    fn a_copied_file_goes_on_as_a_url_the_read_half_can_take_back() {
+        // What ⌘C writes and ⌘V reads are the two ends of one string, and the
+        // decoder is `psd_write::source_path` — so the test is the round trip
+        // rather than the spelling of the escape.
+        let path = std::path::Path::new("/Users/me/Library/Application Support/Idlewild/t.psd");
+        let url = file_url(path);
+        assert_eq!(
+            url,
+            "file:///Users/me/Library/Application%20Support/Idlewild/t.psd",
+        );
+        assert_eq!(crate::psd_write::source_path(&url), path);
+    }
+
+    #[test]
+    fn a_project_name_with_anything_in_it_still_round_trips() {
+        for raw in [
+            "/tmp/plain.psd",
+            "/tmp/a b/c%d.psd",
+            "/tmp/naïve/ünïcode.psd",
+            "/tmp/one#two?three.psd",
+        ] {
+            let path = std::path::Path::new(raw);
+            assert_eq!(crate::psd_write::source_path(&file_url(path)), path, "{raw}");
+        }
     }
 
     #[test]

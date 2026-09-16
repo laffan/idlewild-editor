@@ -101,7 +101,7 @@
 /* Rows of small choices: grid sizes, and the nudge pad. */
 /* The mode row in a library editor's toolbar — Draw / Select / Pan.
    Sized to the chips above it rather than to the sheet's own segmented
-   control: that one is built for the New Game sheet, where a row is the width
+   control: that one is built for the New Project sheet, where a row is the width
    of the page, and at 15px with 20px of padding either side three options
    wrapped onto three lines in a 210px column. */
 .lib-section .seg { width: 100%; }

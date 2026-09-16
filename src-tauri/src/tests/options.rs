@@ -1,5 +1,5 @@
 //! The per-project options: pixel-perfect rendering, the zoom a scene opens
-//! at, and whether New Game wrote a character controller.
+//! at, and whether New Project wrote a character controller.
 //!
 //! All four are settings that reach the running game through the generated
 //! config, so the test is that the config carries them and that changing one

@@ -1,9 +1,15 @@
 /**
- * Turning a fill into a placed PSD.
+ * Turning a patch of grid into a placed PSD.
  *
  * The third bridge into the PSD pipeline, after an image import and a
  * lassoed sketch. A fill is a fast way to block a shape out on the grid; this
  * is what turns that block-out into something an artist can open and paint.
+ *
+ * The two that follow it are the same sentence with the artwork coming from
+ * somewhere else: `generatePsdForRegion` writes an empty file the shape of a
+ * selection, and `addImageToRegion` puts whatever Add Image hands back onto
+ * one. All three mark the file with the spaces it belongs to, which is the
+ * thing they have in common and the reason they are together.
  *
  * Unlike an import, a fill knows exactly which pixels belong over which grid
  * spaces — it was drawn on them — so the PSD is marked with the spaces it
@@ -24,6 +30,7 @@ import type { Cell, FillPatch, Point, Rect, Selection } from "../lib/types";
 import type { Paint } from "../lib/paint";
 import * as log from "../lib/log";
 import { openPsdProgress } from "./psd-progress";
+import { openAddImage } from "./sheets";
 import type { WorldScene } from "../game/world-scene";
 import {
   anchorCell,
@@ -128,6 +135,35 @@ export async function convertFillToPsd(
   } finally {
     progress.close();
   }
+}
+
+/**
+ * Add Image over a patch of grid, and place what comes back on it.
+ *
+ * Beside `generatePsdForRegion` because it is the same sentence with the
+ * artwork coming from somewhere else: a patch of grid is turned into a file,
+ * and the selection travels into that file as its two orienting marks so the
+ * anchor mark that comes back out is what the placement lines up on. It was a
+ * closure in the shell, where the only thing it had in common with its
+ * neighbours was being reachable from the same floating bar.
+ */
+export function addImageToRegion(
+  projectId: string,
+  os: string,
+  grid: Grid,
+  scene: WorldScene,
+  from: Cell,
+  to: Cell,
+): void {
+  const anchor = anchorCell(from, to);
+  openAddImage(
+    projectId,
+    os,
+    (result) => {
+      void scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);
+    },
+    marksForSelection(grid, from, to),
+  );
 }
 
 /**

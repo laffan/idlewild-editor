@@ -215,7 +215,7 @@
 .push-right { margin-left: auto; }
 
 /* Select, while it is on. The accent as an outline rather than as a field: the
-   primary is New Game's, and two filled buttons in one bar would be two
+   primary is New Project's, and two filled buttons in one bar would be two
    answers to "what is the main thing here". Scoped to the bar, because `.btn`
    is every sheet's button too and a pressed state is this one's alone. */
 .home-bar .btn[aria-pressed="true"] {

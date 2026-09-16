@@ -299,6 +299,19 @@
   color: #fff;
 }
 .panel-btn[aria-pressed="true"]:hover { background: var(--color-accent-600); }
+/* A panel button that is only there when something is out of place — Reset
+   Layer Position, drawn while a layer of a placed PSD is standing somewhere
+   the file does not put it. Outlined in the accent rather than filled with
+   it: the accent is what the editor draws its *own* marks in, and a filled
+   button would read as a mode that is switched on. `.inspect-note.warning`
+   says the same thing about the same kind of problem. */
+.panel-btn.warn {
+  border-color: var(--color-accent);
+  color: var(--color-accent-300);
+}
+.panel-btn.warn:hover {
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
 
 .inspect-empty {
   padding: 18px 16px;

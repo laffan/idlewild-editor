@@ -186,3 +186,8 @@
    right under a paragraph and wrong directly under a heading. */
 .psd-layers-head .panel-btn { margin-top: 0; }
 .psd-layers-new .panel-btn { margin-top: 6px; }
+/* Reset Layer Position, directly over the list and on a line of its own —
+   it is a correction rather than one of the three standing actions above it,
+   and its label is a sentence rather than a verb. */
+.psd-layers-reset { margin-bottom: 8px; }
+.psd-layers-reset .panel-btn { margin-top: 0; justify-content: center; }

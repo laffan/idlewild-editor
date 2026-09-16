@@ -24,8 +24,15 @@ const DOC = {
           // Two layers of one file, sharing an instance: on the canvas they
           // are one placed PSD, and a double-tap is what takes them apart.
           placements: [
-            { id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
-            { id: "place-2", psdKey: "tower", layerPath: "roof", x: 16, y: -24, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture" },
+            { id: "place-1", psdKey: "tower", layerPath: "tower", x: 0, y: 0, width: 64, height: 96, naturalWidth: 64, naturalHeight: 96, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture", order: 0 },
+            // The roof, and `__movedRoof` stands it two spaces away from the
+            // walls — which is what a drag inside an opened-up PSD leaves
+            // behind, and the only state in which **Reset Layer Position** is
+            // drawn. The offset from its own anchor is the same either way,
+            // because that offset is the file's answer rather than the move's.
+            (window as any).__movedRoof
+              ? { id: "place-2", psdKey: "tower", layerPath: "roof", x: 80, y: 8, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 2, cy: 0 }, instance: "psd-fixture", order: 1 }
+              : { id: "place-2", psdKey: "tower", layerPath: "roof", x: 16, y: -24, width: 32, height: 24, naturalWidth: 32, naturalHeight: 24, anchor: { cx: 0, cy: 0 }, instance: "psd-fixture", order: 1 },
           ],
           // A boundary, so selecting and dragging one can be driven here.
           zones: [
@@ -319,7 +326,46 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         }),
       };
     }
-    case "list_projects": return [];
+    // Empty unless a script says otherwise, which is what lets Import Assets'
+    // "another project" route be driven: with none there it says so, and with
+    // `__projects` set the two steps behind it can be opened and looked at.
+    case "list_projects": return (window as any).__projects ?? [];
+    // What is in a project's `psd/`, which both Export Assets and Import
+    // Assets list. The fixture's own file plus whatever a script adds.
+    case "list_project_psds":
+      return (
+        (window as any).__projectPsds ?? [
+          { key: "tower", bytes: 148_000, hasAssets: true },
+          { key: "hut", bytes: 32_400, hasAssets: false },
+        ]
+      );
+    // The key a bulk import writes under. No store here, so the answer is the
+    // sanitised name and a script can pin the collision case with `__freeKey`.
+    case "free_psd_key":
+      return (
+        (window as any).__freeKey ??
+        String((args as any)?.name ?? "image").replace(/[^\w-]+/g, "_")
+      );
+    // A PSD copied out of another project. Recorded rather than performed, so
+    // a script can check which file was asked for and from where.
+    case "import_psd_from_project": {
+      const key = String((args as any)?.key ?? "imported");
+      (window as any).__lastProjectImport = {
+        from: (args as any)?.fromId ?? null,
+        key,
+      };
+      return {
+        key,
+        width: 120,
+        height: 80,
+        manifest: JSON.stringify({
+          name: key, width: 120, height: 80,
+          layers: [
+            { name: key, category: "sprite", x: 0, y: 0, width: 120, height: 80 },
+          ],
+        }),
+      };
+    }
     // Project Options writes through this, and reads the meta it hands back.
     // Echoed rather than stored: there is no store here, and what the editor
     // does with the answer is set its own copy of the options to it.
@@ -582,6 +628,11 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     // here — the same route a Linux or Windows build takes.
     case "read_clipboard":
       return (window as any).__clipboard ?? { types: [], file: null };
+    // ⌘C. There is no pasteboard here either, so what is recorded is which
+    // file was put on it — the real command writes a `file://` URL naming it.
+    case "copy_psd_to_clipboard":
+      (window as any).__copiedPsd = (args as any)?.key ?? null;
+      return undefined;
     // A file dropped through the shell rather than the webview. Only macOS
     // takes this route, but a script can drive it by setting __droppedFile.
     case "read_dropped_file":
