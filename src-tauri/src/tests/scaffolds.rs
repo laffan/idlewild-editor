@@ -507,6 +507,74 @@ fn patterns_are_held_until_the_psds_are_in() {
     );
 }
 
+/// Whatever is waiting on the document is woken however the load ends.
+///
+/// `whenPsdsReady` is the scaffold's answer to the one thing `create` cannot
+/// do: the textures are queued from a promise callback that lands after Phaser
+/// has called it, so anything reading one has to wait. What it waits on is
+/// `psdsReady` rather than the plugin's own `psdLoadComplete`, and the
+/// difference is the file that never arrives — `ready` runs on the timeout
+/// too, so a waiter listening to the plugin would sit there for ever on
+/// exactly the load that went wrong. The signal also goes out *after*
+/// `placeDocument`, so what a waiter makes stands on a document that is
+/// already there rather than racing it.
+#[test]
+fn a_waiter_is_woken_however_the_load_ends() {
+    let canvas = templates::template_file(
+        "js/shared/canvas.js",
+        &seed(
+            Projection::Orthogonal,
+            Genre::Topdown,
+            32,
+            GameOptions::default(),
+        ),
+    )
+    .expect("the canvas module has a scaffold");
+
+    let ready = canvas
+        .split_once("const ready = () => {")
+        .expect("loadDocument settles the load")
+        .1
+        .split_once("};")
+        .expect("the settle closes")
+        .0;
+
+    let emit = ready
+        .find(r#"scene.events.emit("psdsReady")"#)
+        .expect("the load settles without waking anything that waited");
+    let place = ready
+        .find("placeDocument(scene)")
+        .expect("the load settles without placing the document");
+    assert!(
+        place < emit,
+        "a waiter is woken before the document it stands on is placed"
+    );
+
+    // The timeout runs the same settle, which is what covers a file that
+    // never arrives.
+    assert!(
+        canvas.contains("setTimeout(ready, 15000)"),
+        "a load that never finishes never wakes what is waiting on it"
+    );
+
+    let waiter = canvas
+        .split_once("export function whenPsdsReady(scene, fn) {")
+        .expect("the scaffold offers no way to wait for the document")
+        .1
+        .split_once('}')
+        .expect("the waiter closes")
+        .0;
+    assert!(
+        waiter.contains(r#"scene.events.once("psdsReady", fn)"#),
+        "the waiter listens for the plugin rather than for the settle, so a \
+         timed-out load would never run it"
+    );
+    assert!(
+        waiter.contains("if (scene.psdsReady) fn();"),
+        "the waiter never runs for a document that is already in"
+    );
+}
+
 /// Every marked block in the scaffold closes, and each file carries the set it
 /// is meant to — the code modal finds a block by id, so a template that
 /// renamed one would silently stop offering its Reset.
@@ -525,6 +593,7 @@ fn the_scaffold_marks_the_blocks_it_should_and_closes_every_one() {
     let canvas = [
         "sceneOf",
         "loadDocument",
+        "whenPsdsReady",
         "updateCanvas",
         "applyCamera",
         "placeDocument",

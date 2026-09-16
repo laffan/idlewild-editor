@@ -105,6 +105,7 @@ export function loadDocument(scene) {
     clearTimeout(timer);
     scene.psdsReady = true;
     placeDocument(scene);
+    scene.events.emit("psdsReady");
   };
   scene.events.once("psdLoadComplete", ready);
   // An asset that never arrives must not mean a document that never places.
@@ -112,6 +113,14 @@ export function loadDocument(scene) {
   scene.P2P.load.loadMultiple(scene, psds);
 }
 // idlewild:end loadDocument
+
+/** Run something once the document's PSDs are in — now, if they already are. */
+// idlewild:begin whenPsdsReady
+export function whenPsdsReady(scene, fn) {
+  if (scene.psdsReady) fn();
+  else scene.events.once("psdsReady", fn);
+}
+// idlewild:end whenPsdsReady
 
 /**
  * Every frame, because both of these follow the camera.

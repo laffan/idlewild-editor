@@ -5,6 +5,7 @@ import {
   placeDocument,
   placePatterns,
   updateCanvas,
+  whenPsdsReady,
 } from "../shared/canvas.js";
 import { spawnCharacter, updateCharacter } from "../shared/character.js";
 
