@@ -263,13 +263,13 @@ fn dump_a_runnable_tree() {
 
     std::fs::create_dir_all(dir.join("js/scenes")).expect("scenes dir should exist");
     let scenes = vec![
-        ("scene-main".to_string(), "Scene1".to_string(), "Scene1".to_string()),
-        ("scene-2".to_string(), "Cave".to_string(), "Cave".to_string()),
+        ("scene-main".to_string(), "Scene1".to_string()),
+        ("scene-2".to_string(), "Cave".to_string()),
     ];
-    for (_, file, name) in &scenes {
+    for (_, file) in &scenes {
         std::fs::write(
             dir.join(format!("js/scenes/{file}.js")),
-            crate::templates::scene_file(file, name),
+            crate::templates::scene_file(file),
         )
         .expect("scene should write");
     }

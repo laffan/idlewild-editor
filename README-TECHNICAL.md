@@ -6290,6 +6290,15 @@ sides now, narrower where the column is, and `.docs-content` carries a
 `min-height: 0` as well as its `min-width: 0` because the panel is laid out
 both ways.
 
+**And it may have the whole height of the row it is in.** The rule that was
+actually cropping it is `.code-backdrop.docked .docs-panel { max-height: 50% }`
+— right for a reference stacked on a 320px bottom dock, which has to leave the
+editor above it something, and meaningless for one *beside* the editor, where
+the height is the row's and there is nothing underneath to leave room for. A
+`max-height` is also the one thing that beats the `height: auto` a stretched
+flex item needs, so the panel stopped at half the dock and its page was cut off
+at the same line however long the page was. Lifted for `docs-right` only.
+
 **The file column folds two ways.** Its folders collapse — the list Rust returns
 is flat and sorted, so "inside" is a path prefix and a shut folder is rows not
 rendered — and the choice is remembered per install rather than per project,

@@ -168,6 +168,25 @@ describe("the code panel's placements", () => {
     expect(content["overflow-y"]).toBe("auto");
   });
 
+  /**
+   * And it lets the reference have the whole height of the row it is in.
+   *
+   * Half is the right cap for a reference stacked on a 320px bottom dock and
+   * meaningless for one beside the editor — and a `max-height` is the one
+   * thing that beats the `height: auto` a stretched flex item needs, so the
+   * panel stopped at half the dock and its page was cut off at the same line
+   * however long the page was. Measured in a browser rather than reasoned
+   * about, which is how it was found: every other rule on it was right.
+   */
+  it("takes the docked height cap off the reference beside the editor", () => {
+    expect(ruleIn(docsCss, ".code-backdrop.docked .docs-panel")["max-height"]).toBe(
+      "50%",
+    );
+    expect(
+      ruleIn(docsCss, ".code-backdrop.docked .docs-panel.docs-right")["max-height"],
+    ).toBe("none");
+  });
+
   it("takes the file column away with its divider", () => {
     expect(ruleIn(codeCss, ".code-backdrop.files-hidden .code-column").display).toBe(
       "none",

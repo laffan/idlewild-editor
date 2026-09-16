@@ -215,13 +215,13 @@ pub fn template_files(meta: &ProjectMeta) -> Result<Vec<(&'static str, String)>,
 /// One scene's file, as the scaffold writes it.
 ///
 /// `class` is the scene's file name without the extension, which is also its
-/// class name and its Phaser key — see `game_config::scene_file_name`. `name`
-/// is what the sidebar calls it, which may have spaces in it and is only ever
-/// a comment here.
-pub fn scene_file(class: &str, name: &str) -> String {
-    SCENE_JS
-        .replace("__SCENE_CLASS__", class)
-        .replace("__SCENE_NAME__", name)
+/// class name and its Phaser key — see `game_config::scene_file_name`. It is
+/// the only thing substituted: the file is the imports and the class, with no
+/// prose over it. Every scene in a project would otherwise open on the same
+/// page of explanation, and what it explained is in `js/shared/` where the
+/// code it is about is.
+pub fn scene_file(class: &str) -> String {
+    SCENE_JS.replace("__SCENE_CLASS__", class)
 }
 
 /// One scaffolded file, as it was first written.
@@ -238,7 +238,7 @@ pub fn scene_file(class: &str, name: &str) -> String {
 /// would otherwise read a file with no blocks as a file missing all of them.
 pub fn template_file(rel: &str, meta: &ProjectMeta) -> Result<String, String> {
     if let Some(class) = scene_class_of(rel) {
-        return Ok(scene_file(&class, &class));
+        return Ok(scene_file(&class));
     }
 
     let wanted = MOVED

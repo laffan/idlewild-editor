@@ -303,15 +303,10 @@ fn sync_scene_files(id: &str, previous: Option<&str>, config: &Value) -> Result<
     let wanted = scene_files_of(config);
     let before: HashMap<String, String> = previous
         .and_then(|text| serde_json::from_str::<Value>(text).ok())
-        .map(|value| {
-            scene_files_of(&value)
-                .into_iter()
-                .map(|(id, file, _)| (id, file))
-                .collect()
-        })
+        .map(|value| scene_files_of(&value).into_iter().collect())
         .unwrap_or_default();
 
-    for (scene_id, file, name) in &wanted {
+    for (scene_id, file) in &wanted {
         let path = scenes_dir.join(format!("{file}.js"));
         match before.get(scene_id) {
             // Renamed, and the file it was in is still where it was said to
@@ -325,7 +320,7 @@ fn sync_scene_files(id: &str, previous: Option<&str>, config: &Value) -> Result<
                 let _ = fs::remove_file(&from);
             }
             _ if !path.exists() => {
-                fs::write(&path, crate::templates::scene_file(file, name))
+                fs::write(&path, crate::templates::scene_file(file))
                     .map_err(|e| format!("Cannot write {file}.js: {e}"))?;
             }
             _ => {}
@@ -335,9 +330,9 @@ fn sync_scene_files(id: &str, previous: Option<&str>, config: &Value) -> Result<
     // Scenes that have gone. Deleting a scene in the sidebar already says it
     // takes everything on it, and the file it was written in is part of that
     // — an orphan nothing imports would be worse than a clean removal.
-    let keep: HashSet<&str> = wanted.iter().map(|(_, file, _)| file.as_str()).collect();
+    let keep: HashSet<&str> = wanted.iter().map(|(_, file)| file.as_str()).collect();
     for (scene_id, was) in &before {
-        if keep.contains(was.as_str()) || wanted.iter().any(|(id, _, _)| id == scene_id) {
+        if keep.contains(was.as_str()) || wanted.iter().any(|(id, _)| id == scene_id) {
             continue;
         }
         let _ = fs::remove_file(scenes_dir.join(format!("{was}.js")));
@@ -351,8 +346,8 @@ fn sync_scene_files(id: &str, previous: Option<&str>, config: &Value) -> Result<
     Ok(())
 }
 
-/// Every scene in a config, as (id, file, name).
-fn scene_files_of(config: &Value) -> Vec<(String, String, String)> {
+/// Every scene in a config, as (id, file).
+fn scene_files_of(config: &Value) -> Vec<(String, String)> {
     config
         .get("scenes")
         .and_then(|s| s.as_array())
@@ -360,14 +355,9 @@ fn scene_files_of(config: &Value) -> Vec<(String, String, String)> {
             scenes
                 .iter()
                 .filter_map(|scene| {
-                    let file = scene.get("file")?.as_str()?.to_string();
                     let id = scene.get("id")?.as_str()?.to_string();
-                    let name = scene
-                        .get("name")
-                        .and_then(|n| n.as_str())
-                        .unwrap_or(&file)
-                        .to_string();
-                    Some((id, file, name))
+                    let file = scene.get("file")?.as_str()?.to_string();
+                    Some((id, file))
                 })
                 .collect()
         })
@@ -378,7 +368,7 @@ fn scene_files_of(config: &Value) -> Vec<(String, String, String)> {
 ///
 /// The first scene is the one the game opens on, which is what makes
 /// reordering scenes in the sidebar mean something at runtime.
-pub fn scene_index(scenes: &[(String, String, String)]) -> String {
+pub fn scene_index(scenes: &[(String, String)]) -> String {
     let mut out = String::from(
         "// The project's scenes, as `main.js` registers them.\n\
          //\n\
@@ -387,12 +377,12 @@ pub fn scene_index(scenes: &[(String, String, String)]) -> String {
          // edit, and the scene files themselves are entirely yours. The first\n\
          // entry is the scene the game opens on.\n",
     );
-    for (_, file, _) in scenes {
+    for (_, file) in scenes {
         out.push_str(&format!("import {file} from \"./{file}.js\";\n"));
     }
     let names = scenes
         .iter()
-        .map(|(_, file, _)| file.as_str())
+        .map(|(_, file)| file.as_str())
         .collect::<Vec<_>>()
         .join(", ");
     out.push_str(&format!("\nexport const scenes = [{names}];\n"));

@@ -806,8 +806,8 @@ remaining pieces are wired to real slots rather than mocked.
   Search, and a table of contents for the written guides. All of it is on the
   device, so it works on an iPad with no network. Beside the editor it is the
   same panel turned sideways — the contents list stays *beside* the page rather
-  than stacking above it, and the page scrolls rather than being cut off at the
-  bottom of the panel, which it was
+  than stacking above it, and it takes the whole height of the row rather than
+  half of it with the page cut off at the same line however long the page was
 - Console drawer in Fira Code — selectable, `%c`-aware — carrying the
   editor's own commentary, psd-to-json's progress, and the JavaScript console:
   this page's and the running game's, errors and stack traces included, so a

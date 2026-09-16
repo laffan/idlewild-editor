@@ -363,8 +363,17 @@
 .docs-desc pre .hl-cmt { color: var(--chrome-dim); font-style: italic; }
 
 /* Docked, the modal is a short row and the reference has to give way to the
-   editor above it rather than the other way round. */
+   editor above it rather than the other way round.
+
+   **Under the editor only.** Half is the right cap for a reference stacked on
+   top of a 320px dock and meaningless for one *beside* it, where the height is
+   the row's and there is no editor underneath to leave room for — and a
+   `max-height` is the one thing that beats the `height: auto` a stretched flex
+   item needs, so the panel stopped at half the dock with its page cut off at
+   the same line however long the page was. That is what "attached underneath"
+   was still doing to a panel that had moved to the side. */
 .code-backdrop.docked .docs-panel { max-height: 50%; }
+.code-backdrop.docked .docs-panel.docs-right { max-height: none; }
 
 /* On a narrow iPad the two toggles and the field will not share a line. The
    header wraps, and the nav column narrows rather than the page. */

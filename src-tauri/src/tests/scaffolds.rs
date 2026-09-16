@@ -573,7 +573,7 @@ fn the_scaffold_marks_the_blocks_it_should_and_closes_every_one() {
         assert_eq!(open, expected, "{file} marks a different set of blocks");
     }
 
-    let scene = templates::scene_file("Scene1", "Scene1");
+    let scene = templates::scene_file("Scene1");
     assert!(
         !scene.contains("// idlewild:"),
         "a scene file is the author's, end to end",
