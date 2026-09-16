@@ -55,6 +55,8 @@ export class FileTree {
   private readonly projectId: string;
   private readonly callbacks: FileTreeCallbacks;
   private readonly list: HTMLElement;
+  /** Whatever stands above the column's own controls — see `setHeader`. */
+  private readonly head: HTMLElement;
   private files: GameFile[] = [];
   private openPath: string | null = null;
   private drag: { path: string; isDir: boolean; release: () => void } | null = null;
@@ -97,7 +99,34 @@ export class FileTree {
         h("span", { text: "New Folder" }),
       ),
     );
-    this.root = h("div", { class: "code-column" }, controls, this.list);
+    this.head = h("div", { class: "code-column-head" });
+    this.root = h("div", { class: "code-column" }, this.head, controls, this.list);
+  }
+
+  /**
+   * Put something above the column's own controls, or take it away.
+   *
+   * There is one thing that goes there — the cross-file Find, whose answers
+   * are files and therefore belong in the column of files. The tree does not
+   * own that strip and knows nothing about it; what it owns is this column,
+   * and a slot is the honest way to say so rather than having the modal reach
+   * into another component's DOM to prepend a node.
+   */
+  setHeader(node: HTMLElement | null): void {
+    clear(this.head);
+    if (node) this.head.appendChild(node);
+  }
+
+  /**
+   * Whether results are standing where the tree was.
+   *
+   * The two are the same kind of thing — a way to reach a file — and a 170px
+   * column dock has room for one of them. The class is what the stylesheet
+   * reads; nothing here is destroyed, so the tree comes back exactly as it was
+   * folded, with the same row still marked as open.
+   */
+  setSearching(searching: boolean): void {
+    this.root.classList.toggle("searching", searching);
   }
 
   /**

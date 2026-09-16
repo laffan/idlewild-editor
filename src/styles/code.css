@@ -231,7 +231,16 @@
 .code-drag-ghost.outside { border-color: var(--color-neutral-600); }
 .code-drag-ghost.outside .code-ghost-target { color: var(--chrome-dim); }
 
-.code-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* `position: relative` is load-bearing rather than tidy: ⌘F's box is
+   absolutely positioned in the top right corner of this column, and without a
+   containing block it would hang off the shell instead. */
+.code-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
 /* The panel's only bar.
 
    Left to right: the file column's switch, the open file, whether it is
@@ -397,3 +406,171 @@
    are covered without it: the modal saves the open file when another is
    opened in it and when the section is left, and the editor's header carries
    the history pair. Fifty-six pixels of a file is several lines of it. */
+
+/* ── Find ──────────────────────────────────────────────────────────────────
+   Two panels for two questions. ⌘F floats over the file it searches; ⇧⌘F
+   stands at the top of the column of files it searches. See code/finding.ts.
+
+   They share a field, a count and a row of 26px buttons, because they are one
+   question asked of one document or of all of them and reading as two
+   different controls would say otherwise. */
+
+/* The floating one. Over the text rather than above it: the code panel is
+   already one bar of chrome over a file taller than the screen, and a fifth
+   dock would cost every placement another forty pixels for something that is
+   up for as long as it takes to type six characters. */
+.code-find {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
+  background: var(--chrome-panel);
+  border: 1px solid var(--chrome-rule);
+  box-shadow: var(--shadow-lg);
+  color: var(--chrome-text);
+  max-width: calc(100% - 32px);
+}
+.code-find.hidden { display: none; }
+.code-find > svg { flex: none; color: var(--chrome-dim); }
+/* A query with no answers says so in the count; the border says it at a
+   glance, which is what you want while you are still typing. */
+.code-find.no-matches { border-color: var(--color-accent-600); }
+
+.code-find-field {
+  flex: 1 1 180px;
+  min-width: 80px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--chrome-rule);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  font: 400 12px var(--font-mono);
+}
+.code-find-field:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+.code-find-count {
+  flex: none;
+  font-size: 10px;
+  color: var(--chrome-dim);
+  white-space: nowrap;
+}
+.code-find-btn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.code-find-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+/* The case switch is a word rather than a glyph — "Aa" is what every editor
+   this one's users have already used calls it. */
+.code-find-case { font: 600 11px var(--font-body); }
+.code-find-btn[aria-pressed="true"] {
+  background: var(--color-accent);
+  color: var(--chrome-text);
+}
+
+/* Every answer in the open file, and the one in hand.
+
+   The current match is the accent; the rest are a wash of it. Two shades of
+   one colour rather than two colours, because they are the same kind of
+   thing — the difference is only which one Enter would take you to next. */
+.cm-editor .cm-find-match {
+  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+}
+.cm-editor .cm-find-current {
+  background: var(--color-accent);
+  color: var(--color-neutral-100);
+}
+
+/* ── Find in all files ─────────────────────────────────────────────────────
+   At the top of the file column, with its answers standing where the tree
+   was. The two are the same kind of thing — a way to reach a file — and a
+   170px column dock has room for one of them at a time. */
+.code-column-head { flex: none; display: flex; flex-direction: column; min-height: 0; }
+/* While it is answering, the head is the column: the tree and the two create
+   buttons go down and the results take the height they were using. */
+.code-column.searching .code-column-head { flex: 1; }
+.code-column.searching .code-new-row,
+.code-column.searching .code-files { display: none; }
+
+.code-find-files {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-bottom: var(--rule-chrome);
+  background: var(--chrome-panel);
+}
+.code-find-files.hidden { display: none; }
+.code-find-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+}
+.code-find-bar > svg { flex: none; color: var(--chrome-dim); }
+.code-find-files .code-find-count {
+  padding: 0 8px 6px;
+  text-align: left;
+  white-space: normal;
+}
+.code-find-results { flex: 1; min-height: 0; }
+
+/* A file's name once, with its lines under it. The path repeated down every
+   row would be most of a column this narrow. */
+.code-find-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 4px;
+  border-top: 1px solid var(--chrome-rule);
+  font: 400 11px var(--font-mono);
+  color: var(--chrome-text);
+}
+.code-find-file > svg { flex: none; color: var(--chrome-dim); }
+.code-find-dir {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+.code-find-name { flex: none; white-space: nowrap; }
+
+/* One matching line. The number is a fixed column so the text of every hit in
+   a file starts at the same x, which is what makes a list of them scannable. */
+.code-find-hit {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-neutral-300);
+  font: 400 11px var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.code-find-hit:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.code-find-line { flex: none; min-width: 24px; font-size: 10px; text-align: right; }
+.code-find-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

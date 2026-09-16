@@ -139,6 +139,31 @@ describe("the code panel's placements", () => {
     expect(column.height).toBe("auto");
   });
 
+  /**
+   * ⌘F's box is `position: absolute` in the editor's own column. Without a
+   * containing block on that column the nearest positioned ancestor is the
+   * shell, so the box would hang in the top right corner of the *window* —
+   * over the inspector in a bottom dock, and off the panel entirely in a
+   * column one. Nothing throws; the Find simply appears somewhere else.
+   */
+  it("gives the floating Find something to be positioned in", () => {
+    expect(ruleIn(codeCss, ".code-main").position).toBe("relative");
+    expect(ruleIn(codeCss, ".code-find").position).toBe("absolute");
+  });
+
+  /**
+   * ⇧⌘F's answers stand where the tree was — a 170px column dock has room for
+   * one of them. The class is the whole mechanism: `FileTree.setSearching`
+   * toggles it and nothing is destroyed, so the tree comes back folded exactly
+   * as it was. If the rule went, the results and the tree would stack and the
+   * column would scroll two lists.
+   */
+  it("puts the cross-file Find's results where the tree was", () => {
+    const body = withoutComments(codeCss);
+    expect(body).toContain(".code-column.searching .code-files { display: none; }");
+    expect(ruleIn(codeCss, ".code-column.searching .code-column-head").flex).toBe("1");
+  });
+
   it("moves the reference between the two axes the same way", () => {
     // The same trap as the panel's own: the docked height has to stop
     // applying, or the reference beside the editor is 260px tall in a column

@@ -27,6 +27,7 @@ mod painting;
 mod rewrite;
 mod scaffolds;
 mod scenes;
+mod search;
 mod server;
 mod sketching;
 mod stacking;

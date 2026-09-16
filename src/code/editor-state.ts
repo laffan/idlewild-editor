@@ -22,6 +22,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { html as htmlLang } from "@codemirror/lang-html";
 import { css as cssLang } from "@codemirror/lang-css";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { findHighlight } from "./find-matches";
 import { managedExtension } from "./managed-view";
 
 const languageCompartment = new Compartment();
@@ -36,6 +37,15 @@ export interface FileStateOptions {
   onSave: () => void;
   /** A managed block's Reset was pressed. */
   onReset: (blockId: string) => void;
+  /**
+   * ⌘F, which has to be a keymap entry rather than a listener on the panel:
+   * CodeMirror's content is `contenteditable`, so a document-level shortcut
+   * stands down for it — see `editor/shortcuts.ts` — and WKWebView takes an
+   * un-prevented ⌘F as its own page search.
+   */
+  onFind: () => void;
+  /** ⇧⌘F: the same question asked of every file, over the file column. */
+  onFindInFiles: () => void;
   /** An edit to one of the editor's own lines was refused. */
   onRefused: () => void;
   /** The scaffold has blocks this file has never had. */
@@ -66,11 +76,33 @@ export function fileState(options: FileStateOptions): EditorState {
             return true;
           },
         },
+        // Before `defaultKeymap`, which is the order a keymap array is read
+        // in — and ⇧⌘F before ⌘F, because a binding without the modifier
+        // would otherwise take the one with it.
+        {
+          key: "Mod-Shift-f",
+          preventDefault: true,
+          run: () => {
+            options.onFindInFiles();
+            return true;
+          },
+        },
+        {
+          key: "Mod-f",
+          preventDefault: true,
+          run: () => {
+            options.onFind();
+            return true;
+          },
+        },
         ...defaultKeymap,
         ...historyKeymap,
       ]),
       languageCompartment.of(languageFor(path)),
       oneDark,
+      // A fresh state per file means a fresh set of marks per file, which is
+      // the right answer: the panel re-scans whatever is now under it.
+      findHighlight,
       managedExtension({
         path,
         canonical,

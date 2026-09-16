@@ -189,6 +189,10 @@ export const ICONS = {
   pin: ["M9 4h6", "M10 4v6l-3 4v2h10v-2l-3-4V4", "M12 16v5"],
   /** A panel with a column down one side: the file browser's own toggle. */
   sidebar: ["M4 5h16v14H4z", "M10 5v14"],
+  /* A magnifying glass, for both Finds: the floating one over a file and the
+     strip over the file column. One glyph, because they are one question
+     asked of one document or of all of them. */
+  search: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z", "m16.2 16.2 4.3 4.3"],
   /* Sliders — Project Options, which is settings rather than navigation. */
   sliders: ["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 5v4", "M9 15v4"],
   /* The three kinds of layer, as the dropdown under the `+` offers them and

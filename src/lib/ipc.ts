@@ -387,7 +387,38 @@ export const gameFiles = {
     invoke<string>("copy_game_path", { id, path }),
   remove: (id: string, path: string) =>
     invoke<void>("delete_game_path", { id, path }),
+  /**
+   * Find a string in every file of `game/` — ⇧⌘F, over the file column.
+   *
+   * One call rather than a read per file: the alternative is twenty round
+   * trips and twenty copies of the tree crossing this boundary as JSON on
+   * every keystroke. See `game_search.rs` for what it skips and where it
+   * stops.
+   */
+  search: (id: string, query: string, caseSensitive: boolean) =>
+    invoke<SearchResults>("search_game_files", { id, query, caseSensitive }),
 };
+
+/** One line of one file that a cross-file Find matched. */
+export interface FileMatch {
+  /** Relative to `game/`, exactly as the file column names it. */
+  path: string;
+  /** 1-based, which is what `CodeModal.openAt` takes. */
+  line: number;
+  /** Where in the line the match starts, in UTF-16 code units — see the Rust. */
+  column: number;
+  length: number;
+  /** The line itself, for the row to show. */
+  text: string;
+}
+
+export interface SearchResults {
+  matches: FileMatch[];
+  /** Whether the cap was reached, so the strip can say the list is partial. */
+  truncated: boolean;
+  /** How many files were read. */
+  files: number;
+}
 
 export const psd = {
   /** Import from an OS path — Files, the share sheet, a deep link. */

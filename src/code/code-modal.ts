@@ -49,6 +49,8 @@ import { CodeBar } from "./code-bar";
 import { FileTree } from "./file-tree";
 import { DocsPanel } from "./docs/panel";
 import { fileState } from "./editor-state";
+import { Finding } from "./finding";
+import { forgetFile, lastFile, opening, rememberFile } from "./last-file";
 import { addMissingBlocks, isGenerated, resetBlock } from "./managed-blocks";
 import { managedEdit, missingBlocksRow } from "./managed-view";
 import { createResizer, type Resizer } from "../editor/resizer";
@@ -99,6 +101,8 @@ export class CodeModal {
   private readonly panel: HTMLElement;
   private readonly body: HTMLElement;
   private filesShown = true;
+  /** ⌘F over the open file, ⇧⌘F over all of them — see `finding.ts`. */
+  private readonly find: Finding;
 
   constructor(
     projectId: string,
@@ -115,6 +119,7 @@ export class CodeModal {
         // The editor is showing a file that just changed name or folder.
         if (this.openPath !== from) return;
         this.openPath = to;
+        rememberFile(projectId, to);
         this.bar.setFilename(to);
         this.tree.setOpen(to);
       },
@@ -147,6 +152,20 @@ export class CodeModal {
     this.repair = h("div", { class: "code-repair hidden" });
     this.editorHost = h("div", { class: "code-editor" });
 
+    // The two Finds, each closed and each in the column its answers are about:
+    // one floats over the text, one stands over the file list.
+    this.find = new Finding({
+      projectId,
+      view: () => this.view,
+      openAt: (path, line, column, length) =>
+        void this.openAt(path, line, column, length),
+      setSearching: (searching) => this.tree.setSearching(searching),
+      showFiles: () => {
+        if (!this.filesShown) this.setFilesShown(true);
+      },
+    });
+    this.tree.setHeader(this.find.strip);
+
     const panel = h(
       "div",
       { class: "code-panel", onClick: (e: Event) => e.stopPropagation() },
@@ -161,12 +180,20 @@ export class CodeModal {
           this.bar.root,
           this.repair,
           this.editorHost,
+          // Over the editor rather than above it: a fifth dock would cost
+          // every placement another forty pixels of the file.
+          this.find.overlay,
         ),
       )),
     );
     this.panel = panel;
 
     this.root = h("div", { class: "code-backdrop" }, panel);
+    // ⌘F and ⇧⌘F from anywhere in the panel that is not the editor — the file
+    // column, a Find's own box. The editor has them in its keymap, because
+    // CodeMirror's content is `contenteditable` and takes the keystroke first;
+    // `defaultPrevented` is what keeps that from being handled twice.
+    this.root.addEventListener("keydown", (event) => this.find.handleShortcut(event));
     this.filesResizer.restore();
     void this.reloadFiles();
   }
@@ -297,19 +324,33 @@ export class CodeModal {
    * show it. The line is centred and selected, so the active-line highlight
    * lands on it rather than leaving you to count rows.
    */
-  async openAt(path: string, line: number): Promise<void> {
+  async openAt(
+    path: string,
+    line: number,
+    column?: number,
+    length?: number,
+  ): Promise<void> {
     if (this.openPath !== path) await this.openFile(path);
     const view = this.view;
     if (!view || this.openPath !== path) return;
     const info = view.state.doc.line(
       Math.max(1, Math.min(view.state.doc.lines, line)),
     );
+    // A console line knows only which line it was written on, so it takes the
+    // whole of it. A cross-file Find knows exactly which characters matched,
+    // and selecting those is what makes the answer land on the thing you
+    // searched for rather than on the row it is in.
+    const from =
+      column === undefined ? info.from : Math.min(info.to, info.from + column);
+    const to = length === undefined ? info.to : Math.min(info.to, from + length);
     view.dispatch({
-      selection: { anchor: info.from, head: info.to },
-      effects: EditorView.scrollIntoView(info.from, { y: "center" }),
+      selection: { anchor: from, head: to },
+      effects: EditorView.scrollIntoView(from, { y: "center" }),
     });
     view.focus();
   }
+
+
 
   /** Show or hide the reference along the bottom. */
   setDocsOpen(open: boolean): void {
@@ -329,17 +370,27 @@ export class CodeModal {
     // opening the place it was written, which is a better answer than the
     // one this would have picked.
     if (this.openToken > 0) return;
-    const first = files.find((f) => !f.isDir && f.path.endsWith("WorldScene.js"));
-    if (first) void this.openFile(first.path);
+    // Whichever file this project was last left in, and the scene if it has
+    // never been in one. See `last-file.ts`: the panel is rebuilt on every
+    // entry to Code, so without that the file you were editing closes itself
+    // behind you every time you go and look at the canvas.
+    const first = opening(files, lastFile(this.projectId));
+    if (first) void this.openFile(first);
   }
 
   /** The open file went away under us. */
   private closeFile(): void {
     this.openPath = null;
+    // The file is gone, so the answer it was is no longer one to come back
+    // to: the next visit falls through to the scene rather than looking for
+    // something that is not there.
+    forgetFile(this.projectId);
     this.bar.setFilename(null);
     this.setDirty(false);
     this.view?.destroy();
     this.view = null;
+    // The box searches the open file, and there is not one.
+    this.find.closeForFile();
     this.tree.setOpen(null);
     this.historyMoved();
   }
@@ -362,6 +413,7 @@ export class CodeModal {
     if (token !== this.openToken) return;
 
     this.openPath = path;
+    rememberFile(this.projectId, path);
     this.bar.setFilename(path);
     this.setDirty(false);
     this.bar.setNote(
@@ -378,6 +430,8 @@ export class CodeModal {
       canonical,
       onSave: () => void this.save(),
       onReset: (blockId) => void this.reset(blockId),
+      onFind: () => this.find.openInFile(),
+      onFindInFiles: () => this.find.openAcrossFiles(),
       onRefused: () =>
         this.bar.setNote("These lines are the editor's — Reset puts them back."),
       onMissing: (ids) => this.offerMissing(path, ids),
@@ -395,9 +449,11 @@ export class CodeModal {
     }
     // A new file is a new language as far as the reference is concerned, even
     // before the caret has moved in it — and a new file is an empty history,
-    // which the buttons above have to be told about.
+    // which the buttons above have to be told about. A Find that is up is now
+    // over a different document, so it answers for that one instead.
     this.reportCursor();
     this.historyMoved();
+    this.find.refresh();
   }
 
   /**
@@ -548,6 +604,7 @@ export class CodeModal {
 
   destroy(): void {
     this.bar.destroy();
+    this.find.destroy();
     this.filesResizer.destroy();
     this.docsResizer?.destroy();
     this.docs.destroy();
