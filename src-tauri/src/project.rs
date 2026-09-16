@@ -118,6 +118,115 @@ fn yes() -> bool {
     true
 }
 
+/// Where a project publishes to, when publishing means somewhere real.
+///
+/// **The credentials are not here.** A login is the person's and is shared by
+/// every project — one server, one GitHub account, entered once; see
+/// `publish_targets.rs`. What is per project is the *destination*: which of
+/// those servers, and which directory on it, or which repository, branch and
+/// path inside it. Splitting them that way is what makes "log in once, then
+/// point each project somewhere" the shape of the feature rather than a
+/// password sheet per project.
+///
+/// Flat rather than an enum with payloads, and every field defaulting, because
+/// it is written into `meta.json` beside `GameOptions`: a project whose target
+/// was rsync and is now GitHub keeps what it had typed for the other one, and
+/// every `meta.json` written before publishing existed reads as `None`.
+///
+/// `server` names a row in *this install's* settings. That is the reason a
+/// target does not travel in a `.idlewild` file: an id from another machine
+/// would name a server this one has never heard of. See `archive.rs` for the
+/// same argument about `meta.json` as a whole.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishTarget {
+    #[serde(default)]
+    pub kind: TargetKind,
+    /// The id of the rsync server this project pushes to.
+    #[serde(default)]
+    pub server: String,
+    /// The directory on that server the site's own files land in.
+    #[serde(default)]
+    pub directory: String,
+    /// Whether an rsync push may remove what is at the far end that the site
+    /// no longer has. Off by default: a publish that deletes is a publish that
+    /// can delete something else's files, and the box says so.
+    #[serde(default)]
+    pub prune: bool,
+    #[serde(default)]
+    pub owner: String,
+    #[serde(default)]
+    pub repo: String,
+    /// The branch the site is committed to. `gh-pages` unless someone says
+    /// otherwise — see `TargetKind::Github` and the sheet that fills this in.
+    #[serde(default)]
+    pub branch: String,
+    /// A directory inside the repository, or empty for its root.
+    #[serde(default)]
+    pub path: String,
+}
+
+/// Which of the two a project publishes through, or neither.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TargetKind {
+    /// Nothing is set up, which is what every project starts as and what the
+    /// two zip exports have always been enough for.
+    #[default]
+    None,
+    Rsync,
+    Github,
+}
+
+impl PublishTarget {
+    /// Whether this target names somewhere to publish to.
+    ///
+    /// A kind alone is not enough: a project that picked rsync and never named
+    /// a directory would otherwise offer a Publish that fails at the far end.
+    pub fn is_set(&self) -> bool {
+        match self.kind {
+            TargetKind::None => false,
+            TargetKind::Rsync => !self.server.is_empty() && !self.directory.is_empty(),
+            TargetKind::Github => !self.owner.is_empty() && !self.repo.is_empty(),
+        }
+    }
+
+    /// The branch a GitHub publish actually uses.
+    ///
+    /// `gh-pages` for anyone who has not said, because that is the branch
+    /// whose whole job is to be a built site — and because the alternative
+    /// default is `main`, where the thing being replaced would be somebody's
+    /// source.
+    pub fn branch_or_default(&self) -> &str {
+        if self.branch.is_empty() {
+            "gh-pages"
+        } else {
+            &self.branch
+        }
+    }
+
+    /// How the destination reads to a person, for a sheet and for a log line.
+    pub fn describe(&self) -> String {
+        match self.kind {
+            TargetKind::None => "nowhere yet".to_string(),
+            TargetKind::Rsync => format!("{} on the server", self.directory),
+            TargetKind::Github => {
+                let path = if self.path.is_empty() {
+                    String::new()
+                } else {
+                    format!("/{}", self.path.trim_matches('/'))
+                };
+                format!(
+                    "{}/{} on {}{path}",
+                    self.owner,
+                    self.repo,
+                    self.branch_or_default()
+                )
+            }
+        }
+    }
+}
+
 /// The home screen's list entry. Persisted as `meta.json` in the project dir.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMeta {
@@ -138,6 +247,9 @@ pub struct ProjectMeta {
     /// reads as the defaults — see `GameOptions`.
     #[serde(default)]
     pub options: GameOptions,
+    /// Where this project publishes to, or nowhere. See `PublishTarget`.
+    #[serde(default)]
+    pub publish: PublishTarget,
 }
 
 impl ProjectMeta {
@@ -160,6 +272,7 @@ impl ProjectMeta {
             updated_at: now,
             layer_count: 0,
             options,
+            publish: PublishTarget::default(),
         }
     }
 }

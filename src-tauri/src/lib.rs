@@ -3,6 +3,9 @@
 
 mod archive;
 mod clipboard;
+mod deploy;
+mod deploy_github;
+mod deploy_rsync;
 mod export_assets;
 mod file_server;
 mod game_config;
@@ -19,6 +22,7 @@ mod psd_pipeline;
 mod psd_rebuild;
 mod psd_write;
 mod publish;
+mod publish_targets;
 mod store;
 mod templates;
 
@@ -567,6 +571,14 @@ pub fn run() {
             psd_preview,
             read_asset_data_url,
             publish::publish_site,
+            publish_targets::read_publish_settings,
+            publish_targets::save_publish_server,
+            publish_targets::delete_publish_server,
+            publish_targets::save_github_login,
+            publish_targets::clear_github_login,
+            publish_targets::read_publish_target,
+            publish_targets::save_publish_target,
+            deploy::publish_to_target,
             export_assets::export_assets_zip,
             export_assets::list_project_psds,
             import_assets::free_psd_key,

@@ -19,12 +19,13 @@ becomes a PSD and goes through
 psd-to-phaser integration is uniform: a screenshot and a hand-built Photoshop
 document arrive at the runtime the same way.
 
-Publishing hands you either a zipped runnable site or a `.idlewild` file — the
-whole project, source PSDs included, to open somewhere else — and Export Assets
-hands back the artwork on its own, for the PSDs that are wanted somewhere that
-is not a game. Import Assets is that door the other way, for the files and the
-other projects the artwork is coming from. Direct publishing to a web server
-over rsync is planned and explicitly out of scope for now.
+Publishing sends the site somewhere — a directory on a server over rsync, or a
+branch of a GitHub repository — or hands you a zipped runnable site or a
+`.idlewild` file, the whole project with its source PSDs, to open somewhere
+else. You sign in once, on the device, and then point each project at its own
+destination. Export Assets hands back the artwork on its own, for the PSDs that
+are wanted somewhere that is not a game, and Import Assets is that door the
+other way.
 
 ## Status
 
@@ -819,6 +820,25 @@ remaining pieces are wired to real slots rather than mocked.
   offers to put it in — your `game/` tree is your copy, and nothing writes into
   it unasked. The generated config is the whole-file case: read-only, and
   re-read as you build
+- **The file you were in is still there when you come back.** The panel is
+  built on the way into Code and taken down on the way out, so which file it
+  showed used to be decided fresh each time — by a filename no project
+  scaffolded since one-per-scene has, which is also why a new project opened
+  into an empty editor. It is remembered per project now, across modes and
+  across launches, and a project that has never been opened in Code lands on
+  its scene
+- **Find, twice, because there are two questions.** ⌘F searches the file that
+  is open and floats in the corner of it — a box rather than a fifth dock,
+  since it is up for as long as it takes to type six characters. Every match
+  is marked, the one in hand more strongly, Enter and ⇧Enter walk them
+  wrapping round the ends, and the count says which of how many. ⇧⌘F asks the
+  same of every file in `game/` and appears at the top of the file column,
+  because its answers are files and that column is already the list of them:
+  results stand where the tree was, grouped by file, and a line opens that file
+  with the match selected. Both are plain text with an **Aa** switch rather
+  than regular expressions — what anyone searches for in here is
+  `config.scenes` or `place(` — and ⇧⌘F arrives carrying whatever ⌘F was
+  looking for
 - Docs, along the bottom of the code modal: Phaser's concept guides, Phaser's
   own API, MDN's JavaScript, CSS and HTML reference, and psd-to-phaser's docs.
   Automatic follows the caret — put it on `this.add.sprite` and the page for it
@@ -871,7 +891,34 @@ remaining pieces are wired to real slots rather than mocked.
   server answers for them and an export writes them in. A project made before
   this layout keeps the one it was made with — your `game/` tree is your copy —
   and plays and publishes from wherever its own `index.html` says
-- Publish has two exits. **Export site** is a zip you can serve: the game, its
+- **Publish sends it somewhere, and you log in once.** A project points at a
+  directory on a server over rsync, or at a branch of a GitHub repository, and
+  the login behind either — the servers you have an ssh key on, the GitHub
+  account your token is for — is the device's rather than the project's. So
+  adding a second project is naming a directory, not typing a password again.
+  **Check it first** is beside Publish and does the same run without sending
+  anything: rsync says what it would transfer, and GitHub is asked whether the
+  token can reach that repository and whether the branch is there yet
+- **The GitHub publish commits, it does not force-push.** The quick way to ship
+  a built site is to make a repository out of the output and force-push it,
+  which works right up until somebody types `main` into the branch box. This
+  clones the branch, replaces what is at the path being published to, commits
+  and pushes — so nothing outside that path is touched, no history is rewritten
+  and a mistake is one revert away. `gh-pages` is the default because the
+  alternative default is the branch holding your source. The token is kept on
+  the device in a file only you can read, reaches git through the environment
+  rather than through a URL, and is redacted out of anything the app prints
+- **rsync uses your ssh key, and asks before it deletes.** Set the key up with
+  `ssh-copy-id`; a server that wants a password is refused in a second rather
+  than hanging behind a sheet with a spinner on it. Deleting what is at the far
+  end and not in the site is a switch on the target, off by default — right for
+  a directory holding nothing but this game, and also how a neighbouring app's
+  files go
+- Both of those run the `rsync` and `git` programs, so they are **a desktop
+  thing**: iPadOS does not let an app run either, and the sheet says so there
+  rather than offering a button that cannot work. The two zips below are that
+  platform's route, as they have always been
+- Publish's two other exits. **Export site** is a zip you can serve: the game, its
   processed assets and both runtimes, so the exported game opens showing what
   the editor showed. **Export project** is a `.idlewild` file — the project
   itself, source PSDs and all, with the document, the processed assets and the
@@ -927,7 +974,12 @@ remaining pieces are wired to real slots rather than mocked.
   between them — today the template places the open one
 - Sloped ground for the platformer: a blocking boundary is currently taken as
   its bounding box
-- rsync publish targets
+- Publishing from an iPad. rsync and GitHub both run a program, which iPadOS
+  does not allow — a GitHub publish over the REST API would work there, and is
+  a rewrite of blobs, trees, commits and refs rather than a flag
+- The system keychain for the GitHub token. It is in a file only you can read,
+  beside the projects; Keychain and its iOS counterpart are a dependency and a
+  platform pair that have not been taken on yet
 - Opening a `.idlewild` straight from Files or the Finder — the format is
   real, but it is not declared to the system and nothing handles a file the OS
   hands the app

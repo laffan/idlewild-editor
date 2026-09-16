@@ -7,7 +7,13 @@ import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plug
 import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
 import { psd, publish, toBase64 } from "../lib/ipc";
-import type { AnchorMarks, ImportResult } from "../lib/ipc";
+import type { AnchorMarks, ImportResult, PublishSettings } from "../lib/ipc";
+import {
+  describeTarget,
+  targetIsSet,
+  type PublishTarget,
+} from "../lib/publish-target";
+import { openPublishWhere } from "./publish-where";
 import {
   projectOptions,
   ZOOM_RANGE,
@@ -305,25 +311,29 @@ export function openExportSelection(
   );
 }
 
-/** Publish. A zipped copy for now; rsync targets are explicitly deferred. */
 /**
- * Publish, which has two exits.
+ * Publish, which now has somewhere to go as well as something to hand you.
  *
- * **Export site** is a zip you can serve: the game, its processed assets and
- * both runtimes, and nothing you would edit it with. **Export project** is a
- * `.idlewild` file — the project itself, source PSDs and all, to open
- * somewhere else and carry on with. The source files are the difference, and
- * they are the part a published site cannot give back.
+ * At the top, **the project's own destination** — a directory on a server over
+ * rsync, or a branch of a GitHub repository — with the login shared by every
+ * project on the device and the destination per project. See
+ * `publish-where.ts` and `publish-logins.ts` for that split, and `deploy.rs`
+ * for what pushes.
  *
- * Both are written straight to the path the dialog returns; neither comes
+ * Under it, the two exits that were here before, and which are still the
+ * answer where there is no server to publish to — an iPad, which cannot run
+ * either program, or a project going somewhere by hand. **Export site** is a
+ * zip you can serve: the game, its processed assets and both runtimes, and
+ * nothing you would edit it with. **Export project** is a `.idlewild` file —
+ * the project itself, source PSDs and all, to open somewhere else and carry on
+ * with. The source files are the difference, and they are the part a published
+ * site cannot give back.
+ *
+ * Both zips are written straight to the path the dialog returns; neither comes
  * back through the IPC boundary as base64 first.
  */
 export function openPublish(projectId: string, projectName: string): void {
-  const sheet = openSheet({
-    title: "Publish",
-    subtitle: "rsync targets coming later",
-    width: 560,
-  });
+  const sheet = openSheet({ title: "Publish", width: 560 });
 
   const stem = projectName.replace(/[^\w-]+/g, "-").toLowerCase() || "idlewild";
 
@@ -347,6 +357,13 @@ export function openPublish(projectId: string, projectName: string): void {
     }
   };
 
+  // Filled once Rust has answered which servers exist and where this project
+  // points — the sheet is up before either is known, and a strip that gains a
+  // row reads better than a sheet that opens late.
+  const destination = h("div", { class: "sheet-list" });
+  const refresh = () => void showDestination(projectId, destination, sheet.close, refresh);
+  refresh();
+
   const list = h("div", { class: "sheet-list" });
   list.append(
     option("Export site", "A zip to serve · game, assets, runtimes", () =>
@@ -364,10 +381,93 @@ export function openPublish(projectId: string, projectName: string): void {
     ),
   );
 
-  sheet.body.appendChild(list);
+  sheet.body.append(destination, list);
   sheet.actions.appendChild(
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
   );
+}
+
+/**
+ * The rows about publishing somewhere real, once it is known whether there is
+ * anywhere.
+ *
+ * Three shapes. **Nothing set up** is one row that opens the destination
+ * sheet. **Set up, on a machine that can publish** is Publish, a rehearsal
+ * beside it, and the way back to the settings. **Set up, on a platform that
+ * cannot run rsync or git** — an iPad — says so plainly rather than offering a
+ * button that fails: the two zips under it are that platform's route and
+ * always have been.
+ *
+ * The rehearsal is there because the question it answers — "is this pointed
+ * where I think it is?" — is one people ask with a finger already on Publish,
+ * and the answer is cheap: rsync says what it would send, and a GitHub check
+ * asks the repository whether the token can reach it.
+ */
+async function showDestination(
+  projectId: string,
+  into: HTMLElement,
+  close: () => void,
+  refresh: () => void,
+): Promise<void> {
+  let settings: PublishSettings;
+  let target: PublishTarget;
+  try {
+    [settings, target] = await Promise.all([
+      publish.settings(),
+      publish.target(projectId),
+    ]);
+  } catch (err) {
+    log.error("Could not read where this project publishes:", err);
+    return;
+  }
+
+  const rows: HTMLElement[] = [];
+  const server = settings.servers.find((one) => one.id === target.server);
+  const where = describeTarget(target, server?.label || server?.host);
+  const set = targetIsSet(target);
+
+  if (set && settings.canDeploy) {
+    rows.push(
+      option("Publish", where, () => {
+        close();
+        void send(projectId, where, false);
+      }),
+      option("Check it first", "say what would happen, send nothing", () => {
+        close();
+        void send(projectId, where, true);
+      }),
+    );
+  } else if (set) {
+    rows.push(option(`Set up for ${where}`, settings.reason, refresh));
+  }
+
+  rows.push(
+    option(
+      set ? "Where this publishes…" : "Set up publishing…",
+      set ? "change it" : "a server, or GitHub",
+      () => openPublishWhere(projectId, () => refresh()),
+    ),
+  );
+  into.replaceChildren(...rows);
+}
+
+/**
+ * Push, and say how it went in the console.
+ *
+ * The console rather than a sheet with a spinner, because that is where this
+ * editor says everything else — and because a publish that takes a minute
+ * behind a modal is a minute with nothing to read. The first line goes out
+ * before the call, so the drawer says what is happening while it happens.
+ */
+async function send(projectId: string, where: string, dryRun: boolean): Promise<void> {
+  log.info(dryRun ? `Checking ${where}…` : `Publishing to ${where}…`);
+  try {
+    const report = await publish.toTarget(projectId, dryRun);
+    log.info(report.summary);
+    if (report.log.trim()) log.info(report.log);
+  } catch (err) {
+    log.error(dryRun ? "That check failed:" : "Publishing failed:", err);
+  }
 }
 
 /** The three options Project Options can change, as it hands them back. */

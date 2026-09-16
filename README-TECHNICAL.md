@@ -38,6 +38,7 @@ Extension of [README.md](README.md).
 ┌────────────────────────────▼──────────────────────────────────┐
 │                        Rust backend                            │
 │  store.rs        per-project directories on disk               │
+│  projects.rs     the command surface over the store of them    │
 │  psd_write.rs    image / RGBA → PSD  (psd fork, write half)    │
 │  psd_paint.rs    ink → a layer already in a PSD                │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
@@ -45,7 +46,12 @@ Extension of [README.md](README.md).
 │  templates.rs    per-genre scaffolds, per-projection grid      │
 │  game_files.rs   the editable game/ tree, as the code modal    │
 │                  sees it                                       │
-│  publish.rs      zip export, both runtimes included            │
+│  game_search.rs  ⇧⌘F, over that same tree                      │
+│  publish.rs      what a published site is made of, and the zip │
+│  deploy.rs       that site, staged and pushed somewhere real   │
+│  deploy_rsync.rs   one rsync run, over ssh                     │
+│  deploy_github.rs  clone the branch, replace the path, commit  │
+│  publish_targets.rs  the logins, which are the device's        │
 │  export_assets.rs  chosen PSDs alone: sources, output, or both │
 │  import_assets.rs  the same door inward, several files at once │
 │  game_config.rs  the document, as the exported game reads it   │
@@ -812,10 +818,12 @@ has no frame to be under. Asserted against `.game-frame`'s own z-index rather
 than against the number, since the pair only means anything relative to each
 other.
 
-Entering Code puts the panel up wherever it was last placed and leaving takes it
-down, writing a dirty file on the way out. Anything that wants a file on screen
-— the console's LOG link, which opens the line a message was written on — asks
-for the mode first and the file second.
+Entering Code puts the panel up wherever it was last placed, showing whichever
+file that project was last left in, and leaving takes it down, writing a dirty
+file on the way out — see *The file it opens with*, below, for why the second of
+those needs something outside the panel to hold it. Anything that wants a file
+on screen — the console's LOG link, which opens the line a message was written
+on — asks for the mode first and the file second.
 
 ---
 
@@ -2850,6 +2858,182 @@ keys**. So the scaffolded scene places the document from the plugin's own
 goes on awaiting `psdLoadComplete` as it always did, because it loads at
 *runtime* rather than from a `preload()`.
 
+## Publishing somewhere real, and logging in once
+
+The zip exports hand you a file. These hand the site to a place that serves it:
+a directory on a server over rsync, or a branch of a GitHub repository.
+
+### A site is a list before it is a file
+
+`publish::site_entries` answers with every path a published site has and where
+its bytes come from — a file on disk, or bytes this code generated. Two things
+consume that list: `build_zip`, which writes them into an archive under a
+directory named after the project, and `deploy::stage`, which writes the same
+list into a staging directory for rsync or git to push.
+
+That seam is the point. Without it the second one would have been the first one
+copied and edited, and **a site that was right in a zip and wrong on a server**
+is the kind of difference nobody finds until it is live. A `SiteSource::Disk`
+stays a path until the moment it is written, because a processed project is
+tens of megabytes of sprite sheets and only the three generated files are ever
+bytes in memory.
+
+The zip's root directory is deliberately dropped when staging. An archive
+unpacks into a directory named after the project; a document root or a
+repository branch is already the place the site goes, and publishing into
+`public_html/nine-roads/` when the target said `public_html/` would be this
+code naming a directory somebody else owns.
+
+### A login is the device's, a destination is the project's
+
+This is the whole shape of the feature, and getting it the other way round is
+what makes publishing feel like a password prompt.
+
+| | Where it lives | What it is |
+|---|---|---|
+| **Login** | `publish.json`, beside the project store | the servers you have an ssh key on, the GitHub account your token is for |
+| **Destination** | `meta.json`, beside the render options | which of those servers and which directory, or which repository, branch and path |
+
+So adding a second project is naming a directory, not typing a password again.
+`project::PublishTarget` is flat with everything defaulting, exactly as
+`GameOptions` is: a project that was rsync and is now GitHub keeps what it had
+typed for the other one, and every `meta.json` written before publishing
+existed reads as *nowhere*.
+
+`server` names a row in **this install's** settings, which is the reason a
+target does not travel in a `.idlewild` file — an id from another machine would
+name a server this one has never heard of. `meta.json` does not travel anyway,
+for the reason in *The format*; this is a second argument for the same answer.
+
+`is_set` is a kind **and** something behind it. A project that picked rsync and
+never named a directory would otherwise be offered a Publish that fails at the
+far end.
+
+### What the frontend is told, and what it is not
+
+`read_publish_settings` answers with the servers, the GitHub account's *name*,
+and whether this platform can publish. **The token never crosses the IPC
+boundary.** A secret handed to a webview is a secret in a webview's memory for
+as long as a sheet is open, and nothing in the frontend needs it: the deploys
+run in Rust. Signing in again is how a token is replaced.
+
+The file is `0600` on platforms that have such a thing. That is a real
+trade-off and it is worth stating plainly: **this is not the system keychain.**
+Reaching Keychain and its iOS counterpart through Tauri is a dependency and a
+platform pair that have not been taken on, and until they are, a token lives in
+a file only this user can read, in the directory that already holds every
+project's source. Anything that can read it can already read those.
+
+### Both shell out, which makes publishing a desktop capability
+
+rsync has no library worth the name, and a GitHub publish through the REST API
+would mean an HTTP client, a TLS stack, and a reimplementation of blobs, trees,
+commits and refs for a result `git` already gets right. The cost is that
+iPadOS gives an app no way to run either binary, so `deploy::can_run` answers
+false there and the sheet says so rather than offering a button that cannot
+work. The two zips remain the iPad's route, which is what they have always
+been. See *Known gaps*.
+
+Three rules hold across both:
+
+- **The token never reaches argv.** It goes to git in the environment, read by
+  a one-line credential helper — `https://token@github.com/…` is the usual
+  trick and it puts the secret in `ps` and in half of git's own error
+  messages, because git echoes the remote back at you whenever it cannot reach
+  it. `deploy::redact` is the belt to that braces: nothing returned from a
+  publish has been near the secret without going through it.
+- **Nothing is a shell.** Every argument is a separate element of `Command`'s
+  argv, so a hostname somebody typed is never parsed by a shell. rsync's remote
+  path is the one string that *is* expanded by a shell — the remote one — and
+  `--protect-args` is what stops that; without it a directory with a space in
+  it becomes two arguments and the site lands in neither.
+- **Nothing hangs.** `BatchMode=yes` for ssh and `GIT_TERMINAL_PROMPT=0` for
+  git. A credential that does not work has to fail, not sit at a prompt on a
+  stdin nobody can see, behind a modal sheet with a spinner on it.
+
+`publish_to_target` is `#[tauri::command(async)]`, and that is load-bearing for
+the same reason the PSD commands are: a synchronous command runs on the **main
+thread** — see *One PSD job at a time* — and this one stages tens of megabytes
+and then waits on a network transfer.
+
+### rsync, and the two flags that are choices
+
+```text
+-r -l -t          recurse, keep symlinks, keep modified times
+-z                compress in flight
+--protect-args    the remote shell does not get to re-split the path
+--delete          only when the target asks for it
+```
+
+**`-a` is deliberately not used.** Archive mode carries permissions, ownership
+and groups, and a published site wants none of them: the files were written
+into a staging directory by this app a second ago, so their modes describe this
+machine's umask rather than anything a web server should serve. Pushing them
+makes a document root's permissions a function of whichever device published
+last.
+
+**`--delete` is a switch on the target, off by default.** Deleting what is at
+the far end and not here is exactly right for a directory holding nothing but
+this site, and is also how somebody loses a `.well-known` or a neighbouring
+app. The sheet says which it is doing.
+
+An empty directory is refused rather than defaulted: rsync reads `host:` as the
+login's home, and publishing a site over somebody's home directory because a
+field was blank is not a thing to do. A leading dash is refused in the host,
+the user and the directory, because rsync reads one as an option wherever it
+appears.
+
+### GitHub commits onto the branch, it does not replace it
+
+The quick way to ship a built site is to make a repository out of the output
+directory and force-push it. Every static-site deploy script does this, and it
+works right up until somebody types `main` into the branch box — at which point
+their source is gone from the tip of their default branch because a game editor
+decided to.
+
+So instead: **shallow-clone the branch, replace what is at the target path,
+commit, push.** No history is rewritten, nothing outside the path being
+published is touched, and a mistake is one `git revert` away rather than one
+reflog away. A branch that does not exist yet is started from nothing, which is
+what makes a fresh `gh-pages` work — and the summary says *a new branch* when
+that happened, because a typo in a branch name otherwise looks exactly like a
+successful publish to a place nobody will look.
+
+`branch_or_default` is `gh-pages` for the same reason: it is the branch whose
+whole job is to be a built site, and the alternative default is the one holding
+somebody's source.
+
+Replacing rather than merging is deliberate too. A file the site no longer has
+is a file that should stop being served, and a publish that only ever adds
+leaves a deleted scene's assets live for good. At the repository root that
+means everything but `.git`, which is the clone itself.
+
+`git status --porcelain` is how "nothing changed" is told from "something went
+wrong": `git commit` *fails* when there is nothing staged, and a publish
+reporting a failure because the site had not changed is a publish nobody
+trusts.
+
+### A rehearsal is the same command
+
+`dry_run` is a parameter rather than a second command, because the useful
+question — "is this pointed where I think it is?" — is one people ask with a
+finger already on Publish. rsync says what it would send; a GitHub check is
+`git ls-remote`, which needs the token to be valid, the account to be able to
+see the repository, and the network to be there. That is every way a publish
+fails that is not about the site itself.
+
+### What cannot be tested here
+
+A transfer wants a server and a repository, and a suite that reached the
+network would be a suite that fails on a train. `tests/deploying.rs` pins
+everything a bad publish is made of *before* it leaves: the staged site being
+the site the zip carries, a staging directory emptied so a failed publish does
+not leave its half-written copy for the next one, a hostname rsync would read
+as an option, a branch name git would refuse, a path that climbs out of the
+clone, and a token surviving into something somebody reads. Those are worth
+pinning precisely because the failure they prevent happens on somebody's live
+server rather than in this process.
+
 ## One file per scene, named after it
 
 A scene in the sidebar and a file in `js/scenes/` are the same thing said
@@ -2926,8 +3110,10 @@ scene; see `dump_a_runnable_tree`.
 
 ## Three exits
 
-They answer different questions, and the differences are the source PSDs and
-whether what comes out is a program at all.
+Three *files*, that is. Publishing to a server or to GitHub is a fourth way out
+and is not one of these, because nothing is handed over — see *Publishing
+somewhere real*, above. These three answer different questions, and the
+differences are the source PSDs and whether what comes out is a program at all.
 
 | | Carries | For |
 |---|---|---|
@@ -6538,6 +6724,99 @@ looking like the file went nowhere. The whole column comes off on the switch
 beside the open file's path, which is the control a 420 px column dock most
 wants: the tree is the half you only need between files.
 
+### The file it opens with
+
+The panel is built on the way into Code and destroyed on the way out. That is
+what makes Code a *section* rather than a floating window, and it is also why
+"which file is open" cannot live in the panel: every visit would decide it
+again. It did, and the answer was a constant — `js/scenes/WorldScene.js`, the
+one scene file a project had when there was only ever one. A project
+scaffolded since is a file per scene named after it, so that lookup found
+nothing and a new project opened into an empty editor; an old one opened into
+its scene and then closed it again the moment you went to look at the canvas.
+
+`code/last-file.ts` holds it outside the panel, in `localStorage` beside the
+folds the file column keeps. Two things about the shape:
+
+- **Keyed by project.** A path means nothing across them —
+  `js/prefabs/character.js` is a different file in each — so it is a map, and
+  the map is capped at the most recent thirty-two so a row per project ever
+  opened is not something nobody prunes.
+- **A remembered file that no longer exists is not an answer.** `opening`
+  takes the listing as well as the remembered path and only answers with one
+  the tree still has, as a file rather than a folder. Then the project's first
+  scene — not `js/scenes/index.js`, which is a generated list of scenes rather
+  than a scene — then `js/main.js`, then whatever is first. A project with no
+  files at all answers null and the panel opens with no file, which is the
+  honest thing to show.
+
+A rename carries the answer with it (`onMoved`), and a delete drops it, so the
+next visit falls through rather than looking for something that is not there.
+
+---
+
+### Find, twice, because there are two questions
+
+⌘F is about the file in front of you and ⇧⌘F is about the project. They are two
+panels, coordinated by `code/finding.ts`, and where each one *is* is most of
+what it means.
+
+**⌘F floats over the editor.** The panel already spends one 44px bar of a
+window on chrome, in a section whose whole subject is a file taller than the
+screen; a fifth dock would cost every placement another forty pixels for
+something that is up for as long as it takes to type six characters. So it is
+absolutely positioned in the top right of the editor column — which is why
+`.code-main` carries `position: relative`, asserted in `styles.test.ts`,
+because without a containing block the box hangs off the shell instead and
+nothing throws. It opens seeded from the selection, when the selection is one
+line's worth, and it selects the match rather than only scrolling to it, so
+Escape leaves the caret on what you were looking for.
+
+**⇧⌘F stands at the top of the file column.** Its answers are files, and the
+column of files is already there; a second floating window listing files, over
+a panel with a list of files down its left edge, would be the same list twice.
+The results take the column while they are up (`FileTree.setSearching`, and one
+rule in `code.css`) because a 170px column dock has room for one list at a
+time — nothing is destroyed, so the tree comes back folded exactly as it was,
+with the same row still marked open.
+
+**Both are plain substring, with a case switch.** What anybody searches for in
+this tree is `config.scenes` or `place(`, and a box that quietly reads those as
+patterns answers a question nobody asked. Case is the one option that is
+genuinely wanted, because `Scene` and `scene` are a class and a variable in
+every file here.
+
+**The cross-file half is Rust.** `game_search.rs` is one call per query rather
+than a read per file — the alternative is twenty round trips and twenty copies
+of the tree crossing the IPC boundary as JSON strings on every keystroke — and
+it walks `store::list_game_files`, the same listing the column shows, so a
+result and a row are the same set of files said twice. It skips what it cannot
+read as text (somebody will drop a PNG into `game/`) and what is over 512 KiB,
+and caps the answer at three hundred matches, saying so.
+
+The one subtle thing in it is the **column**. The frontend adds it to a
+CodeMirror line offset, and CodeMirror counts a document the way JavaScript
+counts a string, in UTF-16 code units. A byte offset would be right for every
+ASCII file in this tree and one place out on the first line carrying an em dash
+in a comment — which is most comment lines in a project this editor scaffolded.
+So the scan works in `char`s and the column is a sum of `len_utf16`. Case
+folding is done **per character**, taking a character's lower case only when it
+has exactly one, for the same reason: `char::to_lowercase` is an iterator
+because a few characters lowercase to several, and a folded line of a different
+length from the line it came from is how an offset ends up pointing at the
+wrong place.
+
+Both bindings are registered **twice**, and that is deliberate. CodeMirror's
+content is `contenteditable`, so a keystroke in the editor goes to its keymap
+and never reaches a document-level listener — `editor/shortcuts.ts` stands down
+for text fields by design. The keymap entries are in `editor-state.ts`;
+`Finding.handleShortcut` covers the rest of the panel, and `defaultPrevented`
+is what stops the two from both firing as an event bubbles out of the editor.
+Preventing the default matters beyond tidiness: WKWebView takes an
+un-prevented ⌘F as its own page search.
+
+---
+
 ## Console
 
 `lib/log.ts` wraps `console.*` and interprets format directives rather than
@@ -6645,6 +6924,32 @@ console is a record of what happened rather than a document.
 
 ## Known gaps
 
+- **Publishing to a server or to GitHub does not work on an iPad**, which is
+  the device this editor is mainly developed on. Both run a program — `rsync`
+  and `git` — and iPadOS gives an app no way to. A GitHub publish over the REST
+  API would work there, and is a reimplementation of blobs, trees, commits and
+  refs rather than a flag; rsync has no such door at all. The sheet says so on
+  that platform rather than offering a button that cannot work, and the two zip
+  exports are its route.
+- **The GitHub token is in a file, not in the system keychain.** `publish.json`
+  is `0600`, beside the project store — anything that can read it can already
+  read every project's source — but Keychain and its iOS counterpart are the
+  right answer and are a dependency and a platform pair that have not been
+  taken on.
+- **rsync stores no password, only a key.** The identity is the ssh agent's or
+  a key file named on the server's row, and a server that wants a password is
+  refused rather than waited on. Storing one would mean either `sshpass` or
+  writing a password to disk, and `ssh-copy-id` is the answer everybody already
+  has — but it does mean a host that only takes passwords cannot be published
+  to from here.
+- **A publish target does not travel in a `.idlewild` file.** It names a server
+  by an id that exists only in this install's settings, and `meta.json` does not
+  travel anyway. A project opened on another machine has to be pointed
+  somewhere again.
+- A publish says how it went in the console rather than showing progress.
+  `rsync` and `git` are run to completion and their last lines are reported;
+  neither is parsed as it goes, so a large first publish is a line saying it
+  started and then a line saying it finished.
 - ⌘C on an iPad puts a `public.file-url` on the pasteboard and nothing else, so
   what it copies is pasteable into Idlewild and not into another app — which is
   the half the gesture is for, and *Share PSD* is the other half. Offering the

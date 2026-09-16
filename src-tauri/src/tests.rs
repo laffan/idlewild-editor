@@ -20,6 +20,7 @@
 mod archive;
 mod backgrounds;
 mod config;
+mod deploying;
 mod exports;
 mod marks;
 mod options;

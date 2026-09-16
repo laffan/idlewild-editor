@@ -14,7 +14,9 @@
 //!       game/              the editable project source the code modal shows
 //! ```
 
-use crate::project::{now_ms, GameFile, GameOptions, Genre, ProjectMeta, Projection};
+use crate::project::{
+    now_ms, GameFile, GameOptions, Genre, ProjectMeta, Projection, PublishTarget,
+};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -154,6 +156,19 @@ pub fn set_project_options(
     meta.updated_at = now_ms();
     write_meta(&meta)?;
     let _ = sync_game_config(id);
+    Ok(meta)
+}
+
+/// Point a project at somewhere to publish to, or at nowhere.
+///
+/// `updatedAt` is deliberately **not** stamped. The home screen sorts by it,
+/// and naming a directory on a server is not work on the project — a project
+/// that jumped to the top of the list because somebody corrected a typo in a
+/// hostname would be the list lying about what was worked on.
+pub fn set_publish_target(id: &str, target: PublishTarget) -> Result<ProjectMeta, String> {
+    let mut meta = read_meta(id)?;
+    meta.publish = target;
+    write_meta(&meta)?;
     Ok(meta)
 }
 
