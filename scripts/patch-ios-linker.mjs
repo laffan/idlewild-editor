@@ -30,6 +30,18 @@
  * what makes the next build work without re-running XcodeGen. Both edits are
  * skipped if the setting is already there, so this is safe on every build.
  *
+ * **The pbxproj half is the one that matters, and it is the one that broke.**
+ * The first version of this anchored on `LIBRARY_SEARCH_PATHS[sdk=iphoneos*]`,
+ * which is how **cargo-mobile2** spells it — and Tauri does not use
+ * cargo-mobile2's template. It ships its own,
+ * `templates/mobile/ios/project.yml`, which writes `[arch=arm64]` and
+ * `[arch=x86_64]` instead. So nothing in the pbxproj matched, only the yml was
+ * patched, XcodeGen does not run again on a build, and the link failed exactly
+ * as it had before — while this script reported success. Hence `TARGET_ONLY`
+ * below, which matches the stem rather than a bracketed variant and takes any
+ * of three settings; and hence the warning, because a patch that recognises
+ * nothing must not read as a patch that had nothing to do.
+ *
  * `src-tauri/gen/` is not in the repository and `tauri ios init` writes it
  * fresh, which is why this is a script rather than a checked-in file. Tauri's
  * own pbxproj editing is line-based — it rewrites the lines it owns and leaves
@@ -74,24 +86,43 @@ export function withLinkerFlagsYml(yml) {
 }
 
 /**
- * What xcodebuild actually reads, with the setting added.
+ * Settings XcodeGen writes for the **app target** and for nothing else.
  *
- * Every `buildSettings` block carrying the iOS library search path is one of
- * the app target's — debug and release. The project-level blocks do not have
- * it, which is what keeps this off configurations the app is not built from.
+ * A `buildSettings` block carrying any of them is one of the app target's two
+ * configurations, debug or release. The project-level blocks carry none, which
+ * is what keeps the flags off configurations the app is not built from.
+ *
+ * Three of them rather than one because this is the part that has already
+ * broken once. Tauri ships its **own** `templates/mobile/ios/project.yml`
+ * rather than using cargo-mobile2's, and the two disagree about exactly this:
+ * cargo-mobile2 writes `LIBRARY_SEARCH_PATHS[sdk=iphoneos*]`, Tauri writes
+ * `[arch=arm64]` and `[arch=x86_64]`. Matching the bare stem covers both, and
+ * any one of the three surviving a template rewrite is enough.
+ */
+const TARGET_ONLY = [
+  "ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES",
+  "LIBRARY_SEARCH_PATHS",
+  "INFOPLIST_FILE",
+];
+
+/**
+ * What xcodebuild actually reads, with the setting added.
  *
  * The file is rebuilt by concatenation rather than by a regex over it: a
  * `buildSettings` block is brace-delimited and nothing but brace matching
  * finds its end reliably.
  *
- * @returns `{ text, added }` — `added` is how many configurations were given
- *          the setting, and zero means the file is left byte for byte.
+ * @returns `{ text, added, seen }` — `added` is how many configurations were
+ *          given the setting and `seen` how many already had it. Both zero on
+ *          a file this could make no sense of, which is a thing to say out
+ *          loud rather than a thing to pass over: see `patch`.
  */
 export function withLinkerFlagsPbxproj(pbxproj) {
   const OPEN = "buildSettings = {";
   let out = "";
   let rest = pbxproj;
   let added = 0;
+  let seen = 0;
 
   for (;;) {
     const at = rest.indexOf(OPEN);
@@ -102,18 +133,18 @@ export function withLinkerFlagsPbxproj(pbxproj) {
 
     const block = rest.slice(brace + 1, close);
     out += rest.slice(0, brace + 1);
-    if (
-      block.includes("LIBRARY_SEARCH_PATHS[sdk=iphoneos*]") &&
-      !block.includes(SETTING)
-    ) {
-      out += `\n${indentOf(block)}${SETTING} = "${FLAGS}";`;
-      added += 1;
+    if (TARGET_ONLY.some((key) => block.includes(key))) {
+      if (block.includes(SETTING)) seen += 1;
+      else {
+        out += `\n${indentOf(block)}${SETTING} = "${FLAGS}";`;
+        added += 1;
+      }
     }
     out += block;
     rest = rest.slice(close);
   }
 
-  return { text: out + rest, added };
+  return { text: out + rest, added, seen };
 }
 
 /** The index of the `}` closing the `{` at `from`, or -1. */
@@ -136,6 +167,7 @@ function indentOf(block) {
 
 function patch(appleDir) {
   const done = [];
+  let warning = "";
 
   const yml = join(appleDir, "project.yml");
   if (existsSync(yml)) {
@@ -152,16 +184,30 @@ function patch(appleDir) {
   const project = readdirSync(appleDir).find((n) => n.endsWith(".xcodeproj"));
   const pbxproj = project && join(appleDir, project, "project.pbxproj");
   if (pbxproj && existsSync(pbxproj)) {
-    const { text, added } = withLinkerFlagsPbxproj(
+    const { text, added, seen } = withLinkerFlagsPbxproj(
       readFileSync(pbxproj, "utf-8"),
     );
     if (added > 0) {
       writeFileSync(pbxproj, text, "utf-8");
       done.push(`${project} ×${added}`);
     }
+    // The one that has to be said. project.yml is only read when XcodeGen
+    // runs, so a patch that reaches it and not the pbxproj changes nothing
+    // about the build about to happen — and the way that shows up is the
+    // linker error this script exists to prevent, three minutes later, with
+    // nothing connecting the two. Recognising no configuration at all means
+    // the settings below have moved again.
+    if (added === 0 && seen === 0) {
+      warning =
+        `⚠ Found no app-target build settings in ${project} to add ${SETTING} to.\n` +
+        `  The iOS link will fail on libgit2's zlib and iconv symbols. This\n` +
+        `  script looks for a buildSettings block carrying one of:\n` +
+        TARGET_ONLY.map((key) => `    ${key}\n`).join("") +
+        `  If Tauri's project template has moved them, that list is the fix.`;
+    }
   }
 
-  return done;
+  return { done, warning };
 }
 
 // Run only when this is the program, so the two transforms above can be
@@ -173,9 +219,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const appleDir = join(root, "src-tauri", "gen", "apple");
   // No iOS project — a desktop build, or `tauri ios init` has not been run.
   if (existsSync(appleDir)) {
-    const done = patch(appleDir);
+    const { done, warning } = patch(appleDir);
     if (done.length > 0) {
-      console.log(`✓ Linked zlib and libiconv into the iOS app (${done.join(", ")})`);
+      console.log(`✓ Linked zlib and libiconv into the iOS app: ${done.join(", ")}`);
     }
+    // After the tick, so the last thing on screen is the thing that is wrong.
+    if (warning) console.warn(warning);
   }
 }

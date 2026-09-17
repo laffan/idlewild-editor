@@ -3254,15 +3254,32 @@ same reason: `src-tauri/gen/` is not in the repository, `tauri ios init` writes
 it fresh, and `bundle.iOS.frameworks` in `tauri.conf.json` cannot express this
 — Tauri turns a bare name into `- sdk: <name>.framework` and anything with an
 extension into a vendored path, and `-lz` is neither. The alternative Tauri
-does offer is `bundle.iOS.template`, a whole copy of cargo-mobile2's XcodeGen
-template carried in this repository to change two lines of it, which is the
-kind of second copy this codebase avoids everywhere else.
+does offer is `bundle.iOS.template`, a whole copy of its XcodeGen template
+carried in this repository to change two lines of it, which is the kind of
+second copy this codebase avoids everywhere else.
 
 It writes `OTHER_LDFLAGS` into two files, because they are read at different
 times. `project.yml` is the XcodeGen source, so a regenerated project keeps the
 setting; `project.pbxproj` is what `xcodebuild` actually reads, so patching it
 is what makes the next build work without anyone re-running XcodeGen. Both
 edits are skipped when the setting is already there.
+
+**Which is also how this went wrong the first time, and the mistake is worth
+keeping.** Tauri does not use cargo-mobile2's project template. It ships its
+own, `templates/mobile/ios/project.yml`, and the two disagree about exactly the
+line this anchors on: cargo-mobile2 writes `LIBRARY_SEARCH_PATHS[sdk=iphoneos*]`
+and Tauri writes `[arch=arm64]` and `[arch=x86_64]`. Anchored on the first,
+this matched nothing in the pbxproj — and since the *yml* half anchors on
+`ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES`, which both templates do write, the
+script patched a file XcodeGen was not going to read again and reported
+success. The build failed on the identical linker error, with a tick above it.
+
+Two things come from that. `TARGET_ONLY` takes **any of three** settings
+XcodeGen writes for the app target and nothing else, matched on the stem rather
+than on a bracketed variant. And recognising *no* configuration is now said out
+loud, distinguished from having nothing to do: the script counts the blocks it
+recognised as well as the ones it changed, and warns — after the tick, so the
+last line on screen is the problem — naming the settings it looked for.
 
 **A build does not undo it.** Tauri writes the development team and the bundle
 identifier into the pbxproj on every build, and its editor is line-based — it
@@ -3271,14 +3288,15 @@ init` is the one thing that does undo it, which is why `npm run ios:init` runs
 the script straight afterwards. As with the plist, `beforeBuildCommand` means
 `tauri ios build` applies it and `tauri ios dev` does not.
 
-The two string transforms are tested in `scripts/__tests__`, against
-cargo-mobile2's template as XcodeGen renders it. That is unusual for a build
-script here and it is the one that earns it: the file being edited only exists
-on a Mac that has run `ios init`, nobody reads it, and both ways of getting it
-wrong are silent — a pbxproj rebuilt slightly wrong is a project Xcode refuses
-to open, and a patch that matches nothing is a build that fails exactly as it
-did before. So the test asserts the harder half outright: everything but the
-inserted lines comes back byte for byte.
+The two string transforms are tested in `scripts/__tests__`, against Tauri's
+own template as XcodeGen renders it, and against cargo-mobile2's spelling of
+the search-path key beside it. That is unusual for a build script here and it
+is the one that earns it: the file being edited only exists on a Mac that has
+run `ios init`, nobody reads it, and both ways of getting it wrong are silent —
+a pbxproj rebuilt slightly wrong is a project Xcode refuses to open, and a
+patch that matches nothing is a build that fails exactly as it did before. So
+the tests assert the two hard halves outright: everything but the inserted
+lines comes back byte for byte, and both key spellings are recognised.
 
 ### SFTP, a manifest, and the host key
 
