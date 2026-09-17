@@ -130,10 +130,10 @@ impl GameOptions {
 /// the same argument that put `pixelArt` in the config rather than in the
 /// scaffold as a literal. A rule somebody rewrites keeps whatever they wrote.
 ///
-/// Every field defaults, and the defaults are what a project written before any
-/// of this existed has always looked like: the game filling the window, no
-/// margin, square corners, and the same `#d9e6ef` the scaffold has always had
-/// behind it.
+/// Every field defaults, and the defaults are the page a project written before
+/// any of this existed has always had: the game filling the window, no margin,
+/// square corners. Which makes the colour the odd one out, and deliberately —
+/// see `DEFAULT_BACKGROUND`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Presentation {
@@ -160,8 +160,24 @@ pub struct Presentation {
     pub background: String,
 }
 
-/// What the scaffold has always had behind the game.
-pub const DEFAULT_BACKGROUND: &str = "#d9e6ef";
+/// The page behind the game, when nobody has said otherwise.
+///
+/// **Not the scaffold's `#d9e6ef`**, which is the only other colour in this
+/// file's neighbourhood and would have been the tidy answer. That blue is the
+/// *world's* — it is what the editor's canvas is drawn on, what Phaser paints
+/// behind the scenes, and what a player reads as sky. The page is the surface
+/// the game is *mounted on*, and it is only ever visible once a margin, a
+/// radius or a fixed size has pulled the game back from an edge. At that
+/// moment a second field of the same sky is the worst possible answer: it
+/// reads as the world continuing past its own border, which is exactly the
+/// impression a framed game exists to avoid.
+///
+/// So: a neutral dark, the way every video player and every device frame mats
+/// a picture. This one is the app's own `--color-neutral-900` — the dark the
+/// editor's chrome is drawn in — rather than an invented hex, so there is one
+/// fewer arbitrary number here and a framed game sits on the same ground the
+/// thing that made it does.
+pub const DEFAULT_BACKGROUND: &str = "#2d2b2b";
 
 impl Default for Presentation {
     fn default() -> Self {

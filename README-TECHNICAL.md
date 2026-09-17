@@ -7272,6 +7272,26 @@ radius or a fixed size has pulled the game back from an edge — which is exactl
 when you want to choose them separately, and is why the sheet's row says *page*
 colour and the scaffold keeps its own literal.
 
+**They default to two different colours, on purpose.** The tidy answer would
+have been `#d9e6ef` for both, and it is the wrong one. That blue is the
+*world's*: the editor's canvas ground, what Phaser paints behind the scenes,
+what a player reads as sky. The page is the surface the game is *mounted on*,
+and at the only moment it is visible — the moment something has framed the game
+— a second field of the same sky reads as the world running on past its own
+border, which is precisely the impression a framed game exists to avoid. So the
+page defaults to a neutral dark and the world keeps its blue, the way a video
+player mats a picture. The dark is the app's own `--color-neutral-900`
+(`#2d2b2b`) rather than an invented hex: one fewer arbitrary number, and a
+framed game sits on the same ground the editor is drawn on.
+
+The `styles.css` and `main.js` fallbacks carry that value too. A fallback that
+disagreed with the default would mean a project rendering one colour with its
+config and another without, which is the kind of difference nobody can debug —
+so the rule is that every fallback in the scaffold is the default the editor
+would have sent anyway. It is the one default that is *not* what a project had
+on screen before Page Setup existed, and it is invisible to every one of them
+until they frame something.
+
 ### What is checked, and where
 
 `Presentation::sane()` clamps on the way **out**, into the config — not on the

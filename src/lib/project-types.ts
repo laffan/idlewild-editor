@@ -127,8 +127,16 @@ export interface Presentation {
 }
 
 /**
- * The page every project has had since before any of this was settable: the
- * game filling the window, square, flush, on the scaffold's own blue.
+ * The page a project has when nobody has said otherwise: the game filling the
+ * window, square, flush — and matted on a neutral dark rather than on the
+ * scaffold's blue.
+ *
+ * The blue is the *world's*: the editor's canvas ground, and what Phaser paints
+ * behind the scenes. The page is what the game is mounted on, and is only
+ * visible once a margin, a radius or a fixed size has pulled the game back from
+ * an edge — where a second field of the same sky would read as the world
+ * running on past its own border. `DEFAULT_BACKGROUND` in project.rs is the
+ * same value and carries the argument.
  */
 export const DEFAULT_PRESENTATION: Presentation = {
   fixed: false,
@@ -137,7 +145,7 @@ export const DEFAULT_PRESENTATION: Presentation = {
   centered: true,
   margin: 0,
   radius: 0,
-  background: "#d9e6ef",
+  background: "#2d2b2b",
 };
 
 /**

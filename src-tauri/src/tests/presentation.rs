@@ -12,10 +12,14 @@
 //! background that is not a colour is a value handed to `setProperty` that this
 //! code has never looked at.
 //!
-//! **And the defaults are the page every project already had.** Every field
-//! defaults, so a `meta.json` written before any of this existed reads as the
-//! full-bleed, square-cornered, `#d9e6ef` page it has always been — and the
-//! config it generates says exactly that rather than saying nothing.
+//! **And a project that has never heard of a page still describes one.** Every
+//! field defaults, so a `meta.json` written before any of this existed reads as
+//! the full-bleed, square-cornered page it has always been, and the config it
+//! generates says exactly that rather than saying nothing. The colour is the
+//! one default that is *not* what such a project had on screen, and that is
+//! deliberate — it is invisible until something pulls the game off an edge, and
+//! at that moment the world's own blue is the wrong answer. See
+//! `DEFAULT_BACKGROUND`.
 
 use crate::game_config;
 use crate::project::{GameOptions, Genre, Presentation, Projection, DEFAULT_BACKGROUND};
@@ -63,6 +67,11 @@ fn a_project_that_has_never_heard_of_a_page_still_describes_one() {
         assert_eq!(page["margin"], 0);
         assert_eq!(page["radius"], 0);
         assert_eq!(page["background"], DEFAULT_BACKGROUND);
+        assert_ne!(
+            page["background"], "#d9e6ef",
+            "the page is not the world: a frame the colour of the sky reads as \
+             the world running on past its own border",
+        );
     });
     store::delete_project(&id).ok();
     if let Err(payload) = result {

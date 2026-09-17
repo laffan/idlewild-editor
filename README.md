@@ -927,7 +927,10 @@ remaining pieces are wired to real slots rather than mocked.
   **page colour** behind it all. That last one is the HTML background, not
   Phaser's own: they are only both visible once one of the other three has
   pulled the game back from an edge, which is exactly when you want to pick them
-  separately. A 320×568 phone game is a 320×568 game on a desktop now instead of
+  separately — and why they start out different. The world keeps the pale blue
+  it has always had; the page behind it is a neutral dark, the way a video
+  player mats a picture. A frame the same colour as the sky just reads as the
+  world carrying on past its own border. A 320×568 phone game is a 320×568 game on a desktop now instead of
   one stretched across it. None of it rewrites a line of your `styles.css`: the
   values ride in the generated config, `js/main.js` puts them on the document as
   custom properties, and every rule in the stylesheet reads one with a fallback

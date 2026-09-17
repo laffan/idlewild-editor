@@ -36,9 +36,9 @@ const rendering = {
 // Written onto the document as custom properties rather than into
 // `styles.css`, so that stylesheet stays yours: every rule it has reads one of
 // these with a fallback, and a rule you rewrite keeps whatever you wrote. The
-// fallbacks are what the page meant before any of this existed, so nothing
-// here is load-bearing — delete the block and the game is full-bleed on
-// `#d9e6ef`, exactly as it always was.
+// fallbacks here and in `styles.css` are the same defaults the editor would
+// have sent, so nothing in this block is load-bearing — delete it and the game
+// is full-bleed on the same page it would have had anyway.
 //
 // `scale` is the half CSS cannot do. A game filling the window wants RESIZE,
 // so the camera gets the whole viewport; a fixed-size game wants FIT against
@@ -49,7 +49,7 @@ const page = config.presentation ?? {};
 const fixed = page.fixed === true && page.width > 0 && page.height > 0;
 
 const style = document.documentElement.style;
-style.setProperty("--game-background", page.background ?? "#d9e6ef");
+style.setProperty("--game-background", page.background ?? "#2d2b2b");
 style.setProperty("--game-margin", `${page.margin ?? 0}px`);
 style.setProperty("--game-radius", `${page.radius ?? 0}px`);
 style.setProperty("--game-width", fixed ? `${page.width}px` : "100%");
@@ -72,9 +72,11 @@ const scale = fixed
 new Phaser.Game({
   type: Phaser.WEBGL,
   parent: "game",
-  // Phaser's own, behind what the scenes draw. Not the page colour above:
-  // that one is only ever visible where the game is *not*, which is what a
-  // margin and a fixed size make. Two surfaces, two answers.
+  // Phaser's own, behind what the scenes draw — the sky, in effect. Not the
+  // page colour above, which is the surface the game is mounted on and is only
+  // visible where the game is *not*. Two surfaces, and they default to two
+  // different answers on purpose: a frame the same colour as the world reads
+  // as the world running on past its own border.
   backgroundColor: "#d9e6ef",
   ...rendering,
   scale,

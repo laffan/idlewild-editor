@@ -9,16 +9,19 @@
  * rule you change stays changed — drop the `var()` and write a number, or add
  * anything you like beside it. The properties are a default you can ignore.
  *
- * And the fallbacks are what this stylesheet meant before any of it existed,
- * so the page is correct with the stylesheet alone: opened straight off disk,
- * with an old `game.config.json` beside it, or with main.js edited to stop
- * setting them. */
+ * And every fallback is the default the editor would have sent anyway, so the
+ * page is right with the stylesheet alone: opened straight off disk, with an
+ * old `game.config.json` beside it, or with main.js edited to stop setting
+ * them. The one worth knowing is the background — a neutral dark rather than
+ * the `#d9e6ef` Phaser paints behind your scenes. That blue is the world's;
+ * this is the surface the game is mounted on, and it only shows where the
+ * game does not reach. */
 
 html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--game-background, #d9e6ef);
+  background: var(--game-background, #2d2b2b);
   overflow: hidden;
 }
 
