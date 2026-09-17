@@ -21,6 +21,7 @@
  */
 
 import { h, ICONS, icon } from "./dom";
+import { hintButton, type HintText } from "./tooltip";
 
 /** What a row's end can carry: a value it reports, or controls. */
 export interface OptionAction {
@@ -55,6 +56,25 @@ export interface OptionRow {
   glyph?: string | readonly string[];
   /** A short word standing in for a glyph: an initial, a kind. */
   badge?: string;
+  /**
+   * What this row is for, behind a `?` beside the title — the second line
+   * folded up.
+   *
+   * The alternative to `sub`, not a companion to it. A row carrying both says
+   * the same kind of thing twice in two places, and which one a reader trusts
+   * is then a coin toss; a row that has the space for a sentence should use
+   * `sub` and no `?` at all. This is for a sheet where every row carries a
+   * control and a second line under each would make a form out of a list.
+   *
+   * A function for a hint whose answer depends on another row — see
+   * `tooltip.ts`.
+   */
+  hint?: HintText;
+  /**
+   * The control this row *is* — a switch, a segmented control, a number.
+   * Sits at the end of the row, before any `actions`.
+   */
+  control?: HTMLElement;
   /** Reported at the end of the row, before any buttons. */
   value?: string;
   /** Buttons at the end of the row. */
@@ -75,10 +95,13 @@ export function optionRow(row: OptionRow): HTMLElement {
       : null;
 
   const subs = row.sub === undefined ? [] : Array.isArray(row.sub) ? row.sub : [row.sub];
+  const title = h("span", { class: "option-title", text: row.title });
   const body = h(
     "div",
     { class: "option-body" },
-    h("span", { class: "option-title", text: row.title }),
+    row.hint
+      ? h("div", { class: "option-title-row" }, title, hintButton(row.hint, row.title))
+      : title,
     ...subs.map((sub) => {
       const { text, mono } = typeof sub === "string" ? { text: sub, mono: false } : sub;
       return h("span", { class: `option-sub${mono ? " mono" : ""}`, text });
@@ -87,11 +110,12 @@ export function optionRow(row: OptionRow): HTMLElement {
 
   const actions = row.actions ?? [];
   const trail =
-    row.value || actions.length || (row.onSelect && !actions.length)
+    row.value || row.control || actions.length || (row.onSelect && !actions.length)
       ? h(
           "div",
           { class: "option-trail" },
           row.value ? h("span", { class: "option-value", text: row.value }) : null,
+          row.control ?? null,
           ...actions.map((action) =>
             h("button", {
               class: `option-btn${action.accent ? " accent" : ""}${action.danger ? " danger" : ""}`,
@@ -107,7 +131,7 @@ export function optionRow(row: OptionRow): HTMLElement {
               },
             }),
           ),
-          row.onSelect && !actions.length
+          row.onSelect && !actions.length && !row.control
             ? icon(ICONS.chevronRight, 16, "currentColor")
             : null,
         )
@@ -116,6 +140,7 @@ export function optionRow(row: OptionRow): HTMLElement {
   const classes = ["option"];
   if (lead) classes.push("has-lead");
   if (row.onSelect) classes.push("tappable");
+  if (row.control) classes.push("has-control");
 
   return h(
     row.onSelect ? "button" : "div",

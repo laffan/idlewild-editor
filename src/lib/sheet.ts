@@ -11,6 +11,18 @@ export interface SheetOptions {
   /** Tapping the backdrop dismisses unless this is false. */
   dismissable?: boolean;
   width?: number;
+  /**
+   * Whether the title is *drawn*. It is always carried, as the dialog's
+   * `aria-label`, because a modal with no accessible name is a modal a screen
+   * reader announces as nothing.
+   *
+   * False for a sheet whose subject is already on screen — New Project is
+   * opened by a button that says New Project, and repeating it in 22px across
+   * the top of the sheet spends the best line on the one thing nobody needed
+   * telling. A sheet reached from a menu of six is not that sheet, so this is
+   * opt-in rather than the default.
+   */
+  titled?: boolean;
 }
 
 export interface SheetHandle {
@@ -50,7 +62,9 @@ export function openSheet(options: SheetOptions): SheetHandle {
       "aria-label": options.title,
       onClick: (event: Event) => event.stopPropagation(),
     },
-    h("div", { class: "sheet-head" }, title, subtitle),
+    options.titled === false
+      ? null
+      : h("div", { class: "sheet-head" }, title, subtitle),
     body,
     actions,
   );

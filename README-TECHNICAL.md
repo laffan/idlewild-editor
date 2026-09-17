@@ -3055,6 +3055,59 @@ built on it and is meant not to be the last: Project Options and the render
 settings are the obvious next ones, and they should be able to copy the *shape*
 of `publish-accounts.ts` and share none of its content.
 
+### Why New Project is drawn in the settings vocabulary
+
+Logins was the first page built on it and was meant not to be the last. New
+Project is the second, and it is the one that shows what the vocabulary was
+missing.
+
+It was a stack of `.field`s — a label, a control, and a grey line of
+explanation under each. That is the design system's *form* shape and it is the
+wrong shape here: a form is a thing you fill in, and this is six questions with
+a right answer already chosen for every one of them, which is a settings page.
+Nothing about it was a form except the markup.
+
+**The vocabulary had no controls, only reports.** Logins is a list of things
+that exist with buttons to add and remove them, so `optionRow` grew a `value`
+and `actions` and stopped there. A sheet where every row *is* a control needed
+the other half, and that is `lib/options-controls.ts`: a segmented control, a
+switch, a number with its unit, a colour swatch, a text box — each sized to
+`.option-btn`'s 30px rather than to a form's 42px, because a row is the subject
+and a full-size control at the end of one makes the row look like a toolbar.
+`optionRow` takes them as `control`, which sits in the trail before any
+buttons. `settings-controls.test.ts` pins the sizing and the accent, both of
+which fail quietly.
+
+**The explanations went behind a `?`.** Six rows each carrying two lines is six
+paragraphs of grey to read past before you reach the one control you came to
+change. None of it was thrown away — every sentence that was a `field-hint` is
+on the hint beside its row's title — and the hint opens to a **tap** as well as
+to a hover, which is the whole reason it is not a native `title`: see the
+exception noted under *Where the panel's explanations went*. An iPad has no
+pointer to rest on anything, and this sheet is the only place these sentences
+are written down.
+
+`hint` is the alternative to `sub` rather than a companion to it. A row with
+both says the same kind of thing twice in two places and leaves a reader to
+guess which to trust; a page with room for a sentence should use `sub` and no
+`?` at all. Logins still does.
+
+**A hint can be a function**, and one is. What the grid scale *means* changes
+with the template — under Blank nothing snaps to it, so it is the unit the
+character is measured in rather than the size of a space — and the template is
+picked two rows above it. A fixed string would be wrong half the time;
+rebuilding the row when its neighbour changes would throw away a control
+somebody may be part-way through using. So the text is read at the moment the
+bubble opens, which is the moment the answer is wanted.
+
+**And the sheet has no title.** It is opened by a button that says *New
+Project*, nothing else on the home screen opens it, and a 22px heading repeating
+that word spends the best line on the one thing nobody needed telling. The
+dialog still carries the name as its `aria-label`, because a modal with no
+accessible name is announced as nothing. `openSheet` takes `titled: false` for
+it, opt-in rather than default: a sheet reached from a menu of six is not this
+sheet.
+
 Two details are load-bearing, and both are asserted in `styles.test.ts`:
 
 - **The tokens are on `:root`, not on `.options`.** That looks like the wrong
@@ -4384,6 +4437,20 @@ rest of the editor already uses for exactly this — the tool rail, the mode bar
 every button in the two library editors — and because on the iPad there is no
 hover to serve either way. What a tool has to say there, it says in the line the
 console prints when it is picked up.
+
+**There is one exception now, and the reason is the sentence above.** "No hover
+to serve either way" is an acceptable answer for a *tool*, because a tool that
+has been picked up says its piece in the console and the panel is standing
+there in front of you either way. It is not an acceptable answer for a sheet
+you see once, at the moment you are deciding what a project *is*: New Project's
+explanations are the only place the grid scale or the character controller is
+described, and a native `title` would have moved every one of them somewhere an
+iPad cannot reach. So the hints on that sheet are `lib/tooltip.ts` — a `?`
+button that opens to a hover *and* to a tap, which is the thing `title` cannot
+be. See **Why New Project is drawn in the settings vocabulary**.
+
+The rule that remains, then: a `title` where there is another way to the same
+information, and a `?` where the sheet is the only way.
 
 ## The pattern and shape libraries
 

@@ -25,10 +25,42 @@
  * character controller can be changed later in Project Options. The character
  * cannot: it is lines in a file, and the file becomes the project's own the
  * moment it is written.
+ *
+ * ## Why it is drawn in the settings vocabulary
+ *
+ * This used to be a stack of `.field`s — label, control, and a grey line of
+ * explanation under each — which is the design system's form shape and is the
+ * wrong shape for this. A form is a thing you fill in; this is a list of
+ * questions with an answer already chosen for every one of them, which is a
+ * settings page, and the app has had a settings vocabulary since Publish
+ * needed one. So it is `options.css` and `options-list.ts` here, the same
+ * rows the Logins sheet is built from — see the top of `styles/options.css`
+ * for what that system departs from and why.
+ *
+ * Two things follow from the change.
+ *
+ * **The explanations are behind a `?`.** Six rows each carrying two lines is
+ * six paragraphs of grey to read past before you find the one control you came
+ * to change, and the answer to every question is already right for most
+ * projects. None of it is thrown away: every sentence that was a `field-hint`
+ * is on the hint beside its row's title, and the hint opens to a tap as well
+ * as to a hover, because an iPad has no pointer to rest on anything — see
+ * `lib/tooltip.ts`.
+ *
+ * **There is no title.** The sheet is opened by a button that says *New
+ * Project* and nothing else on the screen opens it, so a 22px heading saying
+ * the same word spends the best line on the one thing nobody needed telling.
+ * The dialog still carries the name for anything reading the page.
  */
 
-import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
+import { h } from "../lib/dom";
+import { optionGroup, optionRow, optionsPage } from "../lib/options-list";
+import {
+  optionSegmented,
+  optionSwitch,
+  optionText,
+} from "../lib/options-controls";
 import { DEFAULT_OPTIONS, type GameOptions, type Genre, type Projection } from "../lib/types";
 
 /**
@@ -57,44 +89,31 @@ export function openNewProject(
   let projection: Projection = "isometric";
   let genre: Genre = "topdown";
   let gridSize = 64;
+  let name = "";
   const options: GameOptions = { ...DEFAULT_OPTIONS };
 
   const sheet = openSheet({
     title: "New Project",
-    subtitle: "Template, style, grid scale and rendering",
+    titled: false,
     light: true,
     width: 620,
   });
 
-  const nameInput = h("input", {
-    class: "input",
+  const nameInput = optionText(name, (value) => (name = value), {
     placeholder: "Untitled",
-    maxlength: "60",
+    label: "Project name",
   });
 
-  const styleSeg = segmented(
+  const styleSeg = optionSegmented(
     [
       { value: "topdown", label: "Top Down" },
       { value: "platformer", label: "Platformer" },
     ],
     genre,
-    (value) => {
-      genre = value as Genre;
-    },
+    (value) => (genre = value as Genre),
   );
 
-  const scaleField = field(
-    "Grid scale",
-    segmented(
-      SCALES.map((s) => ({ value: String(s), label: `${s}` })),
-      String(gridSize),
-      (value) => {
-        gridSize = Number(value);
-      },
-    ).root,
-  );
-
-  const templateSeg = segmented(
+  const templateSeg = optionSegmented(
     [
       { value: "isometric", label: "Isometric" },
       { value: "orthogonal", label: "Orthogonal" },
@@ -109,73 +128,124 @@ export function openNewProject(
         genre = "topdown";
         styleSeg.select("topdown");
       }
-      scaleHint.textContent = scaleNote(projection);
     },
   );
 
-  const scaleHint = h("div", {
-    class: "field-hint",
-    text: scaleNote(projection),
-  });
-  scaleField.appendChild(scaleHint);
+  const scaleSeg = optionSegmented(
+    SCALES.map((scale) => ({ value: String(scale), label: String(scale) })),
+    String(gridSize),
+    (value) => (gridSize = Number(value)),
+  );
+
+  const zoomSeg = optionSegmented(
+    ZOOMS.map((zoom) => ({ value: String(zoom), label: `${zoom}×` })),
+    String(options.defaultZoom),
+    (value) => (options.defaultZoom = Number(value)),
+  );
 
   // Pixel perfect is the pair of settings that go together: nearest-neighbour
-  // textures, and drawing on whole pixels. One box, because a project that
+  // textures, and drawing on whole pixels. One switch, because a project that
   // wants one and not the other is a project that wants Project Options, where
   // they are two.
-  const pixelPerfect = check(
-    "Pixel perfect",
-    "Nearest-neighbour textures and whole-pixel drawing. Both can be toggled " +
-      "separately later, in Project Options",
+  const pixelPerfect = optionSwitch(
     options.pixelArt,
     (on) => {
       options.pixelArt = on;
       options.roundPixels = on;
     },
+    "Pixel perfect",
   );
 
-  const zoomField = field(
-    "Default zoom",
-    segmented(
-      ZOOMS.map((z) => ({ value: String(z), label: `${z}×` })),
-      String(options.defaultZoom),
-      (value) => {
-        options.defaultZoom = Number(value);
-      },
-    ).root,
-  );
-  zoomField.appendChild(
-    h("div", {
-      class: "field-hint",
-      text: "What a scene opens at, here and in the game — 8px art usually wants 3× or 4×",
-    }),
-  );
-
-  const character = check(
-    "Character controller",
-    "A prefab that walks the grid, or runs and jumps along it, and the line " +
-      "in the scene that puts it down. Unticked, the project places the " +
-      "document and nothing moves",
+  const character = optionSwitch(
     options.character,
-    (on) => {
-      options.character = on;
-    },
+    (on) => (options.character = on),
+    "Character controller",
   );
 
-  sheet.body.append(
-    field("Name", nameInput),
-    field("Template", templateSeg.root),
-    field("Style", styleSeg.root),
-    scaleField,
-    zoomField,
-    pixelPerfect,
-    character,
+  sheet.body.appendChild(
+    optionsPage(
+      [
+        optionGroup({
+          rows: [
+            optionRow({
+              title: "Name",
+              hint:
+                "What the project is called on the home screen, and the name an " +
+                "export takes. It can be renamed at any time — long-press its card.",
+              control: nameInput,
+            }),
+          ],
+        }),
+        optionGroup({
+          title: "Template",
+          rows: [
+            optionRow({
+              title: "Template",
+              hint:
+                "The shape of the space you build in. Isometric is a diamond " +
+                "lattice, Orthogonal a square one, and Blank has no lattice at " +
+                "all — nothing snaps, and a selection is the exact rectangle you " +
+                "dragged. This is a fact about the project afterwards: the " +
+                "document is addressed in it and the scaffold is written for it.",
+              control: templateSeg.root,
+            }),
+            optionRow({
+              title: "Style",
+              hint:
+                "The game that comes out of it. Top Down walks the grid; " +
+                "Platformer runs and jumps along it under gravity. Not offered " +
+                "with Isometric, because gravity has no direction on a diamond " +
+                "grid seen from above.",
+              control: styleSeg.root,
+            }),
+            optionRow({
+              title: "Grid scale",
+              hint: () => scaleNote(projection),
+              control: scaleSeg.root,
+            }),
+          ],
+        }),
+        optionGroup({
+          title: "Rendering",
+          rows: [
+            optionRow({
+              title: "Default zoom",
+              hint:
+                "What a scene opens at, here and in the game — 8px art usually " +
+                "wants 3× or 4×.",
+              control: zoomSeg.root,
+            }),
+            optionRow({
+              title: "Pixel perfect",
+              hint:
+                "Nearest-neighbour textures and whole-pixel drawing. Both can be " +
+                "toggled separately later, in Project Options.",
+              control: pixelPerfect.root,
+            }),
+            optionRow({
+              title: "Character controller",
+              hint:
+                "A prefab that walks the grid, or runs and jumps along it, and " +
+                "the line in the scene that puts it down. Off, the project places " +
+                "the document and nothing moves.",
+              control: character.root,
+            }),
+          ],
+        }),
+      ],
+      true,
+    ),
   );
 
   const create = () => {
-    const name = nameInput.value.trim() || "Untitled";
     sheet.close();
-    onCreate({ name, projection, genre, gridSize, options: { ...options } });
+    onCreate({
+      name: name.trim() || "Untitled",
+      projection,
+      genre,
+      gridSize,
+      options: { ...options },
+    });
   };
 
   nameInput.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -198,91 +268,8 @@ export function openNewProject(
  */
 function scaleNote(projection: Projection): string {
   return projection === "blank"
-    ? "Nothing snaps on a blank canvas — this is the unit the character and its movement are measured in"
-    : "The size of one space, in pixels";
-}
-
-function field(label: string, control: HTMLElement): HTMLElement {
-  return h(
-    "div",
-    { class: "field" },
-    h("span", { class: "field-label m", text: label }),
-    control,
-  );
-}
-
-/**
- * A labelled checkbox with a line under it saying what it does.
- *
- * The hint is not decoration: every one of these changes what lands on disk,
- * and the sheet is the only place it is explained.
- */
-function check(
-  label: string,
-  hint: string,
-  initial: boolean,
-  onChange: (on: boolean) => void,
-): HTMLElement {
-  const box = h("input", { type: "checkbox", class: "check-box" }) as HTMLInputElement;
-  box.checked = initial;
-  box.addEventListener("change", () => onChange(box.checked));
-
-  return h(
-    "div",
-    { class: "field" },
-    h(
-      "label",
-      { class: "check" },
-      box,
-      h("span", { class: "check-label", text: label }),
-    ),
-    h("div", { class: "field-hint", text: hint }),
-  );
-}
-
-interface Segmented {
-  root: HTMLElement;
-  /** Choose an option from outside, without firing `onPick`. */
-  select: (value: string) => void;
-  /** Grey an option out, and move off it if it was the one chosen. */
-  setEnabled: (value: string, enabled: boolean) => void;
-}
-
-function segmented(
-  options: Array<{ value: string; label: string }>,
-  initial: string,
-  onPick: (value: string) => void,
-): Segmented {
-  const buttons = new Map<string, HTMLButtonElement>();
-  const wrap = h("div", { class: "seg" });
-
-  for (const option of options) {
-    const button = h("button", {
-      class: "seg-opt",
-      type: "button",
-      text: option.label,
-      "aria-pressed": String(option.value === initial),
-      onClick: () => {
-        for (const b of buttons.values()) b.setAttribute("aria-pressed", "false");
-        button.setAttribute("aria-pressed", "true");
-        onPick(option.value);
-      },
-    });
-    buttons.set(option.value, button);
-    wrap.appendChild(button);
-  }
-
-  return {
-    root: wrap,
-    select: (value) => {
-      for (const [key, button] of buttons) {
-        button.setAttribute("aria-pressed", String(key === value));
-      }
-    },
-    setEnabled: (value, enabled) => {
-      const button = buttons.get(value);
-      if (!button) return;
-      button.disabled = !enabled;
-    },
-  };
+    ? "Nothing snaps on a blank canvas, so this is not the size of anything you " +
+        "will see. It is still the project's unit: how big the character is, and " +
+        "how coarse the lattice play mode walks."
+    : "The size of one space, in pixels.";
 }

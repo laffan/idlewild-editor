@@ -257,3 +257,170 @@
   line-height: 1.5;
 }
 .options-notice:empty { display: none; }
+
+/* ── Controls inside a row ───────────────────────────────────────────────────
+
+   `lib/options-controls.ts` builds these. They are deliberately smaller and
+   quieter than the same controls in a form: the row is the subject, and a
+   full-size segmented control at the end of one makes the row look like a
+   toolbar. Same argument as `.option-btn` above, which they are sized to
+   match.
+
+   A row that carries one gets `.option.has-control`, which lets its title
+   stop eliding and lets the pair stack on a narrow sheet. */
+
+/* A row whose control is wide enough to want its own line on a narrow sheet. */
+@media (max-width: 560px) {
+  .option.has-control {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .option.has-control .option-trail {
+    width: 100%;
+    justify-content: flex-start;
+    padding-left: calc(var(--opt-lead, 0px));
+  }
+}
+
+/* The title, and the `?` that explains it. A row with a hint has no second
+   line — that is the whole point of the hint — so the two sit together on one
+   baseline rather than the glyph floating beside a two-line body. */
+.option-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.option-title-row .option-title { min-width: 0; }
+
+/* ── Segmented ───────────────────────────────────────────────────────────── */
+
+.opt-seg {
+  display: flex;
+  flex: none;
+  border: 1px solid var(--opt-edge);
+  border-radius: calc(var(--opt-radius) - 4px);
+  overflow: hidden;
+}
+.opt-seg-btn {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--opt-sub);
+  font: 500 12px var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.opt-seg-btn + .opt-seg-btn { border-left: 1px solid var(--opt-edge); }
+.opt-seg-btn:hover:not(:disabled) { background: var(--opt-surface-hover); }
+.opt-seg-btn[aria-pressed="true"] {
+  background: var(--opt-accent);
+  color: var(--chrome-bg, #fff);
+}
+/* The one combination that is not offered — an isometric platformer — rather
+   than an option that is simply missing. Greyed says "not with that", gone
+   says "never existed". */
+.opt-seg-btn:disabled { color: var(--opt-sub); opacity: 0.4; cursor: not-allowed; }
+.opt-seg-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* A light sheet's pressed segment: the accent is a dark ink on paper, so what
+   sits on it is paper rather than the chrome's own background. */
+.options.light .opt-seg-btn[aria-pressed="true"] { color: var(--color-bg, #fff); }
+
+/* ── Switch ──────────────────────────────────────────────────────────────── */
+
+.opt-switch {
+  flex: none;
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--opt-edge);
+  border-radius: 13px;
+  background: var(--opt-surface-hover);
+  cursor: pointer;
+  position: relative;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.opt-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  /* Mid-grey off, white on. Not the title's ink: the track it slides in is
+     barely tinted, so a near-black knob on it reads as a control that is
+     already doing something. */
+  background: var(--opt-sub);
+  transition: transform 120ms ease, background 120ms ease;
+}
+.opt-switch[aria-checked="true"] {
+  background: var(--opt-accent);
+  border-color: var(--opt-accent);
+}
+.opt-switch[aria-checked="true"] .opt-switch-knob {
+  transform: translateX(18px);
+  background: #fff;
+}
+.opt-switch:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* ── Number ──────────────────────────────────────────────────────────────── */
+
+.opt-number-wrap {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+.opt-number {
+  width: 66px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--opt-edge);
+  border-radius: calc(var(--opt-radius) - 4px);
+  background: transparent;
+  color: var(--opt-title);
+  font: 500 12px var(--font-mono);
+  text-align: right;
+}
+.opt-number:focus { outline: none; border-color: var(--color-accent); }
+.opt-number-unit { font-size: 11px; color: var(--opt-sub); }
+
+/* ── Swatch ──────────────────────────────────────────────────────────────── */
+
+.opt-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 30px;
+  padding: 0 10px 0 6px;
+  border: 1px solid var(--opt-edge);
+  border-radius: calc(var(--opt-radius) - 4px);
+  background: transparent;
+  cursor: pointer;
+}
+.opt-swatch:hover { background: var(--opt-surface-hover); }
+.opt-swatch:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.opt-swatch-chip {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  /* An inset rule rather than a border, so a swatch of the surface colour is
+     still a swatch rather than a hole. */
+  box-shadow: inset 0 0 0 1px var(--opt-edge);
+}
+.opt-swatch-hex { font: 500 11px var(--font-mono); color: var(--opt-sub); }
+
+/* ── Text ────────────────────────────────────────────────────────────────── */
+
+.opt-text {
+  flex: none;
+  width: 190px;
+  max-width: 44vw;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--opt-edge);
+  border-radius: calc(var(--opt-radius) - 4px);
+  background: transparent;
+  color: var(--opt-title);
+  font: 500 13px var(--font-body);
+}
+.opt-text:focus { outline: none; border-color: var(--color-accent); }
+.opt-text::placeholder { color: var(--opt-sub); }

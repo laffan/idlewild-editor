@@ -48,6 +48,14 @@ remaining pieces are wired to real slots rather than mocked.
   where a space is a sprite rather than a room). Blank has no lattice: a
   selection is the exact rectangle it was dragged across, and a fill on it is
   one rectangle rather than a run of spaces
+- **The sheet is a settings page, and is drawn as one.** It used to be a column
+  of labels each with a grey paragraph under it; it is the same rows the Logins
+  sheet is built from now — the vocabulary Publish introduced, which this is the
+  second page to use and the first to need *controls* rather than reports. Every
+  explanation is still there, behind a **?** beside its row, which opens to a
+  tap as well as to a hover, because an iPad has no pointer to rest on anything.
+  The one that changes with the template says the right thing either way. There
+  is no *New Project* heading across the top: the button that opened it says so
 - And how it renders, on the same sheet. **Pixel perfect** is one box for the
   two settings that go together — nearest-neighbour textures, so a 16px sprite
   scaled up stays blocky, and whole-pixel drawing, so a camera at a fractional

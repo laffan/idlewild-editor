@@ -255,3 +255,55 @@
     50% { opacity: 1; }
   }
 }
+
+/* ── Hints ──────────────────────────────────────────────────────────────────
+
+   The `?` beside a label, and the bubble it opens. Behaviour is
+   `lib/tooltip.ts`; the reason it is a button rather than a `title` attribute
+   is there too, and it comes down to the iPad having no pointer to rest.
+
+   The bubble is `position: fixed` and lives on `document.body`, so nothing an
+   options group clips can clip it. */
+
+.tip-trigger {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--opt-edge, currentColor);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--opt-sub, currentColor);
+  font: 600 10px/1 var(--font-body);
+  cursor: help;
+  /* The glyph is a lone `?` in a circle 16px across, and the body face's own
+     line box puts it a pixel high inside one. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tip-trigger:hover,
+.tip-trigger[aria-expanded="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.tip-trigger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.tip {
+  position: fixed;
+  z-index: 1200;
+  max-width: 34ch;
+  padding: 9px 11px;
+  border-radius: 8px;
+  /* Ink whichever surface it is over: a hint opened from a light sheet and one
+     opened from the editor's dark chrome are the same object, and a bubble
+     that changed colour with the sheet under it would read as two. */
+  background: var(--color-neutral-900);
+  color: #fff;
+  font: 400 11.5px/1.5 var(--font-body);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 28%);
+  pointer-events: none;
+}
