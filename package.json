@@ -16,7 +16,7 @@
     "vendor:p2p": "node scripts/vendor-p2p.mjs",
     "tauri": "tauri",
     "build:macos": "tauri build",
-    "ios:init": "tauri ios init && node scripts/patch-ios-plist.mjs",
+    "ios:init": "tauri ios init && node scripts/patch-ios-plist.mjs && node scripts/patch-ios-linker.mjs",
     "build:ios": "tauri ios build --debug"
   },
   "dependencies": {

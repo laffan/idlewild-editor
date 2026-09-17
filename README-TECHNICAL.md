@@ -3218,6 +3218,68 @@ and then waits on a network transfer. The SSH half is async and is awaited;
 libgit2 is a blocking C library and goes through `spawn_blocking`, so neither
 parks a runtime thread on a socket.
 
+### And libgit2 needs two libraries that only Xcode has to be told about
+
+Linking libgit2 instead of spawning `git` is what makes publishing work on an
+iPad, and it came with a bill that the Mac never presented. libgit2 needs
+**zlib**, because a git object is a deflated blob, and **libiconv**, because
+`libgit2-sys` compiles `GIT_USE_ICONV` in for every Apple target — it is
+`target.contains("apple")` in its `build.rs`, with no feature to turn it off —
+so that a path can be precomposed the way HFS wants it. Both ship in the iOS
+SDK. Neither was being linked.
+
+**Why the macOS build never noticed.** On desktop, Cargo drives the final link
+itself, so the `cargo:rustc-link-lib=z` and `cargo:rustc-link-lib=iconv` lines
+those build scripts print become `-lz -liconv` on the command rustc runs. On
+iOS none of that happens: the Rust side is a `staticlib`, **Xcode** does the
+link, and a `.a` carries no record of the native libraries its objects still
+need. So the same tree that links on a Mac fails on the device with a page of
+undefined symbols — `_deflate`, `_crc32`, `_inflate`, `_iconv_open` — every one
+of them referenced from `libapp.a` and not one of them anything to do with this
+app's own code. The error is at the very last step of a long build and names
+nothing that appears in this repository, which is most of why it reads as
+something being broken rather than as two flags being absent.
+
+Mach-O does have a mechanism for exactly this, `LC_LINKER_OPTION`, and it is
+what puts the auto-linked frameworks on that same command. rustc does not emit
+those for `#[link]` yet ([rust-lang/rust#121293][autolink]), and ld64 will not
+pick them out of an archive member it is not already loading, so it would not
+be dependable from a `staticlib` even once it does. The flags therefore go on
+the Xcode side.
+
+[autolink]: https://github.com/rust-lang/rust/issues/121293
+
+**`scripts/patch-ios-linker.mjs` is where**, beside the plist one and for the
+same reason: `src-tauri/gen/` is not in the repository, `tauri ios init` writes
+it fresh, and `bundle.iOS.frameworks` in `tauri.conf.json` cannot express this
+— Tauri turns a bare name into `- sdk: <name>.framework` and anything with an
+extension into a vendored path, and `-lz` is neither. The alternative Tauri
+does offer is `bundle.iOS.template`, a whole copy of cargo-mobile2's XcodeGen
+template carried in this repository to change two lines of it, which is the
+kind of second copy this codebase avoids everywhere else.
+
+It writes `OTHER_LDFLAGS` into two files, because they are read at different
+times. `project.yml` is the XcodeGen source, so a regenerated project keeps the
+setting; `project.pbxproj` is what `xcodebuild` actually reads, so patching it
+is what makes the next build work without anyone re-running XcodeGen. Both
+edits are skipped when the setting is already there.
+
+**A build does not undo it.** Tauri writes the development team and the bundle
+identifier into the pbxproj on every build, and its editor is line-based — it
+rewrites the lines it owns and leaves the rest — so this survives. `tauri ios
+init` is the one thing that does undo it, which is why `npm run ios:init` runs
+the script straight afterwards. As with the plist, `beforeBuildCommand` means
+`tauri ios build` applies it and `tauri ios dev` does not.
+
+The two string transforms are tested in `scripts/__tests__`, against
+cargo-mobile2's template as XcodeGen renders it. That is unusual for a build
+script here and it is the one that earns it: the file being edited only exists
+on a Mac that has run `ios init`, nobody reads it, and both ways of getting it
+wrong are silent — a pbxproj rebuilt slightly wrong is a project Xcode refuses
+to open, and a patch that matches nothing is a build that fails exactly as it
+did before. So the test asserts the harder half outright: everything but the
+inserted lines comes back byte for byte.
+
 ### SFTP, a manifest, and the host key
 
 **rsync is the one tool here with no library form**, and that is the actual
