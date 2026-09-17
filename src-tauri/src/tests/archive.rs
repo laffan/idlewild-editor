@@ -255,6 +255,57 @@ fn a_zip_that_is_not_a_project_says_so() {
     std::fs::remove_file(&file).ok();
 }
 
+/// The two zips this app writes that are *not* backups, and the person holding
+/// one who reasonably thinks otherwise.
+///
+/// Both come out of the same Export sheet as the `.idlewild`, so "it is not an
+/// Idlewild project" reads as "your backup is broken" rather than as "you
+/// exported the other thing". Each is told apart by its shape and named, and
+/// each answer points at the row that does round-trip.
+#[test]
+fn a_site_export_zip_is_named_rather_than_refused_blankly() {
+    let file = temp("a-whole-site.zip");
+    write_zip(
+        &file,
+        &[
+            ("my-game/index.html", "<!doctype html>"),
+            ("my-game/js/game.config.json", "{}"),
+            // A site carries processed assets too, which is why it is tested
+            // for before the assets zip is.
+            ("my-game/assets/tower/data.json", "{}"),
+            ("my-game/README.txt", "Serve this directory over HTTP"),
+        ],
+    );
+
+    let err = archive::import(&file).expect_err("a site zip is not a project");
+    assert!(err.contains("Export → Site"), "it should say what it is: {err}");
+    assert!(
+        err.contains("Export → Project"),
+        "it should name the exit that does open here: {err}",
+    );
+    std::fs::remove_file(&file).ok();
+}
+
+#[test]
+fn an_assets_export_zip_is_named_rather_than_refused_blankly() {
+    let file = temp("just-the-art.zip");
+    write_zip(
+        &file,
+        &[
+            ("my-game/psd/tower.psd", "not really a psd"),
+            ("my-game/assets/tower/data.json", "{}"),
+        ],
+    );
+
+    let err = archive::import(&file).expect_err("an assets zip is not a project");
+    assert!(err.contains("Export → Assets"), "it should say what it is: {err}");
+    assert!(
+        err.contains("Import Assets"),
+        "it should name the door the artwork does go through: {err}",
+    );
+    std::fs::remove_file(&file).ok();
+}
+
 /// An archive is a file someone hands you, so what it may write is a list
 /// rather than a hope.
 #[test]

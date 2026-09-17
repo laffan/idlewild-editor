@@ -3739,13 +3739,19 @@ A published site cannot give back the file a sprite was drawn in. That is the
 whole reason the second format exists, and why `psd/` is in one and not the
 other.
 
-There are two ways **in**, and they are not exits turned round. **Open** reads a
-`.idlewild` back as a project of its own, which is what makes the second row a
-round trip; **Import Assets** brings artwork into the project you are in, off the
-filesystem or out of another project in this store — see *Import Assets, which is
-that door inward*. Nothing reads an Export Assets zip back: what is in one is
-`psd/<key>.psd` and `assets/<key>/…` under a project's own name, and a person who
-has one of those has files a picker can already reach.
+There are two ways **in**, and they are not exits turned round. **Import**, on
+the home screen, reads a `.idlewild` back as a project of its own, which is what
+makes the second row a round trip; **Import Assets** brings artwork into the
+project you are in, off the filesystem or out of another project in this store —
+see *Import Assets, which is that door inward*. Nothing reads an Export Assets
+zip back: what is in one is `psd/<key>.psd` and `assets/<key>/…` under a
+project's own name, and a person who has one of those has files a picker can
+already reach. The first of the two was called **Open** for as long as it
+existed, and *Where it is in the app* below is why it is not any more.
+
+Two of the three exits write a `.zip` and neither round-trips, which is a
+sentence this documentation could say and the app could not. Both are now
+recognised on the way in and **named** — see *A zip that is not a backup*.
 
 All three are written straight to the path the save dialog returned
 (`publish::publish_site`, `archive::export_project`,
@@ -3847,16 +3853,66 @@ that did — so an archive assembled by hand still opens.
 
 ### Where it is in the app
 
-**Open**, on the home screen beside New Project. The picker is unfiltered on a
+**Import**, on the home screen beside New Project. The picker is unfiltered on a
 touch device and filtered on a desktop, the same split as the editor's Add
 Image and for the same reason: iPadOS reads the filter list to decide *which
 picker* to show, and an extension it has never heard of is not a reliable way
 to ask for the document browser.
 
+**It was called Open, and that was the wrong word.** The button and the command
+behind it have existed since the archive format did; what had not happened was
+anybody finding them. A grid of project cards is a screen whose entire subject
+is opening things, so *Open* beside *Select* and *New Project* reads as "open
+one of these", and the one door on the screen that takes a file was the one
+nobody saw. The word people go looking for is *Import*, and it pairs with the
+editor's own **Import Assets** rather than competing with the cards: one brings
+a project in, the other brings artwork into the project you are in. Nothing
+underneath it changed — same command, same guard, same tests.
+
+**The desktop filter takes `.zip` too**, because a `.idlewild` *is* a zip and
+the extension is this app's private name for one. Nothing on a machine knows
+that name, so a backup that has been through mail, a chat client, a download or
+somebody's own Compress arrives as `.zip` — and a file the picker will not show
+is a backup that has been lost as surely as if it were deleted. Nothing is
+loosened by it: `import` has always decided what a file is by looking for a
+manifest at its root, never by its extension, so the filter was the only thing
+refusing those and it was refusing them for a reason that was never true. The
+touch picker is unfiltered and was never affected either way.
+
 `.idlewild` is not declared as a system file type. Doing so without wiring the
 open would put Idlewild in macOS's "Open with" for a file it then ignores; the
 declaration and the `RunEvent::Opened` / deep-link handling behind it belong
 together, and neither has been exercised on either platform yet.
+
+### A zip that is not a backup
+
+"This file has no idlewild.json — it is not an Idlewild project" is true, and it
+is no help at all to the person most likely to read it. Export writes three
+files and **two of them are zips**; only the middle row comes back. Somebody who
+picked *Site* a week ago, called it a backup and is now holding it in front of
+the importer is being told their backup is broken, when what happened is that
+they exported the other thing.
+
+So a zip with no manifest is **told apart by its shape and named**. Both of the
+others unpack into one directory called after the project, so the first path
+segment is dropped before anything is read; `.idlewild` has no such wrapper,
+which is the same fact that puts its manifest at the root. A site is
+`index.html` or `js/game.config.json` — tested **first**, because a site carries
+`assets/` too and would otherwise answer to the test below it. An assets export
+is `psd/` or `assets/` and nothing that runs. Anything else keeps the old
+sentence, because a zip this app did not write is a zip nothing here can name.
+
+Each answer says which of the three the file is, and points at the row that does
+open — *Export → Project* for both, plus *Import Assets* for the artwork one,
+which is where those files were actually going. `not_a_project` is the whole of
+it, and two tests pin the two shapes; a message that drifted off the sheet's own
+wording would send somebody looking for a menu item that is not there.
+
+A site is **not** made importable by any of this, and could not be: it has no
+`psd/` and no `doc.json`, so there is no project in it to rebuild. Pretending
+otherwise — importing one as an empty project named after it, say — would hand
+back something that looked like a recovered backup and was not, which is worse
+than a refusal that explains itself.
 
 ## Import Assets, which is that door inward
 

@@ -1,12 +1,19 @@
 /**
  * Home screen: the project list. A card per project showing its current
- * state as a thumbnail; long-press for rename and delete; Select, Open and New
- * Project top right.
+ * state as a thumbnail; long-press for rename and delete; Select, Import and
+ * New Project top right.
  *
- * Open reads a `.idlewild` file — the archive Publish's *Export project*
+ * **Import** reads a `.idlewild` file — the archive Export's *Project* row
  * writes — back in as a project of its own. It lands in the list like any
  * other, with a fresh id, because an id is a fact about this install's store
  * rather than about the project.
+ *
+ * It was called **Open** for as long as it has existed, and that was the wrong
+ * word on this screen. A grid of project cards is already a screen about
+ * opening things, so Open read as "open one of these" and the way *in* for a
+ * backup was the one door nobody found. Import is what the person is looking
+ * for, and it pairs with the editor's own **Import Assets**: one brings a
+ * project in, the other brings artwork into the project you are in.
  *
  * **Select** is a mode of the grid rather than a modifier on a press. There is
  * no ⌘-click on an iPad and no rubber band over a grid of cards, so the honest
@@ -78,15 +85,17 @@ export function renderHome(
     h("span", { text: "Select" }),
   ) as HTMLButtonElement;
 
-  const openButton = h(
+  const importButton = h(
     "button",
     {
       class: "btn btn-ghost",
-      title: "Open a .idlewild project file",
+      title: "Import a project from a .idlewild or .zip backup",
       onClick: () => void importProject(),
     },
+    // The same glyph as the editor's Import Assets, because they are the same
+    // verb at two scales — a door inward, for a project or for artwork.
     icon(ICONS.folder, 17),
-    h("span", { text: "Open" }),
+    h("span", { text: "Import" }),
   );
 
   const duplicateButton = h(
@@ -183,7 +192,7 @@ export function renderHome(
         h("div", { class: "home-brand", text: "IDLEWILD" }),
         count,
         selectButton,
-        openButton,
+        importButton,
         newButton,
       ),
       body,
@@ -257,6 +266,16 @@ export function renderHome(
    * the editor's Add Image, and for the same reason: iPadOS reads the filter
    * list to decide *which picker* to show, and an extension it has never
    * heard of is not a reliable way to ask for the document browser.
+   *
+   * **`.zip` is on the desktop filter too, because a `.idlewild` *is* a zip.**
+   * The extension is this app's name for it and nothing else on a machine
+   * knows that name, so a backup that went through mail, a chat client, a
+   * download or somebody's own Compress comes back as `.zip` more often than
+   * not. The importer decides what a file is by reading its manifest rather
+   * than its extension, so the filter was the only thing refusing those — and
+   * a backup you cannot see in the picker is a backup you have lost. A zip
+   * that turns out to be a site or an assets export is refused by name on the
+   * other side, which is a better answer than never offering it.
    */
   async function importProject(): Promise<void> {
     try {
@@ -266,14 +285,14 @@ export function renderHome(
         pickerMode: "document",
         filters: isMobile(os)
           ? undefined
-          : [{ name: "Idlewild project", extensions: ["idlewild"] }],
+          : [{ name: "Idlewild project", extensions: ["idlewild", "zip"] }],
       });
       if (typeof picked !== "string") return;
       const meta = await projects.import(picked);
-      log.info(`Opened ${meta.name} from ${picked}`);
+      log.info(`Imported ${meta.name} from ${picked}`);
       callbacks.onOpenProject(meta);
     } catch (err) {
-      log.error("Could not open that project:", err);
+      log.error("Could not import that file:", err);
       void reload();
     }
   }

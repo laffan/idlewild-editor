@@ -202,14 +202,73 @@ pub fn import(src: &Path) -> Result<ProjectMeta, String> {
 fn read_manifest<R: Read + std::io::Seek>(
     zip: &mut zip::ZipArchive<R>,
 ) -> Result<Manifest, String> {
+    // Collected rather than iterated in place: `file_names` borrows the
+    // archive, and the manifest has to be read out of it in the same breath.
+    let names: Vec<String> = zip.file_names().map(str::to_string).collect();
+    if !names.iter().any(|name| name == MANIFEST) {
+        return Err(not_a_project(&names));
+    }
+
     let mut entry = zip
         .by_name(MANIFEST)
-        .map_err(|_| "This file has no idlewild.json — it is not an Idlewild project".to_string())?;
+        .map_err(|e| format!("Cannot read this archive's manifest: {e}"))?;
     let mut text = String::new();
     entry
         .read_to_string(&mut text)
         .map_err(|e| format!("Cannot read this archive's manifest: {e}"))?;
     serde_json::from_str(&text).map_err(|e| format!("This archive's manifest is not readable: {e}"))
+}
+
+/// What to say about a zip that has no manifest in it.
+///
+/// "It is not an Idlewild project" is true, and it is no help at all to the
+/// person most likely to be reading it: somebody who exported a zip *from this
+/// app*, called it a backup and is now holding it in front of the importer.
+/// Export writes three files and two of them are zips; only one comes back. So
+/// the two that do not are recognised and named, along with the row that does.
+///
+/// Told apart by shape rather than by anything written into them. Both of the
+/// others unpack into one directory called after the project, so the first path
+/// segment is dropped before either is read; a `.idlewild` has no such wrapper,
+/// which is the same fact that puts its manifest at the root.
+fn not_a_project(names: &[String]) -> String {
+    let inside: Vec<&str> = names
+        .iter()
+        .map(|name| name.split_once('/').map(|(_, rest)| rest).unwrap_or(""))
+        .collect();
+
+    // A site: the page that runs it, and the config the runtime reads. Tested
+    // first, because a site carries `assets/` too and would otherwise answer to
+    // the test below it.
+    if inside
+        .iter()
+        .any(|rel| *rel == "index.html" || *rel == crate::game_config::CONFIG_REL)
+    {
+        return concat!(
+            "This is a zip from Export → Site: a built game, with no source ",
+            "PSDs and no document in it. A site cannot be turned back into a ",
+            "project — Export → Project writes the .idlewild file that opens ",
+            "here.",
+        )
+        .into();
+    }
+
+    // Artwork on its own, in the store's own layout under the project's name.
+    if inside
+        .iter()
+        .any(|rel| rel.starts_with("psd/") || rel.starts_with("assets/"))
+    {
+        return concat!(
+            "This is a zip from Export → Assets: artwork on its own, with no ",
+            "document and no code in it. Import Assets, inside a project, ",
+            "takes the artwork; Export → Project writes the .idlewild file ",
+            "that carries a whole project.",
+        )
+        .into();
+    }
+
+    // A zip this app did not write is a zip nothing here can name.
+    "This file has no idlewild.json — it is not an Idlewild project".into()
 }
 
 fn unpack<R: Read + std::io::Seek>(

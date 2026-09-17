@@ -24,7 +24,9 @@ branch of a GitHub repository. You sign in once, on the device, then point each
 project at its own destination and choose what to send. Export is the other
 verb — it hands you a file rather than sending one: the site as a zip, the
 project as a `.idlewild`, or the artwork on its own for the PSDs that are
-wanted somewhere that is not a game. Import Assets is that door the other way.
+wanted somewhere that is not a game. Import, on the home screen, reads a
+`.idlewild` back in as a project of its own; Import Assets is the same door at
+the scale of artwork, into the project you already have open.
 
 ## Status
 
@@ -34,7 +36,7 @@ remaining pieces are wired to real slots rather than mocked.
 **Working**
 
 - Project list with thumbnails, long-press rename / duplicate / delete
-- **Select**, beside Open, turns the grid into a set of choices: a tap picks a
+- **Select**, beside Import, turns the grid into a set of choices: a tap picks a
   card instead of opening it, each one carries a box in the corner of its
   thumbnail, and the row above them offers All, None, Duplicate and Delete. A
   bulk delete asks **once**, naming the projects while the list is short enough
@@ -1019,10 +1021,19 @@ remaining pieces are wired to real slots rather than mocked.
   of the view rather than in a heap on one space, and nothing is written over:
   a second `roof` becomes `roof-2`, because two files that happen to share a
   name are two files rather than one coming home
-- **Open**, beside New Project on the home screen, reads a `.idlewild` back in as
-  a project of its own. Everything comes with it, including the solids behind
+- **Import**, beside New Project on the home screen, reads a `.idlewild` back in
+  as a project of its own. Everything comes with it, including the solids behind
   extruded layers — so a shape you pulled on one machine is a shape you can go
-  on pulling on another
+  on pulling on another. It was called **Open** until recently, which was the
+  wrong word on a screen already full of things to open: the way *in* for a
+  backup was the one door nobody found. The picker takes `.zip` as well, because
+  a `.idlewild` *is* a zip and nothing outside this app knows the name — a
+  backup that went through mail, a chat client or somebody's own Compress comes
+  back as `.zip` more often than not, and what a file is gets decided by reading
+  its manifest rather than its extension. A zip that turns out to be a **site**
+  or an **assets** export is refused *by name*, saying which of the three it is
+  and which one does open here, rather than as "not an Idlewild project" —
+  all three come out of the same sheet, and only one of them is a backup
 
 **Next**
 
