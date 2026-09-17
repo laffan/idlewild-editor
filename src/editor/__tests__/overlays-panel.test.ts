@@ -18,6 +18,23 @@ describe("the remembered switches", () => {
     expect(readOverlays("")).toEqual(OVERLAY_DEFAULTS);
   });
 
+  /**
+   * Asserted against the literal answers rather than against the defaults, so
+   * this says what a first-run project looks like instead of agreeing with
+   * whatever the constant happens to hold. The two halves are separate
+   * decisions: every mark on, because a mark off by default is a mark somebody
+   * has to be told exists; the section folded, because three rows of chrome
+   * over the map every session is more than switches you act on rarely earn.
+   */
+  it("opens a first-run project with the section folded and the marks on", () => {
+    expect(readOverlays(null)).toEqual({
+      boundary: true,
+      centre: true,
+      minimap: true,
+      open: false,
+    });
+  });
+
   it("reads back what was written", () => {
     const stored = { boundary: false, centre: true, minimap: false, open: false };
     expect(readOverlays(JSON.stringify(stored))).toEqual(stored);

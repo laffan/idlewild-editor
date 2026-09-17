@@ -12,8 +12,10 @@
  * header's menu. A switch belongs beside the thing it switches: the Minimap
  * row sits directly on top of the minimap it hides, and the other two are in
  * the column you are already looking at when you notice a mark is in the way.
- * The section folds, because three rows of chrome permanently above the map
- * would cost the map more than the switches are worth.
+ * The section is folded to begin with, because three rows of chrome
+ * permanently above the map cost the map more than switches you act on rarely
+ * are worth — and the heading stays, so what is behind it is one tap away and
+ * named.
  *
  * **The order is not the order they were asked for.** Boundary and centre
  * point are the two marks `screen-guide.ts` draws — one subject, so they go
@@ -40,12 +42,22 @@ export interface OverlayState {
   open: boolean;
 }
 
-/** Everything on, and the section open. What a project opens as. */
+/**
+ * Everything on, and the section folded. What a project opens as.
+ *
+ * The two halves of that are not the same decision. Every **mark** starts
+ * showing, because a mark switched off by default is a mark somebody has to be
+ * told exists. The **section** starts folded, because it is chrome about the
+ * canvas rather than part of it: three rows permanently above the map cost the
+ * map a third of what it had, every session, to say something you act on
+ * rarely. The heading stays, so it is one tap away and still says what is
+ * behind it.
+ */
 export const OVERLAY_DEFAULTS: OverlayState = {
   boundary: true,
   centre: true,
   minimap: true,
-  open: true,
+  open: false,
 };
 
 /**

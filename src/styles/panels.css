@@ -96,10 +96,11 @@
 }
 
 /* Overlays: three switches for the three things drawn *about* the document
-   rather than in it. Open to begin with, because a switch nobody can find is
-   a mark nobody can turn off — and foldable, because three rows of chrome
-   permanently above the map would cost the map more than they are worth. The
-   fold is remembered per install, like a divider's width. */
+   rather than in it. Folded to begin with — three rows of chrome permanently
+   above the map cost the map a third of what it had, every session, to say
+   something you act on rarely — with the heading left standing, so what is
+   behind it is one tap away and named. The fold is remembered per install,
+   like a divider's width. */
 .overlays {
   flex: none;
   border-top: var(--rule-chrome);

@@ -754,10 +754,14 @@ foldable **Overlays** section directly above the map.
 
 **Beside the thing they switch, not behind the header's menu.** The Minimap row
 sits on top of the minimap it hides, and the other two are in the column you
-are already looking at when you notice a mark is in the way. The section folds
-because three rows of chrome permanently above the map would cost the map more
-than the switches are worth, and it opens showing all three because a switch
-nobody can find is a mark nobody can turn off.
+are already looking at when you notice a mark is in the way.
+
+**Folded to begin with, with every mark showing**, which is two decisions
+rather than one. A *mark* switched off by default is a mark somebody has to be
+told exists, so all three start on. The *section* is chrome about the canvas
+rather than part of it, and three rows of it permanently above the map cost the
+map a third of what it had, every session, to say something you act on rarely —
+so it starts folded, with the heading left standing, one tap away and named.
 
 **The order is not the order they were asked for.** Boundary and centre point
 are the two marks `screen-guide.ts` draws — one subject, so they go together —

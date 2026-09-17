@@ -112,12 +112,14 @@ remaining pieces are wired to real slots rather than mocked.
   game's window life size on the canvas; at any other zoom it grows and
   shrinks with the camera, and stays centred on the crosshair. It is Draw's
   alone — in Code and Play the real screen is the thing in front of you
-- **Overlays**, a foldable section above the minimap, switches those two marks
+- **Overlays**, a folded section above the minimap, switches those two marks
   and the minimap itself on and off one at a time. A boundary is what you lay a
   building against and then want out of the way; the map is worth a third of
-  the sidebar right up until you are working close in. What is switched is
-  remembered per install rather than saved into the project, the way a
-  sidebar's width is
+  the sidebar right up until you are working close in. It arrives folded, with
+  everything showing — the switches are for the times a mark is in the way, and
+  a row of them standing over the map the rest of the time costs more than it
+  saves. What is switched, and whether the section is open, is remembered per
+  install rather than saved into the project, the way a sidebar's width is
 - Fill a selection with any colour, from a full picker with recent swatches.
   It starts grey rather than in the app's accent: a fill is usually a
   block-out, and the accent is the colour the editor draws its *own* marks in
