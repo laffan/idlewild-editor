@@ -30,6 +30,7 @@ import panelsCss from "../panels.css?raw";
 import inspectCss from "../inspect.css?raw";
 import libraryCss from "../library.css?raw";
 import sheetsCss from "../sheets.css?raw";
+import optionsCss from "../options.css?raw";
 
 /** The declarations of one rule, by property. Comments are stripped first. */
 function rule(selector: string): Record<string, string> {
@@ -122,6 +123,54 @@ describe("the drawing layer's stylesheet", () => {
  * rather than decorative, and neither fails in a way anybody would call a
  * styling bug.
  */
+/**
+ * The options vocabulary — `styles/options.css` — is the settings look this
+ * app's option pages are built on, and it is deliberately not the modernist
+ * system the rest of the chrome uses. Three of its rules are load-bearing
+ * rather than decorative.
+ */
+describe("the options list", () => {
+  /**
+   * The tokens are on `:root`, not on `.options`, and that is the difference
+   * between a field used outside an options page working and drawing a bright
+   * border round itself. An undefined `var()` makes the declaration invalid at
+   * computed-value time, and `border-color` then resolves to `currentColor` —
+   * which is text, not a hairline. The publish destination sheet uses
+   * `.options-field` outside any `.options`, so this is not hypothetical.
+   */
+  it("declares its tokens where anything can reach them", () => {
+    const root = ruleIn(optionsCss, ":root");
+    for (const token of ["--opt-radius", "--opt-edge", "--opt-sub", "--opt-surface"]) {
+      expect(root[token], `${token} has to be a :root default`).toBeTruthy();
+    }
+    // `.options` is a scope that may override them, not where they live.
+    expect(ruleIn(optionsCss, ".options")["--opt-radius"]).toBeUndefined();
+  });
+
+  /**
+   * A group is one rounded card and its rows take its corners by being
+   * clipped, rather than each row knowing whether it is first or last.
+   */
+  it("clips the rows to the group's corners", () => {
+    const rows = ruleIn(optionsCss, ".options-rows");
+    expect(rows["border-radius"]).toBeTruthy();
+    expect(rows.overflow).toBe("hidden");
+  });
+
+  /**
+   * The separator between rows is inset to where the text starts, which is
+   * what makes a list read as a list. It is a pseudo-element because a
+   * `border-bottom` cannot be inset — and it is on `.option + .option`, so the
+   * first row has none without anybody writing `:last-child { border: 0 }`.
+   */
+  it("insets the rule between rows to where the text starts", () => {
+    const rule = ruleIn(optionsCss, ".option + .option::before");
+    expect(rule.position).toBe("absolute");
+    expect(rule.left).toContain("--opt-lead");
+    expect(rule["border-top"]).toBeTruthy();
+  });
+});
+
 describe("the publish sheets", () => {
   it("puts the two halves side by side", () => {
     expect(ruleIn(sheetsCss, ".publish-split").display).toBe("flex");

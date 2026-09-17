@@ -909,6 +909,13 @@ remaining pieces are wired to real slots rather than mocked.
   accounts and servers interleaved, because they are one kind of thing — and a
   column with no login yet shows the way to it and nothing else. So adding a
   second project is picking a repository, not typing a password again
+- **Logins is drawn as a settings list**, not in the flat modernist system the
+  rest of the chrome uses: rounded groups of rows, a name and a quiet line
+  under it, hairline separators starting where the text does. It is a
+  vocabulary rather than a one-off — `styles/options.css` and
+  `lib/options-list.ts` name rows and groups and nothing about publishing — so
+  the next options screen is rows handed to a builder rather than a second
+  opinion about what a settings page looks like
 - **Signing in to GitHub asks for a token and nothing else.** GitHub is asked
   whose it is, which is one fewer box to type into and the difference between
   finding out a token is bad now and finding out at the far end of a publish

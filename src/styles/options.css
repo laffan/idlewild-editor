@@ -1,0 +1,259 @@
+/* ── Options lists ──────────────────────────────────────────────────────────
+
+   A settings vocabulary, deliberately **not** the modernist design system the
+   rest of this app is drawn in. That system is flat, zero-radius, 2px rules
+   and uppercase micro-labels: right for chrome standing over a canvas, wrong
+   for a page of settings, where what you want is a list you can run your eye
+   down. So this departs on three counts, and only three:
+
+   - **Rounded groups.** `--radius-md` is 0 everywhere else. A settings list
+     reads as cards of related rows, and the corner is what makes a group look
+     like a group rather than like four rules in a row.
+   - **Sentence case, body face.** No `--font-label` in uppercase. A row's
+     title is a name, and a name set in narrow capitals is a heading.
+   - **Two lines per row.** A title and a quiet second line under it, rather
+     than a key column and a value. The second line is where a row says what
+     it is *for*, which is the thing a settings list exists to tell you.
+
+   Everything else — the palette, the body face, the accent — is the system's,
+   because a settings page that is a different *colour* is a different app.
+
+   ## Using it elsewhere
+
+   Nothing here names a feature. The classes are rows, groups, leads, trails;
+   the Logins sheet is the first thing built on them and should not be the last.
+   Every dimension and colour is a variable, so another page retunes it by
+   overriding them rather than by editing this file:
+
+       <div class="options" style="--opt-row-min: 64px">
+
+   The defaults are on `:root` rather than on `.options`, and that is
+   deliberate rather than tidy: a single `.options-field` or `.option-btn` is
+   worth dropping into a panel that is *not* an options page — the publish
+   destination sheet does exactly that — and a token scoped to `.options` would
+   leave one used outside it with an invalid `var()`, which resolves to
+   `currentColor` and draws a bright border round a text box. Anything from
+   this file works anywhere; a container that wants different numbers sets them
+   on itself.
+
+   A page that wants the list on a light surface adds `.options.light`, which
+   is the one variant this carries, because the home screen's sheets are light
+   and the editor's are dark. */
+
+:root {
+  /* The shape of a row. */
+  --opt-row-min: 58px;
+  --opt-pad-x: 16px;
+  --opt-pad-y: 11px;
+  --opt-gap: 14px;
+  --opt-radius: 10px;
+  /* The surfaces a group is drawn on. */
+  --opt-surface: color-mix(in srgb, var(--chrome-text) 5%, transparent);
+  --opt-surface-hover: color-mix(in srgb, var(--chrome-text) 10%, transparent);
+  --opt-rule: color-mix(in srgb, var(--chrome-text) 12%, transparent);
+  --opt-edge: color-mix(in srgb, var(--chrome-text) 16%, transparent);
+  /* The three weights of text a row uses. */
+  --opt-title: var(--chrome-text);
+  --opt-sub: var(--chrome-dim);
+  --opt-accent: var(--color-accent-400);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+/* On a light sheet the same list, mixed against ink instead of paper. */
+.options.light {
+  --opt-surface: color-mix(in srgb, var(--color-text) 4%, transparent);
+  --opt-surface-hover: color-mix(in srgb, var(--color-text) 8%, transparent);
+  --opt-rule: color-mix(in srgb, var(--color-text) 12%, transparent);
+  --opt-edge: color-mix(in srgb, var(--color-text) 18%, transparent);
+  --opt-title: var(--color-text);
+  --opt-sub: var(--color-neutral-700);
+  --opt-accent: var(--color-accent-700);
+}
+
+/* ── A group ─────────────────────────────────────────────────────────────── */
+
+.options-group { display: flex; flex-direction: column; gap: 8px; }
+
+/* Above the group, quiet, in the body face. Not a `sheet-title`: a group
+   heading is a label for what follows, and competing with the sheet's own
+   title is how a settings page stops having a hierarchy. */
+.options-group-title {
+  font: 600 12px var(--font-body);
+  letter-spacing: 0.02em;
+  color: var(--opt-sub);
+  padding: 0 4px;
+}
+
+/* Under it, in the same key: the sentence a group needs and a row cannot
+   carry. The classic place for the thing you would otherwise put in a tooltip
+   nobody opens. */
+.options-group-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--opt-sub);
+  padding: 0 4px;
+  max-width: 62ch;
+}
+
+/* The rows themselves, as one card. `overflow: hidden` is what makes the first
+   and last rows take the group's corners without either of them having to know
+   it is first or last. */
+.options-rows {
+  display: flex;
+  flex-direction: column;
+  background: var(--opt-surface);
+  border: 1px solid var(--opt-edge);
+  border-radius: var(--opt-radius);
+  overflow: hidden;
+}
+
+/* ── A row ───────────────────────────────────────────────────────────────── */
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--opt-gap);
+  min-height: var(--opt-row-min);
+  padding: var(--opt-pad-y) var(--opt-pad-x);
+  position: relative;
+  color: var(--opt-title);
+  text-align: left;
+}
+
+/* The separator is drawn as a pseudo-element inset from the lead, which is the
+   detail that makes a list look like a list rather than a table: the rule
+   starts where the text starts. A plain `border-bottom` cannot be inset, and
+   `:last-child { border: 0 }` is the other half of what this avoids. */
+.option + .option::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: calc(var(--opt-pad-x) + var(--opt-lead, 0px));
+  right: 0;
+  border-top: 1px solid var(--opt-rule);
+}
+/* A row with a lead pushes its own separator across by the lead's width. Set
+   as a variable rather than a class so a page with wider leads says so once. */
+.option.has-lead { --opt-lead: calc(28px + var(--opt-gap)); }
+
+/* A row that is itself a control — the whole width is the hit target, which is
+   what a finger needs and what a settings list has always done. */
+.option.tappable {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.option.tappable:hover { background: var(--opt-surface-hover); }
+.option.tappable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* The glyph or badge at the head of a row. */
+.option-lead {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(var(--opt-radius) - 4px);
+  background: var(--opt-surface-hover);
+  color: var(--opt-sub);
+}
+.option-lead svg { display: block; }
+
+/* Title over subtitle. `min-width: 0` on both so a long value ellipsizes
+   rather than pushing the row's controls off the end. */
+.option-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.option-title {
+  font: 500 14px var(--font-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.option-sub {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--opt-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A second line that is a fingerprint, a path, a key — something compared
+   character by character rather than read. */
+.option-sub.mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  word-break: break-all;
+  white-space: normal;
+}
+
+/* What sits at the end of a row: buttons, a value, a chevron. */
+.option-trail { flex: none; display: flex; align-items: center; gap: 8px; }
+/* A value the row is reporting rather than a control — right-aligned, quiet,
+   the shape `Wi-Fi ............ MyNetwork ›` has in every settings app. */
+.option-value { font-size: 12px; color: var(--opt-sub); }
+.option-chevron { color: var(--opt-sub); flex: none; }
+
+/* Buttons inside a row are small and quiet: the row is the subject, and three
+   full-size buttons on it would make the row look like a toolbar. */
+.option-btn {
+  flex: none;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--opt-edge);
+  border-radius: calc(var(--opt-radius) - 4px);
+  background: transparent;
+  color: var(--opt-title);
+  font: 500 12px var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.option-btn:hover { background: var(--opt-surface-hover); }
+.option-btn.accent { border-color: var(--opt-accent); color: var(--opt-accent); }
+/* The one that takes something away. Named rather than coloured red by hand,
+   so a page can retune what "destructive" looks like in one place. */
+.option-btn.danger { color: var(--color-accent-500); border-color: transparent; }
+.option-btn.danger:hover { background: color-mix(in srgb, var(--color-accent) 16%, transparent); }
+
+/* A row that adds something, at the foot of its group: the lead is a `+` and
+   the whole row is the button. */
+.option.add .option-lead { color: var(--opt-accent); }
+.option.add .option-title { color: var(--opt-accent); }
+
+/* A group with nothing in it yet says so on a row of its own, so the card is
+   never an empty box with a border round it. */
+.option.empty { color: var(--opt-sub); font-size: 12px; min-height: 48px; }
+
+/* ── Fields, for the sheets a row opens ──────────────────────────────────────
+
+   Label above input rather than the design system's 150px key column. A
+   settings form is read down, and a column of right-aligned keys is a table. */
+
+.options-field { display: flex; flex-direction: column; gap: 6px; padding: 0 4px; }
+.options-field-label { font: 600 12px var(--font-body); color: var(--opt-title); }
+.options-field-hint { font-size: 11px; line-height: 1.5; color: var(--opt-sub); max-width: 62ch; }
+.options-field .input {
+  min-height: 42px;
+  border-radius: calc(var(--opt-radius) - 4px);
+  border-color: var(--opt-edge);
+  font-size: 15px;
+}
+.options-field .input:focus { border-color: var(--color-accent); }
+/* A field with a button beside it — "choose a file", "test this". */
+.options-field-row { display: flex; align-items: center; gap: 10px; }
+.options-field-row .input { flex: 1; min-width: 0; }
+
+/* Something the form has to say back: a failure, or what it is doing now. */
+.options-notice {
+  padding: 10px 12px;
+  border-radius: calc(var(--opt-radius) - 4px);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.options-notice:empty { display: none; }

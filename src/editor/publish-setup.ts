@@ -51,7 +51,8 @@ import {
 import { EMPTY_TARGET, type PublishTarget } from "../lib/publish-target";
 import { fuzzyRank, highlight } from "../lib/fuzzy";
 import * as log from "../lib/log";
-import { openPublishAccounts, field } from "./publish-accounts";
+import { optionField } from "../lib/options-list";
+import { openPublishAccounts } from "./publish-accounts";
 
 /**
  * Open the sheet. `onSaved` is how whatever opened it finds out there is a
@@ -326,15 +327,19 @@ function githubFields(
   target: PublishTarget,
   onChange: (next: Partial<PublishTarget>) => void,
 ): HTMLElement {
-  const branch = field("Branch", "gh-pages", target.branch);
-  const path = field("Path", "the repository root, if empty", target.path);
+  const branch = optionField({ label: "Branch", placeholder: "gh-pages", value: target.branch });
+  const path = optionField({
+    label: "Path",
+    placeholder: "the repository root, if empty",
+    value: target.path,
+  });
   branch.input.addEventListener("input", () => onChange({ branch: branch.input.value }));
   path.input.addEventListener("input", () => onChange({ path: path.input.value }));
   return h(
     "div",
     { class: "publish-fields" },
-    branch.row,
-    path.row,
+    branch.root,
+    path.root,
     h("div", {
       class: "field-hint",
       text:
@@ -404,7 +409,11 @@ function serverFields(
   target: PublishTarget,
   onChange: (next: Partial<PublishTarget>) => void,
 ): HTMLElement {
-  const directory = field("Directory", "/var/www/example.com", target.directory);
+  const directory = optionField({
+    label: "Directory",
+    placeholder: "/var/www/example.com",
+    value: target.directory,
+  });
   directory.input.addEventListener("input", () =>
     onChange({ directory: directory.input.value }),
   );
@@ -419,7 +428,7 @@ function serverFields(
   return h(
     "div",
     { class: "publish-fields" },
-    directory.row,
+    directory.root,
     h(
       "label",
       { class: "check" },

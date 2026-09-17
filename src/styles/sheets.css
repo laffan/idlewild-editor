@@ -386,12 +386,16 @@
 .publish-fields {
   display: flex;
   flex-direction: column;
+  gap: 12px;
   border-top: 1px solid var(--chrome-rule);
-  padding-top: 6px;
+  padding-top: 12px;
 }
-.publish-fields .sheet-row,
-.publish-fields .sheet-row.control { padding: 0; min-height: 52px; border-bottom: 0; }
-.publish-fields .sheet-row-key { width: 78px; }
+/* The fields are the options vocabulary's — label above box — because a
+   column this narrow has no room for a key column beside one, and because
+   having the two places that ask for a hostname look the same is worth more
+   than either of them being bespoke. See `styles/options.css`. */
+.publish-fields .options-field { padding: 0; }
+.publish-fields .options-field .input { min-height: 36px; font-size: 13px; }
 
 .publish-empty {
   padding: 16px 4px;
@@ -486,31 +490,9 @@
    so every filename in the pane still starts at the same x. */
 .check-box-gap { flex: none; width: 22px; }
 
-/* ── The list of logins ─────────────────────────────────────────────────────
-
-   GitHub accounts and servers interleaved, because they are one kind of thing:
-   a login this device holds, shared by every project. The kind is a chip in
-   the key column rather than a heading, so the list stays one list. */
-
-.publish-kind {
-  flex: none;
-  width: 72px;
-  font-family: var(--font-label);
-  font-size: 9px;
-  letter-spacing: 0.08em;
-  color: var(--chrome-dim);
-}
-.publish-add { gap: 10px; justify-content: flex-start; }
-
-/* A server's host key fingerprint, on its row. In the code face because it is
-   a string somebody compares character by character against what the server
-   says about itself, and a proportional font is the wrong tool for that. */
-.publish-fingerprint {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  word-break: break-all;
-}
-
-/* A row carrying two buttons after its value — Edit and Delete on a server —
-   needs the value to be the part that gives way. */
-.sheet-row .btn { flex: none; }
+/* The list of logins is not drawn here. It is an options page — see
+   `styles/options.css`, which is the settings vocabulary this app's other
+   options screens are meant to be built on, and which deliberately departs
+   from the modernist system the rest of the chrome uses. What used to be in
+   this space were three classes describing a kind chip, an add row and a
+   fingerprint line; all three are rows and sub-lines over there now. */

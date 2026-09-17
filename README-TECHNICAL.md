@@ -2887,6 +2887,57 @@ repository branch is already the place the site goes, and publishing into
 `public_html/nine-roads/` when the target said `public_html/` would be this
 code naming a directory somebody else owns.
 
+### An options vocabulary, which is not this app's design system
+
+The Logins sheet is a settings page, and the modernist system the rest of the
+chrome is drawn in — flat, zero-radius, 2px rules, uppercase micro-labels in
+Archivo Narrow — is the wrong tool for one. That system is right for chrome
+standing over a canvas, where everything is a control and nothing is prose. A
+settings page is a list you run your eye down.
+
+So `styles/options.css` departs, on three counts and only three:
+
+- **Rounded groups.** `--radius-md` is `0` everywhere else in this app. A
+  settings list reads as cards of related rows, and the corner is what makes a
+  group look like a group rather than like four rules in a row.
+- **Sentence case in the body face.** No uppercase `--font-label`. A row's
+  title is a name, and a name in narrow capitals is a heading.
+- **Two lines to a row.** A title and a quiet second line, rather than a key
+  column and a value. The second line is where a row says what it is *for*,
+  which is the thing a settings list exists to tell you.
+
+Everything else is the system's — the palette, the body face, the accent —
+because a settings page that is a different *colour* is a different app.
+
+**Nothing in it names a feature.** The classes are groups, rows, leads, trails;
+`lib/options-list.ts` is the matching set of builders, so a page hands it rows
+and gets a page back rather than assembling `div`s. Logins is the first thing
+built on it and is meant not to be the last: Project Options and the render
+settings are the obvious next ones, and they should be able to copy the *shape*
+of `publish-accounts.ts` and share none of its content.
+
+Two details are load-bearing, and both are asserted in `styles.test.ts`:
+
+- **The tokens are on `:root`, not on `.options`.** That looks like the wrong
+  scope for something namespaced `--opt-*`, and it is the difference between a
+  single `.options-field` dropped into a panel that is not an options page
+  working and drawing a bright border round itself. An undefined `var()` makes
+  the declaration invalid at computed-value time and `border-color` resolves to
+  `currentColor` — text, not a hairline. The publish destination sheet uses
+  exactly one field that way, so this is not hypothetical. A container that
+  wants different numbers sets them on itself.
+- **The separator between rows is a pseudo-element, inset to where the text
+  starts.** A `border-bottom` cannot be inset, and the rule starting under the
+  title rather than at the card's edge is most of what makes a list read as a
+  list. It hangs off `.option + .option`, so the first row has none without
+  anybody writing `:last-child { border: 0 }`.
+
+`optionRow` takes its quiet lines as an array for a reason worth stating: a
+server row has two — what it is, and its host key fingerprint — and the
+alternative was the caller reaching into the row it had just been handed to
+append one. A builder whose output has to be patched afterwards is a builder
+missing a parameter.
+
 ### Three sheets, and the seam they are split along
 
 Publishing is made of two things that change at different rates, and the first

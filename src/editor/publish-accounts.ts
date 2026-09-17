@@ -10,9 +10,13 @@
  * the relationship legible: everything here is shared by every project, and
  * nothing here is about any one of them.
  *
- * So the rows interleave. A row is a login, whichever kind, with the same
- * shape: who it is, what it is for, and a way to change or forget it. The two
- * kinds differ only in what their popup asks for.
+ * **Drawn as a settings list rather than in the app's own design system.** See
+ * `styles/options.css` for what that departs on and why — rounded groups,
+ * sentence case, two lines to a row. This page is the first thing built on
+ * that vocabulary and is meant not to be the last, so nothing here styles
+ * anything: it hands `lib/options-list.ts` rows and gets a page back. A second
+ * options page should be able to copy the *shape* of this file and share none
+ * of its content.
  *
  * **No secret is ever read back into this sheet.** Rust answers with names and
  * fingerprints and nothing else; signing in again is how a token is replaced,
@@ -39,8 +43,17 @@
  */
 
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { h } from "../lib/dom";
+import { h, ICONS } from "../lib/dom";
 import { confirmSheet, openSheet } from "../lib/sheet";
+import {
+  optionAddRow,
+  optionField,
+  optionGroup,
+  optionNotice,
+  optionRow,
+  optionsForm,
+  optionsPage,
+} from "../lib/options-list";
 import {
   publish,
   type GithubAccount,
@@ -52,9 +65,9 @@ import * as log from "../lib/log";
 /**
  * The sheet, over whatever opened it.
  *
- * `onChanged` is how the sheet that opened this one finds out a server
- * appeared or an account signed in: the destination sheet lists servers, and
- * one added here has to show up there without the project being reopened.
+ * `onChanged` is how the sheet that opened this one finds out a login appeared:
+ * the destination sheet lists them, and one added here has to show up there
+ * without the project being reopened.
  */
 export function openPublishAccounts(onChanged: () => void = () => {}): void {
   const sheet = openSheet({
@@ -77,82 +90,68 @@ export function openPublishAccounts(onChanged: () => void = () => {}): void {
       log.error("Could not read the publish settings:", err);
       return;
     }
-    const rows = [
-      ...settings.accounts.map((account) => accountRow(account, reload, onChanged)),
-      ...settings.servers.map((server) => serverRow(server, reload, onChanged)),
-    ];
+    const again = () => void reload();
     body.replaceChildren(
-      ...(rows.length
-        ? rows
-        : [
-            h("div", {
-              class: "field-hint",
-              text:
-                "Nothing yet. Add a GitHub account to publish to a repository, " +
-                "or a server to publish over SSH. Either is shared by every " +
-                "project on this device.",
-            }),
-          ]),
-      addRow(reload, onChanged),
+      optionsPage([
+        optionGroup({
+          title: "GitHub",
+          note:
+            "A personal access token with Contents write on the repositories " +
+            "you publish to. Kept on this device, in a file only you can read.",
+          rows: [
+            ...settings.accounts.map((account) => accountRow(account, again, onChanged)),
+            optionAddRow("Add an account", () => void signIn(again, onChanged)),
+          ],
+        }),
+        optionGroup({
+          title: "Servers",
+          note:
+            "Publishing uses your ssh key. Its public half needs to be in the " +
+            "account's authorized_keys already — ssh-copy-id is the usual way.",
+          rows: [
+            ...settings.servers.map((server) => serverRow(server, again, onChanged)),
+            optionAddRow("Add a server", () => void editServer(null, again, onChanged)),
+          ],
+        }),
+      ]),
     );
   };
   void reload();
 }
 
-/** The two ways to add a login, on one row at the bottom of the list. */
-function addRow(reload: () => void, onChanged: () => void): HTMLElement {
-  return h(
-    "div",
-    { class: "sheet-row publish-add" },
-    h("button", {
-      class: "btn btn-ghost",
-      text: "Add a GitHub account",
-      onClick: () => void signIn(reload, onChanged),
-    }),
-    h("button", {
-      class: "btn btn-ghost",
-      text: "Add a server",
-      onClick: () => void editServer(null, reload, onChanged),
-    }),
-  );
-}
+// ── GitHub ──────────────────────────────────────────────────────────────────
 
-/** A signed-in GitHub account. */
 function accountRow(
   account: GithubAccount,
   reload: () => void,
   onChanged: () => void,
 ): HTMLElement {
-  return h(
-    "div",
-    { class: "sheet-row" },
-    h("div", { class: "publish-kind m", text: "GITHUB" }),
-    h(
-      "div",
-      { class: "sheet-row-value seg-stack" },
-      h("span", { text: account.login }),
-      h("span", { class: "check-hint", text: "Publishes to any repository this token can write" }),
-    ),
-    h("button", {
-      class: "btn btn-ghost",
-      title: "Replace this account's token",
-      text: "New token",
-      onClick: () => void signIn(reload, onChanged),
-    }),
-    h("button", {
-      class: "btn btn-ghost",
-      text: "Sign out",
-      onClick: () => void signOut(account, reload, onChanged),
-    }),
-  );
+  return optionRow({
+    title: account.login,
+    sub: "Publishes to any repository this token can write to",
+    glyph: ICONS.code,
+    actions: [
+      {
+        label: "New token",
+        title: "Replace this account's token",
+        onSelect: () => void signIn(reload, onChanged),
+      },
+      {
+        label: "Sign out",
+        danger: true,
+        onSelect: () => void signOut(account, reload, onChanged),
+      },
+    ],
+  });
 }
 
 /**
  * Sign in: one box.
  *
  * GitHub is asked whose the token is rather than the person being asked to
- * type a username the app could have looked up — and the lookup doubles as
- * the check that the token works at all.
+ * type a username the app could have looked up — and the lookup doubles as the
+ * check that the token works at all, which is why the notice says what it is
+ * doing rather than the sheet simply closing.
  */
 async function signIn(reload: () => void, onChanged: () => void): Promise<void> {
   const sheet = openSheet({
@@ -160,13 +159,10 @@ async function signIn(reload: () => void, onChanged: () => void): Promise<void> 
     subtitle: "a personal access token",
     width: 560,
   });
-  const token = field("Token", "ghp_… or github_pat_…");
-  token.input.type = "password";
-  token.input.autocomplete = "off";
-  const note = h("div", { class: "field-hint" });
+  const notice = optionNotice();
 
   const submit = () => {
-    note.textContent = "Asking GitHub whose token that is…";
+    notice.textContent = "Asking GitHub whose token that is…";
     void publish
       .signInToGithub(token.input.value.trim())
       .then((account) => {
@@ -176,25 +172,22 @@ async function signIn(reload: () => void, onChanged: () => void): Promise<void> 
         reload();
       })
       .catch((err) => {
-        note.textContent = String(err);
+        notice.textContent = String(err);
       });
   };
-  token.input.addEventListener("keydown", (event: KeyboardEvent) => {
-    if (event.key === "Enter") submit();
+
+  const token = optionField({
+    label: "Token",
+    placeholder: "ghp_… or github_pat_…",
+    secret: true,
+    hint:
+      "A fine-grained token has to list the repositories you publish to " +
+      "explicitly, and needs Contents write on them. It is never sent " +
+      "anywhere but github.com.",
+    onSubmit: submit,
   });
 
-  sheet.body.append(
-    token.row,
-    h("div", {
-      class: "field-hint",
-      text:
-        "It needs Contents write on the repositories you publish to — a " +
-        "fine-grained token has to list them explicitly. The token is kept on " +
-        "this device, in a file only you can read, and is never sent anywhere " +
-        "but github.com.",
-    }),
-    note,
-  );
+  sheet.body.appendChild(optionsForm(token.root, notice));
   sheet.actions.append(
     h("button", { class: "btn btn-primary", text: "Sign in", onClick: submit }),
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
@@ -224,6 +217,8 @@ async function signOut(
   }
 }
 
+// ── servers ─────────────────────────────────────────────────────────────────
+
 function serverRow(
   server: PublishServer,
   reload: () => void,
@@ -237,41 +232,144 @@ function serverRow(
     .filter(Boolean)
     .join(" · ");
 
-  return h(
-    "div",
-    { class: "sheet-row" },
-    h("div", { class: "publish-kind m", text: "SERVER" }),
-    h(
-      "div",
-      { class: "sheet-row-value seg-stack" },
-      h("span", { text: server.label || server.host }),
-      h("span", { class: "check-hint", text: where }),
-      // The fingerprint, once there is one. On the row rather than behind a
-      // disclosure, because the whole value of trust-on-first-use is that
-      // somebody can check afterwards what was trusted.
-      server.hostKey
-        ? h("span", { class: "check-hint publish-fingerprint", text: server.hostKey })
-        : h("span", { class: "check-hint", text: "Host key learned on the first publish." }),
+  return optionRow({
+    title: server.label || server.host,
+    // The fingerprint on the row rather than behind a disclosure: the whole
+    // value of trust-on-first-use is that somebody can check afterwards what
+    // was trusted, and a fact nobody is shown is a check nobody makes.
+    sub: [
+      where,
+      {
+        text: server.hostKey || "Host key learned on the first publish.",
+        mono: !!server.hostKey,
+      },
+    ],
+    glyph: ICONS.publish,
+    actions: [
+      ...(server.hostKey
+        ? [
+            {
+              label: "Forget key",
+              title: "Trust whatever key this server offers next time",
+              onSelect: () => void forgetHostKey(server, reload, onChanged),
+            },
+          ]
+        : []),
+      { label: "Edit", onSelect: () => void editServer(server, reload, onChanged) },
+      {
+        label: "Delete",
+        danger: true,
+        onSelect: () => void removeServer(server, reload, onChanged),
+      },
+    ],
+  });
+}
+
+/**
+ * Add a server, or change one.
+ *
+ * A sheet of its own rather than fields in the row, because five of them do not
+ * fit on a row and because a half-typed hostname that saved as you went would
+ * be a server a project might be pointed at mid-edit.
+ */
+async function editServer(
+  server: PublishServer | null,
+  reload: () => void,
+  onChanged: () => void,
+): Promise<void> {
+  const sheet = openSheet({
+    title: server ? `Edit ${server.label || server.host}` : "Add a server",
+    subtitle: "published to over SSH",
+    width: 560,
+  });
+
+  const label = optionField({ label: "Name", placeholder: "Live", value: server?.label ?? "" });
+  const host = optionField({ label: "Host", placeholder: "example.com", value: server?.host ?? "" });
+  const user = optionField({
+    label: "User",
+    placeholder: "your login on that server",
+    value: server?.user ?? "",
+  });
+  const port = optionField({
+    label: "Port",
+    placeholder: "22",
+    value: server?.port ? String(server.port) : "",
+  });
+
+  // The key path is held here rather than in a field: it is read once, on
+  // Save, and what is kept afterwards is the key rather than the path. A box
+  // showing a path that nothing will ever read again would be a box that lies.
+  let keyFile: string | null = null;
+  const key = optionField({
+    label: "SSH key",
+    value: server?.hasKey ? `Using ${server.keySource || "an imported key"}` : "",
+    placeholder: "no key yet",
+    hint:
+      "Pick your private key — id_ed25519, not id_ed25519.pub. It is copied " +
+      "onto this device so it works on an iPad, where there is no ~/.ssh to " +
+      "read at publish time.",
+    button: {
+      label: server?.hasKey ? "Replace…" : "Import…",
+      onSelect: () => {
+        void openFileDialog({ multiple: false, pickerMode: "document" })
+          .then((picked) => {
+            if (typeof picked !== "string") return;
+            keyFile = picked;
+            key.input.value = `Importing ${picked.split("/").pop() ?? picked}`;
+          })
+          .catch((err) => log.error("Could not pick a key file:", err));
+      },
+    },
+  });
+  // Named by the file it came from, not typed into.
+  key.input.readOnly = true;
+
+  const passphrase = optionField({
+    label: "Passphrase",
+    placeholder: "only if the key has one",
+    secret: true,
+  });
+  const notice = optionNotice();
+
+  const save = () => {
+    const parsed = Number(port.input.value.trim());
+    notice.textContent = "";
+    void publish
+      .saveServer({
+        id: server?.id,
+        label: label.input.value.trim(),
+        host: host.input.value.trim(),
+        user: user.input.value.trim(),
+        port: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+        keyFile: keyFile ?? undefined,
+        passphrase: passphrase.input.value || undefined,
+      })
+      .then(() => {
+        sheet.close();
+        onChanged();
+        reload();
+      })
+      .catch((err) => {
+        notice.textContent = String(err);
+      });
+  };
+
+  sheet.body.appendChild(
+    optionsForm(
+      label.root,
+      host.root,
+      user.root,
+      port.root,
+      key.root,
+      passphrase.root,
+      notice,
     ),
-    server.hostKey
-      ? h("button", {
-          class: "btn btn-ghost",
-          title: "Trust whatever key this server offers next time",
-          text: "Forget key",
-          onClick: () => void forgetHostKey(server, reload, onChanged),
-        })
-      : null,
-    h("button", {
-      class: "btn btn-ghost",
-      text: "Edit",
-      onClick: () => void editServer(server, reload, onChanged),
-    }),
-    h("button", {
-      class: "btn btn-ghost",
-      text: "Delete",
-      onClick: () => void removeServer(server, reload, onChanged),
-    }),
   );
+  sheet.actions.append(
+    h("button", { class: "btn btn-primary", text: "Save", onClick: save }),
+    h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
+  );
+  host.input.focus();
 }
 
 /**
@@ -305,109 +403,6 @@ async function forgetHostKey(
 }
 
 /**
- * Add a server, or change one.
- *
- * A sheet of its own rather than fields in the row, because five of them do
- * not fit on a row and because a half-typed hostname that saved as you went
- * would be a server a project might be pointed at mid-edit.
- */
-async function editServer(
-  server: PublishServer | null,
-  reload: () => void,
-  onChanged: () => void,
-): Promise<void> {
-  const sheet = openSheet({
-    title: server ? `Edit ${server.label || server.host}` : "Add a server",
-    subtitle: "rsync over ssh",
-    width: 560,
-  });
-
-  const label = field("Name", "Live", server?.label ?? "");
-  const host = field("Host", "example.com", server?.host ?? "");
-  const user = field("User", "your login on that server", server?.user ?? "");
-  const port = field("Port", "22", server?.port ? String(server.port) : "");
-  const passphrase = field("Passphrase", "only if the key has one");
-  passphrase.input.type = "password";
-  passphrase.input.autocomplete = "off";
-
-  // The path is held here rather than in a field: it is read once, on Save,
-  // and what is kept afterwards is the key rather than the path. A box showing
-  // a path that nothing will ever read again would be a box that lies.
-  let keyFile: string | null = null;
-  const keyState = h("div", {
-    class: "sheet-row-value m",
-    text: server?.hasKey
-      ? `Using ${server.keySource || "an imported key"}`
-      : "No key yet",
-  });
-  const keyRow = h(
-    "div",
-    { class: "sheet-row" },
-    h("div", { class: "sheet-row-key m", text: "SSH KEY" }),
-    keyState,
-    h("button", {
-      class: "btn btn-ghost",
-      text: server?.hasKey ? "Replace…" : "Import…",
-      onClick: () => {
-        void openFileDialog({ multiple: false, pickerMode: "document" })
-          .then((picked) => {
-            if (typeof picked !== "string") return;
-            keyFile = picked;
-            keyState.textContent = `Importing ${picked.split("/").pop() ?? picked}`;
-          })
-          .catch((err) => log.error("Could not pick a key file:", err));
-      },
-    }),
-  );
-
-  sheet.body.append(
-    label.row,
-    host.row,
-    user.row,
-    port.row,
-    keyRow,
-    passphrase.row,
-    h("div", {
-      class: "field-hint",
-      text:
-        "Pick your private key — id_ed25519, not id_ed25519.pub — and its " +
-        "public half needs to be in that account's authorized_keys already; " +
-        "ssh-copy-id is the usual way. The key is copied onto this device so " +
-        "it works on an iPad, where there is no ~/.ssh to read at publish time.",
-    }),
-  );
-
-  sheet.actions.append(
-    h("button", {
-      class: "btn btn-primary",
-      text: "Save",
-      onClick: () => {
-        const parsed = Number(port.input.value.trim());
-        void publish
-          .saveServer({
-            id: server?.id,
-            label: label.input.value.trim(),
-            host: host.input.value.trim(),
-            user: user.input.value.trim(),
-            port: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
-            keyFile: keyFile ?? undefined,
-            passphrase: passphrase.input.value || undefined,
-          })
-          .then(() => {
-            sheet.close();
-            onChanged();
-            reload();
-          })
-          .catch((err) => log.error("Could not save the server:", err));
-      },
-    }),
-    h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
-  );
-
-  host.input.focus();
-}
-
-/**
  * Forget a server.
  *
  * The projects pointing at it keep a target naming an id nothing matches, and
@@ -434,30 +429,4 @@ async function removeServer(
   } catch (err) {
     log.error("Could not delete the server:", err);
   }
-}
-
-// ── one labelled input ──────────────────────────────────────────────────────
-
-/** A row on the sheet's own grid: a label, and a box to type in. */
-export function field(
-  label: string,
-  placeholder: string,
-  value = "",
-): { row: HTMLElement; input: HTMLInputElement } {
-  const input = h("input", {
-    class: "input",
-    value,
-    placeholder,
-    spellcheck: "false",
-    autocapitalize: "off",
-    autocomplete: "off",
-    "aria-label": label,
-  }) as HTMLInputElement;
-  const row = h(
-    "div",
-    { class: "sheet-row control" },
-    h("div", { class: "sheet-row-key m", text: label.toUpperCase() }),
-    h("div", { class: "sheet-row-value" }, input),
-  );
-  return { row, input };
 }
