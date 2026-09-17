@@ -766,6 +766,92 @@ tools belong with it because they are a brush swap wearing a tool's clothes.
 
 ---
 
+## The origin, and the screen the game opens at
+
+The canvas has no edges. The lattice is recomputed from the camera over the
+cells it can see, there is no world bound to hit, and a camera that has been
+panned for a while is looking at a picture that would be identical a thousand
+spaces away. That is the right model for building in and it leaves two facts
+about the **game** with nothing on screen to say them.
+
+The first is world `0, 0`. Every coordinate in the document is counted from it,
+`config.scenes` hands it to the project's own code, and until now the only
+thing that ever drew it was the minimap's two hairlines — three hundred pixels
+away in the sidebar, at a scale nothing can be placed against.
+
+The second is how much world a player sees. `templates/common/js/main.js` runs
+the game at `Phaser.Scale.RESIZE`, so there is no design size to point at: the
+game's screen *is* the window, and what decides how much world fits in it is
+Project Options' default zoom. Drawing a building around the origin and finding
+half of it off the edge in Play is the ordinary way to learn that, and learning
+it in Play means going back to Draw with a number in your head.
+
+So `editor/screen-guide.ts` puts both on the canvas in Draw: a red crosshair on
+the origin, and a dashed red rectangle around the screen the game opens at.
+
+**Centred on the origin, not hung off a corner.** A scene has no top-left —
+cells count in both directions, a fresh camera centres on `0, 0`, and the
+default zoom scales what the game shows about the middle of its screen. And the
+rectangle is deliberately not a claim about *where the game's camera will be*:
+`spawnCharacter` calls `startFollow` a frame after boot, so on any project with
+the character controller ticked the camera is wherever the character is. What
+the box can honestly say is **this much world, around here**.
+
+`guideBox` is the whole of the arithmetic and is the thing under test. The
+origin is `−originX × zoom`, straight out of the viewport the scene already
+publishes; the box is the game's screen scaled by `cameraZoom / gameZoom`. The
+property that makes it worth drawing falls out of that second term: **at the
+project's default zoom the two cancel**, and the dashes are the game's window
+life size on the canvas you are drawing on. Zoom in past it and the box grows
+by exactly the ratio, which is the same statement seen closer up.
+
+**The size is the row's, not the canvas's.** Play takes both sidebars down, so
+a running game fills the whole of `.editor-main` — measure the canvas in front
+of you and the boundary is drawn at whatever width the sidebars happen to be
+leaving, which is the one width the game never gets. A `ResizeObserver` on that
+row keeps its content box, and `contentRect` is already content: the row pads
+itself out of the iPad's side safe areas and a full-screen game does not get
+those.
+
+**It is a div, not paint**, which is the bargain `minimap.ts` strikes with its
+camera frame and for two more reasons besides. A mark drawn into the scene
+would be baked into the project's **thumbnail** — `game/snapshot.ts` takes that
+straight off the live renderer — which is a dashed red box across every card on
+the home screen. And it would have to be re-stroked at `1 / zoom` on every
+zoom, the way every other overlay on this canvas is, where a CSS hairline is
+one screen pixel by definition. Two absolutely-positioned elements moved with a
+transform cost the renderer nothing and the main thread one write per camera
+move, off the same `onViewport` push the drawing layer and the minimap are
+already driven by. It gets a `z-index` of its own — 3, under the ink's sheet at
+4 and the tool rail at 5 — rather than sharing one with either, because a tie
+is settled by document order and the boundary is a rectangle wide enough to
+draw dashes across the rail's buttons. Under the ink is also where the scene's
+own selection chrome already is.
+
+**A red that is not the accent.** `--canvas-guide` is its own token. The accent
+is what the editor draws a *selection* in — outlines, the marquee, the extrude
+plate — and these two marks are the only things on the canvas that are there
+the whole time and cannot be picked up, dragged or filled. It is the same
+argument the colour picker's grey default is there for. The crosshair carries a
+one-pixel white halo on top of that, because the origin is the likeliest place
+on the whole canvas to have something standing on it, and a red hairline over a
+red fill is a mark nobody can find. The boundary needs none: it is dashed, and
+nothing else here is.
+
+**Draw's alone**, for the reason the minimap is: in Code and Play the canvas is
+behind a running game, so a drawing of where the game's screen falls would be
+drawn under the screen itself. `styles/__tests__/guides.test.ts` asserts that
+rule names both modes, and that the sheet takes no pointer events — without
+that it would swallow every press over the canvas, which is the drawing layer's
+own failure by the same mechanism and with nothing to go on.
+
+Two files moved to make room, both to the 700-line rule rather than to
+anything about the feature: the guide's CSS is `styles/guides.css` because
+`editor.css` was at the limit, and `styles/__tests__/rules.ts` now holds the
+`ruleIn` helper that `styles.test.ts` was at the limit holding.
+
+---
+
 ## Three sections, not two modes
 
 `EditorMode` is `draw | code | play`. It was `edit | play`, with Code a menu

@@ -1,0 +1,81 @@
+/* The two marks on the canvas that are about the game rather than about the
+   document: where world 0,0 is, and how much world the game's own screen will
+   hold. Their own stylesheet because editor.css is at the line limit and
+   these belong together — see editor/screen-guide.ts. */
+
+/* ── the game's screen, on the canvas ─────────────────────────────────────────
+   A red crosshair on world 0,0 and a dashed red rectangle around the screen
+   the game opens at — see editor/screen-guide.ts, which places both with a
+   transform and holds the argument for why they are elements rather than
+   paint in the scene.
+
+   Over the game canvas and under everything else in the wrapper: the ink's own
+   sheet is at 4, the tool rail and the drop target at 5, the floating bars and
+   the edge toggles at 6, a running game at 8. A number of its own rather than
+   sharing one with any of those, because a tie is settled by document order —
+   and the boundary is a rectangle that can cross the whole canvas, so sharing
+   the rail's layer would mean dashes drawn across its buttons at some zooms.
+   Under the ink is also where the scene's own selection chrome already is,
+   this being a mark about the game rather than part of the picture. */
+.screen-guide {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  /* A mark, never a target: everything under it keeps the pointer. */
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* The boundary. `border-box` puts the dashes on the edge of the game's screen
+   rather than a pixel outside it, and the hairline is one *screen* pixel at
+   any zoom for free — which is what the scene's own overlays divide by the
+   zoom to achieve. */
+.screen-guide-frame {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  border: 1px dashed var(--canvas-guide);
+  will-change: transform;
+}
+
+/* The origin: two hairlines crossing on it, at a fixed size on screen, so it
+   stays findable at any zoom and never grows into a mark of its own. */
+.screen-guide-cross {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+.screen-guide-cross::before,
+.screen-guide-cross::after {
+  content: "";
+  position: absolute;
+  background: var(--canvas-guide);
+  /* A halo, because the origin is the one place on the canvas most likely to
+     have something standing on it — and a red hairline over a red fill is a
+     mark you cannot find. A pixel of white either side reads over artwork,
+     over a backdrop and over the lattice alike. The boundary needs none: it
+     is a dashed line, and nothing else on this canvas is dashed. */
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.75);
+}
+.screen-guide-cross::before {
+  left: -11px;
+  top: 0;
+  width: 23px;
+  height: 1px;
+}
+.screen-guide-cross::after {
+  left: 0;
+  top: -11px;
+  width: 1px;
+  height: 23px;
+}
+
+/* Draw's alone, and for the same reason the minimap is: in Code and Play the
+   canvas is behind a running game, so a drawing of where the game's screen
+   falls would be drawn under the screen itself. */
+.editor.play-mode .screen-guide,
+.editor.code-mode .screen-guide { display: none; }

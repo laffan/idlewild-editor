@@ -32,35 +32,11 @@ import libraryCss from "../library.css?raw";
 import sheetsCss from "../sheets.css?raw";
 import optionsCss from "../options.css?raw";
 import menuCss from "../menu.css?raw";
+import { ruleIn, withoutComments } from "./rules";
 
-/** The declarations of one rule, by property. Comments are stripped first. */
+/** The declarations of one rule of the editor's own stylesheet. */
 function rule(selector: string): Record<string, string> {
   return ruleIn(css, selector);
-}
-
-/**
- * The same, in a named stylesheet.
- *
- * A grouped selector is found by its **last** member, since that is the one
- * followed by the brace.
- */
-function ruleIn(source: string, selector: string): Record<string, string> {
-  const body = withoutComments(source);
-  const at = body.indexOf(`\n${selector} {`);
-  if (at < 0) throw new Error(`no rule for ${selector}`);
-  const open = body.indexOf("{", at);
-  const close = body.indexOf("}", open);
-  const out: Record<string, string> = {};
-  for (const line of body.slice(open + 1, close).split(";")) {
-    const colon = line.indexOf(":");
-    if (colon < 0) continue;
-    out[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
-  }
-  return out;
-}
-
-function withoutComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
 describe("the drawing layer's stylesheet", () => {

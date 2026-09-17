@@ -100,6 +100,18 @@ remaining pieces are wired to real slots rather than mocked.
   space borrows it from wherever you are
 - Press and hold to ask for a patch of grid, and get Fill, Add Image,
   Generate PSD and Extrude over it
+- **Where the game's screen is**, on the canvas you draw on. The grid is
+  effectively infinite and there is nothing on it to measure from, so two
+  things about the *game* were invisible the whole time you were building for
+  it: where world 0,0 is, and how much of the world a player actually sees. In
+  Draw there is now a red crosshair on the origin and a dashed red boundary
+  around the screen the game opens at. The project's scale mode is
+  `Phaser.Scale.RESIZE`, so that screen is the window — the boundary is drawn
+  at the size the game will get in Play, with both sidebars down, divided by
+  the project's default zoom. At that zoom the two cancel and the box is the
+  game's window life size on the canvas; at any other zoom it grows and
+  shrinks with the camera, and stays centred on the crosshair. It is Draw's
+  alone — in Code and Play the real screen is the thing in front of you
 - Fill a selection with any colour, from a full picker with recent swatches.
   It starts grey rather than in the app's accent: a fill is usually a
   block-out, and the accent is the colour the editor draws its *own* marks in

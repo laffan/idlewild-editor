@@ -60,6 +60,14 @@
   --canvas-bg: #d9e6ef;
   --canvas-line: #a9c2d3;
 
+  /* The two marks on the canvas that are about the *game* rather than about
+     the document: the origin, and the screen the game opens at. A plain red
+     rather than the accent, which is what the editor draws a *selection* in —
+     a fixed reference that cannot be picked up, dragged or filled must not
+     look like one, and these two are the only marks on the canvas that are
+     there the whole time. See editor/screen-guide.ts. */
+  --canvas-guide: #d81b1b;
+
   /* Touch targets. Everything the finger hits is at least this tall. */
   --hit: 44px;
 

@@ -40,6 +40,7 @@ import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
 import { addSweptZone } from "./zone-actions";
 import { createFillBarUi } from "./fill-bar";
+import { ScreenGuide } from "./screen-guide";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
@@ -73,6 +74,7 @@ export async function mountEditor(
   // the way it restarts on code just saved.
   const render = createRenderSettings(meta, () => handle, () => {
     if (gameFrame.isRunning) gameFrame.reload();
+    guide.refresh();
   });
 
   /**
@@ -429,6 +431,14 @@ export async function mountEditor(
   });
   layout.restore();
 
+  // Where the game's screen falls on this canvas: a crosshair on world 0,0,
+  // and a dashed boundary around what it opens showing — `screen-guide.ts`.
+  const guide = new ScreenGuide({
+    main: layout.main,
+    defaultZoom: () => render.options.defaultZoom,
+  });
+  canvasWrap.appendChild(guide.root);
+
   handle = await bootGame(
     canvasWrap,
     {
@@ -448,6 +458,7 @@ export async function mountEditor(
       onViewport: (view) => {
         drawing?.sync(view);
         minimap.setViewport(view);
+        guide.sync(view);
         // The shape is in world units and the bar is chrome, so the bar has to
         // be moved every time the camera does.
         fillBar.sync();
@@ -666,6 +677,7 @@ export async function mountEditor(
     await store.flush();
     header.destroy();
     minimap.destroy();
+    guide.destroy();
     layers.destroy();
     inspector.destroy();
     gameFrame.destroy();
