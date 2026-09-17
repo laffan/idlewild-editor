@@ -31,7 +31,7 @@
 //! second source of truth for where a project lives. The fields worth keeping
 //! are in the manifest, and an import writes a fresh `meta.json` around them.
 
-use crate::project::{now_ms, GameOptions, Genre, ProjectMeta, Projection};
+use crate::project::{now_ms, GameOptions, Genre, Presentation, ProjectMeta, Projection};
 use crate::store;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -92,6 +92,14 @@ pub struct ArchivedProject {
     /// defaults — and the defaults are what such a project was.
     #[serde(default)]
     pub options: GameOptions,
+    /// The page around the game. Travels for the same reason the render
+    /// options do: it is a decision about this project, it is not recoverable
+    /// from anything else in the archive, and a game that came back framed
+    /// differently from the one that was exported would be a project that had
+    /// quietly lost work. Absent on an older archive, which reads as the
+    /// defaults.
+    #[serde(default)]
+    pub presentation: Presentation,
 }
 
 /// **Export project**: the project itself, as a `.idlewild` file — source PSDs
@@ -140,6 +148,7 @@ pub fn export(project_id: &str, dest: &Path) -> Result<(), String> {
             created_at: meta.created_at,
             layer_count: meta.layer_count,
             options: meta.options,
+            presentation: meta.presentation.clone(),
         },
     };
     zip.start_file(MANIFEST, options).map_err(|e| e.to_string())?;
@@ -325,6 +334,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
     meta.created_at = project.created_at;
     meta.updated_at = now_ms();
     meta.layer_count = project.layer_count;
+    meta.presentation = project.presentation.clone();
     store::write_meta(&meta)?;
 
     if !store::game_dir(id)?.join("index.html").exists() {

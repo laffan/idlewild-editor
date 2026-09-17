@@ -31,18 +31,53 @@ const rendering = {
 };
 // idlewild:end pixelPerfect
 
+// The page around the game — what Page Setup writes.
+//
+// Written onto the document as custom properties rather than into
+// `styles.css`, so that stylesheet stays yours: every rule it has reads one of
+// these with a fallback, and a rule you rewrite keeps whatever you wrote. The
+// fallbacks are what the page meant before any of this existed, so nothing
+// here is load-bearing — delete the block and the game is full-bleed on
+// `#d9e6ef`, exactly as it always was.
+//
+// `scale` is the half CSS cannot do. A game filling the window wants RESIZE,
+// so the camera gets the whole viewport; a fixed-size game wants FIT against
+// the size it was given, so it shrinks to fit a window too small for it
+// instead of being cut off by the box it sits in.
+// idlewild:begin presentation
+const page = config.presentation ?? {};
+const fixed = page.fixed === true && page.width > 0 && page.height > 0;
+
+const style = document.documentElement.style;
+style.setProperty("--game-background", page.background ?? "#d9e6ef");
+style.setProperty("--game-margin", `${page.margin ?? 0}px`);
+style.setProperty("--game-radius", `${page.radius ?? 0}px`);
+style.setProperty("--game-width", fixed ? `${page.width}px` : "100%");
+style.setProperty("--game-height", fixed ? `${page.height}px` : "100%");
+style.setProperty("--game-place", page.centered === false ? "flex-start" : "center");
+
+const scale = fixed
+  ? {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      width: page.width,
+      height: page.height,
+    }
+  : { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH };
+// idlewild:end presentation
+
 // psd-to-phaser requires Phaser 4 and the WebGL renderer: layer masks are
 // built on Phaser 4's Filter system. Under Canvas, masked layers still place
 // and render, just unmasked.
 new Phaser.Game({
   type: Phaser.WEBGL,
   parent: "game",
+  // Phaser's own, behind what the scenes draw. Not the page colour above:
+  // that one is only ever visible where the game is *not*, which is what a
+  // margin and a fixed size make. Two surfaces, two answers.
   backgroundColor: "#d9e6ef",
   ...rendering,
-  scale: {
-    mode: Phaser.Scale.RESIZE,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-  },
+  scale,
   plugins: {
     global: [
       {

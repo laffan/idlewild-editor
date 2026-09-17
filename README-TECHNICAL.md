@@ -7195,6 +7195,109 @@ the write that carried the work. An unchanged config is not rewritten at all,
 which matters because a drag saves on an 800 ms debounce and the code modal
 watches this file.
 
+## The page around the game
+
+Everything else in this editor is about what is on the canvas. This is about
+the **HTML document the canvas is embedded in** — the page a published site
+opens as, and the page Play runs in.
+
+There has only ever been one of those, and it was the same for every project:
+the game filling the window, square-cornered, flush to every edge, on the
+scaffold's `#d9e6ef`. That is a reasonable default and a poor only answer. A
+320×568 phone game shown on a desktop should be a 320×568 game on a desktop,
+not one stretched across it, and nothing in the app could say so.
+
+**Page Setup** is the sheet, beside Project Options in the header's menu rather
+than inside it, because the two are about different things: Project Options is
+how the *canvas* renders and reaches the editor's own view; this only ever shows
+up in Play and in an export. Six settings — fixed size with a width and a
+height, centred or top left, a margin, a corner radius, and the page colour.
+
+### Why it is not `GameOptions`
+
+Two reasons, and the better one is not the language's.
+
+The language's is that `GameOptions` is `Copy` and is copied all over the
+editor, and a colour is a `String`.
+
+The other is that `GameOptions` is how the canvas renders — `pixelArt`,
+`roundPixels` and the zoom are applied to the editor's own view the moment
+they change, which is what `render-settings.ts` is for. None of these six
+reach that canvas at all, because the editor draws a *world* and this describes
+a *page*. Keeping them apart means nothing in the editor ever has to ask which
+half of one object applies to it. So `Presentation` is its own field on
+`ProjectMeta`, beside `PublishTarget`, defaulting the same way.
+
+### Why it writes nothing into the project's own files
+
+The literal build is to rewrite the rules in the project's `styles.css`
+whenever a number changes — it *is* a CSS template, after all. It is also the
+build that fights the person using it. A `game/` tree is the project's own copy
+the moment the scaffold writes it, and an editor that owns lines inside a
+stylesheet is an editor that undoes your edits to them. That is the whole
+argument of **Lines the editor owns**, and a stylesheet is the worst file to
+have it in: CSS is where somebody changes one number to see what happens.
+
+So these ride in `game.config.json` the way `pixelArt` and the zoom already do,
+and the scaffold reads them. `main.js` writes them onto the document as custom
+properties in its `presentation` block; every rule in `styles.css` reads one
+with a fallback:
+
+```css
+#game {
+  width: var(--game-width, 100%);
+  height: var(--game-height, 100%);
+  border-radius: var(--game-radius, 0px);
+  overflow: hidden;
+}
+```
+
+Three things follow, and all three are the point. A rule you rewrite keeps what
+you wrote. Delete the block in `main.js` and the page is exactly what it always
+was, because **the fallbacks are the old stylesheet** — it is correct opened
+straight off disk, with a config that predates the feature beside it, or with
+no JavaScript having run. And a project made before any of this existed picks it
+up on its next save, without the editor having touched a file it wrote.
+
+`scale` is the half CSS cannot do, and it is in the same block. A game filling
+the window wants `RESIZE`, so the camera gets the viewport; a fixed-size game
+wants `FIT` against the size it was given, so a window too small for it scales
+the game down instead of cropping it. `max-width: 100%` on the box is the CSS
+half of that same answer.
+
+**Two backgrounds, and they are not the same one.** `Presentation.background` is
+the `html` background, behind everything. Phaser's own `backgroundColor` is
+behind what the scenes draw. They are only ever both visible once a margin, a
+radius or a fixed size has pulled the game back from an edge — which is exactly
+when you want to choose them separately, and is why the sheet's row says *page*
+colour and the scaffold keeps its own literal.
+
+### What is checked, and where
+
+`Presentation::sane()` clamps on the way **out**, into the config — not on the
+way in, to disk. A width typed as `4` that became `16` under the cursor would
+be the sheet arguing with somebody still typing; what matters is that nothing
+absurd reaches a stylesheet. Three things can put absurdity there and none of
+them is the sheet: a hand-edited `meta.json`, an archive from another machine,
+and a build whose bounds were different. A zero width is a game nobody can see;
+a margin of four million is a game pushed off the page.
+
+The colour is checked rather than clamped, being the only one that is not a
+number. It is written into a CSS custom property, and while a browser drops a
+property it cannot parse, a value this code has never looked at is not a thing
+to hand a stylesheet. `#rgb`, `#rrggbb` and `#rrggbbaa` — what this app's own
+picker writes — survive; anything else falls back to the default.
+`tests/presentation.rs` pins both halves, along with the archive carrying it and
+a project that has never heard of a page still describing the one it has.
+
+### Where it takes effect
+
+There is no preview on the canvas behind the sheet, because there is nothing on
+that canvas this describes. What there is instead is Play: the sheet restarts a
+running game through the same `onChanged` the render settings use, so with Play
+up the sheet *is* its own preview, and the page you are describing is the page
+in front of you.
+
 ## Lines the editor owns
 
 The editor writes code into a project and the user edits that same code.
@@ -7284,8 +7387,10 @@ it is one file for both genres, so there is no longer a pair that can drift.
 `character.js` marks its own, and the two genres' differ: a top-down character
 sorts itself into an isometric ordering and a platformer does not, so
 `sortCharacter`, `readColliders` and `walkDepth` are the first's and
-`readSolids` is the second's. `main.js` marks `pixelPerfect`, and the config
-and the scene list are generated whole.
+`readSolids` is the second's. `main.js` marks `pixelPerfect` and
+`presentation` — both of them a setting read out of the generated config and
+handed to Phaser and to the page — and the config and the scene list are
+generated whole.
 
 A test pins each file's set and that every marker closes, because a block is
 found by id and one renamed would quietly stop offering its Reset. It also

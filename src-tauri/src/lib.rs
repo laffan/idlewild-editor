@@ -531,6 +531,7 @@ pub fn run() {
             projects::list_projects,
             projects::create_project,
             projects::set_project_options,
+            projects::set_project_presentation,
             projects::rename_project,
             projects::delete_project,
             projects::duplicate_project,

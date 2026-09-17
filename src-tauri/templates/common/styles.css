@@ -1,14 +1,52 @@
+/* The page the game sits on.
+ *
+ * Every rule that Page Setup can change reads a custom property with a
+ * fallback, and `js/main.js` writes those properties onto the document from
+ * `game.config.json` before the game starts. Two things follow, and both are
+ * the point.
+ *
+ * This file is **yours**. Nothing in the editor rewrites a line of it, so a
+ * rule you change stays changed — drop the `var()` and write a number, or add
+ * anything you like beside it. The properties are a default you can ignore.
+ *
+ * And the fallbacks are what this stylesheet meant before any of it existed,
+ * so the page is correct with the stylesheet alone: opened straight off disk,
+ * with an old `game.config.json` beside it, or with main.js edited to stop
+ * setting them. */
+
 html,
 body {
   margin: 0;
   height: 100%;
-  background: #d9e6ef;
+  background: var(--game-background, #d9e6ef);
   overflow: hidden;
 }
 
+/* The game is placed rather than filling: with no margin and no fixed size
+   this is the same full-bleed result it always was, and it is what lets a
+   fixed-size game sit in the middle of the page. */
+body {
+  display: flex;
+  align-items: var(--game-place, center);
+  justify-content: var(--game-place, center);
+  padding: var(--game-margin, 0px);
+  box-sizing: border-box;
+}
+
 #game {
-  width: 100vw;
-  height: 100vh;
+  width: var(--game-width, 100%);
+  height: var(--game-height, 100%);
+  /* A fixed size larger than the window shrinks to fit rather than pushing the
+     page out: `overflow: hidden` on the body would otherwise cut the game off
+     rather than scale it, and Phaser's own FIT mode is already sizing the
+     canvas to whatever box this ends up being. */
+  max-width: 100%;
+  max-height: 100%;
+  /* Clips the canvas corners, which is the whole of what a radius means here:
+     the canvas is an opaque rectangle and rounding the box around it does
+     nothing without this. */
+  border-radius: var(--game-radius, 0px);
+  overflow: hidden;
 }
 
 canvas {

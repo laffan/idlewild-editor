@@ -11,7 +11,7 @@
 //! were already a section of their own there, and every one of them is a thin
 //! wrapper over `store` — which is where the rules actually live.
 
-use crate::project::{GameOptions, Genre, ProjectMeta, Projection};
+use crate::project::{GameOptions, Genre, Presentation, ProjectMeta, Projection};
 use crate::store;
 
 #[tauri::command]
@@ -72,6 +72,21 @@ pub fn set_project_options(
     character: bool,
 ) -> Result<ProjectMeta, String> {
     store::set_project_options(&id, pixel_art, round_pixels, default_zoom, character)
+}
+
+/// Change the page the game sits on: its size, where it sits, the space around
+/// it, its corners and what is behind it. What Page Setup writes.
+///
+/// One struct across the bridge rather than six arguments, unlike
+/// `set_project_options` above. That one grew a parameter at a time and shows
+/// it; this has six from the start, and six positional booleans and numbers is
+/// a call nobody can read at either end.
+#[tauri::command]
+pub fn set_project_presentation(
+    id: String,
+    presentation: Presentation,
+) -> Result<ProjectMeta, String> {
+    store::set_presentation(&id, presentation)
 }
 
 #[tauri::command]

@@ -10,7 +10,7 @@
  * moment a menu item is pressed rather than a value captured when the shell was
  * assembled.
  *
- * Nine of the ten are one line, and Import Assets is the tenth only because it
+ * Ten of the eleven are one line, and Import Assets is the eleventh only because it
  * has to say where an import lands. Copy PSD and Paste Image both go through
  * `intake.ts`, where the keyboard's half of the same job already lives, so a
  * menu item and its keystroke cannot drift apart.
@@ -23,6 +23,7 @@ import type { HeaderCallbacks } from "./header";
 import type { HistoryUi } from "./history";
 import { openImportAssets } from "./import-assets";
 import { pasteTargetFor, type Intake } from "./intake";
+import { openPageSetup } from "./page-setup";
 import { openExport } from "./sheets";
 import { openPublish } from "./publish";
 
@@ -42,6 +43,15 @@ export interface HeaderWiringDeps {
   scene: () => WorldScene | null;
   /** Project Options, which needs to say how many layers there are. */
   openOptions: () => void;
+  /**
+   * Restart a game that is running, if one is.
+   *
+   * Page Setup is about the page the game is embedded in, so there is nothing
+   * on the editor's canvas for it to change — the canvas draws a world, not a
+   * page. What it can do is put the change in front of you where it *is*
+   * visible, which is Play. The same thing saving a code file does.
+   */
+  reloadGame: () => void;
 }
 
 export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
@@ -66,5 +76,8 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
         target: () => pasteTargetFor(deps.grid, deps.scene()),
       }),
     onOptions: () => deps.openOptions(),
+    // The HTML and CSS around the game rather than the game: its size, where
+    // it sits on the page, the space and the colour around it.
+    onPageSetup: () => openPageSetup(meta, deps.reloadGame),
   };
 }

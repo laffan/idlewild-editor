@@ -920,6 +920,21 @@ remaining pieces are wired to real slots rather than mocked.
   server answers for them and an export writes them in. A project made before
   this layout keeps the one it was made with — your `game/` tree is your copy —
   and plays and publishes from wherever its own `index.html` says
+- **Page Setup**, beside Project Options in the menu, is the HTML and CSS
+  *around* the game rather than the game. Six settings: a **fixed size** with a
+  width and a height — or the window, which is what every project has done until
+  now — **centred** or top left, a **margin**, a **corner radius**, and the
+  **page colour** behind it all. That last one is the HTML background, not
+  Phaser's own: they are only both visible once one of the other three has
+  pulled the game back from an edge, which is exactly when you want to pick them
+  separately. A 320×568 phone game is a 320×568 game on a desktop now instead of
+  one stretched across it. None of it rewrites a line of your `styles.css`: the
+  values ride in the generated config, `js/main.js` puts them on the document as
+  custom properties, and every rule in the stylesheet reads one with a fallback
+  — so a rule you change stays changed, and deleting the block gives you back
+  exactly the page the scaffold always wrote. There is no preview on the canvas,
+  because the canvas is a world rather than a page; with **Play** up the sheet is
+  its own preview, since it restarts a running game the way saving code does
 - **Publish and Export are two items, because they are two verbs.** Publish
   sends the site somewhere real and is a destination you set up once and then
   use. Export hands you a file — the site as a zip, the project as `.idlewild`,

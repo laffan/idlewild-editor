@@ -110,6 +110,131 @@ impl GameOptions {
     }
 }
 
+/// The page around the game: how big it is, where it sits and what is behind
+/// it.
+///
+/// **Separate from `GameOptions`, and not folded into it.** Two reasons, one of
+/// them the language's. `GameOptions` is `Copy` and is copied all over the
+/// editor; a colour is a `String` and would cost that. The other is the better
+/// one: `GameOptions` is how the *canvas* renders — what the editor's own view
+/// and the game's camera both read — and none of this reaches the editor's
+/// canvas at all. It describes the HTML document the game is embedded in, which
+/// is a thing only the exported or played game has. Keeping them apart means
+/// the editor never has to ask which half of one struct applies to it.
+///
+/// **It reaches the game as data, not as rewritten CSS.** These end up in
+/// `game.config.json` and `main.js` writes them onto the document as custom
+/// properties, which `styles.css` reads with a fallback for each. A project's
+/// `styles.css` is its own file the moment the scaffold writes it, and an
+/// editor that rewrote rules inside it would be fighting whoever edited them —
+/// the same argument that put `pixelArt` in the config rather than in the
+/// scaffold as a literal. A rule somebody rewrites keeps whatever they wrote.
+///
+/// Every field defaults, and the defaults are what a project written before any
+/// of this existed has always looked like: the game filling the window, no
+/// margin, square corners, and the same `#d9e6ef` the scaffold has always had
+/// behind it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Presentation {
+    /// A fixed box rather than the whole window. The two sizes below are read
+    /// only when this is on, so turning it off and on again comes back to the
+    /// size you had.
+    #[serde(default)]
+    pub fixed: bool,
+    #[serde(default = "default_width")]
+    pub width: u32,
+    #[serde(default = "default_height")]
+    pub height: u32,
+    /// Whether the box sits in the middle of the page or at its top left.
+    /// Nothing to see when the game fills the window.
+    #[serde(default = "yes")]
+    pub centered: bool,
+    /// Clear space around the game, in CSS pixels.
+    pub margin: u32,
+    /// Rounded corners on the game itself, in CSS pixels.
+    pub radius: u32,
+    /// The page behind the game — the `html` background, not Phaser's own.
+    /// Only ever visible where the game does not reach.
+    #[serde(default = "default_background")]
+    pub background: String,
+}
+
+/// What the scaffold has always had behind the game.
+pub const DEFAULT_BACKGROUND: &str = "#d9e6ef";
+
+impl Default for Presentation {
+    fn default() -> Self {
+        Presentation {
+            fixed: false,
+            width: default_width(),
+            height: default_height(),
+            centered: true,
+            margin: 0,
+            radius: 0,
+            background: default_background(),
+        }
+    }
+}
+
+impl Presentation {
+    /// The same values with anything unusable brought back into range.
+    ///
+    /// Called on the way *out*, into the config, rather than on the way in.
+    /// Three things can put nonsense here and none of them is the sheet: a
+    /// hand-edited `meta.json`, an archive from somewhere else, and a build
+    /// whose bounds were different. What they reach is a stylesheet and a
+    /// Phaser scale config, where a zero width is a game nobody can see and a
+    /// margin of four million is a game pushed off the page.
+    ///
+    /// The colour is the one that is checked rather than clamped, because it is
+    /// the only one that is not a number. It is written into a CSS custom
+    /// property, and while the browser drops a property it cannot parse, a
+    /// value this code has not looked at is not a thing to hand a stylesheet.
+    /// Anything that is not a plain hex colour falls back to the default.
+    pub fn sane(&self) -> Presentation {
+        Presentation {
+            fixed: self.fixed,
+            width: self.width.clamp(MIN_GAME_SIZE, MAX_GAME_SIZE),
+            height: self.height.clamp(MIN_GAME_SIZE, MAX_GAME_SIZE),
+            centered: self.centered,
+            margin: self.margin.min(MAX_SPACING),
+            radius: self.radius.min(MAX_SPACING),
+            background: if is_hex_colour(&self.background) {
+                self.background.clone()
+            } else {
+                default_background()
+            },
+        }
+    }
+}
+
+/// Small enough for a sprite, large enough for anything a browser will show.
+pub const MIN_GAME_SIZE: u32 = 16;
+pub const MAX_GAME_SIZE: u32 = 8192;
+/// A margin or a corner bigger than this is not a layout, it is a typo.
+pub const MAX_SPACING: u32 = 512;
+
+/// `#rgb`, `#rrggbb` or `#rrggbbaa` — what this app's own colour picker writes.
+fn is_hex_colour(value: &str) -> bool {
+    let Some(digits) = value.strip_prefix('#') else {
+        return false;
+    };
+    matches!(digits.len(), 3 | 6 | 8) && digits.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn default_width() -> u32 {
+    960
+}
+
+fn default_height() -> u32 {
+    540
+}
+
+fn default_background() -> String {
+    DEFAULT_BACKGROUND.to_string()
+}
+
 fn one() -> f64 {
     1.0
 }
@@ -257,6 +382,11 @@ pub struct ProjectMeta {
     /// Where this project publishes to, or nowhere. See `PublishTarget`.
     #[serde(default)]
     pub publish: PublishTarget,
+    /// The page around the game. Absent on every `meta.json` written before it
+    /// existed, which reads as the defaults — and the defaults are the page
+    /// every one of those projects already had.
+    #[serde(default)]
+    pub presentation: Presentation,
 }
 
 impl ProjectMeta {
@@ -280,6 +410,7 @@ impl ProjectMeta {
             layer_count: 0,
             options,
             publish: PublishTarget::default(),
+            presentation: Presentation::default(),
         }
     }
 }

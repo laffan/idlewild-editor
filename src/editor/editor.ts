@@ -318,6 +318,7 @@ export async function mountEditor(
       intake: () => intake,
       scene: () => handle?.scene ?? null,
       openOptions: () => render.open(store.layers.length),
+      reloadGame: () => gameFrame.isRunning && gameFrame.reload(),
     }),
   );
 

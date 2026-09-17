@@ -94,6 +94,71 @@ export function projectOptions(meta: ProjectMeta): GameOptions {
   return { ...DEFAULT_OPTIONS, ...(meta.options ?? {}) };
 }
 
+/**
+ * The page the game sits on: how big it is, where on the page, and what is
+ * behind it.
+ *
+ * **Not part of `GameOptions`, and deliberately.** Those are how the *canvas*
+ * renders, and the editor applies every one of them to the canvas in front of
+ * you. None of this reaches that canvas at all — it describes the HTML
+ * document the game is embedded in, which only the played or exported game
+ * has. Keeping them apart means nothing in the editor has to work out which
+ * half of one object applies to it.
+ *
+ * It reaches the game through `game.config.json`, where `js/main.js` reads it
+ * and writes it onto the document as custom properties that `styles.css`
+ * consumes. A project's stylesheet is its own file and nothing rewrites a line
+ * of it — see `Presentation` in src-tauri/src/project.rs, which this mirrors.
+ */
+export interface Presentation {
+  /** A fixed box rather than the whole window. */
+  fixed: boolean;
+  /** Read only while `fixed`, so turning it off and on returns what you had. */
+  width: number;
+  height: number;
+  /** In the middle of the page, or at its top left. Nothing to see unfixed. */
+  centered: boolean;
+  /** Clear space around the game, in CSS pixels. */
+  margin: number;
+  /** Rounded corners on the game itself, in CSS pixels. */
+  radius: number;
+  /** The page behind the game — not Phaser's own background. `#rrggbb`. */
+  background: string;
+}
+
+/**
+ * The page every project has had since before any of this was settable: the
+ * game filling the window, square, flush, on the scaffold's own blue.
+ */
+export const DEFAULT_PRESENTATION: Presentation = {
+  fixed: false,
+  width: 960,
+  height: 540,
+  centered: true,
+  margin: 0,
+  radius: 0,
+  background: "#d9e6ef",
+};
+
+/**
+ * What the sheet will take, matching `MIN_GAME_SIZE` / `MAX_GAME_SIZE` /
+ * `MAX_SPACING` in project.rs.
+ *
+ * Both sides clamp. This side so the control cannot offer a number the far
+ * side will quietly change, and that side because a `meta.json` is a file on a
+ * disk and an archive is a file somebody hands you.
+ */
+export const GAME_SIZE_RANGE = { min: 16, max: 8192 } as const;
+export const SPACING_RANGE = { min: 0, max: 512 } as const;
+
+/**
+ * A project's page, filled in. The counterpart of `projectOptions` above, and
+ * absent for the same reason: a `meta.json` no build since has touched.
+ */
+export function projectPresentation(meta: ProjectMeta): Presentation {
+  return { ...DEFAULT_PRESENTATION, ...(meta.presentation ?? {}) };
+}
+
 /** What the home screen lists. Cheap to load — no document body. */
 export interface ProjectMeta {
   id: string;
@@ -110,4 +175,7 @@ export interface ProjectMeta {
   /** Where this project publishes to — absent on every project that has never
    *  been pointed anywhere. See `lib/publish-target.ts`. */
   publish?: PublishTarget;
+  /** The page around the game — absent on projects made before Page Setup
+   *  existed. See `projectPresentation`. */
+  presentation?: Presentation;
 }

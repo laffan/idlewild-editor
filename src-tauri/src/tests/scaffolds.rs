@@ -617,11 +617,17 @@ fn the_scaffold_marks_the_blocks_it_should_and_closes_every_one() {
         "walkDepth",
     ];
     let platformer = ["spawnCharacter", "updateCharacter", "readSolids"];
+    // `main.js` is the same file for both genres. Both of its blocks read a
+    // setting out of the generated config and hand it to Phaser, which is why
+    // they are marked at all: they are the editor's answer arriving in the
+    // author's file, and Reset has to be able to put either back.
+    let main = ["pixelPerfect", "presentation"];
 
     for (genre, file, expected) in [
         (Genre::Topdown, "js/shared/canvas.js", &canvas[..]),
         (Genre::Topdown, "js/shared/character.js", &topdown[..]),
         (Genre::Platformer, "js/shared/character.js", &platformer[..]),
+        (Genre::Topdown, "js/main.js", &main[..]),
     ] {
         let text = templates::template_file(
             file,

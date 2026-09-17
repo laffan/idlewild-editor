@@ -424,3 +424,15 @@
 }
 .opt-text:focus { outline: none; border-color: var(--color-accent); }
 .opt-text::placeholder { color: var(--opt-sub); }
+
+/* A row whose setting does not apply right now — the two size rows while the
+   game fills the window.
+
+   Quiet rather than gone. A row that disappears when a switch above it is
+   turned off is a row somebody remembers seeing and then cannot find, and the
+   number in it is still the answer the switch comes back to. The control is
+   `disabled` as well; this is only what that looks like. */
+.option.muted .option-title,
+.option.muted .option-title-row { opacity: 0.45; }
+.option.muted .opt-number { opacity: 0.45; cursor: not-allowed; }
+.option.muted .opt-number-unit { opacity: 0.45; }

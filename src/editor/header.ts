@@ -12,7 +12,7 @@
  * a thing you could be half in — the panel open behind a mode that did not know
  * about it. It is a section now, left to right in the order you work.
  *
- * Publish, Export Assets, Import Assets and Project Options stay in the
+ * Publish, Export Assets, Import Assets, Project Options and Page Setup stay in the
  * hamburger's menu. They are destinations rather than modes — you come back
  * from them to where you were — and folding them in leaves the header carrying
  * the project, undo and redo, and the mode it is in.
@@ -49,6 +49,7 @@ export interface HeaderCallbacks {
   /** Artwork from the filesystem or from another project in this app. */
   onImportAssets: () => void;
   onOptions: () => void;
+  onPageSetup: () => void;
 }
 
 /** The three sections, in the order the header offers them. */
@@ -218,6 +219,15 @@ export class EditorHeader {
           label: "Project Options",
           glyph: ICONS.sliders,
           onSelect: callbacks.onOptions,
+        },
+        // Beside it rather than inside it, because they are about two different
+        // things: Project Options is how the canvas renders, and this is the
+        // HTML page the exported game is embedded in. One reaches the editor's
+        // own view; the other only ever shows up in Play and in an export.
+        {
+          label: "Page Setup",
+          glyph: ICONS.file,
+          onSelect: callbacks.onPageSetup,
         },
       ],
       () => {

@@ -15,7 +15,7 @@
 //! ```
 
 use crate::project::{
-    now_ms, GameFile, GameOptions, Genre, ProjectMeta, Projection, PublishTarget,
+    now_ms, GameFile, GameOptions, Genre, Presentation, ProjectMeta, Projection, PublishTarget,
 };
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -153,6 +153,25 @@ pub fn set_project_options(
     meta.options.round_pixels = round_pixels;
     meta.options.default_zoom = default_zoom;
     meta.options.character = character;
+    meta.updated_at = now_ms();
+    write_meta(&meta)?;
+    let _ = sync_game_config(id);
+    Ok(meta)
+}
+
+/// Change the page around the game. What Page Setup writes.
+///
+/// `updatedAt` **is** stamped, unlike the publish target below: how a game is
+/// framed is a decision about the project rather than about where it is sent,
+/// and the home screen's "edited" is right to move for it.
+///
+/// The value is written as it was given and clamped on the way *out*, into the
+/// config — see `Presentation::sane`. Writing the clamped one back would mean a
+/// width typed as `4` became `16` on disk and stayed there, which is the sheet
+/// arguing with somebody mid-edit over a number they were still typing.
+pub fn set_presentation(id: &str, presentation: Presentation) -> Result<ProjectMeta, String> {
+    let mut meta = read_meta(id)?;
+    meta.presentation = presentation;
     meta.updated_at = now_ms();
     write_meta(&meta)?;
     let _ = sync_game_config(id);

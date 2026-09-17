@@ -242,6 +242,12 @@ fn config(
         // here by `shared/character.js`, which answers no and leaves the
         // scene to run without one, it is a switch like the rest of them.
         "character": character,
+        // The page around the game: size, placement, margin, corners and what
+        // is behind it. `main.js` writes these onto the document as custom
+        // properties and `styles.css` reads them, so a stylesheet somebody has
+        // edited keeps whatever they wrote — see `Presentation`. Clamped here
+        // rather than trusted, because a `meta.json` is a file on a disk.
+        "presentation": meta.presentation.sane(),
         "spawn": spawn,
         "psdKeys": psd_keys,
         "layers": layers,

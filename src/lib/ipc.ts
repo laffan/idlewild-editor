@@ -7,7 +7,13 @@ import { invoke } from "@tauri-apps/api/core";
 // that imports `publish` from this module has to know.
 export * from "./ipc-publish";
 
-import type { GameOptions, Genre, ProjectMeta, Projection } from "./types";
+import type {
+  GameOptions,
+  Genre,
+  Presentation,
+  ProjectMeta,
+  Projection,
+} from "./types";
 
 /**
  * How many bytes are encoded as one standalone piece.
@@ -350,6 +356,15 @@ export const projects = {
       defaultZoom: options.defaultZoom,
       character: options.character,
     }),
+  /**
+   * The page the game sits on — what Page Setup writes.
+   *
+   * One object rather than six arguments: `setOptions` above grew a parameter
+   * at a time and shows it, and six positional numbers and booleans is a call
+   * nobody can read at either end.
+   */
+  setPresentation: (id: string, presentation: Presentation) =>
+    invoke<ProjectMeta>("set_project_presentation", { id, presentation }),
   rename: (id: string, name: string) =>
     invoke<ProjectMeta>("rename_project", { id, name }),
   remove: (id: string) => invoke<void>("delete_project", { id }),
