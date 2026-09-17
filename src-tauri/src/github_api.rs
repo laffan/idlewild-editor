@@ -185,7 +185,16 @@ pub fn list_tree(
     let url = format!("{API}/repos/{owner}/{repo}/git/trees/{branch}?recursive=1");
     let body: serde_json::Value = match get(token, &url) {
         Ok(body) => body,
-        Err(e) if e.contains("404") || e.contains("not there") => return Ok(Vec::new()),
+        // Two ways for there to be nothing to compare against, and both are
+        // ordinary rather than wrong: a branch that does not exist yet (404),
+        // and a repository with no commits at all, which GitHub answers with
+        // **409 Conflict** on this endpoint. A repository somebody made a
+        // minute ago to publish into is the second one, and treating it as a
+        // failure stopped the publish at the comparison — before the screen
+        // that would have created the branch.
+        Err(e) if e.contains("404") || e.contains("not there") || e.contains("409") => {
+            return Ok(Vec::new())
+        }
         Err(e) => return Err(e),
     };
 
@@ -252,6 +261,7 @@ fn wire_error(error: &ureq::Error, url: &str) -> String {
                     and needs Contents write to publish."
                 .to_string(),
             404 => format!("GitHub says that is not there ({code}), or not visible to this token"),
+            409 => "That repository has no commits yet (409)".to_string(),
             429 => "GitHub is rate limiting this token. Wait a few minutes.".to_string(),
             other => format!("GitHub answered {other} for {url}"),
         };

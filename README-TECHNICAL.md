@@ -2996,13 +2996,19 @@ elsewhere and opens *inside* `~/.ssh` when there is one, so even that route
 starts where the keys are. An iPad has no such directory, answers with nothing,
 and gets the dialog it always had.
 
-**The branch box offers and accepts.** A typo in a branch name is the least
-visible mistake in this sheet: publishing to `gh_pages` *succeeds* — it makes
-the branch — and then nothing is where anybody looks for it. So the branches a
-repository has are on a menu beside the box. A name that is not among them is
-not refused, because starting a branch by naming one is how you publish to a
-fresh `gh-pages`; the line under the box says which of the two is about to
-happen instead of leaving it to be found out afterwards.
+**The branch box offers and accepts, and says so.** A typo in a branch name is
+the least visible mistake in this sheet: publishing to `gh_pages` *succeeds* —
+it makes the branch — and then nothing is where anybody looks for it. So the
+branches a repository has are on a menu beside the box.
+
+**New branch is a row on that menu**, above the existing ones, and it empties
+the field and focuses it. The box has always taken a name that is not on the
+list, but a field whose only visible control is a menu of things that already
+exist reads as a picker, and a picker is a thing you choose *from* — so the way
+to make one has to be somewhere a person looking for it will look. The line
+under the box names which of the two is about to happen, in the accent when it
+is a branch that does not exist yet: it is the one thing in this sheet that is
+about to be *made* rather than chosen.
 
 **Typing must not redraw.** Every field in the destination sheet went through
 the same handler as the pickers, which rebuilt both columns — so the input the
@@ -3318,6 +3324,45 @@ transfer, because the transfer was only half of what went wrong:
   what a server says when the directory above a file is missing, and *failure*
   is what it says for most permission problems. Both get a clause saying what
   they usually mean.
+
+### The shallow clone that broke every second publish
+
+`RepoBuilder` was given `depth(1)`, on the reasoning that a branch's history is
+not what is being published and a site's worth of assets is not worth
+downloading twice. It made the **first** publish to a branch work and every one
+after it fail, because **libgit2 cannot push from a shallow repository**. What
+it says when you try is *"a reference that you are trying to update on the
+remote contains commits that are not present locally"* — which reads as
+somebody else having pushed to the branch, and is really the graft point at the
+bottom of the shallow history.
+
+Publishing twice to the same branch is the ordinary case, so the optimisation
+went. `RepoBuilder::branch` still limits the fetch to the one branch being
+published to, which is most of what the depth was for.
+
+It is worth saying how this was found, because it is the answer to why the
+GitHub half had been written twice without ever running. **A bare repository in
+a temporary directory is a perfectly good git remote.** Nothing in
+`deploy_github` needs github.com except the URL, so `publish_into` takes the
+URL as a parameter and `tests/publishing.rs` drives the whole path against a
+local one: starting a branch that does not exist, starting one *beside* an
+existing `main`, committing onto one that does exist, sending a subset,
+removing a file, noticing that nothing changed, and refusing to let a
+`.gitignore` on the branch drop the site. No network, no token, and it would
+have caught this on the day it was written.
+
+Two things that only the "beside an existing branch" case exercises, and which
+are the case a person actually starts from: the clone of `gh-pages` fails
+against a remote that *is* reachable and *does* have refs, so the fallback has
+to start an unrelated history — and the push of that orphan history must not
+disturb `main`.
+
+**A repository with no commits answers 409, not 404.** GitHub's tree endpoint
+says *Conflict* for an empty repository, which the comparison treated as a
+failure — so publishing into a repository somebody had made a minute ago
+stopped at the comparison, before the screen that would have created the
+branch. Both statuses now mean the same thing: there is nothing at the far end
+yet, which is an ordinary thing for there to be.
 
 ### A publish narrates itself
 

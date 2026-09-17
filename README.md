@@ -940,9 +940,10 @@ remaining pieces are wired to real slots rather than mocked.
 - **The ssh keys are offered, not hunted for.** They live in `~/.ssh`, which
   macOS's open panel hides; the sheet lists what is there and the file dialog
   stays for a key kept elsewhere, opening inside `~/.ssh` when there is one
-- **The branch box offers the branches that exist and takes one that does
-  not** — naming a new branch is how you publish to a fresh `gh-pages`, and the
-  line under the box says which of the two is about to happen
+- **The branch box offers the branches that exist, and has a New branch row
+  above them** — naming one that is not there is how you publish to a fresh
+  `gh-pages`, and the line under the box says which of the two is about to
+  happen, in the accent when it is one that will be created
 - **Both of them work on an iPad**, which took doing. iOS does not let an app
   run another program — no `fork`, no `exec` — so shelling out to `rsync` and
   `git` made publishing a desktop feature. But that is a limit on *running

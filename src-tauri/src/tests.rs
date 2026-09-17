@@ -7,15 +7,14 @@
 //!
 //! Neighbours split off for the 700-line rule, sharing only the store they
 //! create projects in and `swatch`. `marks` is the orienting marks an import
-//! writes and psd-to-json reports back. `rewrite` is what a *second* write to
-//! the same file has to keep. `painting` is the two writes PSD Edit mode makes —
-//! a layer added to a file, and ink laid into one. `scaffolds` is what a
-//! *project* is made of — the starter document, the runnable game each
-//! template selection writes, and the tree the code modal edits; `exports` is
-//! what leaving with one takes. `options` is the per-project settings —
-//! pixel-perfect rendering, the default zoom, and whether a character is
-//! spawned. `scenes` is the file each scene in the sidebar is written in, and
-//! the three things that can happen to one.
+//! writes; `rewrite` is what a *second* write to the same file has to keep;
+//! `painting` is the two writes PSD Edit mode makes. `scaffolds` is what a
+//! *project* is made of and `exports` is what leaving with one takes.
+//! `options` is the per-project settings; `scenes` is the file each scene is
+//! written in. `search` is ⇧⌘F over the game tree. `deploying` is what a bad
+//! publish is made of before it leaves, and `publishing` is a whole GitHub
+//! publish driven against a bare repository in a temporary directory — which
+//! is every step of that path except the network and the token.
 
 mod archive;
 mod backgrounds;
@@ -25,6 +24,7 @@ mod exports;
 mod marks;
 mod options;
 mod painting;
+mod publishing;
 mod rewrite;
 mod scaffolds;
 mod scenes;

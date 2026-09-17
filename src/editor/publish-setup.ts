@@ -398,29 +398,43 @@ function githubFields(
   const known = branches ?? [];
   const note = h("div", { class: "field-hint" });
 
+  const use = (name: string) => {
+    branch.input.value = name;
+    onEdit({ branch: name });
+    say();
+  };
+
+  /**
+   * Existing branches, and — first — starting a new one.
+   *
+   * **New branch is an item on the menu, not just a fact about the text box.**
+   * The box has always taken a name that is not on the list; publishing to one
+   * is how a fresh `gh-pages` gets made. But a field whose only visible
+   * control is a menu of things that already exist reads as a picker, and a
+   * picker is a thing you choose *from*. So the way to make one is a row you
+   * can see, at the top, where somebody looking for it will look.
+   */
+  const pick = () => {
+    openMenu(branch.root.querySelector("button") as HTMLElement, [
+      {
+        label: "New branch…",
+        glyph: ICONS.plus,
+        onSelect: () => {
+          // Emptied and focused rather than prefilled: the point of pressing
+          // this is that the name you want is not one of the others.
+          use("");
+          branch.input.focus();
+        },
+      },
+      ...known.map((name) => ({ label: name, onSelect: () => use(name) })),
+    ]);
+  };
+
   const branch = optionField({
     label: "Branch",
     placeholder: "gh-pages",
     value: target.branch,
-    ...(known.length
-      ? {
-          button: {
-            label: "Branches",
-            onSelect: () =>
-              openMenu(
-                branch.root.querySelector("button") as HTMLElement,
-                known.map((name) => ({
-                  label: name,
-                  onSelect: () => {
-                    branch.input.value = name;
-                    onEdit({ branch: name });
-                    say();
-                  },
-                })),
-              ),
-          },
-        }
-      : {}),
+    button: { label: known.length ? "Branches" : "New branch…", onSelect: pick },
   });
 
   /**
@@ -430,15 +444,11 @@ function githubFields(
    */
   const say = () => {
     const name = branch.input.value.trim() || "gh-pages";
-    if (!known.length) {
-      note.textContent =
-        "Publishing commits onto that branch — it does not rewrite it. A branch " +
-        "that does not exist yet is created by the first publish.";
-      return;
-    }
-    note.textContent = known.includes(name)
+    const exists = known.includes(name);
+    note.classList.toggle("new-branch", !exists);
+    note.textContent = exists
       ? `${name} exists. Publishing commits onto it — it does not rewrite it.`
-      : `${name} does not exist yet. The first publish starts it.`;
+      : `${name} will be created by the first publish, and committed onto after that.`;
   };
 
   const path = optionField({

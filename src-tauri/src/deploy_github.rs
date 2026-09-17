@@ -61,6 +61,45 @@ pub fn push(
     say: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<Report, String> {
     let (url, branch) = address(target)?;
+    publish_into(
+        &url,
+        &branch,
+        account,
+        target,
+        site,
+        project_name,
+        work,
+        chosen,
+        remove,
+        say,
+    )
+}
+
+/// The whole of a GitHub publish, against **any** git URL.
+///
+/// Split from `push` so the url is a parameter rather than something computed
+/// from an owner and a repository name — which is what makes this path
+/// testable. A bare repository in a temporary directory is a perfectly good
+/// git remote, so `tests/publishing.rs` drives every step of this against one:
+/// starting a branch that does not exist, committing onto one that does,
+/// sending a subset, removing a file, and noticing that nothing changed. None
+/// of that needs a network or a token, and all of it was previously verified
+/// only by reading.
+#[allow(clippy::too_many_arguments)]
+pub fn publish_into(
+    url: &str,
+    branch: &str,
+    account: &Github,
+    target: &PublishTarget,
+    site: &Path,
+    project_name: &str,
+    work: &Path,
+    chosen: Option<&[String]>,
+    remove: &[String],
+    say: &(dyn Fn(&str) + Send + Sync),
+) -> Result<Report, String> {
+    let branch = branch.to_string();
+    let url = url.to_string();
     let inside = checked_path(&target.path)?;
 
     say(&format!("Fetching {branch} from {}/{}", target.owner, target.repo));
@@ -139,9 +178,21 @@ fn open(
     builder.branch(branch);
     let mut fetch = FetchOptions::new();
     fetch.remote_callbacks(auth(account));
-    // One commit's worth. The branch's history is not what is being published
-    // and a site's worth of assets is not something to download twice.
-    fetch.depth(1);
+    // **Not a shallow fetch.** `depth(1)` was here, on the reasoning that a
+    // branch's history is not what is being published and a site's worth of
+    // assets is not worth downloading twice. It made the *first* publish to a
+    // branch work and every one after it fail: libgit2 cannot push from a
+    // shallow repository, and what it says when you try is "a reference that
+    // you are trying to update on the remote contains commits that are not
+    // present locally" — which reads as somebody else having pushed, and is
+    // really the graft point. Publishing twice to the same branch is the
+    // ordinary case, so the optimisation went. See `tests/publishing.rs`,
+    // which drives the whole of this against a bare repository in a temporary
+    // directory and would have caught it on the day.
+    //
+    // What is still narrow is `RepoBuilder::branch` plus `--single-branch`
+    // behaviour: only the branch being published to is fetched, not every
+    // branch in the repository.
     builder.fetch_options(fetch);
 
     if let Ok(repo) = builder.clone(url, work) {

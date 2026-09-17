@@ -395,6 +395,11 @@
    having the two places that ask for a hostname look the same is worth more
    than either of them being bespoke. See `styles/options.css`. */
 .publish-fields .options-field { padding: 0; }
+/* A branch name that is not one of the repository's. Said in the accent
+   because it is the one line in this sheet describing something that is about
+   to be *made* rather than chosen, and because somebody who typed it by
+   accident should notice before they publish. */
+.publish-fields .field-hint.new-branch { color: var(--color-accent-400); }
 .publish-fields .options-field .input { min-height: 36px; font-size: 13px; }
 
 .publish-empty {
