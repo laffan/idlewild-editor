@@ -105,6 +105,8 @@ export class ScreenGuide {
   /** The game's viewport, kept by the observer rather than measured per frame. */
   private screen: Size | null = null;
   private view: Viewport | null = null;
+  /** False once both marks are switched off — see `setMarksVisible`. */
+  private showing = true;
 
   constructor(config: ScreenGuideConfig) {
     this.config = config;
@@ -121,6 +123,22 @@ export class ScreenGuide {
       this.draw();
     });
     this.observer.observe(config.main);
+  }
+
+  /**
+   * Which of the two marks are wanted — the Overlays switches, in the left
+   * sidebar.
+   *
+   * A class rather than a `hidden` attribute, because these are the editor's
+   * own chrome and the stylesheet is where the rest of what Draw shows and
+   * Code hides is already decided. `draw` then has nothing to do at all when
+   * both are off, which is worth the line: it runs on every camera move.
+   */
+  setMarksVisible(frame: boolean, cross: boolean): void {
+    this.frame.classList.toggle("hidden", !frame);
+    this.cross.classList.toggle("hidden", !cross);
+    this.showing = frame || cross;
+    this.draw();
   }
 
   /** The camera has moved. Driven from the scene's own viewport pushes. */
@@ -153,6 +171,7 @@ export class ScreenGuide {
     // Nothing to say yet: the observer fires before the first camera push, and
     // a collapsed row has no viewport to describe.
     if (!view || !screen || screen.width <= 0 || screen.height <= 0) return;
+    if (!this.showing) return;
 
     const box = guideBox(view, screen, this.config.defaultZoom());
     this.cross.style.transform = `translate(${box.x}px, ${box.y}px)`;

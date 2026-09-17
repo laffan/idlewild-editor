@@ -586,6 +586,13 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 .editor.play-mode .minimap,
 .editor.code-mode .minimap { display: none; }
 
+/* And the switches that control it, for the same reason one step further
+   again: in Code the marks they switch are already down — the map with them —
+   so every row in that section would be a switch for something not on screen.
+   Written out beside the pair above so the two cannot drift. */
+.editor.play-mode .overlays,
+.editor.code-mode .overlays { display: none; }
+
 /* What Play runs: the project's own game, in a frame over the canvas.
 
    A frame rather than objects added to the editor's scene, because the thing

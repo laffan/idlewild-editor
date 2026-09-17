@@ -742,6 +742,55 @@ walking off the edge of the document does — so re-fitting mid-drag would slide
 the map out from under the finger driving it. The view is taken once, at
 pointer-down, and held for the gesture; the fit is redone on release.
 
+### The switches above it
+
+Three things on this canvas are drawn *about* the document rather than being
+part of it: the boundary around the screen the game opens at, the crosshair on
+world `0, 0`, and this map. All three are useful and none of them is useful all
+of the time — a boundary is what you lay a building against and then want out
+of the way, and the map is worth a third of the sidebar right up until you are
+working close in. So `editor/overlays-panel.ts` gives each one a switch, in a
+foldable **Overlays** section directly above the map.
+
+**Beside the thing they switch, not behind the header's menu.** The Minimap row
+sits on top of the minimap it hides, and the other two are in the column you
+are already looking at when you notice a mark is in the way. The section folds
+because three rows of chrome permanently above the map would cost the map more
+than the switches are worth, and it opens showing all three because a switch
+nobody can find is a mark nobody can turn off.
+
+**The order is not the order they were asked for.** Boundary and centre point
+are the two marks `screen-guide.ts` draws — one subject, so they go together —
+and Minimap is last because that is what puts it against its own map.
+
+**It is panel state, not document state.** Which marks somebody wants on is a
+per-install convenience, like a sidebar's width or a folded inspector section,
+so it is a `localStorage` record and never reaches `doc.json`. Two people
+opening the same project see their own answer, and no overlay switch has ever
+been a thing to undo. `readOverlays` is the parse and the tested half: it is
+reading something a previous version of this app wrote, out of a store that can
+also hand back a half-written string or another tab's JSON, and **anything not
+plainly a boolean falls back to showing the mark** — a mark switched off that
+nobody asked to switch off, with the switch that would explain it reading *on*,
+is the one outcome that cannot be debugged from the screen.
+
+**Each switch is a class, and the stylesheet does the hiding.** `display: none`
+on the map is the same rule Code and Play already take it down under, and it
+stops the paint as well as the picture — the body has no box to fit anything
+into, `paint` returns on that, and the `ResizeObserver` brings it back the
+moment there is one again. `ScreenGuide.setMarksVisible` does the same for its
+two elements and keeps a `showing` flag beside them, so with both off `draw`
+returns immediately; it runs on every camera move, and a hidden mark should not
+cost one. Turning a mark back on redraws it there and then, so it returns where
+the camera is now rather than where it was when it went.
+
+**The switches are Draw's, like the map.** In Code the marks they control are
+already down, so every row would be a switch for something not on screen. The
+rule names both modes beside the minimap's own, and `styles.test.ts` asserts
+it — along with each mark having a rule of its own, the map going down by
+`display`, and the rows being `--hit` tall, because the whole row is the target
+and there is nothing else on it to aim at.
+
 ### The camera came out of the scene
 
 `world-scene.ts` was at the 700-line limit, and the minimap needed one more

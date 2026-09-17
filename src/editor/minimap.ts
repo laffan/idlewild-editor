@@ -169,6 +169,18 @@ export class Minimap {
     this.resizer.restore();
   }
 
+  /**
+   * Whether the map is wanted at all — the Overlays switch above it.
+   *
+   * `display: none` is the whole of it, and it stops the painting too: the
+   * body then has no box to fit anything into, `paint` returns on that, and
+   * the `ResizeObserver` brings it back the moment there is one again. The
+   * same rule Code and Play already hide it under.
+   */
+  setVisible(visible: boolean): void {
+    this.root.classList.toggle("hidden", !visible);
+  }
+
   /** Where the camera is now — the scene publishes this as it moves. */
   setViewport(view: Viewport): void {
     this.view = view;

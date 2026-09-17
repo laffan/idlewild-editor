@@ -6,11 +6,11 @@
 import { clear, h } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import { assetBase, checkAssetServer, platform, projects } from "../lib/ipc";
+import { assetBase, checkAssetServer, platform } from "../lib/ipc";
 import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
-import { snapshotPng } from "../game/snapshot";
+import { saveThumbnail } from "./thumbnail";
 import { DrawingLayer } from "../drawing";
 import { CodePanel } from "./code-panel";
 import { Inspector } from "./inspector";
@@ -38,6 +38,7 @@ import { createDeletes } from "./layer-actions";
 import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
+import { OverlaysPanel } from "./overlays-panel";
 import { addSweptZone } from "./zone-actions";
 import { createFillBarUi } from "./fill-bar";
 import { ScreenGuide } from "./screen-guide";
@@ -103,12 +104,14 @@ export async function mountEditor(
     code.openAt(site.path, site.line);
   });
 
-  // Where you are standing, along the bottom of the left sidebar. Built
-  // before the panel it goes in, and reaching the scene through a closure
-  // because the canvas is not up until the end of this function.
+  // Where you are standing, along the bottom of the left sidebar, and above it
+  // the switches for the marks the canvas draws about itself. Both are built
+  // before the panel they go in, and reach the scene through a closure because
+  // the canvas is not up until the end of this function.
   const minimap = new Minimap(store, grid, {
     centreOn: (x, y) => handle?.scene.centreOn(x, y),
   });
+  const overlays = new OverlaysPanel(minimap);
 
   const layers = new LayersPanel(
     store,
@@ -143,7 +146,7 @@ export async function mountEditor(
       onNewBackground: (layerId, anchor) =>
         openNewBackground(anchor, layerId, backgrounds),
     },
-    minimap.root,
+    overlays.root,
   );
 
   /** The two shortcuts into a pattern shape that are not the panel's own. */
@@ -438,6 +441,7 @@ export async function mountEditor(
     defaultZoom: () => render.options.defaultZoom,
   });
   canvasWrap.appendChild(guide.root);
+  overlays.setGuide(guide);
 
   handle = await bootGame(
     canvasWrap,
@@ -651,16 +655,6 @@ export async function mountEditor(
     });
   }
 
-  async function saveThumbnail(): Promise<void> {
-    if (!handle) return;
-    try {
-      const dataUrl = await snapshotPng(handle.game);
-      if (dataUrl) await projects.writeThumbnail(meta.id, dataUrl);
-    } catch (err) {
-      log.warn("Could not save a thumbnail:", err);
-    }
-  }
-
   async function leave(): Promise<void> {
     await teardown();
     await callbacks.onBack();
@@ -673,10 +667,10 @@ export async function mountEditor(
     intake.stop();
     // A thumbnail is of the canvas, so the game comes down first.
     if (mode === "play") setMode("draw");
-    await saveThumbnail();
+    await saveThumbnail(handle?.game ?? null, meta.id);
     await store.flush();
     header.destroy();
-    minimap.destroy();
+    overlays.destroy();
     guide.destroy();
     layers.destroy();
     inspector.destroy();

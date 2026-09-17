@@ -79,3 +79,10 @@
    falls would be drawn under the screen itself. */
 .editor.play-mode .screen-guide,
 .editor.code-mode .screen-guide { display: none; }
+
+/* Switched off from the Overlays section in the left sidebar. Each mark goes
+   on its own: the boundary is what you lay a building against and then want
+   out of the way, and the crosshair is the one thing worth keeping when the
+   boundary has gone. See editor/overlays-panel.ts. */
+.screen-guide-frame.hidden,
+.screen-guide-cross.hidden { display: none; }

@@ -84,6 +84,97 @@
 .panel-add:hover { background: var(--chrome-rule); }
 .panel-body { flex: 1; }
 
+/* ── the bottom of the sidebar ──────────────────────────────────────────────
+   The switches for the canvas's own marks, and the map they sit on top of.
+   One block, so the layer list above it gives up its space to the pair rather
+   than to each of them. See editor/overlays-panel.ts. */
+.sidebar-footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Overlays: three switches for the three things drawn *about* the document
+   rather than in it. Open to begin with, because a switch nobody can find is
+   a mark nobody can turn off — and foldable, because three rows of chrome
+   permanently above the map would cost the map more than they are worth. The
+   fold is remembered per install, like a divider's width. */
+.overlays {
+  flex: none;
+  border-top: var(--rule-chrome);
+}
+.overlays-head {
+  width: 100%;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px 0 10px;
+  text-align: left;
+}
+.overlays-head:hover { background: var(--chrome-panel); }
+/* Pointing down when the rows are showing, and along when they are not — the
+   arrow says which way the section will go, as a disclosure does anywhere. */
+.overlays-chevron {
+  flex: none;
+  display: flex;
+  color: var(--chrome-dim);
+  transition: transform 120ms ease;
+}
+.overlays.closed .overlays-chevron { transform: rotate(-90deg); }
+.overlays.closed .overlays-body { display: none; }
+
+.overlays-body {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 4px;
+}
+/* The whole width is the switch: nothing else is on the row, so a finger
+   should be able to land anywhere. The same argument Code's layer directory
+   makes about its own rows, and the reason these are not checkboxes. */
+.overlays-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* The whole row is the target, so it answers to the rule every target in
+     this app answers to rather than to the 34px the layer rows give a toggle
+     that shares its row with five other controls. */
+  min-height: var(--hit);
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  padding: 0 8px 0 30px;
+  text-align: left;
+}
+.overlays-row:hover { background: var(--chrome-panel); }
+/* A name, in the body face — not the uppercase micro-label the headings above
+   and below it are in. Three rows of narrow capitals under a heading in narrow
+   capitals read as three more headings rather than as things to press. */
+.overlays-name {
+  flex: 1;
+  min-width: 0;
+  font: 600 13px var(--font-heading);
+}
+/* The eye the layer rows use, in the colours they use it in: the accent for
+   on, and the far end of the neutral ramp for off. */
+.overlays-eye {
+  flex: none;
+  display: flex;
+  color: var(--color-accent);
+}
+.overlays-row.off .overlays-name { color: var(--chrome-dim); }
+.overlays-row.off .overlays-eye { color: var(--color-neutral-600); }
+
+/* Switched off from the row above it. `display: none` also stops the paint:
+   the body has no box to fit anything into, `Minimap.paint` returns on that,
+   and the ResizeObserver brings it back the moment there is one again — the
+   same rule Code and Play already take the map down under. */
+.minimap.hidden { display: none; }
+
 /* The minimap, along the bottom of the sidebar.
 
    The column reads as the questions in the order you ask them: which place am

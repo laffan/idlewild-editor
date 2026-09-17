@@ -32,6 +32,7 @@ import libraryCss from "../library.css?raw";
 import sheetsCss from "../sheets.css?raw";
 import optionsCss from "../options.css?raw";
 import menuCss from "../menu.css?raw";
+import guidesCss from "../guides.css?raw";
 import { ruleIn, withoutComments } from "./rules";
 
 /** The declarations of one rule of the editor's own stylesheet. */
@@ -605,6 +606,46 @@ describe("the minimap's stylesheet", () => {
     expect(rule(".editor.code-mode .minimap").display).toBe("none");
     const body = withoutComments(css);
     expect(body).toContain(".editor.play-mode .minimap");
+  });
+});
+
+/**
+ * The Overlays switches, above the minimap — `editor/overlays-panel.ts`.
+ *
+ * Three rules carry the whole of what this section is for. Each mark has to be
+ * hideable on its own, which is a rule per element rather than one on the
+ * section; the map has to go down the way Code and Play already take it down,
+ * so the paint stops with it; and the switches themselves have to be Draw's,
+ * because in Code the marks they switch are already gone and a switch for
+ * something not on screen is worse than no switch at all.
+ */
+describe("the overlay switches", () => {
+  it("hides each mark on its own", () => {
+    // Grouped, so the last member is the one `ruleIn` finds.
+    expect(ruleIn(guidesCss, ".screen-guide-cross.hidden").display).toBe("none");
+    expect(withoutComments(guidesCss)).toContain(".screen-guide-frame.hidden");
+  });
+
+  /**
+   * The same mechanism Code and Play hide the map with, and it is load-bearing
+   * beyond appearance: with no box to fit anything into, `Minimap.paint`
+   * returns and the ResizeObserver brings it back when there is one again.
+   */
+  it("takes the map down with display rather than with opacity", () => {
+    expect(ruleIn(panelsCss, ".minimap.hidden").display).toBe("none");
+  });
+
+  it("is down in the two modes that run the game over the canvas", () => {
+    expect(rule(".editor.code-mode .overlays").display).toBe("none");
+    expect(withoutComments(css)).toContain(".editor.play-mode .overlays");
+  });
+
+  /**
+   * Every target in this app is at least `--hit` tall, and the whole row is
+   * the target here — there is nothing else on it to aim at.
+   */
+  it("gives each row a finger-sized target", () => {
+    expect(ruleIn(panelsCss, ".overlays-row")["min-height"]).toBe("var(--hit)");
   });
 });
 
