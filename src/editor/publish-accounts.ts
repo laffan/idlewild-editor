@@ -1,25 +1,34 @@
 /**
- * Who this install publishes as — the half that is not a project's.
+ * Who this device publishes as: **one list of logins**, GitHub accounts and
+ * servers together.
  *
- * Entered once and shared by every project: the servers you have an ssh key
- * on, and the GitHub account your token is for. A project then says *which*
- * server and which repository, in `publish-where.ts`. That split is the whole
- * shape of the feature — log in once, then point each project somewhere — and
- * the alternative, a password box inside every project's publish sheet, is
- * what makes people export a zip and upload it by hand instead.
+ * It is one list because they are one kind of thing. A publish needs a *login*
+ * — an account with a token, a server with a key — and a *destination* — a
+ * repository, a directory. The login belongs to the device and is entered
+ * once; the destination belongs to the project. Splitting the sheets along
+ * that seam rather than along "GitHub things / server things" is what keeps
+ * the relationship legible: everything here is shared by every project, and
+ * nothing here is about any one of them.
  *
- * **No secret is ever read back into this sheet.** Rust answers with the
- * account's name and nothing else; signing in again is how a token is
- * replaced, and the row says whether there is one. A token handed to a webview
- * so a field could be pre-filled is a token in a webview's memory for as long
- * as the sheet is open, and nothing here needs it: the publishes run in Rust.
+ * So the rows interleave. A row is a login, whichever kind, with the same
+ * shape: who it is, what it is for, and a way to change or forget it. The two
+ * kinds differ only in what their popup asks for.
+ *
+ * **No secret is ever read back into this sheet.** Rust answers with names and
+ * fingerprints and nothing else; signing in again is how a token is replaced,
+ * and the row says whether there is one. A secret handed to a webview so a
+ * field could be pre-filled is a secret in a webview's memory for as long as
+ * the sheet is open, and nothing here needs one: both publishes run in Rust.
+ *
+ * **A GitHub login asks for a token and nothing else.** GitHub is asked whose
+ * it is, which is one fewer box to type into and the difference between
+ * finding out a token is bad now and finding out at the far end of a publish.
  *
  * **A server's key is imported, not pointed at.** That is what makes the iPad
  * work: there is no `~/.ssh` there to reference, and a file picked out of
  * Files hands back a security-scoped URL that is not readable again on the
  * next launch. So the picker's job is to name a file *once* — Rust reads it,
- * checks it parses, and keeps the key. The row then says which file it came
- * from, and editing a server without picking again keeps the key it has.
+ * checks it parses, and keeps the key.
  *
  * **The host key is shown once there is one.** With its own SSH client the app
  * owns the check `ssh` would have done, and it is trust-on-first-use with no
@@ -32,7 +41,12 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { h } from "../lib/dom";
 import { confirmSheet, openSheet } from "../lib/sheet";
-import { publish, type PublishServer, type PublishSettings } from "../lib/ipc";
+import {
+  publish,
+  type GithubAccount,
+  type PublishServer,
+  type PublishSettings,
+} from "../lib/ipc";
 import * as log from "../lib/log";
 
 /**
@@ -42,11 +56,11 @@ import * as log from "../lib/log";
  * appeared or an account signed in: the destination sheet lists servers, and
  * one added here has to show up there without the project being reopened.
  */
-export function openPublishLogins(onChanged: () => void = () => {}): void {
+export function openPublishAccounts(onChanged: () => void = () => {}): void {
   const sheet = openSheet({
-    title: "Servers and accounts",
+    title: "Logins",
     subtitle: "shared by every project on this device",
-    width: 620,
+    width: 640,
   });
 
   const body = h("div");
@@ -63,113 +77,151 @@ export function openPublishLogins(onChanged: () => void = () => {}): void {
       log.error("Could not read the publish settings:", err);
       return;
     }
+    const rows = [
+      ...settings.accounts.map((account) => accountRow(account, reload, onChanged)),
+      ...settings.servers.map((server) => serverRow(server, reload, onChanged)),
+    ];
     body.replaceChildren(
-      ...github(settings, reload, onChanged),
-      ...servers(settings, reload, onChanged),
+      ...(rows.length
+        ? rows
+        : [
+            h("div", {
+              class: "field-hint",
+              text:
+                "Nothing yet. Add a GitHub account to publish to a repository, " +
+                "or a server to publish over SSH. Either is shared by every " +
+                "project on this device.",
+            }),
+          ]),
+      addRow(reload, onChanged),
     );
   };
   void reload();
 }
 
-// ── GitHub ──────────────────────────────────────────────────────────────────
-
-function github(
-  settings: PublishSettings,
-  reload: () => void,
-  onChanged: () => void,
-): HTMLElement[] {
-  const heading = h("div", { class: "sheet-row-key m", text: "GITHUB" });
-
-  if (settings.github) {
-    return [
-      h(
-        "div",
-        { class: "sheet-row" },
-        heading,
-        h("div", { class: "sheet-row-value", text: `Signed in as ${settings.github}` }),
-        h("button", {
-          class: "btn btn-ghost",
-          text: "Sign out",
-          onClick: () => {
-            void publish
-              .signOutOfGithub()
-              .then(() => {
-                onChanged();
-                reload();
-              })
-              .catch((err) => log.error("Could not sign out:", err));
-          },
-        }),
-      ),
-    ];
-  }
-
-  const login = field("Account", "your GitHub username");
-  const token = field("Token", "ghp_… or github_pat_…");
-  token.input.type = "password";
-  // A token is not a login this field should offer to remember: the browser's
-  // own password manager has no business in an app's settings file.
-  token.input.autocomplete = "off";
-
-  return [
-    h("div", { class: "sheet-row" }, heading, h("div", { class: "sheet-row-value", text: "Not signed in" })),
-    login.row,
-    token.row,
-    h(
-      "div",
-      { class: "publish-actions" },
-      h(
-        "div",
-        { class: "field-hint" },
-        h("span", {
-          text:
-            "A personal access token with Contents write on the repositories " +
-            "you publish to. It is kept on this device, in a file only you can " +
-            "read, and is never sent anywhere but github.com.",
-        }),
-      ),
-      h("button", {
-        class: "btn btn-primary",
-        text: "Sign in",
-        onClick: () => {
-          void publish
-            .signInToGithub(login.input.value.trim(), token.input.value.trim())
-            .then(() => {
-              onChanged();
-              reload();
-            })
-            .catch((err) => log.error("Could not save the GitHub login:", err));
-        },
-      }),
-    ),
-  ];
+/** The two ways to add a login, on one row at the bottom of the list. */
+function addRow(reload: () => void, onChanged: () => void): HTMLElement {
+  return h(
+    "div",
+    { class: "sheet-row publish-add" },
+    h("button", {
+      class: "btn btn-ghost",
+      text: "Add a GitHub account",
+      onClick: () => void signIn(reload, onChanged),
+    }),
+    h("button", {
+      class: "btn btn-ghost",
+      text: "Add a server",
+      onClick: () => void editServer(null, reload, onChanged),
+    }),
+  );
 }
 
-// ── rsync servers ───────────────────────────────────────────────────────────
-
-function servers(
-  settings: PublishSettings,
+/** A signed-in GitHub account. */
+function accountRow(
+  account: GithubAccount,
   reload: () => void,
   onChanged: () => void,
-): HTMLElement[] {
-  const rows = settings.servers.map((server) => serverRow(server, reload, onChanged));
-  return [
+): HTMLElement {
+  return h(
+    "div",
+    { class: "sheet-row" },
+    h("div", { class: "publish-kind m", text: "GITHUB" }),
     h(
       "div",
-      { class: "sheet-row" },
-      h("div", { class: "sheet-row-key m", text: "SERVERS" }),
-      h("div", {
-        class: "sheet-row-value m",
-        text: rows.length ? "" : "None yet — rsync publishes to one of these",
-      }),
-      h("button", {
-        class: "btn btn-ghost",
-        text: "Add a server",
-        onClick: () => void editServer(null, reload, onChanged),
-      }),
+      { class: "sheet-row-value seg-stack" },
+      h("span", { text: account.login }),
+      h("span", { class: "check-hint", text: "Publishes to any repository this token can write" }),
     ),
-    ...rows,
-  ];
+    h("button", {
+      class: "btn btn-ghost",
+      title: "Replace this account's token",
+      text: "New token",
+      onClick: () => void signIn(reload, onChanged),
+    }),
+    h("button", {
+      class: "btn btn-ghost",
+      text: "Sign out",
+      onClick: () => void signOut(account, reload, onChanged),
+    }),
+  );
+}
+
+/**
+ * Sign in: one box.
+ *
+ * GitHub is asked whose the token is rather than the person being asked to
+ * type a username the app could have looked up — and the lookup doubles as
+ * the check that the token works at all.
+ */
+async function signIn(reload: () => void, onChanged: () => void): Promise<void> {
+  const sheet = openSheet({
+    title: "Add a GitHub account",
+    subtitle: "a personal access token",
+    width: 560,
+  });
+  const token = field("Token", "ghp_… or github_pat_…");
+  token.input.type = "password";
+  token.input.autocomplete = "off";
+  const note = h("div", { class: "field-hint" });
+
+  const submit = () => {
+    note.textContent = "Asking GitHub whose token that is…";
+    void publish
+      .signInToGithub(token.input.value.trim())
+      .then((account) => {
+        sheet.close();
+        log.info(`Signed in to GitHub as ${account.login}`);
+        onChanged();
+        reload();
+      })
+      .catch((err) => {
+        note.textContent = String(err);
+      });
+  };
+  token.input.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key === "Enter") submit();
+  });
+
+  sheet.body.append(
+    token.row,
+    h("div", {
+      class: "field-hint",
+      text:
+        "It needs Contents write on the repositories you publish to — a " +
+        "fine-grained token has to list them explicitly. The token is kept on " +
+        "this device, in a file only you can read, and is never sent anywhere " +
+        "but github.com.",
+    }),
+    note,
+  );
+  sheet.actions.append(
+    h("button", { class: "btn btn-primary", text: "Sign in", onClick: submit }),
+    h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
+  );
+  token.input.focus();
+}
+
+async function signOut(
+  account: GithubAccount,
+  reload: () => void,
+  onChanged: () => void,
+): Promise<void> {
+  const sure = await confirmSheet(
+    `Sign out of ${account.login}?`,
+    "The token is forgotten. Any project publishing as this account will need " +
+      "another one.",
+    "Sign out",
+    false,
+  );
+  if (!sure) return;
+  try {
+    await publish.signOutOfGithub(account.id);
+    onChanged();
+    reload();
+  } catch (err) {
+    log.error("Could not sign out:", err);
+  }
 }
 
 function serverRow(
@@ -188,11 +240,12 @@ function serverRow(
   return h(
     "div",
     { class: "sheet-row" },
-    h("div", { class: "sheet-row-key m", text: server.label || server.host }),
+    h("div", { class: "publish-kind m", text: "SERVER" }),
     h(
       "div",
       { class: "sheet-row-value seg-stack" },
-      h("span", { class: "m", text: where }),
+      h("span", { text: server.label || server.host }),
+      h("span", { class: "check-hint", text: where }),
       // The fingerprint, once there is one. On the row rather than behind a
       // disclosure, because the whole value of trust-on-first-use is that
       // somebody can check afterwards what was trusted.

@@ -19,12 +19,12 @@
 import type { Grid } from "../lib/grid";
 import type { EditorMode, ProjectMeta } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
-import { openExportAssets } from "./export-assets";
 import type { HeaderCallbacks } from "./header";
 import type { HistoryUi } from "./history";
 import { openImportAssets } from "./import-assets";
 import { pasteTargetFor, type Intake } from "./intake";
-import { openPublish } from "./sheets";
+import { openExport } from "./sheets";
+import { openPublish } from "./publish";
 
 export interface HeaderWiringDeps {
   meta: ProjectMeta;
@@ -53,8 +53,8 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
     onMode: (next) => deps.setMode(next),
     onPasteImage: () => deps.intake().paste(),
     onCopyPsd: () => deps.intake().copy(),
-    onPublish: () => openPublish(meta.id, meta.name),
-    onExportAssets: () => openExportAssets(meta.id, meta.name),
+    onPublish: () => openPublish(meta.id),
+    onExport: () => openExport(meta.id, meta.name),
     // The way in for several files at once, off the filesystem or out of
     // another project. It lands them the way a paste lands one, which is what
     // `pasteTargetFor` is — see `editor/import-assets.ts`.

@@ -153,6 +153,12 @@ pub struct PublishTarget {
     /// can delete something else's files, and the box says so.
     #[serde(default)]
     pub prune: bool,
+    /// The id of the GitHub account this project publishes as.
+    ///
+    /// Empty on a target written when there could only be one, which resolves
+    /// to that one — see `publish_targets::account_for`.
+    #[serde(default)]
+    pub account: String,
     #[serde(default)]
     pub owner: String,
     #[serde(default)]
@@ -191,6 +197,12 @@ impl PublishTarget {
         }
     }
 
+    /// `owner/repo`, which is how the picker lists a repository and how a
+    /// target is matched back to a row in that list.
+    pub fn full_name(&self) -> String {
+        format!("{}/{}", self.owner, self.repo)
+    }
+
     /// The branch a GitHub publish actually uses.
     ///
     /// `gh-pages` for anyone who has not said, because that is the branch
@@ -216,12 +228,7 @@ impl PublishTarget {
                 } else {
                     format!("/{}", self.path.trim_matches('/'))
                 };
-                format!(
-                    "{}/{} on {}{path}",
-                    self.owner,
-                    self.repo,
-                    self.branch_or_default()
-                )
+                format!("{} on {}{path}", self.full_name(), self.branch_or_default())
             }
         }
     }

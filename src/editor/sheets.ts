@@ -7,13 +7,7 @@ import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plug
 import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
 import { psd, publish, toBase64 } from "../lib/ipc";
-import type { AnchorMarks, ImportResult, PublishSettings } from "../lib/ipc";
-import {
-  describeTarget,
-  targetIsSet,
-  type PublishTarget,
-} from "../lib/publish-target";
-import { openPublishWhere } from "./publish-where";
+import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import {
   projectOptions,
   ZOOM_RANGE,
@@ -22,6 +16,7 @@ import {
 } from "../lib/types";
 import { isMobile } from "../lib/platform";
 import * as log from "../lib/log";
+import { openExportAssets } from "./export-assets";
 import { clipboardImage } from "./clipboard";
 import { pasteName } from "./paste";
 import { trimTransparent } from "./trim-alpha";
@@ -312,28 +307,31 @@ export function openExportSelection(
 }
 
 /**
- * Publish, which now has somewhere to go as well as something to hand you.
+ * Export: the three ways out that hand you a **file**.
  *
- * At the top, **the project's own destination** — a directory on a server over
- * rsync, or a branch of a GitHub repository — with the login shared by every
- * project on the device and the destination per project. See
- * `publish-where.ts` and `publish-logins.ts` for that split, and `deploy.rs`
- * for what pushes.
+ * Split from Publish, which is the verb for sending the site somewhere real.
+ * They were one menu item and one sheet, and that was wrong in the way that
+ * only shows up when somebody uses it: the sheet asked "where does this
+ * publish to" and "do you want a zip" in the same breath, and the answer to
+ * one has nothing to do with the answer to the other. Publishing is a
+ * destination you set up once and then use; exporting is a save dialog.
  *
- * Under it, the two exits that were here before, and which are still the
- * answer where there is no server to publish to — an iPad, which cannot run
- * either program, or a project going somewhere by hand. **Export site** is a
- * zip you can serve: the game, its processed assets and both runtimes, and
- * nothing you would edit it with. **Export project** is a `.idlewild` file —
- * the project itself, source PSDs and all, to open somewhere else and carry on
- * with. The source files are the difference, and they are the part a published
- * site cannot give back.
+ * The three, and what each is for:
  *
- * Both zips are written straight to the path the dialog returns; neither comes
- * back through the IPC boundary as base64 first.
+ * - **Site** is a zip you can serve: the game, its processed assets and both
+ *   runtimes, and nothing you would edit it with.
+ * - **Project** is a `.idlewild` file — the project itself, source PSDs and
+ *   all, to open somewhere else and carry on with. The source files are the
+ *   difference, and they are the part a published site cannot give back.
+ * - **Assets** is the artwork on its own, for the PSDs that are wanted
+ *   somewhere that is not a game. It asks its own questions, so it is a row
+ *   that opens a sheet rather than a save dialog.
+ *
+ * The first two are written straight to the path the dialog returns; neither
+ * comes back through the IPC boundary as base64 first.
  */
-export function openPublish(projectId: string, projectName: string): void {
-  const sheet = openSheet({ title: "Publish", width: 560 });
+export function openExport(projectId: string, projectName: string): void {
+  const sheet = openSheet({ title: "Export", width: 560 });
 
   const stem = projectName.replace(/[^\w-]+/g, "-").toLowerCase() || "idlewild";
 
@@ -357,115 +355,31 @@ export function openPublish(projectId: string, projectName: string): void {
     }
   };
 
-  // Filled once Rust has answered which servers exist and where this project
-  // points — the sheet is up before either is known, and a strip that gains a
-  // row reads better than a sheet that opens late.
-  const destination = h("div", { class: "sheet-list" });
-  const refresh = () => void showDestination(projectId, destination, sheet.close, refresh);
-  refresh();
-
   const list = h("div", { class: "sheet-list" });
   list.append(
-    option("Export site", "A zip to serve · game, assets, runtimes", () =>
+    option("Site", "A zip to serve · game, assets, runtimes", () =>
       void run("Exported site", "zip", "Zip archive", (path) =>
         publish.site(projectId, path),
       ),
     ),
     option(
-      "Export project",
+      "Project",
       "A .idlewild file · everything, source PSDs included",
       () =>
         void run("Exported project", "idlewild", "Idlewild project", (path) =>
           publish.project(projectId, path),
         ),
     ),
+    option("Assets", "The artwork on its own · PSDs, or what the pipeline made", () => {
+      sheet.close();
+      openExportAssets(projectId, projectName);
+    }),
   );
 
-  sheet.body.append(destination, list);
+  sheet.body.appendChild(list);
   sheet.actions.appendChild(
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
   );
-}
-
-/**
- * The rows about publishing somewhere real, once it is known whether there is
- * anywhere.
- *
- * Two shapes. **Nothing set up** is one row that opens the destination sheet.
- * **Set up** is Publish, a rehearsal beside it, and the way back to the
- * settings. There is no third shape any more: this used to say that an iPad
- * could not publish, which was true of an implementation that ran `rsync` and
- * `git` as programs and is not true of one that links libgit2 and speaks SSH
- * itself. Both platforms take the same two rows.
- *
- * The rehearsal is there because the question it answers — "is this pointed
- * where I think it is?" — is one people ask with a finger already on Publish,
- * and the answer is cheap: rsync says what it would send, and a GitHub check
- * asks the repository whether the token can reach it.
- */
-async function showDestination(
-  projectId: string,
-  into: HTMLElement,
-  close: () => void,
-  refresh: () => void,
-): Promise<void> {
-  let settings: PublishSettings;
-  let target: PublishTarget;
-  try {
-    [settings, target] = await Promise.all([
-      publish.settings(),
-      publish.target(projectId),
-    ]);
-  } catch (err) {
-    log.error("Could not read where this project publishes:", err);
-    return;
-  }
-
-  const rows: HTMLElement[] = [];
-  const server = settings.servers.find((one) => one.id === target.server);
-  const where = describeTarget(target, server?.label || server?.host);
-  const set = targetIsSet(target);
-
-  if (set) {
-    rows.push(
-      option("Publish", where, () => {
-        close();
-        void send(projectId, where, false);
-      }),
-      option("Check it first", "say what would happen, send nothing", () => {
-        close();
-        void send(projectId, where, true);
-      }),
-    );
-  }
-
-  rows.push(
-    option(
-      set ? "Where this publishes…" : "Set up publishing…",
-      set ? "change it" : "a server, or GitHub",
-      () => openPublishWhere(projectId, () => refresh()),
-    ),
-  );
-  into.replaceChildren(...rows);
-}
-
-/**
- * Push, and say how it went in the console.
- *
- * The console rather than a sheet with a spinner, because that is where this
- * editor says everything else — and because a publish that takes a minute
- * behind a modal is a minute with nothing to read. The first line goes out
- * before the call, so the drawer says what is happening while it happens.
- */
-async function send(projectId: string, where: string, dryRun: boolean): Promise<void> {
-  log.info(dryRun ? `Checking ${where}…` : `Publishing to ${where}…`);
-  try {
-    const report = await publish.toTarget(projectId, dryRun);
-    log.info(report.summary);
-    if (report.log.trim()) log.info(report.log);
-  } catch (err) {
-    log.error(dryRun ? "That check failed:" : "Publishing failed:", err);
-  }
 }
 
 /** The three options Project Options can change, as it hands them back. */

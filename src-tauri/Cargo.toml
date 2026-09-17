@@ -63,6 +63,21 @@ russh = { version = "0.63", default-features = false, features = [
 russh-sftp = "3"
 tokio = { version = "1", features = ["rt", "net", "io-util", "time", "fs"] }
 
+# The GitHub REST API, for the two questions libgit2 cannot answer: which
+# repositories this token can see, and what is on a branch without cloning it.
+# Both are what the publish sheet is made of — a list to search, and the far
+# end of a comparison — and neither is a git operation.
+#
+# `rustls` rather than the platform's TLS, and `ring` rather than `aws-lc-rs`,
+# for the same reason russh is configured that way: it is the backend that
+# cross-compiles to `aarch64-apple-ios` without a fight, and it is already in
+# the tree, so this adds a client rather than a second crypto stack.
+ureq = { version = "3", default-features = false, features = [
+    "rustls",
+    "json",
+    "gzip",
+] }
+
 # The PSD pipeline, shared with Phaser Bench.
 #
 # TEMPORARILY PINNED AHEAD OF MAIN, and meant to come off. The branch carries

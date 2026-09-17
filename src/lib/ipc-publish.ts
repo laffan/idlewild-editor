@@ -98,29 +98,92 @@ export const publish = {
    */
   forgetHostKey: (id: string) => invoke<void>("forget_host_key", { id }),
   /**
-   * Keep a GitHub personal access token.
+   * Keep a GitHub personal access token, and answer with whose it is.
    *
-   * A token rather than an OAuth flow: OAuth needs a redirect the app can
-   * receive and a client secret it would have to ship, and a fine-grained PAT
-   * is both narrower and revocable from a page the person already knows.
+   * **No username is asked for.** The token is checked against GitHub, which
+   * says who it belongs to — one fewer box to type into, and the difference
+   * between finding out a token is bad now and finding out at the far end of
+   * a publish.
    */
-  signInToGithub: (login: string, token: string) =>
-    invoke<void>("save_github_login", { login, token }),
-  signOutOfGithub: () => invoke<void>("clear_github_login"),
+  signInToGithub: (token: string) => invoke<GithubAccount>("save_github_login", { token }),
+  signOutOfGithub: (id: string) => invoke<void>("delete_github_login", { id }),
+  /** Every repository an account can see, for the picker to search. */
+  repos: (id: string) => invoke<GithubRepo[]>("list_github_repos", { id }),
 
   /** Where this project publishes to. */
   target: (id: string) => invoke<PublishTarget>("read_publish_target", { id }),
   saveTarget: (id: string, target: PublishTarget) =>
     invoke<ProjectMeta>("save_publish_target", { id, target }),
   /**
+   * What is already published, beside what this project would publish.
+   *
+   * The two panes of the Publish sheet, and the reason publishing is something
+   * you can do to one file.
+   */
+  compare: (id: string) => invoke<Comparison>("compare_target", { id }),
+  /**
    * Publish, or rehearse one.
    *
-   * `dryRun` is the same command deliberately: the useful question — "is this
-   * set up right?" — is one people ask with a finger already on Publish.
+   * `chosen` is the right pane's ticks and `remove` is the left pane's;
+   * leaving `chosen` out means everything that differs. `dryRun` is the same
+   * command deliberately: the useful question — "is this set up right?" — is
+   * one people ask with a finger already on Publish.
    */
-  toTarget: (id: string, dryRun: boolean) =>
-    invoke<PublishReport>("publish_to_target", { id, dryRun }),
+  toTarget: (
+    id: string,
+    dryRun: boolean,
+    chosen?: readonly string[],
+    remove?: readonly string[],
+  ) => invoke<PublishReport>("publish_to_target", { id, dryRun, chosen, remove }),
 };
+
+/** One GitHub account this device can publish as. Never its token. */
+export interface GithubAccount {
+  id: string;
+  login: string;
+}
+
+/** One repository an account can see, as the picker lists it. */
+export interface GithubRepo {
+  /** `owner/name` — what the list searches and what a target stores. */
+  fullName: string;
+  owner: string;
+  name: string;
+  /** What the repository itself calls default. A hint, not the publish default. */
+  defaultBranch: string;
+  private: boolean;
+  /** Whether this token can write to it. Shown and refused, rather than hidden. */
+  canPush: boolean;
+  updatedAt: number;
+}
+
+/** What a local file is, relative to what is already published. */
+export type FileStatus = "new" | "changed" | "same" | "unknown";
+
+export interface RemoteEntry {
+  path: string;
+  size: number;
+  /** Whether the site still has a file of this name. */
+  inSite: boolean;
+}
+
+export interface LocalEntry {
+  path: string;
+  size: number;
+  status: FileStatus;
+}
+
+/** The two panes, and where they are about. */
+export interface Comparison {
+  remote: RemoteEntry[];
+  local: LocalEntry[];
+  /** The destination, as a person reads it. */
+  destination: string;
+  /** Nothing at the far end yet — a new branch, an empty directory. */
+  fresh: boolean;
+  /** Reachable but not comparable, when that happens. Empty otherwise. */
+  note: string;
+}
 
 /** One server this install can publish to over SSH. */
 export interface PublishServer {
@@ -145,8 +208,7 @@ export interface PublishServer {
 /** What the app knows about who is publishing — never a secret itself. */
 export interface PublishSettings {
   servers: PublishServer[];
-  /** The GitHub account's name, when one is signed in. */
-  github: string | null;
+  accounts: GithubAccount[];
 }
 
 /** What a publish did, or would have done. */

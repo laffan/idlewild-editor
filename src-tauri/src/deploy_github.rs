@@ -94,12 +94,14 @@ pub fn push(
     site: &Path,
     project_name: &str,
     work: &Path,
+    chosen: Option<&[String]>,
+    remove: &[String],
 ) -> Result<Report, String> {
     let (url, branch) = address(target)?;
     let inside = checked_path(&target.path)?;
 
     let (repo, existed) = open(&url, &branch, work, account)?;
-    replace(work, &inside, site)?;
+    apply(work, &inside, site, chosen, remove)?;
 
     let tree_id = stage(&repo).map_err(|e| redact(e.message(), &account.token))?;
     let parent = repo
@@ -124,6 +126,10 @@ pub fn push(
         .map_err(|e| redact(e.message(), &account.token))?;
     send(&repo, &url, &branch, account)?;
 
+    let counted = match chosen {
+        Some(paths) => format!("{} file(s)", paths.len()),
+        None => "the whole site".to_string(),
+    };
     Ok(Report {
         summary: format!(
             "Published to {}{}",
@@ -132,8 +138,12 @@ pub fn push(
         ),
         log: tail(
             &format!(
-                "Committed as \"{message}\" and pushed to {branch}.\n\
-                 Everything at that path is now what the site has."
+                "Committed {counted} as \"{message}\" and pushed to {branch}.{}",
+                if remove.is_empty() {
+                    String::new()
+                } else {
+                    format!(" {} removed.", remove.len())
+                }
             ),
             20,
         ),
@@ -252,35 +262,56 @@ fn auth(account: &Github) -> RemoteCallbacks<'static> {
 
 // ── the working tree ────────────────────────────────────────────────────────
 
-/// Put the site where the target says, replacing what was there.
+/// Put the chosen files where the target says, and take away the chosen
+/// removals.
 ///
-/// Replacing rather than merging: a file the site no longer has is a file that
-/// should stop being served, and a publish that only ever adds leaves a deleted
-/// scene's assets live for good. What is *not* touched is anything outside the
-/// path being published to — which is the reason the path exists.
-fn replace(work: &Path, inside: &Path, site: &Path) -> Result<(), String> {
+/// **It used to wipe the target path and copy the whole site in.** That is the
+/// right default and was the wrong only option: a file somebody put there by
+/// hand vanished without ever having been shown to them, and there was no way
+/// to publish one scene's change without republishing everything. Now the
+/// Publish sheet lists both sides and this applies what was ticked — so a file
+/// at the far end that nobody chose to remove stays, exactly as it was, and
+/// the commit says so.
+///
+/// `chosen` as `None` is every file in the site, which is what Publish does
+/// before anybody has touched the list. Anything outside `inside` is never
+/// touched at all, which is the reason the path exists.
+fn apply(
+    work: &Path,
+    inside: &Path,
+    site: &Path,
+    chosen: Option<&[String]>,
+    remove: &[String],
+) -> Result<(), String> {
     let dest = work.join(inside);
-    if inside.as_os_str().is_empty() {
-        // The repository root. Everything goes except `.git`, which is the
-        // clone itself — removing it would take the branch's history with it.
-        for entry in std::fs::read_dir(work).map_err(|e| e.to_string())?.flatten() {
-            if entry.file_name() == ".git" {
-                continue;
-            }
-            let path = entry.path();
-            let removed = if path.is_dir() {
-                std::fs::remove_dir_all(&path)
-            } else {
-                std::fs::remove_file(&path)
-            };
-            removed.map_err(|e| format!("Cannot clear {}: {e}", path.display()))?;
-        }
-    } else if dest.exists() {
-        std::fs::remove_dir_all(&dest)
-            .map_err(|e| format!("Cannot clear {}: {e}", dest.display()))?;
-    }
     std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-    crate::store::copy_dir(site, &dest)
+
+    for rel in crate::site_files::scan(site)?
+        .iter()
+        .map(|entry| entry.rel.clone())
+        .filter(|rel| chosen.is_none_or(|paths| paths.iter().any(|p| p == rel)))
+    {
+        let from = site.join(&rel);
+        let to = dest.join(crate::store::safe_relative(&rel)?);
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        std::fs::copy(&from, &to)
+            .map_err(|e| format!("Cannot stage {rel}: {e}"))
+            .map(|_| ())?;
+    }
+
+    for rel in remove {
+        // Through the same guard every relative path here goes through: this
+        // one names a file the app is about to delete inside a clone, and it
+        // came from a list drawn out of a remote listing.
+        let path = dest.join(crate::store::safe_relative(rel)?);
+        // Missing is not a failure: the list was drawn before the clone, and
+        // the only way to name a file that is not there is for the branch to
+        // have moved since.
+        let _ = std::fs::remove_file(&path);
+    }
+    Ok(())
 }
 
 // ── what a target is allowed to be ──────────────────────────────────────────

@@ -116,6 +116,43 @@ describe("the drawing layer's stylesheet", () => {
  * docked rules stopped taking the panel out of that positioning, a dock would
  * look like a panel that had covered the editor.
  */
+/**
+ * The publish sheets are two columns beside two columns: choosing a
+ * destination, and reviewing what to send. Two rules there are load-bearing
+ * rather than decorative, and neither fails in a way anybody would call a
+ * styling bug.
+ */
+describe("the publish sheets", () => {
+  it("puts the two halves side by side", () => {
+    expect(ruleIn(sheetsCss, ".publish-split").display).toBe("flex");
+    expect(ruleIn(sheetsCss, ".publish-pane").flex).toBeTruthy();
+    expect(ruleIn(sheetsCss, ".publish-side").flex).toBeTruthy();
+  });
+
+  /**
+   * The column that is *not* the current choice is dimmed and stays live —
+   * clicking in it is how you change your mind. `display: none` or
+   * `pointer-events: none` there would leave somebody who picked GitHub with
+   * no way back to the server side without reopening the sheet.
+   */
+  it("dims the unchosen column rather than taking it away", () => {
+    const dimmed = ruleIn(sheetsCss, ".publish-side:not(.active)");
+    expect(Number(dimmed.opacity)).toBeGreaterThan(0.4);
+    expect(dimmed.display).toBeUndefined();
+    expect(dimmed["pointer-events"]).toBeUndefined();
+  });
+
+  /**
+   * A file list ellipsizes at the **front**, because two paths in a site
+   * differ at the end: cutting the other way gives forty rows that all read
+   * `js/scenes/Sc…`.
+   */
+  it("cuts a long path where the difference is not", () => {
+    expect(ruleIn(sheetsCss, ".publish-file-name").direction).toBe("rtl");
+    expect(ruleIn(sheetsCss, ".publish-file-name")["text-align"]).toBe("left");
+  });
+});
+
 describe("the code panel's placements", () => {
   it("floats over the whole shell when it is not docked", () => {
     const floating = ruleIn(codeCss, ".code-backdrop");

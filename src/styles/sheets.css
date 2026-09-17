@@ -253,9 +253,254 @@
 
 /* ── Publishing somewhere real ──────────────────────────────────────────────
 
-   The servers-and-accounts sheet and the destination sheet, both built on the
-   row grid above: a key column, a value, and whatever control the row is. Two
-   things they need that the rows do not already give. */
+   Three sheets, one vocabulary. Choosing a destination is two columns side by
+   side; reviewing a publish is two panes side by side; the logins are one list
+   of rows on the sheet grid above. The split is the same element in both of
+   the first two, because they are the same gesture — read across, choose. */
+
+.publish-split {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--chrome-rule);
+  min-height: 0;
+}
+/* On a narrow window the two stack rather than squeezing to nothing. An iPad
+   in portrait is 834px, so the split survives there and gives way on a phone —
+   which is the width at which two columns of filenames stop being readable. */
+@media (max-width: 720px) {
+  .publish-split { flex-direction: column; }
+}
+
+/* One half of the destination split. The lit one is the choice in force; the
+   other is still fully usable, because clicking in it is how you change your
+   mind — dimmed, not disabled. */
+.publish-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-left: 1px solid var(--chrome-rule);
+}
+.publish-side:first-child { border-left: 0; }
+.publish-side:not(.active) { opacity: 0.62; }
+.publish-side.active { background: color-mix(in srgb, var(--color-accent) 7%, transparent); }
+
+.publish-side-head { display: flex; align-items: baseline; gap: 8px; }
+.publish-side-head svg { flex: none; align-self: center; color: var(--chrome-dim); }
+.publish-side.active .publish-side-head svg { color: var(--color-accent); }
+.publish-side-title { font: 600 15px var(--font-heading); }
+.publish-side-hint { font-size: 10px; }
+
+/* The login in force, and the way through to the list that manages it. Above
+   the picker, because the sheet reads top to bottom as login then
+   destination — which is the relationship it exists to keep clear. */
+.publish-login {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--chrome-dim);
+}
+.publish-login .seg { flex: 1 1 auto; }
+
+/* A button that reads as a link: the secondary way out of a pane, where a
+   bordered button would compete with the thing the pane is for. */
+.link-btn {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  color: var(--color-accent-400);
+  font: 600 11px var(--font-body);
+  text-decoration: underline;
+  cursor: pointer;
+  flex: none;
+}
+.link-btn:hover { color: var(--color-accent); }
+
+.publish-picker { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.publish-search { min-height: 34px; font-size: 13px; }
+/* Bounded rather than growing: the sheet has a second column beside it and a
+   set of fields under it, and a list of two hundred repositories would push
+   both off the screen. */
+.publish-list {
+  max-height: 210px;
+  min-height: 84px;
+  border: 1px solid var(--chrome-rule);
+  border-top: 0;
+}
+
+.publish-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--chrome-panel);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 400 12px var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.publish-row:hover { background: var(--chrome-rule); }
+.publish-row.active {
+  background: var(--color-accent);
+  color: var(--color-neutral-100);
+}
+.publish-row.disabled { opacity: 0.45; cursor: default; }
+.publish-row.disabled:hover { background: transparent; }
+.publish-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* What the search matched. A weight change as well as a colour, because the
+   accent on an active row is the row's own background. */
+.fuzzy-hit {
+  background: transparent;
+  color: var(--color-accent-400);
+  font-weight: 700;
+}
+.publish-row.active .fuzzy-hit { color: var(--color-neutral-100); text-decoration: underline; }
+
+/* A word about a row: private, read only, new, changed. */
+.publish-tag {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--chrome-rule);
+  font-family: var(--font-label);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--chrome-dim);
+}
+.publish-tag.warn { border-color: var(--color-accent-600); color: var(--color-accent-400); }
+.publish-tag.new { border-color: var(--color-accent); color: var(--color-accent-400); }
+.publish-tag.changed { border-color: var(--color-accent-600); color: var(--color-accent-400); }
+.publish-tag.unknown { border-color: var(--color-neutral-600); color: var(--color-neutral-400); }
+
+/* The project-specific half of a destination — branch and path, or the
+   directory. Indented under the picker it belongs to, so it reads as "and
+   where in it" rather than as another question. */
+.publish-fields {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--chrome-rule);
+  padding-top: 6px;
+}
+.publish-fields .sheet-row,
+.publish-fields .sheet-row.control { padding: 0; min-height: 52px; border-bottom: 0; }
+.publish-fields .sheet-row-key { width: 78px; }
+
+.publish-empty {
+  padding: 16px 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--chrome-dim);
+}
+
+/* ── Reviewing a publish ────────────────────────────────────────────────────
+
+   Left is the far end, right is this project. Same split element as the
+   destination sheet, and the panes are taller because a file list is the
+   subject rather than a control. */
+
+.publish-review { display: flex; flex-direction: column; min-height: 0; }
+.publish-review-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--chrome-rule);
+}
+.publish-destination {
+  flex: 1;
+  min-width: 0;
+  font: 500 13px var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Something the sheet has to say before anything else on it means anything —
+   a far end that could be reached and not compared, or a failure. */
+.publish-note {
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.publish-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  border-left: 1px solid var(--chrome-rule);
+  min-height: 0;
+}
+.publish-pane:first-child { border-left: 0; }
+.publish-pane-head { display: flex; align-items: baseline; gap: 10px; padding-bottom: 8px; }
+.publish-pane-title { font: 600 13px var(--font-heading); }
+.publish-pane-count { flex: 1; min-width: 0; font-size: 10px; }
+
+.publish-files {
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: 44vh;
+  border: 1px solid var(--chrome-rule);
+}
+
+/* A row is a label wrapping its own checkbox, so the whole width is the hit
+   target — an iPad is the device this is used on and a 22px box is not. */
+.publish-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--chrome-panel);
+  font: 400 11px var(--font-mono);
+  color: var(--color-neutral-300);
+  cursor: pointer;
+}
+.publish-file:hover { background: var(--chrome-rule); }
+/* Unchanged files are most of a site. They stay legible and stop competing. */
+.publish-file.same { opacity: 0.5; }
+.publish-file.dropped { color: var(--color-accent-400); }
+.publish-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Cut at the front: two files differ at the end of their path, and
+     `js/scenes/…` repeated down forty rows tells nobody anything. */
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+}
+.publish-size { flex: none; font-size: 10px; }
+/* Where a row has no decision to make, the space the box would have taken —
+   so every filename in the pane still starts at the same x. */
+.check-box-gap { flex: none; width: 22px; }
+
+/* ── The list of logins ─────────────────────────────────────────────────────
+
+   GitHub accounts and servers interleaved, because they are one kind of thing:
+   a login this device holds, shared by every project. The kind is a chip in
+   the key column rather than a heading, so the list stays one list. */
+
+.publish-kind {
+  flex: none;
+  width: 72px;
+  font-family: var(--font-label);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--chrome-dim);
+}
+.publish-add { gap: 10px; justify-content: flex-start; }
 
 /* A server's host key fingerprint, on its row. In the code face because it is
    a string somebody compares character by character against what the server
@@ -265,19 +510,6 @@
   font-size: 10px;
   word-break: break-all;
 }
-
-/* The sentence about a token and the button that takes it, on one row. The
-   sentence gives way and the button does not: a button clipped to "Sign i" is
-   the wrong half to lose. */
-.publish-actions {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--chrome-rule);
-}
-.publish-actions .field-hint { margin-top: 0; flex: 1; min-width: 0; }
-.publish-actions .btn { flex: none; }
 
 /* A row carrying two buttons after its value — Edit and Delete on a server —
    needs the value to be the part that gives way. */

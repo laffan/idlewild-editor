@@ -15,7 +15,7 @@
 
 use crate::project::{GameOptions, Genre, Projection, PublishTarget, TargetKind};
 use crate::publish_targets::Server;
-use crate::{deploy, deploy_github, deploy_ssh, store};
+use crate::{compare, deploy, deploy_github, deploy_ssh, site_files, store};
 
 fn project(name: &str) -> crate::project::ProjectMeta {
     store::create_project(
@@ -135,21 +135,84 @@ fn a_server_without_a_key_refuses_early() {
 /// so is one whose hash differs — neither may be silently skipped.
 #[test]
 fn only_what_differs_is_sent() {
-    let local = vec![
-        deploy_ssh::Entry { rel: "index.html".into(), hash: "aaa".into() },
-        deploy_ssh::Entry { rel: "js/main.js".into(), hash: "bbb".into() },
-        deploy_ssh::Entry { rel: "new.png".into(), hash: "ccc".into() },
-    ];
-    let remote = deploy_ssh::parse_manifest("aaa index.html\nzzz js/main.js\n");
-    let sending: Vec<&str> = deploy_ssh::changed(&local, &remote)
+    let local = site();
+    let remote = site_files::parse_manifest("aaa index.html\nzzz js/main.js\n");
+    let sending: Vec<&str> = site_files::changed(&local, &remote)
         .iter()
         .map(|entry| entry.rel.as_str())
         .collect();
     assert_eq!(sending, vec!["js/main.js", "new.png"]);
 
     // A manifest nobody can read means send everything, rather than fail.
-    let none = deploy_ssh::parse_manifest("garbage\n");
-    assert_eq!(deploy_ssh::changed(&local, &none).len(), 3);
+    let none = site_files::parse_manifest("garbage\n");
+    assert_eq!(site_files::changed(&local, &none).len(), 3);
+}
+
+/// Three files, two of which the far end already has one version of.
+fn site() -> Vec<site_files::Entry> {
+    vec![
+        site_files::Entry { rel: "index.html".into(), hash: "aaa".into(), size: 3 },
+        site_files::Entry { rel: "js/main.js".into(), hash: "bbb".into(), size: 3 },
+        site_files::Entry { rel: "new.png".into(), hash: "ccc".into(), size: 3 },
+    ]
+}
+
+/// A publish can send a subset — that is the whole point of the two panes —
+/// and the ticks are obeyed exactly rather than being a hint on top of the
+/// hash comparison.
+#[test]
+fn a_selection_is_what_gets_sent() {
+    let local = site();
+    let remote = site_files::parse_manifest("aaa index.html\nzzz js/main.js\n");
+
+    // Nobody touched the list: everything that differs.
+    let default: Vec<&str> = site_files::selected(&local, &remote, None)
+        .iter()
+        .map(|e| e.rel.as_str())
+        .collect();
+    assert_eq!(default, vec!["js/main.js", "new.png"]);
+
+    // Ticked: exactly those, including one the comparison calls unchanged —
+    // somebody asking for a file to be re-sent is somebody who has a reason.
+    let picked = vec!["index.html".to_string(), "new.png".to_string()];
+    let chosen: Vec<&str> = site_files::selected(&local, &remote, Some(&picked))
+        .iter()
+        .map(|e| e.rel.as_str())
+        .collect();
+    assert_eq!(chosen, vec!["index.html", "new.png"]);
+
+    // A path the site no longer has came from a list drawn before a rebuild.
+    let stale = vec!["gone.js".to_string()];
+    assert!(site_files::selected(&local, &remote, Some(&stale)).is_empty());
+}
+
+/// The manifest has to describe what is *actually* at the far end after a
+/// partial publish. Writing the whole site's hashes after sending two files
+/// would tell the next publish that files it never sent are already there,
+/// which is the one way a manifest causes a wrong site rather than a slow one.
+#[test]
+fn the_manifest_follows_what_was_really_sent() {
+    let local = site();
+    let previous = site_files::parse_manifest("aaa index.html\nzzz js/main.js\nddd old.css\n");
+    let picked = vec!["js/main.js".to_string()];
+    let sending = site_files::selected(&local, &previous, Some(&picked));
+
+    let next = site_files::next_manifest(&previous, &sending, &["old.css".to_string()]);
+    assert_eq!(next.get("js/main.js"), Some(&"bbb".to_string()), "sent, so updated");
+    assert_eq!(next.get("index.html"), Some(&"aaa".to_string()), "untouched, so kept");
+    assert_eq!(next.get("old.css"), None, "removed, so gone");
+    assert_eq!(next.get("new.png"), None, "never sent, so never claimed");
+}
+
+/// GitHub's tree listing carries git blob ids, so the local side has to be
+/// hashed the same way or every file looks changed for ever — which reads as
+/// the comparison simply not working.
+#[test]
+fn a_local_file_hashes_the_way_git_would() {
+    // `git hash-object` of an empty file, and of "hello\n". Both are fixed
+    // values anybody can check with git itself.
+    assert_eq!(compare::blob_id(b""), "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+    assert_eq!(compare::blob_id(b"hello\n"), "ce013625030ba8dba906f756967f9e9ca394464a");
 }
 
 /// Hashed rather than compared by size and time, because the staging directory
@@ -165,15 +228,16 @@ fn a_scan_hashes_every_file_and_sorts_them() {
         std::fs::write(site.join("js/main.js"), "one").expect("write");
         std::fs::write(site.join("index.html"), "two").expect("write");
 
-        let scanned = deploy_ssh::scan(&site).expect("site should scan");
+        let scanned = site_files::scan(&site).expect("site should scan");
         let names: Vec<&str> = scanned.iter().map(|e| e.rel.as_str()).collect();
         assert_eq!(names, vec!["index.html", "js/main.js"]);
         assert_eq!(scanned[0].hash.len(), 64, "sha-256, hex");
         assert_ne!(scanned[0].hash, scanned[1].hash);
+        assert_eq!(scanned[0].size, 3, "the size the pane shows");
 
         // One byte different is a different file.
         std::fs::write(site.join("index.html"), "twp").expect("write");
-        let again = deploy_ssh::scan(&site).expect("site should scan");
+        let again = site_files::scan(&site).expect("site should scan");
         assert_ne!(again[0].hash, scanned[0].hash);
 
         let _ = std::fs::remove_dir_all(&root);

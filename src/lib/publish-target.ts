@@ -40,8 +40,15 @@ export interface PublishTarget {
   server: string;
   /** The directory on that server the site's own files land in. */
   directory: string;
-  /** Whether an rsync push may delete what the site no longer has. */
+  /** Whether a publish may offer to delete what the site no longer has. */
   prune: boolean;
+  /**
+   * The id of the GitHub account this project publishes as.
+   *
+   * Empty on a target written when there could only be one, which resolves to
+   * that one — see `publish_targets::account_for` in the Rust.
+   */
+  account: string;
   owner: string;
   repo: string;
   /** Empty means `gh-pages` — see the Rust's `branch_or_default`. */
@@ -55,6 +62,7 @@ export const EMPTY_TARGET: PublishTarget = {
   server: "",
   directory: "",
   prune: false,
+  account: "",
   owner: "",
   repo: "",
   branch: "",

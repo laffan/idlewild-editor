@@ -19,13 +19,12 @@ becomes a PSD and goes through
 psd-to-phaser integration is uniform: a screenshot and a hand-built Photoshop
 document arrive at the runtime the same way.
 
-Publishing sends the site somewhere — a directory on a server over rsync, or a
-branch of a GitHub repository — or hands you a zipped runnable site or a
-`.idlewild` file, the whole project with its source PSDs, to open somewhere
-else. You sign in once, on the device, and then point each project at its own
-destination. Export Assets hands back the artwork on its own, for the PSDs that
-are wanted somewhere that is not a game, and Import Assets is that door the
-other way.
+Publishing sends the site somewhere — a directory on a server over SSH, or a
+branch of a GitHub repository. You sign in once, on the device, then point each
+project at its own destination and choose what to send. Export is the other
+verb — it hands you a file rather than sending one: the site as a zip, the
+project as a `.idlewild`, or the artwork on its own for the PSDs that are
+wanted somewhere that is not a game. Import Assets is that door the other way.
 
 ## Status
 
@@ -86,7 +85,7 @@ remaining pieces are wired to real slots rather than mocked.
   sorts the way you meant it to. WASD does the same, and both move up, down,
   left and right on the *screen* rather than along the grid's diagonals
 - A full-width header carrying the project, undo and redo, and the
-  **Draw / Code / Play** toggle, with Publish, Export Assets, Import Assets and
+  **Draw / Code / Play** toggle, with Publish, Export, Import Assets and
   Project Options behind its menu — and Copy PSD and Paste Image, which are
   there because an iPad has no ⌘. It insets itself out of the iPad's status bar, as the console drawer
   does out of the home indicator
@@ -891,14 +890,36 @@ remaining pieces are wired to real slots rather than mocked.
   server answers for them and an export writes them in. A project made before
   this layout keeps the one it was made with — your `game/` tree is your copy —
   and plays and publishes from wherever its own `index.html` says
-- **Publish sends it somewhere, and you log in once.** A project points at a
-  directory on a server over rsync, or at a branch of a GitHub repository, and
-  the login behind either — the servers you have an ssh key on, the GitHub
-  account your token is for — is the device's rather than the project's. So
-  adding a second project is naming a directory, not typing a password again.
-  **Check it first** is beside Publish and does the same run without sending
-  anything: rsync says what it would transfer, and GitHub is asked whether the
-  token can reach that repository and whether the branch is there yet
+- **Publish and Export are two items, because they are two verbs.** Publish
+  sends the site somewhere real and is a destination you set up once and then
+  use. Export hands you a file — the site as a zip, the project as `.idlewild`,
+  or the artwork on its own — and is a save dialog. They were one menu item
+  opening one sheet that asked both questions in the same breath
+- **Publish asks "where" once, and "what" every time.** The first time, it is
+  two columns: **GitHub** on the left, **Server** on the right, one of them
+  lit. The GitHub side lists every repository your token can see and searches
+  them as you type — `iwed` finds `idlewild-editor` — because a repository name
+  typed from memory is a name typed wrong, and the failure used to arrive at
+  the far end of a round trip as a 404. The server side lists the servers this
+  device has bookmarked. Under whichever you pick sit the things that are *this
+  project's*: branch and path, or the directory
+- **The login is the device's, the destination is the project's**, and the
+  sheets are split along that seam rather than along GitHub-things and
+  server-things. Both columns lead to the same **Logins** list — GitHub
+  accounts and servers interleaved, because they are one kind of thing — and a
+  column with no login yet shows the way to it and nothing else. So adding a
+  second project is picking a repository, not typing a password again
+- **Signing in to GitHub asks for a token and nothing else.** GitHub is asked
+  whose it is, which is one fewer box to type into and the difference between
+  finding out a token is bad now and finding out at the far end of a publish
+- **Publishing after that is two panes: what is there, and what you have.**
+  Left is the branch or the directory as it stands now. Right is the site this
+  project builds, each file marked **new**, **changed** or identical — and
+  ticked accordingly, so pressing Publish without reading a row does what it
+  always did. Untick to send one scene's fix without pushing every asset again.
+  A file at the far end the site no longer has is offered for removal rather
+  than assumed, because deleting is the one thing here that publishing again
+  cannot undo. **Check it first** does the same run and sends nothing
 - **Both of them work on an iPad**, which took doing. iOS does not let an app
   run another program — no `fork`, no `exec` — so shelling out to `rsync` and
   `git` made publishing a desktop feature. But that is a limit on *running
@@ -913,7 +934,7 @@ remaining pieces are wired to real slots rather than mocked.
   clones the branch, replaces what is at the path being published to, commits
   and pushes — so nothing outside that path is touched, no history is rewritten
   and a mistake is one revert away. `gh-pages` is the default because the
-  alternative default is the branch holding your source. Everything in the site
+  alternative default is the branch holding your source. Everything you ticked
   is staged, `.gitignore` included: a stray ignore rule saying `assets/` would
   otherwise publish a game with no artwork in it and tell nobody
 - **The server half is SFTP, and it only sends what changed.** rsync is the one
@@ -921,11 +942,9 @@ remaining pieces are wired to real slots rather than mocked.
   sending half of its wire protocol is not — so an iPad could not link it the
   way it links libgit2. SFTP over an SSH connection the app makes itself is the
   same job: a publish leaves a manifest of every file's hash beside the site,
-  reads it back next time, and sends only what differs. What is lost against
-  real rsync is the diff *within* a changed file, which for a static site is
-  not much. Deleting what the site no longer has is a switch, off by default —
-  right for a directory holding nothing but this game, and also how a
-  neighbouring app's files go
+  reads it back next time, and that is what the two panes compare against. What
+  is lost against real rsync is the diff *within* a changed file, which for a
+  static site is not much
 - **Your ssh key is imported, not pointed at, and the host key is checked.**
   Pick your private key once and it is kept on the device — there is no
   `~/.ssh` on an iPad to read at publish time. The first connection to a server
@@ -934,14 +953,14 @@ remaining pieces are wired to real slots rather than mocked.
   Getting past that takes a deliberate **Forget key**, because the difference
   between a rebuilt server and somebody in the middle of the connection is not
   something this app can work out
-- Publish's two other exits. **Export site** is a zip you can serve: the game, its
+- **Export** holds the three ways out that hand you a file. **Site** is a zip you can serve: the game, its
   processed assets and both runtimes, so the exported game opens showing what
   the editor showed. **Export project** is a `.idlewild` file — the project
   itself, source PSDs and all, with the document, the processed assets and the
   code as it was edited. A published site cannot give you back the file a
   sprite was drawn in; that is what the second one is for
-- **Export Assets**, beside Publish in the menu, is the third exit and the only
-  one that hands back artwork rather than a program. Tick the PSDs you want and
+- **Assets**, the third row under Export, is the only exit that hands back
+  artwork rather than a program. Tick the PSDs you want and
   say what of them: the assets the pipeline made — each file's `data.json` and
   the sprites and tiles beside it, which is what another engine can read — the
   source PSDs, which is what opens in Photoshop, or both. It lists what is in

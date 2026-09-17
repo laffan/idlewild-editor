@@ -3,6 +3,7 @@
 
 mod archive;
 mod clipboard;
+mod compare;
 mod deploy;
 mod deploy_github;
 mod deploy_ssh;
@@ -11,6 +12,7 @@ mod file_server;
 mod game_config;
 mod game_files;
 mod game_search;
+mod github_api;
 mod import_assets;
 mod project;
 mod projects;
@@ -23,6 +25,7 @@ mod psd_rebuild;
 mod psd_write;
 mod publish;
 mod publish_targets;
+mod site_files;
 mod store;
 mod templates;
 
@@ -575,11 +578,13 @@ pub fn run() {
             publish_targets::save_publish_server,
             publish_targets::delete_publish_server,
             publish_targets::save_github_login,
-            publish_targets::clear_github_login,
+            publish_targets::delete_github_login,
+            publish_targets::list_github_repos,
             publish_targets::forget_host_key,
             publish_targets::read_publish_target,
             publish_targets::save_publish_target,
             deploy::publish_to_target,
+            deploy::compare_target,
             export_assets::export_assets_zip,
             export_assets::list_project_psds,
             import_assets::free_psd_key,

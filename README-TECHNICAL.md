@@ -52,6 +52,9 @@ Extension of [README.md](README.md).
 │  deploy_ssh.rs     the site over SFTP, on our own connection   │
 │  deploy_github.rs  clone the branch, replace the path, commit  │
 │  publish_targets.rs  the logins, which are the device's        │
+│  github_api.rs   the two questions git cannot answer           │
+│  compare.rs      the far end beside the staged site            │
+│  site_files.rs   that site, as a list of files with hashes     │
 │  export_assets.rs  chosen PSDs alone: sources, output, or both │
 │  import_assets.rs  the same door inward, several files at once │
 │  game_config.rs  the document, as the exported game reads it   │
@@ -2884,6 +2887,60 @@ repository branch is already the place the site goes, and publishing into
 `public_html/nine-roads/` when the target said `public_html/` would be this
 code naming a directory somebody else owns.
 
+### Three sheets, and the seam they are split along
+
+Publishing is made of two things that change at different rates, and the first
+version of this UI put them on one sheet. That sheet asked where the project
+publishes to, offered two zip exports, and had a way through to the device's
+own settings — three questions with nothing to do with each other, and the
+relationship between the app-wide half and the per-project half legible only to
+whoever wrote it.
+
+It is three sheets now, and the split is the seam:
+
+| | What it is about | Whose it is |
+|---|---|---|
+| `publish-setup.ts` | which repository, which server and directory | the project's |
+| `publish-accounts.ts` | which accounts and servers exist at all | the device's |
+| `publish-review.ts` | what to send this time | the moment's |
+
+`publish.ts` is the router between the first and the third — no destination
+yet means setup, a destination means review — and it is deliberately tiny.
+Everything about *choosing where* lives in one module and everything about
+*what gets sent* in another; a third that knew both would be the file every
+future change had to go through.
+
+**Setup is two columns** because there are two answers, and the column is laid
+out login-then-destination, top to bottom, so the relationship is the reading
+order. A column with no login yet shows the way through to the list and nothing
+else: a repository picker for an account that does not exist is a box that can
+only disappoint. There is no *Nowhere* option — a project that publishes
+nowhere is a project that has not opened the sheet, and offering it would be
+offering somebody the state they are already in.
+
+**The logins are one list**, GitHub accounts and servers interleaved, with the
+kind as a chip in the key column rather than as two headings. They are one kind
+of thing — a credential this device holds, shared by every project — and two
+sections would say they were two.
+
+**The repositories are searched rather than typed.** `owner` and `repo` were
+two text fields; a name typed from memory is a name typed wrong and the failure
+arrived as a 404 at the far end of a round trip. The token can already see
+every repository it can write to, so `github_api::list_repos` fetches them and
+`lib/fuzzy.ts` searches them. A repository that can be read and not written to
+is **shown and refused** rather than hidden, because an empty list is a worse
+answer than a row that says why.
+
+The matching is a subsequence rather than a substring — `iwed` finds
+`idlewild-editor` — since the useful thing to type is the letters you remember
+in the order you remember them. What makes that usable is the scoring, because
+with three letters typed half a hundred repositories are a legal match: runs
+beat scattered letters, word starts beat middles, and earlier beats later as a
+tiebreak. The one rebalancing that mattered is that a **run has to outweigh a
+boundary** once it reaches two characters — with boundaries worth more, `ide`
+ranked `i-d-e-a`, three word-starts, above `ideal`, which is the answer anybody
+typing `ide` meant.
+
 ### A login is the device's, a destination is the project's
 
 This is the whole shape of the feature, and getting it the other way round is
@@ -3100,6 +3157,46 @@ exactly what nothing changed *means*, and it is a better test than the
 nothing is staged, and a publish reporting a failure because the site had not
 changed is a publish nobody trusts.
 
+### The two panes, and why a publish is no longer all-or-nothing
+
+`compare_target` lists the far end beside the staged site, and `compare.rs`
+marks each local file against it. That is what the Publish sheet opens with
+once there is a destination, and it is what made selecting possible.
+
+**A publish used to replace everything at the destination.** The right default
+and the wrong only option, for two reasons that each show up exactly once: a
+file somebody put there by hand vanished without ever having been shown to
+them, and there was no way to push one scene's fix without pushing every asset
+again. So `deploy_github::apply` copies what was ticked rather than wiping the
+path, and `deploy_ssh::push` takes the same selection. The defaults reproduce
+the old behaviour — everything that differs is ticked — so pressing Publish
+without reading a row does what it always did.
+
+**Removals are offered, not assumed.** A file at the far end that the site no
+longer has gets a checkbox on the left pane, ticked to begin with only when the
+destination says to tidy up. Deleting is the one thing here that publishing
+again cannot undo.
+
+Each half compares with whatever the far end can be compared against, and that
+is the whole reason `site_files::scan_with` takes the hash as an argument:
+
+- **GitHub** hands back a **git blob id** per file, so the local side is hashed
+  the same way through `git2::Oid::hash_object` — libgit2 doing exactly what
+  `git hash-object` does. Exact, and free of a second implementation of the
+  `blob <len>\0` framing that would look like the comparison simply not
+  working if it were wrong.
+- **A server** has no such thing, so the manifest is the comparison. A file on
+  the server the manifest has never heard of is **unknown** rather than
+  unchanged — the honest answer, and it is ticked by default, because sending a
+  file that did not need it costs a second and skipping one that did costs a
+  wrong site.
+
+**The manifest a partial publish writes is not the whole site.** It is what was
+there, plus what this run sent, minus what it removed — `site_files::next_manifest`.
+Writing the full site's hashes after sending two files would tell the next
+publish that files it never sent are already there, which is the one way a
+manifest causes a wrong site rather than a slow one.
+
 ### A rehearsal is the same command
 
 `dry_run` is a parameter rather than a second command, because the useful
@@ -3239,13 +3336,18 @@ boundary as base64 and be written by `save_bytes`; an archive carrying every
 processed asset — let alone every source PSD — has no business being a string in
 a JSON message first.
 
-### Export Assets, and why it is not a mode of Publish
+### Export Assets, and why it is a row under Export
 
-The first two are all-or-nothing and both hand back something only a program can
-read. What was missing is the pictures: the sprite sheets a tileset was sliced
-into, for another engine or a document, and the source PSDs, so a file drawn on an
-iPad opens on a desktop. Neither is a *publish* — nothing about it runs — so it is
-a menu item beside Publish rather than a third row inside it.
+The other two hand back something only a program can read. What was missing is
+the pictures: the sprite sheets a tileset was sliced into, for another engine or
+a document, and the source PSDs, so a file drawn on an iPad opens on a desktop.
+
+It stood on the header menu in its own right for a while, which was right when
+the alternative was putting it *inside* Publish — nothing about it runs, and it
+is not a publish. With Publish and Export split into two verbs it is simply the
+third row under Export, beside the site zip and the project file: all three hand
+you a file, and having two of the three in one place and the third somewhere
+else was the arrangement nobody could have explained.
 
 So the sheet asks two questions and nothing else. **Which files**, as a list with
 a checkbox each, everything ticked to begin with because "all of them" is the

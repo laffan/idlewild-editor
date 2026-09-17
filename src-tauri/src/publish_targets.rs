@@ -112,7 +112,7 @@ impl Server {
     pub fn private_key(&self) -> Result<russh::keys::PrivateKey, String> {
         if self.key.is_empty() {
             return Err(format!(
-                "{} has no ssh key. Import one in Servers and accounts.",
+                "{} has no ssh key. Import one in Publish → Logins.",
                 self.name()
             ));
         }
@@ -160,15 +160,21 @@ impl From<&Server> for ServerView {
     }
 }
 
-/// The GitHub account this install publishes as.
+/// One GitHub account this install can publish as.
 ///
-/// One, not a list: a token is a login, and "so the user only needs to log in
-/// once" is the whole point. Which repository is a project's business.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// A list rather than one, because the settings sheet is a list of *logins* —
+/// servers and accounts together — and a personal account beside a work one is
+/// the same kind of fact as a staging box beside a live one. A project's target
+/// names which account it means, exactly as it names which server.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Github {
+    /// Made here. A project's target names one of these.
+    #[serde(default)]
+    pub id: String,
+    /// Read from GitHub rather than typed — see `save_github_login`.
     pub login: String,
-    /// A personal access token with `repo` scope. Never sent to the frontend.
+    /// A personal access token. Never sent to the frontend.
     pub token: String,
 }
 
@@ -178,7 +184,32 @@ pub struct Settings {
     #[serde(default)]
     pub servers: Vec<Server>,
     #[serde(default)]
+    pub accounts: Vec<Github>,
+    /// The one account this file used to hold, before there could be several.
+    ///
+    /// Folded into `accounts` by `read` and written back as nothing. Kept only
+    /// so that somebody who signed in under the previous shape is not quietly
+    /// signed out by an update; it costs eight lines and the alternative is a
+    /// bug report that reads "it forgot my token".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub github: Option<Github>,
+}
+
+/// One account, as the frontend sees it: who it is, never what it holds.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubView {
+    pub id: String,
+    pub login: String,
+}
+
+impl From<&Github> for GithubView {
+    fn from(account: &Github) -> Self {
+        GithubView {
+            id: account.id.clone(),
+            login: account.login.clone(),
+        }
+    }
 }
 
 /// What the frontend is told: everything except the secrets.
@@ -186,8 +217,7 @@ pub struct Settings {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsView {
     pub servers: Vec<ServerView>,
-    /// The account's name, when one is signed in.
-    pub github: Option<String>,
+    pub accounts: Vec<GithubView>,
 }
 
 fn settings_path() -> Result<PathBuf, String> {
@@ -204,10 +234,28 @@ pub fn read() -> Settings {
     let Ok(path) = settings_path() else {
         return Settings::default();
     };
-    std::fs::read_to_string(path)
+    let mut settings: Settings = std::fs::read_to_string(path)
         .ok()
         .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // The single account this file used to hold, brought forward. Written back
+    // in the new shape by the next `write`, which every command does.
+    if let Some(mut only) = settings.github.take() {
+        if only.id.is_empty() {
+            only.id = uuid::Uuid::new_v4().to_string();
+        }
+        if !settings.accounts.iter().any(|a| a.login == only.login) {
+            settings.accounts.push(only);
+        }
+    }
+    // An account from any shape that reached here without one.
+    for account in &mut settings.accounts {
+        if account.id.is_empty() {
+            account.id = uuid::Uuid::new_v4().to_string();
+        }
+    }
+    settings
 }
 
 /// Write the file, readable and writable by this user and nobody else.
@@ -239,8 +287,29 @@ pub fn read_publish_settings() -> SettingsView {
     let settings = read();
     SettingsView {
         servers: settings.servers.iter().map(ServerView::from).collect(),
-        github: settings.github.map(|account| account.login),
+        accounts: settings.accounts.iter().map(GithubView::from).collect(),
     }
+}
+
+/// The account a target names, or the only one there is.
+///
+/// A target written before there could be several names no account at all, and
+/// on a device with exactly one that is not ambiguous — so it resolves rather
+/// than failing. With two, it has to be said.
+pub fn account_for(settings: &Settings, id: &str) -> Result<Github, String> {
+    if let Some(found) = settings.accounts.iter().find(|a| a.id == id) {
+        return Ok(found.clone());
+    }
+    if id.is_empty() && settings.accounts.len() == 1 {
+        return Ok(settings.accounts[0].clone());
+    }
+    Err(if settings.accounts.is_empty() {
+        "Sign in to GitHub first, in Publish.".to_string()
+    } else {
+        "That GitHub account is not signed in on this device any more. Pick \
+         another in Publish."
+            .to_string()
+    })
 }
 
 /// Remember what a server's host key turned out to be.
@@ -368,25 +437,63 @@ pub fn delete_publish_server(id: String) -> Result<(), String> {
 ///
 /// A token rather than an OAuth flow: OAuth needs a redirect the app can
 /// receive and a client secret it would have to ship, and a fine-grained PAT
-/// scoped to the repositories being published to is both narrower and
-/// something the person can revoke from a page they already know.
-#[tauri::command]
-pub fn save_github_login(login: String, token: String) -> Result<(), String> {
-    let login = login.trim().to_string();
+/// is both narrower and something the person can revoke from a page they
+/// already know.
+///
+/// **The username is not asked for.** The token is checked against GitHub
+/// first and answers with whose it is, which is one fewer box to type into,
+/// one fewer thing to get wrong, and — the real point — the difference between
+/// finding out a token is bad now and finding out at the far end of a publish.
+///
+/// Signing in again with the same account replaces its token rather than
+/// adding a second row, which is what "my token expired" should do.
+#[tauri::command(async)]
+pub fn save_github_login(token: String) -> Result<GithubView, String> {
     let token = token.trim().to_string();
     if token.is_empty() {
         return Err("A token is needed to publish to GitHub".into());
     }
+    let login = crate::github_api::whoami(&token)?;
+
     let mut settings = read();
-    settings.github = Some(Github { login, token });
+    let account = match settings.accounts.iter_mut().find(|a| a.login == login) {
+        Some(existing) => {
+            existing.token = token;
+            existing.clone()
+        }
+        None => {
+            let account = Github {
+                id: uuid::Uuid::new_v4().to_string(),
+                login,
+                token,
+            };
+            settings.accounts.push(account.clone());
+            account
+        }
+    };
+    write(&settings)?;
+    Ok(GithubView::from(&account))
+}
+
+/// Forget an account.
+///
+/// The projects pointing at it keep a target naming an id nothing matches, and
+/// a publish from one of them says so by name — the same as for a server, and
+/// for the same reason: walking every project to blank a field would be this
+/// command rewriting documents it has no business in.
+#[tauri::command]
+pub fn delete_github_login(id: String) -> Result<(), String> {
+    let mut settings = read();
+    settings.accounts.retain(|account| account.id != id);
     write(&settings)
 }
 
-#[tauri::command]
-pub fn clear_github_login() -> Result<(), String> {
-    let mut settings = read();
-    settings.github = None;
-    write(&settings)
+/// Every repository an account can see, for the picker.
+#[tauri::command(async)]
+pub fn list_github_repos(id: String) -> Result<Vec<crate::github_api::Repo>, String> {
+    let settings = read();
+    let account = account_for(&settings, &id)?;
+    crate::github_api::list_repos(&account.token)
 }
 
 // ── a project's own destination ─────────────────────────────────────────────

@@ -42,9 +42,10 @@ export interface HeaderCallbacks {
   onPasteImage: () => void;
   /** Put the selected PSD on the clipboard, so another project can paste it. */
   onCopyPsd: () => void;
+  /** Send the site somewhere real — a repository, or a server. */
   onPublish: () => void;
-  /** Some of the project's PSDs, on their own — assets, sources, or both. */
-  onExportAssets: () => void;
+  /** Hand back a file: the site as a zip, the project, or the artwork. */
+  onExport: () => void;
   /** Artwork from the filesystem or from another project in this app. */
   onImportAssets: () => void;
   onOptions: () => void;
@@ -189,19 +190,25 @@ export class EditorHeader {
           glyph: ICONS.file,
           onSelect: callbacks.onPasteImage,
         },
+        // **Two items, because they are two verbs.** Publish sends the site
+        // somewhere real — a repository, a server — and is a destination you
+        // set up once and then use. Export hands you a file and is a save
+        // dialog. They were one item opening one sheet that asked both
+        // questions in the same breath, and the answer to either has nothing
+        // to do with the answer to the other.
         { label: "Publish", glyph: ICONS.publish, onSelect: callbacks.onPublish },
-        // Beside Publish rather than inside it: Publish's two exits are both
-        // "hand somebody a program", and this is the one that hands back the
-        // artwork — the sprite sheets to take into another engine, or the PSDs
-        // themselves so a file drawn on an iPad opens on a desktop.
+        // All three files that leave, under one item: the site as a zip, the
+        // project as `.idlewild`, and the artwork on its own. Export Assets
+        // used to stand on this menu in its own right, which put two of the
+        // three exits in one place and the third somewhere else.
         {
-          label: "Export Assets",
+          label: "Export",
           glyph: ICONS.image,
-          onSelect: callbacks.onExportAssets,
+          onSelect: callbacks.onExport,
         },
-        // And its inverse, which is the way artwork gets *in* other than one
-        // file at a time through Add Image: several at once, off the
-        // filesystem or out of another project in this app.
+        // The way artwork gets *in* other than one file at a time through Add
+        // Image: several at once, off the filesystem or out of another project
+        // in this app.
         {
           label: "Import Assets",
           glyph: ICONS.folder,

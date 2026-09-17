@@ -63,11 +63,83 @@ pub struct Report {
 
 /// Publish a project to wherever it is pointed.
 ///
-/// `dry_run` rehearses: the server half says which files it would send
-/// without sending them, and GitHub is asked whether the repository and branch
-/// are reachable with the token stored, without committing anything. It is the
-/// same command because the useful question — "is this set up right?" — is one
-/// somebody asks with their finger already on Publish.
+/// **What is already published, beside what this project would publish.**
+///
+/// The two panes of the Publish sheet, and the reason publishing is something
+/// you can do to one file. A publish used to replace everything at the target
+/// path — the right default and the wrong only option, because it means a file
+/// somebody put there by hand disappears without ever having been shown to
+/// them. This is what gets shown first.
+///
+/// Both halves stage the site, because "what would this publish" is not a
+/// question the store can answer: a published site is `game/` and `assets/`
+/// and two vendored runtimes and a generated config, assembled.
+#[tauri::command]
+pub async fn compare_target(id: String) -> Result<crate::compare::Comparison, String> {
+    let meta = crate::store::read_meta(&id)?;
+    if !meta.publish.is_set() {
+        return Err("This project has no publish target yet".into());
+    }
+
+    match meta.publish.kind {
+        TargetKind::None => Err("This project has no publish target yet".into()),
+        TargetKind::Github => {
+            let settings = publish_targets::read();
+            let account = publish_targets::account_for(&settings, &meta.publish.account)?;
+            let target = meta.publish.clone();
+            let project = meta.id.clone();
+            blocking(move || {
+                let root = staging_dir(&project)?;
+                let site = root.join("site");
+                let result = stage(&project, &site)
+                    .and_then(|_| crate::compare::against_github(&target, &site, &account));
+                let _ = std::fs::remove_dir_all(&root);
+                result
+            })
+            .await
+        }
+        TargetKind::Rsync => {
+            let settings = publish_targets::read();
+            let server = server_for(&settings, &meta.publish.server)?;
+            let directory = crate::deploy_ssh::clean_directory(&meta.publish.directory)?;
+            let root = staging_dir(&meta.id)?;
+            let site = root.join("site");
+            let result = match stage(&meta.id, &site) {
+                Ok(()) => {
+                    let session = crate::deploy_ssh::Session::open(&server).await;
+                    match session {
+                        Ok(session) => {
+                            let listing = session.listing(&directory).await;
+                            let manifest = session.manifest(&directory).await;
+                            session.close().await;
+                            crate::compare::against_server(
+                                &meta.publish,
+                                &site,
+                                &listing,
+                                &manifest,
+                            )
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+                Err(e) => Err(e),
+            };
+            let _ = std::fs::remove_dir_all(&root);
+            result
+        }
+    }
+}
+
+/// Publish a project to wherever it is pointed.
+///
+/// `chosen` is the right pane's ticks — the files to send — and `remove` is
+/// the left pane's: what is at the far end and is to stop being there.
+/// `chosen` as `None` means everything that differs, which is what Publish
+/// does before anybody has touched the list.
+///
+/// `dry_run` rehearses: both halves say what they would do and neither does
+/// any of it. It is the same command because the useful question — "is this
+/// set up right?" — is one somebody asks with their finger already on Publish.
 ///
 /// **An `async fn`, and that is load-bearing.** A synchronous Tauri command
 /// runs on the **main thread** — the accident the PSD pipeline had to be dug
@@ -76,35 +148,46 @@ pub struct Report {
 /// is awaited; libgit2 is blocking and goes to `spawn_blocking`, so neither
 /// one parks a runtime thread on a socket.
 #[tauri::command]
-pub async fn publish_to_target(id: String, dry_run: bool) -> Result<Report, String> {
+pub async fn publish_to_target(
+    id: String,
+    dry_run: bool,
+    chosen: Option<Vec<String>>,
+    remove: Option<Vec<String>>,
+) -> Result<Report, String> {
     let meta = crate::store::read_meta(&id)?;
     if !meta.publish.is_set() {
         return Err("This project has no publish target yet".into());
     }
+    let remove = remove.unwrap_or_default();
 
     match meta.publish.kind {
         TargetKind::None => Err("This project has no publish target yet".into()),
         TargetKind::Rsync => {
             let settings = publish_targets::read();
-            let server = settings
-                .servers
-                .iter()
-                .find(|server| server.id == meta.publish.server)
-                .cloned()
-                .ok_or_else(|| {
-                    // The server was deleted out from under the project, which
-                    // is the one way a saved target can stop naming anything.
-                    "That server is not set up on this device any more. Pick \
-                     another in Publish → Where this publishes."
-                        .to_string()
-                })?;
+            let server = server_for(&settings, &meta.publish.server)?;
             // Staged here rather than in a helper the two share: one of these
             // is async and the other is not, and a closure that had to be both
             // was more machinery than the four lines it saved.
             let root = staging_dir(&meta.id)?;
             let site = root.join("site");
             let result = match stage(&meta.id, &site) {
-                Ok(()) => crate::deploy_ssh::push(&server, &meta.publish, &site, dry_run).await,
+                Ok(()) => match crate::deploy_ssh::Session::open(&server).await {
+                    Ok(session) => {
+                        let report = crate::deploy_ssh::push(
+                            &session,
+                            &server,
+                            &meta.publish,
+                            &site,
+                            chosen.as_deref(),
+                            &remove,
+                            dry_run,
+                        )
+                        .await;
+                        session.close().await;
+                        report
+                    }
+                    Err(e) => Err(e),
+                },
                 Err(e) => Err(e),
             };
             let _ = std::fs::remove_dir_all(&root);
@@ -112,9 +195,7 @@ pub async fn publish_to_target(id: String, dry_run: bool) -> Result<Report, Stri
         }
         TargetKind::Github => {
             let settings = publish_targets::read();
-            let account = settings
-                .github
-                .ok_or_else(|| "Sign in to GitHub first, in Publish.".to_string())?;
+            let account = publish_targets::account_for(&settings, &meta.publish.account)?;
             let target = meta.publish.clone();
             // A GitHub rehearsal is one question over the network, so it does
             // not stage the site at all. The server half is the other way
@@ -124,15 +205,23 @@ pub async fn publish_to_target(id: String, dry_run: bool) -> Result<Report, Stri
                 return blocking(move || crate::deploy_github::check(&account, &target)).await;
             }
             let name = meta.name.clone();
-            let id = meta.id.clone();
+            let project = meta.id.clone();
             blocking(move || {
-                let root = staging_dir(&id)?;
+                let root = staging_dir(&project)?;
                 let site = root.join("site");
                 // A second directory beside it, because a GitHub push clones
                 // the branch it is about to commit onto.
                 let work = root.join("repo");
-                let result = stage(&id, &site).and_then(|_| {
-                    crate::deploy_github::push(&account, &target, &site, &name, &work)
+                let result = stage(&project, &site).and_then(|_| {
+                    crate::deploy_github::push(
+                        &account,
+                        &target,
+                        &site,
+                        &name,
+                        &work,
+                        chosen.as_deref(),
+                        &remove,
+                    )
                 });
                 let _ = std::fs::remove_dir_all(&root);
                 result
@@ -142,18 +231,39 @@ pub async fn publish_to_target(id: String, dry_run: bool) -> Result<Report, Stri
     }
 }
 
+/// The server a target names.
+///
+/// Deleted out from under the project is the one way a saved target can stop
+/// naming anything, and it is worth a sentence rather than a missing row.
+fn server_for(
+    settings: &publish_targets::Settings,
+    id: &str,
+) -> Result<publish_targets::Server, String> {
+    settings
+        .servers
+        .iter()
+        .find(|server| server.id == id)
+        .cloned()
+        .ok_or_else(|| {
+            "That server is not set up on this device any more. Pick another in \
+             Publish."
+                .to_string()
+        })
+}
+
 /// Run blocking work off the runtime's own threads.
 ///
 /// libgit2 is a C library and blocks; awaiting it on a runtime thread would
 /// park that thread on a socket for the length of a clone. A panic inside
 /// comes back as a failed publish rather than as a poisoned runtime.
-async fn blocking<F>(work: F) -> Result<Report, String>
+async fn blocking<F, T>(work: F) -> Result<T, String>
 where
-    F: FnOnce() -> Result<Report, String> + Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
 {
     tokio::task::spawn_blocking(work)
         .await
-        .map_err(|e| format!("The publish did not finish: {e}"))?
+        .map_err(|e| format!("That did not finish: {e}"))?
 }
 
 /// A staging directory of this project's own, emptied first.
