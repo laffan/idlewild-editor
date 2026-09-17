@@ -172,35 +172,6 @@
 .header-menu:hover,
 .header-menu[aria-expanded="true"] { background: var(--chrome-rule); }
 
-/* The header's menu: Code, Publish and Project Options. */
-.menu {
-  position: fixed;
-  z-index: 40;
-  min-width: 208px;
-  background: var(--chrome-bg);
-  border: var(--rule-chrome);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-}
-.menu-item {
-  min-height: var(--hit);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 16px;
-  border: 0;
-  border-top: var(--rule-chrome);
-  background: transparent;
-  color: var(--chrome-text);
-  font: 600 14px var(--font-heading);
-  text-align: left;
-}
-.menu-item:first-child { border-top: 0; }
-.menu-item:hover { background: var(--chrome-rule); }
-.menu-item svg { flex: none; color: var(--chrome-dim); }
-.menu-item:hover svg { color: var(--chrome-text); }
-
 /* The tools: two columns down the left edge of the canvas.
 
    Which end a column hangs from is the distinction a gap in the middle of one

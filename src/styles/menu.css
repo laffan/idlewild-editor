@@ -1,0 +1,46 @@
+/* ── Menus ──────────────────────────────────────────────────────────────────
+
+   The one dropdown this app has, wherever it is opened from: the header's own
+   menu, the code panel's pin, a file row in the code column, the ssh key
+   chooser and the branch picker inside a sheet. Its own file because it is
+   none of those places' furniture — it was in `editor.css`, which is the
+   chrome around the canvas, and it is opened from three things that are not
+   that.
+
+   It is appended to `document.body` and positioned by hand — see
+   `lib/menu.ts`, which explains why — so nothing about where it sits comes
+   from the markup around it. */
+
+/* Above everything, because a menu is always over whatever opened it. It was
+   40 — under the sheet backdrop at 50 — which held while every menu came from
+   the header or a file row, none of them reachable with a modal up. Opened
+   from *inside* a sheet it rendered behind it: invisible, the backdrop eating
+   the presses, so the button looked broken rather than covered. Asserted in
+   styles.test.ts against the sheet and the drag ghost rather than as 70. */
+.menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 208px;
+  background: var(--chrome-bg);
+  border: var(--rule-chrome);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+.menu-item {
+  min-height: var(--hit);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border: 0;
+  border-top: var(--rule-chrome);
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 14px var(--font-heading);
+  text-align: left;
+}
+.menu-item:first-child { border-top: 0; }
+.menu-item:hover { background: var(--chrome-rule); }
+.menu-item svg { flex: none; color: var(--chrome-dim); }
+.menu-item:hover svg { color: var(--chrome-text); }

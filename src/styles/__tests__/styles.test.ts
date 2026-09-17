@@ -31,6 +31,7 @@ import inspectCss from "../inspect.css?raw";
 import libraryCss from "../library.css?raw";
 import sheetsCss from "../sheets.css?raw";
 import optionsCss from "../options.css?raw";
+import menuCss from "../menu.css?raw";
 
 /** The declarations of one rule, by property. Comments are stripped first. */
 function rule(selector: string): Record<string, string> {
@@ -129,6 +130,30 @@ describe("the drawing layer's stylesheet", () => {
  * system the rest of the chrome uses. Three of its rules are load-bearing
  * rather than decorative.
  */
+/**
+ * A menu is appended to `document.body` and positioned by hand, so nothing
+ * about its own markup says what it should be on top of. The number is the
+ * whole of that decision, and it is a cross-file one: `editor.css` draws the
+ * menu, `sheets.css` draws the modal it may be opened from.
+ *
+ * It was wrong, and it failed in the way a z-index always does — silently. A
+ * menu opened from inside a sheet rendered *behind* the sheet, so the button
+ * that opened it did nothing visible and the backdrop ate the press.
+ */
+describe("a menu is above whatever opened it", () => {
+  it("outranks a modal sheet", () => {
+    const menu = Number(ruleIn(menuCss, ".menu")["z-index"]);
+    const sheet = Number(ruleIn(sheetsCss, ".sheet-backdrop")["z-index"]);
+    expect(menu).toBeGreaterThan(sheet);
+  });
+
+  it("outranks the code panel and its drag ghost", () => {
+    const menu = Number(ruleIn(menuCss, ".menu")["z-index"]);
+    expect(menu).toBeGreaterThan(Number(ruleIn(codeCss, ".code-backdrop")["z-index"]));
+    expect(menu).toBeGreaterThan(Number(ruleIn(codeCss, ".code-drag-ghost")["z-index"]));
+  });
+});
+
 describe("the options list", () => {
   /**
    * The tokens are on `:root`, not on `.options`, and that is the difference

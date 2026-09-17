@@ -316,17 +316,26 @@ async function editServer(
   // Save, and what is kept afterwards is the key rather than the path. A box
   // showing a path that nothing will ever read again would be a box that lies.
   let keyFile: string | null = null;
-  // Read once when the sheet opens. An empty answer is an iPad, or a machine
-  // with no `~/.ssh` — both mean the file dialog is the only route, which is
-  // what it already was there.
-  let found: SshKey[] = [];
+
+  /**
+   * The keys in `~/.ssh`, asked for as the sheet opens and **awaited** when
+   * the button is pressed.
+   *
+   * A promise rather than a variable filled in by a `then`: reading it as a
+   * snapshot means the button does one thing if the directory read has
+   * finished and another if it has not, and the read is fast enough that the
+   * difference would only ever show up on somebody else's machine. An empty
+   * answer — an iPad, a machine with no `~/.ssh`, a read that failed — means
+   * the file dialog, which is the route those platforms always had.
+   */
+  const keys = publish.sshKeys().catch(() => [] as SshKey[]);
 
   const take = (path: string) => {
     keyFile = path;
     key.input.value = `Importing ${path.split("/").pop() ?? path}`;
   };
 
-  const browse = () => {
+  const browse = (found: SshKey[]) => {
     void openFileDialog({
       multiple: false,
       pickerMode: "document",
@@ -350,35 +359,28 @@ async function editServer(
       "publish time.",
     button: {
       label: server?.hasKey ? "Replace…" : "Choose…",
-      onSelect: () => {
-        const button = key.root.querySelector("button") as HTMLElement;
-        // Straight to the dialog where there is nothing to offer: a menu whose
-        // only item is "Browse…" is a menu that wastes a press.
-        if (!found.length) {
-          browse();
-          return;
-        }
-        openMenu(button, [
-          ...found.map((candidate) => ({
-            label: candidate.hasPublic ? candidate.name : `${candidate.name} (no .pub)`,
-            onSelect: () => take(candidate.path),
-          })),
-          { label: "Browse…", onSelect: browse },
-        ]);
-      },
+      onSelect: () => void chooseKey(),
     },
   });
   // Named by the file it came from, not typed into.
   key.input.readOnly = true;
 
-  void publish
-    .sshKeys()
-    .then((keys) => {
-      found = keys;
-    })
-    .catch(() => {
-      found = [];
-    });
+  const chooseKey = async () => {
+    const found = await keys;
+    // Straight to the dialog where there is nothing to offer: a menu whose
+    // only item is "Browse…" is a menu that wastes a press.
+    if (!found.length) {
+      browse(found);
+      return;
+    }
+    openMenu(key.root.querySelector("button") as HTMLElement, [
+      ...found.map((candidate) => ({
+        label: candidate.hasPublic ? candidate.name : `${candidate.name} (no .pub)`,
+        onSelect: () => take(candidate.path),
+      })),
+      { label: "Browse…", onSelect: () => browse(found) },
+    ]);
+  };
 
   const passphrase = optionField({
     label: "Passphrase",

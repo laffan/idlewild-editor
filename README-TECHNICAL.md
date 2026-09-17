@@ -2974,6 +2974,18 @@ kind as a chip in the key column rather than as two headings. They are one kind
 of thing — a credential this device holds, shared by every project — and two
 sections would say they were two.
 
+**A menu opened from inside a sheet was invisible.** `.menu` was `z-index: 40`
+and `.sheet-backdrop` is `50`, which held for as long as every menu in this app
+came from the header, the code panel's pin or a row in the file column — none
+of them reachable with a modal up. The ssh key chooser and the branch picker
+are the first two opened from *inside* a sheet, and both rendered behind it:
+nothing appeared and the backdrop swallowed the press, so the button read as
+broken rather than covered. It is `70` now, above the drag ghost as well, and
+`styles.test.ts` asserts it against the sheet and the ghost rather than against
+the number — the point is the ordering, not the value. The rules moved to
+`styles/menu.css` while they were being touched: a menu is not editor chrome,
+and `editor.css` was at the line limit.
+
 **The keys are offered rather than hunted for.** They live in `~/.ssh`, a
 directory beginning with a dot, and macOS's open panel hides those. There is a
 keystroke — ⇧⌘. — and it is not something anybody should have to know to
