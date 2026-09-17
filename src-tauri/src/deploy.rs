@@ -48,18 +48,30 @@ use crate::project::TargetKind;
 use crate::publish_targets;
 use std::path::{Path, PathBuf};
 
-/// What a publish did, or would have done.
+/// What a publish did.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Report {
     /// One line for the console and the sheet.
     pub summary: String,
-    /// What the program said, redacted. The detail somebody needs when a
-    /// publish does not land where they expected it to.
+    /// The detail somebody needs when a publish does not land where they
+    /// expected it to. Redacted — see `redact`.
     pub log: String,
-    /// Whether this was a rehearsal.
-    pub dry_run: bool,
 }
+
+/// The event a publish narrates itself on, as it happens.
+///
+/// Publishing is a network transfer of tens of megabytes: long enough that a
+/// sheet with nothing on it reads as a hang, and made of enough separate steps
+/// — reaching the host, the host key, authentication, SFTP, then a file at a
+/// time — that "it failed" without saying which is a failure somebody has to
+/// guess at. Every step says what it is as it starts, the sheet shows the
+/// latest, and the console keeps all of them.
+///
+/// The same channel carries progress and trace on purpose. They are the same
+/// sentences: what the publish is doing now is exactly what you want written
+/// down when it stops doing it.
+pub const PUBLISH_LINE: &str = "publish-line";
 
 /// Publish a project to wherever it is pointed.
 ///
@@ -106,7 +118,9 @@ pub async fn compare_target(id: String) -> Result<crate::compare::Comparison, St
             let site = root.join("site");
             let result = match stage(&meta.id, &site) {
                 Ok(()) => {
-                    let session = crate::deploy_ssh::Session::open(&server).await;
+                    // Nothing to narrate: a comparison is a question with an
+                    // answer, and the sheet is already saying it is reading.
+                    let session = crate::deploy_ssh::Session::open(&server, &|_: &str| {}).await;
                     match session {
                         Ok(session) => {
                             let listing = session.listing(&directory).await;
@@ -137,9 +151,7 @@ pub async fn compare_target(id: String) -> Result<crate::compare::Comparison, St
 /// `chosen` as `None` means everything that differs, which is what Publish
 /// does before anybody has touched the list.
 ///
-/// `dry_run` rehearses: both halves say what they would do and neither does
-/// any of it. It is the same command because the useful question — "is this
-/// set up right?" — is one somebody asks with their finger already on Publish.
+/// Every step is emitted as it happens — see `PUBLISH_LINE`.
 ///
 /// **An `async fn`, and that is load-bearing.** A synchronous Tauri command
 /// runs on the **main thread** — the accident the PSD pipeline had to be dug
@@ -149,11 +161,12 @@ pub async fn compare_target(id: String) -> Result<crate::compare::Comparison, St
 /// one parks a runtime thread on a socket.
 #[tauri::command]
 pub async fn publish_to_target(
+    app: tauri::AppHandle,
     id: String,
-    dry_run: bool,
     chosen: Option<Vec<String>>,
     remove: Option<Vec<String>>,
 ) -> Result<Report, String> {
+    let say = narrator(app);
     let meta = crate::store::read_meta(&id)?;
     if !meta.publish.is_set() {
         return Err("This project has no publish target yet".into());
@@ -170,8 +183,9 @@ pub async fn publish_to_target(
             // was more machinery than the four lines it saved.
             let root = staging_dir(&meta.id)?;
             let site = root.join("site");
+            say("Building the site");
             let result = match stage(&meta.id, &site) {
-                Ok(()) => match crate::deploy_ssh::Session::open(&server).await {
+                Ok(()) => match crate::deploy_ssh::Session::open(&server, &say).await {
                     Ok(session) => {
                         let report = crate::deploy_ssh::push(
                             &session,
@@ -180,7 +194,7 @@ pub async fn publish_to_target(
                             &site,
                             chosen.as_deref(),
                             &remove,
-                            dry_run,
+                            &say,
                         )
                         .await;
                         session.close().await;
@@ -191,19 +205,15 @@ pub async fn publish_to_target(
                 Err(e) => Err(e),
             };
             let _ = std::fs::remove_dir_all(&root);
+            if let Err(e) = &result {
+                say(e);
+            }
             result
         }
         TargetKind::Github => {
             let settings = publish_targets::read();
             let account = publish_targets::account_for(&settings, &meta.publish.account)?;
             let target = meta.publish.clone();
-            // A GitHub rehearsal is one question over the network, so it does
-            // not stage the site at all. The server half is the other way
-            // round — it compares file lists — which is why only one of them
-            // short-cuts.
-            if dry_run {
-                return blocking(move || crate::deploy_github::check(&account, &target)).await;
-            }
             let name = meta.name.clone();
             let project = meta.id.clone();
             blocking(move || {
@@ -212,6 +222,7 @@ pub async fn publish_to_target(
                 // A second directory beside it, because a GitHub push clones
                 // the branch it is about to commit onto.
                 let work = root.join("repo");
+                say("Building the site");
                 let result = stage(&project, &site).and_then(|_| {
                     crate::deploy_github::push(
                         &account,
@@ -221,13 +232,29 @@ pub async fn publish_to_target(
                         &work,
                         chosen.as_deref(),
                         &remove,
+                        &say,
                     )
                 });
                 let _ = std::fs::remove_dir_all(&root);
+                if let Err(e) = &result {
+                    say(e);
+                }
                 result
             })
             .await
         }
+    }
+}
+
+/// A function that says what a publish is doing, on the event the sheet reads.
+///
+/// Handed down rather than each module reaching for an `AppHandle`: the two
+/// deploys have no business knowing they are inside a Tauri app, and the one
+/// test that drives them has no app to give them.
+fn narrator(app: tauri::AppHandle) -> impl Fn(&str) + Send + Sync + Clone + 'static {
+    move |line: &str| {
+        use tauri::Emitter;
+        let _ = app.emit(PUBLISH_LINE, line.to_string());
     }
 }
 

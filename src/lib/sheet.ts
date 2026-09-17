@@ -18,11 +18,27 @@ export interface SheetHandle {
   body: HTMLElement;
   actions: HTMLElement;
   close: () => void;
+  /**
+   * Change the title after the sheet is up.
+   *
+   * For a sheet whose subject is not known until something has been read: the
+   * Publish sheet says *Publish to GitHub* or *Publish to Server*, and which
+   * of those it is arrives a round trip after the sheet does. Opening with a
+   * placeholder and correcting it beats opening late.
+   */
+  setTitle: (title: string, subtitle?: string) => void;
 }
 
 export function openSheet(options: SheetOptions): SheetHandle {
   const body = h("div", { class: "sheet-body" });
   const actions = h("div", { class: "sheet-actions" });
+
+  const title = h("div", { class: "sheet-title", text: options.title });
+  const subtitle = h("div", {
+    class: "sheet-sub m",
+    text: options.subtitle ?? "",
+    hidden: options.subtitle ? undefined : "true",
+  });
 
   const panel = h(
     "div",
@@ -34,14 +50,7 @@ export function openSheet(options: SheetOptions): SheetHandle {
       "aria-label": options.title,
       onClick: (event: Event) => event.stopPropagation(),
     },
-    h(
-      "div",
-      { class: "sheet-head" },
-      h("div", { class: "sheet-title", text: options.title }),
-      options.subtitle
-        ? h("div", { class: "sheet-sub m", text: options.subtitle })
-        : null,
-    ),
+    h("div", { class: "sheet-head" }, title, subtitle),
     body,
     actions,
   );
@@ -63,7 +72,17 @@ export function openSheet(options: SheetOptions): SheetHandle {
   }
 
   document.body.appendChild(backdrop);
-  return { root: backdrop, body, actions, close };
+  return {
+    root: backdrop,
+    body,
+    actions,
+    close,
+    setTitle: (next: string, nextSub?: string) => {
+      title.textContent = next;
+      subtitle.textContent = nextSub ?? "";
+      subtitle.hidden = !nextSub;
+    },
+  };
 }
 
 /** A confirm dialog that resolves to the user's answer. */

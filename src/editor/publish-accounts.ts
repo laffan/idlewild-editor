@@ -34,6 +34,20 @@
  * next launch. So the picker's job is to name a file *once* — Rust reads it,
  * checks it parses, and keeps the key.
  *
+ * **The keys are offered rather than hunted for.** They live in `~/.ssh`, a
+ * directory starting with a dot, and macOS's open panel hides those — there is
+ * a keystroke, ⇧⌘., and it is not something anybody should have to know to
+ * publish a website. So `ssh_keys::list_ssh_keys` lists what is there and the
+ * sheet shows them as a menu; the file dialog stays for a key kept elsewhere,
+ * and opens *inside* `~/.ssh` when there is one.
+ *
+ * **A server can be tried before it is saved.** A row that has never been
+ * tried looks exactly like one that works, and the first time anybody finds
+ * out otherwise used to be in the middle of a publish — where reaching the
+ * host, the host key, the key being accepted, SFTP starting and the directory
+ * existing are five different failures that all read as "publishing is
+ * broken". Test does those five and says which one stopped.
+ *
  * **The host key is shown once there is one.** With its own SSH client the app
  * owns the check `ssh` would have done, and it is trust-on-first-use with no
  * terminal to ask at — so the fingerprint is put on the row afterwards, where
@@ -44,6 +58,7 @@
 
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { h, ICONS } from "../lib/dom";
+import { openMenu } from "../lib/menu";
 import { confirmSheet, openSheet } from "../lib/sheet";
 import {
   optionAddRow,
@@ -59,6 +74,7 @@ import {
   type GithubAccount,
   type PublishServer,
   type PublishSettings,
+  type SshKey,
 } from "../lib/ipc";
 import * as log from "../lib/log";
 
@@ -300,36 +316,118 @@ async function editServer(
   // Save, and what is kept afterwards is the key rather than the path. A box
   // showing a path that nothing will ever read again would be a box that lies.
   let keyFile: string | null = null;
+  // Read once when the sheet opens. An empty answer is an iPad, or a machine
+  // with no `~/.ssh` — both mean the file dialog is the only route, which is
+  // what it already was there.
+  let found: SshKey[] = [];
+
+  const take = (path: string) => {
+    keyFile = path;
+    key.input.value = `Importing ${path.split("/").pop() ?? path}`;
+  };
+
+  const browse = () => {
+    void openFileDialog({
+      multiple: false,
+      pickerMode: "document",
+      // Open *inside* `~/.ssh` when there is one, so even the dialog route
+      // starts somewhere the keys are visible.
+      defaultPath: found[0]?.path.replace(/\/[^/]+$/, "") || undefined,
+    })
+      .then((picked) => {
+        if (typeof picked === "string") take(picked);
+      })
+      .catch((err) => log.error("Could not pick a key file:", err));
+  };
+
   const key = optionField({
     label: "SSH key",
     value: server?.hasKey ? `Using ${server.keySource || "an imported key"}` : "",
     placeholder: "no key yet",
     hint:
-      "Pick your private key — id_ed25519, not id_ed25519.pub. It is copied " +
-      "onto this device so it works on an iPad, where there is no ~/.ssh to " +
-      "read at publish time.",
+      "Your private key — id_ed25519, not id_ed25519.pub. It is copied onto " +
+      "this device so it works on an iPad, where there is no ~/.ssh to read at " +
+      "publish time.",
     button: {
-      label: server?.hasKey ? "Replace…" : "Import…",
+      label: server?.hasKey ? "Replace…" : "Choose…",
       onSelect: () => {
-        void openFileDialog({ multiple: false, pickerMode: "document" })
-          .then((picked) => {
-            if (typeof picked !== "string") return;
-            keyFile = picked;
-            key.input.value = `Importing ${picked.split("/").pop() ?? picked}`;
-          })
-          .catch((err) => log.error("Could not pick a key file:", err));
+        const button = key.root.querySelector("button") as HTMLElement;
+        // Straight to the dialog where there is nothing to offer: a menu whose
+        // only item is "Browse…" is a menu that wastes a press.
+        if (!found.length) {
+          browse();
+          return;
+        }
+        openMenu(button, [
+          ...found.map((candidate) => ({
+            label: candidate.hasPublic ? candidate.name : `${candidate.name} (no .pub)`,
+            onSelect: () => take(candidate.path),
+          })),
+          { label: "Browse…", onSelect: browse },
+        ]);
       },
     },
   });
   // Named by the file it came from, not typed into.
   key.input.readOnly = true;
 
+  void publish
+    .sshKeys()
+    .then((keys) => {
+      found = keys;
+    })
+    .catch(() => {
+      found = [];
+    });
+
   const passphrase = optionField({
     label: "Passphrase",
     placeholder: "only if the key has one",
     secret: true,
   });
+
+  /**
+   * A directory to check, which is not saved anywhere.
+   *
+   * The destination is a project's, not a server's — see `publish-setup.ts` —
+   * so this box exists only for Test to have something to look for. Checking a
+   * login without checking it can reach anything is half a test, and "does
+   * that directory exist" is the failure that cost the most to diagnose.
+   */
+  const directory = optionField({
+    label: "Directory to check",
+    placeholder: "/var/www/example.com — optional, not saved",
+    value: "",
+  });
   const notice = optionNotice();
+
+  /**
+   * Try the details as they stand, without saving them.
+   *
+   * The whole point is *before* saving: a bad hostname saved is a server row
+   * that looks like every other one. What comes back is the five steps it got
+   * through, so a failure names the one that stopped rather than the publish.
+   */
+  const test = () => {
+    const parsed = Number(port.input.value.trim());
+    notice.textContent = `Connecting to ${host.input.value.trim() || "…"}`;
+    void publish
+      .testServer({
+        id: server?.id,
+        host: host.input.value.trim(),
+        user: user.input.value.trim(),
+        port: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+        keyFile: keyFile ?? undefined,
+        passphrase: passphrase.input.value || undefined,
+        directory: directory.input.value.trim() || undefined,
+      })
+      .then((report) => {
+        notice.textContent = `${report.summary}\n${report.log}`;
+      })
+      .catch((err) => {
+        notice.textContent = String(err);
+      });
+  };
 
   const save = () => {
     const parsed = Number(port.input.value.trim());
@@ -362,11 +460,18 @@ async function editServer(
       port.root,
       key.root,
       passphrase.root,
+      directory.root,
       notice,
     ),
   );
   sheet.actions.append(
     h("button", { class: "btn btn-primary", text: "Save", onClick: save }),
+    h("button", {
+      class: "btn btn-ghost",
+      title: "Connect with these details and say what happened",
+      text: "Test",
+      onClick: test,
+    }),
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
   );
   host.input.focus();

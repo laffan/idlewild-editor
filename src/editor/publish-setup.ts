@@ -50,6 +50,7 @@ import {
 } from "../lib/ipc";
 import { EMPTY_TARGET, type PublishTarget } from "../lib/publish-target";
 import { fuzzyRank, highlight } from "../lib/fuzzy";
+import { openMenu } from "../lib/menu";
 import * as log from "../lib/log";
 import { optionField } from "../lib/options-list";
 import { openPublishAccounts } from "./publish-accounts";
@@ -72,6 +73,8 @@ export function openPublishSetup(
   let settings: PublishSettings | null = null;
   /** Repositories per account, once fetched. A sheet's worth of cache. */
   const repos = new Map<string, GithubRepo[]>();
+  /** Branches per `owner/repo`, likewise. */
+  const branches = new Map<string, string[]>();
   let loading = "";
 
   const columns = h("div", { class: "publish-split" });
@@ -95,8 +98,26 @@ export function openPublishSetup(
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
   );
 
-  const change = (next: Partial<PublishTarget>) => {
+  /**
+   * Take a value without redrawing.
+   *
+   * **Typing must not re-render.** Every field used to go through the same
+   * handler as the pickers, which rebuilt both columns — so the input the
+   * caret was in was replaced by a new one on every keystroke, and the caret
+   * went with it. The Branch box lost focus after each character.
+   *
+   * Nothing a field can change alters the *shape* of the sheet, so nothing a
+   * field changes needs a redraw. The only thing that has to follow a
+   * keystroke is whether Use this is available.
+   */
+  const set = (next: Partial<PublishTarget>) => {
     target = { ...target, ...next };
+    save.disabled = !ready(target);
+  };
+
+  /** Take a value that *does* change the shape: a kind, an account, a repo. */
+  const choose = (next: Partial<PublishTarget>) => {
+    set(next);
     draw();
   };
 
@@ -112,15 +133,20 @@ export function openPublishSetup(
         target,
         accounts: settings?.accounts ?? [],
         repos,
+        branches,
         loading,
-        onChange: change,
+        onChoose: choose,
+        onEdit: set,
         onAccounts: toAccounts,
         onNeedRepos: (id) => void fetchRepos(id),
+        onNeedBranches: (accountId, owner, repo) =>
+          void fetchBranches(accountId, owner, repo),
       }),
       serverColumn({
         target,
         servers: settings?.servers ?? [],
-        onChange: change,
+        onChoose: choose,
+        onEdit: set,
         onAccounts: toAccounts,
       }),
     );
@@ -138,6 +164,26 @@ export function openPublishSetup(
       repos.set(accountId, []);
     }
     loading = "";
+    draw();
+  };
+
+  /**
+   * The branches a repository has.
+   *
+   * Failing is not an error anybody needs told about: the branch box works
+   * without the list — it is a text field, and a name that is not there is a
+   * branch the publish creates — so a token that cannot read branches costs
+   * the menu and nothing else.
+   */
+  const fetchBranches = async (accountId: string, owner: string, repo: string) => {
+    const key = `${owner}/${repo}`;
+    if (branches.has(key)) return;
+    branches.set(key, []);
+    try {
+      branches.set(key, await publish.branches(accountId, owner, repo));
+    } catch {
+      branches.set(key, []);
+    }
     draw();
   };
 
@@ -173,10 +219,16 @@ interface GithubColumn {
   target: PublishTarget;
   accounts: GithubAccount[];
   repos: Map<string, GithubRepo[]>;
+  /** Branches per `owner/repo`, for the branch box to offer. */
+  branches: Map<string, string[]>;
   loading: string;
-  onChange: (next: Partial<PublishTarget>) => void;
+  /** A pick that changes the sheet's shape, and redraws it. */
+  onChoose: (next: Partial<PublishTarget>) => void;
+  /** A typed value, which must not redraw — see `set` in `openPublishSetup`. */
+  onEdit: (next: Partial<PublishTarget>) => void;
   onAccounts: () => void;
   onNeedRepos: (accountId: string) => void;
+  onNeedBranches: (accountId: string, owner: string, repo: string) => void;
 }
 
 function githubColumn(state: GithubColumn): HTMLElement {
@@ -207,7 +259,7 @@ function githubColumn(state: GithubColumn): HTMLElement {
             label: account.login,
             active: account.id === accountId,
           })),
-          (id) => state.onChange({ kind: "github", account: id, owner: "", repo: "" }),
+          (id) => state.onChoose({ kind: "github", account: id, owner: "", repo: "" }),
           state.onAccounts,
         ),
   );
@@ -230,7 +282,7 @@ function githubColumn(state: GithubColumn): HTMLElement {
 
   column.appendChild(
     repoPicker(list, target, (repo) =>
-      state.onChange({
+      state.onChoose({
         kind: "github",
         account: accountId,
         owner: repo.owner,
@@ -239,7 +291,12 @@ function githubColumn(state: GithubColumn): HTMLElement {
     ),
   );
 
-  if (active && target.repo) column.appendChild(githubFields(target, state.onChange));
+  if (active && target.repo) {
+    state.onNeedBranches(accountId, target.owner, target.repo);
+    column.appendChild(
+      githubFields(target, state.onEdit, state.branches.get(`${target.owner}/${target.repo}`)),
+    );
+  }
   return column;
 }
 
@@ -322,32 +379,81 @@ function repoRow(
   );
 }
 
-/** Branch and path: the part of a GitHub destination that is the project's. */
+/**
+ * Branch and path: the part of a GitHub destination that is the project's.
+ *
+ * **The branch box offers and accepts.** Existing branches are on a menu
+ * beside it, because a typo in a branch name is the least visible mistake here
+ * — publishing to `gh_pages` *succeeds*, it makes the branch, and then nothing
+ * is where anybody looks for it. And a name that is not on the list is not
+ * refused: starting a branch by naming one is how you publish to a fresh
+ * `gh-pages`, and the line under the box says which of the two is about to
+ * happen rather than leaving it to be found out.
+ */
 function githubFields(
   target: PublishTarget,
-  onChange: (next: Partial<PublishTarget>) => void,
+  onEdit: (next: Partial<PublishTarget>) => void,
+  branches: string[] | undefined,
 ): HTMLElement {
-  const branch = optionField({ label: "Branch", placeholder: "gh-pages", value: target.branch });
+  const known = branches ?? [];
+  const note = h("div", { class: "field-hint" });
+
+  const branch = optionField({
+    label: "Branch",
+    placeholder: "gh-pages",
+    value: target.branch,
+    ...(known.length
+      ? {
+          button: {
+            label: "Branches",
+            onSelect: () =>
+              openMenu(
+                branch.root.querySelector("button") as HTMLElement,
+                known.map((name) => ({
+                  label: name,
+                  onSelect: () => {
+                    branch.input.value = name;
+                    onEdit({ branch: name });
+                    say();
+                  },
+                })),
+              ),
+          },
+        }
+      : {}),
+  });
+
+  /**
+   * Whether the branch named is one that exists. Written on every keystroke
+   * rather than by redrawing, because redrawing is what takes the caret out of
+   * the box — see `set` in `openPublishSetup`.
+   */
+  const say = () => {
+    const name = branch.input.value.trim() || "gh-pages";
+    if (!known.length) {
+      note.textContent =
+        "Publishing commits onto that branch — it does not rewrite it. A branch " +
+        "that does not exist yet is created by the first publish.";
+      return;
+    }
+    note.textContent = known.includes(name)
+      ? `${name} exists. Publishing commits onto it — it does not rewrite it.`
+      : `${name} does not exist yet. The first publish starts it.`;
+  };
+
   const path = optionField({
     label: "Path",
     placeholder: "the repository root, if empty",
     value: target.path,
   });
-  branch.input.addEventListener("input", () => onChange({ branch: branch.input.value }));
-  path.input.addEventListener("input", () => onChange({ path: path.input.value }));
-  return h(
-    "div",
-    { class: "publish-fields" },
-    branch.root,
-    path.root,
-    h("div", {
-      class: "field-hint",
-      text:
-        "Publishing commits onto that branch — it does not rewrite it — and " +
-        "replaces what you choose to replace at that path. gh-pages is the " +
-        "default because the alternative is the branch holding your source.",
-    }),
-  );
+  branch.input.addEventListener("input", () => {
+    onEdit({ branch: branch.input.value });
+    say();
+  });
+  path.input.addEventListener("input", () => onEdit({ path: path.input.value }));
+  say();
+
+  return h("div", { class: "publish-fields" }, branch.root, path.root, note);
 }
 
 // ── a server ────────────────────────────────────────────────────────────────
@@ -355,7 +461,8 @@ function githubFields(
 interface ServerColumn {
   target: PublishTarget;
   servers: PublishServer[];
-  onChange: (next: Partial<PublishTarget>) => void;
+  onChoose: (next: Partial<PublishTarget>) => void;
+  onEdit: (next: Partial<PublishTarget>) => void;
   onAccounts: () => void;
 }
 
@@ -386,7 +493,7 @@ function serverColumn(state: ServerColumn): HTMLElement {
           class: `publish-row${active && server.id === target.server ? " active" : ""}`,
           type: "button",
           title: server.host,
-          onClick: () => state.onChange({ kind: "rsync", server: server.id }),
+          onClick: () => state.onChoose({ kind: "rsync", server: server.id }),
         },
         h("span", { class: "publish-row-name", text: server.label || server.host }),
         server.hasKey
@@ -400,14 +507,14 @@ function serverColumn(state: ServerColumn): HTMLElement {
     h("div", { class: "publish-picker" }, rows),
     loginLine(`${servers.length} bookmarked`, state.onAccounts),
   );
-  if (active && target.server) column.appendChild(serverFields(target, state.onChange));
+  if (active && target.server) column.appendChild(serverFields(target, state.onEdit));
   return column;
 }
 
 /** The directory, and whether a publish may tidy up after itself. */
 function serverFields(
   target: PublishTarget,
-  onChange: (next: Partial<PublishTarget>) => void,
+  onEdit: (next: Partial<PublishTarget>) => void,
 ): HTMLElement {
   const directory = optionField({
     label: "Directory",
@@ -415,14 +522,14 @@ function serverFields(
     value: target.directory,
   });
   directory.input.addEventListener("input", () =>
-    onChange({ directory: directory.input.value }),
+    onEdit({ directory: directory.input.value }),
   );
   const prune = h("input", {
     class: "check-box",
     type: "checkbox",
     checked: target.prune ? "checked" : undefined,
     onChange: (event: Event) =>
-      onChange({ prune: (event.currentTarget as HTMLInputElement).checked }),
+      onEdit({ prune: (event.currentTarget as HTMLInputElement).checked }),
   }) as HTMLInputElement;
 
   return h(

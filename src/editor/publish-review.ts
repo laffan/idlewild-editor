@@ -35,11 +35,13 @@ import { clear, h } from "../lib/dom";
 import { openSheet, type SheetHandle } from "../lib/sheet";
 import {
   publish,
+  watchPublish,
   type Comparison,
   type FileStatus,
   type LocalEntry,
   type RemoteEntry,
 } from "../lib/ipc";
+import { EMPTY_TARGET, type TargetKind } from "../lib/publish-target";
 import * as log from "../lib/log";
 
 /** Which statuses are ticked before anybody touches the list. */
@@ -68,6 +70,22 @@ export function openPublishReview(options: ReviewOptions): void {
   void load(sheet, body, options);
 }
 
+/**
+ * What the sheet is called, which is the destination's *kind* rather than its
+ * detail.
+ *
+ * The detail — which repository, which directory on which server — is on the
+ * row under it, where it can be as long as it needs to be. A title that grew
+ * to `Publish to laffan/idlewild-site on gh-pages/docs` would be a title that
+ * wraps, and the thing a heading is for is knowing at a glance which of the
+ * two kinds of publish you are looking at.
+ */
+function titleFor(kind: TargetKind): string {
+  if (kind === "github") return "Publish to GitHub";
+  if (kind === "rsync") return "Publish to Server";
+  return "Publish";
+}
+
 async function load(
   sheet: SheetHandle,
   body: HTMLElement,
@@ -82,6 +100,7 @@ async function load(
     ]);
     comparison = found;
     prune = target.prune ?? false;
+    sheet.setTitle(titleFor({ ...EMPTY_TARGET, ...target }.kind));
   } catch (err) {
     clear(body);
     body.append(
@@ -138,7 +157,7 @@ function draw(
       h("button", {
         class: "link-btn",
         type: "button",
-        text: "Change…",
+        text: "Change Publish options",
         onClick: () => {
           sheet.close();
           options.onChangeTarget();
@@ -153,21 +172,104 @@ function draw(
   clear(sheet.actions);
   sheet.actions.append(
     action,
-    h("button", {
-      class: "btn btn-ghost",
-      title: "Say what would happen, and send nothing",
-      text: "Check it first",
-      onClick: () => {
-        sheet.close();
-        void send(options.projectId, comparison.destination, true, sending, removing);
-      },
-    }),
     h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
   );
   action.onclick = () => {
-    sheet.close();
-    void send(options.projectId, comparison.destination, false, sending, removing);
+    // The sheet stays up and turns into the transfer. Closing it and writing
+    // to the console was fine for a zip, which is over before the dialog has
+    // shut; a publish is a network transfer of tens of megabytes, and a modal
+    // that vanishes at the moment the slow part starts is a modal that looks
+    // like it did nothing.
+    void run(sheet, body, options, comparison, sending, removing);
   };
+}
+
+// ── the transfer ────────────────────────────────────────────────────────────
+
+/**
+ * Publish, with the sheet showing what is happening as it happens.
+ *
+ * Every step the publish narrates arrives on an event — see
+ * `deploy::PUBLISH_LINE` — and there are enough of them, doing different
+ * enough things, that a spinner would be the wrong shape: reaching a host,
+ * agreeing a host key, then a file at a time. So the latest line is shown
+ * large and the rest scroll under it, which is both the progress and, if it
+ * stops, the diagnosis.
+ *
+ * The console keeps every line too. A sheet somebody has closed is a record
+ * that is gone, and the failure people ask about is the one from ten minutes
+ * ago.
+ */
+async function run(
+  sheet: SheetHandle,
+  body: HTMLElement,
+  options: ReviewOptions,
+  comparison: Comparison,
+  sending: Set<string>,
+  removing: Set<string>,
+): Promise<void> {
+  const chosen = [...sending];
+  const remove = [...removing];
+
+  const now = h("div", { class: "publish-now", text: "Starting…" });
+  const trace = h("div", { class: "publish-trace scroll" });
+  clear(body);
+  body.append(
+    h(
+      "div",
+      { class: "publish-running" },
+      h("div", { class: "publish-destination", text: comparison.destination }),
+      h("div", { class: "progress-bar" }),
+      now,
+      trace,
+    ),
+  );
+
+  clear(sheet.actions);
+  const done = h("button", {
+    class: "btn btn-ghost",
+    text: "Hide",
+    title: "The publish carries on — the console keeps the rest",
+    onClick: sheet.close,
+  }) as HTMLButtonElement;
+  sheet.actions.append(done);
+
+  const say = (line: string) => {
+    now.textContent = line;
+    trace.appendChild(h("div", { class: "publish-trace-line", text: line }));
+    trace.scrollTop = trace.scrollHeight;
+    log.info(line);
+  };
+  const stop = watchPublish(say);
+
+  log.info(`Publishing ${chosen.length} to ${comparison.destination}…`);
+  try {
+    const report = await publish.toTarget(options.projectId, chosen, remove);
+    stop();
+    say(report.summary);
+    if (report.log.trim()) log.info(report.log);
+    body.querySelector(".progress-bar")?.remove();
+    now.classList.add("good");
+    done.textContent = "Done";
+    done.className = "btn btn-primary";
+  } catch (err) {
+    stop();
+    body.querySelector(".progress-bar")?.remove();
+    now.classList.add("bad");
+    now.textContent = String(err);
+    log.error("Publishing failed:", err);
+    done.textContent = "Close";
+    sheet.actions.prepend(
+      h("button", {
+        class: "btn btn-ghost",
+        text: "Change Publish options",
+        onClick: () => {
+          sheet.close();
+          options.onChangeTarget();
+        },
+      }),
+    );
+  }
 }
 
 // ── the left pane: what is already there ────────────────────────────────────
@@ -355,33 +457,6 @@ function paneHead(
         ]
       : []),
   );
-}
-
-/**
- * Push, and say how it went in the console.
- *
- * The console rather than a sheet with a spinner, because that is where this
- * editor says everything else — and because a publish that takes a minute
- * behind a modal is a minute with nothing to read. The first line goes out
- * before the call, so the drawer says what is happening while it happens.
- */
-async function send(
-  projectId: string,
-  where: string,
-  dryRun: boolean,
-  sending: Set<string>,
-  removing: Set<string>,
-): Promise<void> {
-  const chosen = [...sending];
-  const remove = [...removing];
-  log.info(dryRun ? `Checking ${where}…` : `Publishing ${chosen.length} to ${where}…`);
-  try {
-    const report = await publish.toTarget(projectId, dryRun, chosen, remove);
-    log.info(report.summary);
-    if (report.log.trim()) log.info(report.log);
-  } catch (err) {
-    log.error(dryRun ? "That check failed:" : "Publishing failed:", err);
-  }
 }
 
 /** A size, in the units a person reads. */

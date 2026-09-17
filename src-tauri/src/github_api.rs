@@ -134,6 +134,37 @@ fn repo(value: &serde_json::Value) -> Option<Repo> {
     })
 }
 
+/// Every branch a repository has, for the picker to offer.
+///
+/// Offered rather than left to a text field because the branch box is where a
+/// typo is least visible: `gh-pages` and `gh_pages` both look like branch
+/// names, and publishing to the wrong one succeeds — it makes the branch — and
+/// then nothing is where anybody looks for it.
+pub fn list_branches(token: &str, owner: &str, repo: &str) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for page in 1..=MAX_PAGES {
+        let url = format!("{API}/repos/{owner}/{repo}/branches?per_page=100&page={page}");
+        let batch: Vec<serde_json::Value> = match get(token, &url) {
+            Ok(batch) => batch,
+            // A repository with no commits has no branches, which is a fine
+            // thing to publish into rather than an error to report.
+            Err(e) if e.contains("not there") || e.contains("409") => return Ok(Vec::new()),
+            Err(e) => return Err(e),
+        };
+        let full = batch.len() == 100;
+        out.extend(
+            batch
+                .iter()
+                .filter_map(|b| Some(b.get("name")?.as_str()?.to_string())),
+        );
+        if !full {
+            break;
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
 /// What is on a branch, under a path, right now.
 ///
 /// One request. `?recursive=1` walks the whole tree server-side, which is the

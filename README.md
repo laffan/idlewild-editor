@@ -926,7 +926,23 @@ remaining pieces are wired to real slots rather than mocked.
   always did. Untick to send one scene's fix without pushing every asset again.
   A file at the far end the site no longer has is offered for removal rather
   than assumed, because deleting is the one thing here that publishing again
-  cannot undo. **Check it first** does the same run and sends nothing
+  cannot undo
+- **The sheet stays up and becomes the transfer.** Reaching the host, agreeing
+  the host key, the key being accepted, SFTP starting, then a file at a time —
+  each says what it is as it happens, the latest large and the rest scrolling
+  under it. Which is both the progress and, if it stops, the diagnosis: those
+  are five different failures with five different fixes, and a publish that
+  said only that it failed was one you had to guess at. The console keeps every
+  line, because a sheet you have closed is a record that is gone
+- **Test a server before you save it.** A row that has never been tried looks
+  exactly like one that works. Test does the five steps with whatever is in the
+  form — and, if you give it a directory, checks that too
+- **The ssh keys are offered, not hunted for.** They live in `~/.ssh`, which
+  macOS's open panel hides; the sheet lists what is there and the file dialog
+  stays for a key kept elsewhere, opening inside `~/.ssh` when there is one
+- **The branch box offers the branches that exist and takes one that does
+  not** — naming a new branch is how you publish to a fresh `gh-pages`, and the
+  line under the box says which of the two is about to happen
 - **Both of them work on an iPad**, which took doing. iOS does not let an app
   run another program — no `fork`, no `exec` — so shelling out to `rsync` and
   `git` made publishing a desktop feature. But that is a limit on *running

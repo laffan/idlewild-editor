@@ -41,6 +41,8 @@ use crate::site_files::{self, Entry};
 use russh::client;
 use russh::keys::{HashAlg, PrivateKeyWithHashAlg};
 use russh_sftp::client::SftpSession;
+use russh_sftp::protocol::OpenFlags;
+use tokio::io::AsyncWriteExt;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -63,7 +65,14 @@ pub struct Session {
 
 impl Session {
     /// Reach a server: host key, key authentication, SFTP.
-    pub async fn open(server: &Server) -> Result<Session, String> {
+    ///
+    /// `say` is told each step as it is reached. Publishing is four things
+    /// that can each fail for a different reason — reaching the host, agreeing
+    /// the host key, the key being accepted, SFTP starting — and a failure
+    /// with none of them named is a failure somebody has to guess at. It is
+    /// the difference between "it did not work" and "authenticated fine, SFTP
+    /// would not start", which are different problems with different fixes.
+    pub async fn open(server: &Server, say: &(dyn Fn(&str) + Send + Sync)) -> Result<Session, String> {
         let key = server.private_key()?;
         // No default user. ssh's own rule — the account you are logged in as —
         // has no meaning on a device with no shell, and the plausible stand-in
@@ -76,6 +85,12 @@ impl Session {
             ));
         }
 
+        say(&format!(
+            "Connecting to {}:{} as {}",
+            server.host,
+            server.port_or_default(),
+            server.user
+        ));
         let first_visit = server.host_key.is_empty();
         let trust = Trust::new(server);
         let seen = trust.seen.clone();
@@ -107,8 +122,12 @@ impl Session {
         // key has still proved which server it is, so this is not undone by
         // what follows: being asked to accept the same new host key twice is
         // being asked twice.
-        if first_visit {
-            if let Some(seen) = &fingerprint {
+        if let Some(seen) = &fingerprint {
+            say(&format!(
+                "Host key {seen}{}",
+                if first_visit { " — first visit, recorded" } else { "" }
+            ));
+            if first_visit {
                 crate::publish_targets::learn_host_key(&server.id, seen)?;
             }
         }
@@ -128,6 +147,7 @@ impl Session {
             ));
         }
 
+        say("Key accepted");
         let channel = session
             .channel_open_session()
             .await
@@ -139,6 +159,7 @@ impl Session {
         let sftp = SftpSession::new(channel.into_stream())
             .await
             .map_err(|e| format!("SFTP would not start on {}: {e}", server.host))?;
+        say("SFTP ready");
 
         Ok(Session {
             sftp,
@@ -198,9 +219,92 @@ impl Session {
         }
     }
 
+    /// Write a file, creating it if it is not there and truncating it if it is.
+    ///
+    /// **Not `SftpSession::write`.** That helper opens with `OpenFlags::WRITE`
+    /// alone, which is "open the file for writing" and not "make me this
+    /// file" — so every file that did not already exist failed with
+    /// `SSH_FX_NO_SUCH_FILE`, and the message a person saw was *No such file*
+    /// about the file they were trying to create. Which is to say the server
+    /// publish never worked for a new site, and read as a permissions problem
+    /// every time. `create` is the flag set that means what this wants:
+    /// `CREATE | TRUNCATE | WRITE`.
+    ///
+    /// The truncate matters on its own, too: without it, rewriting a file with
+    /// a shorter one would leave the tail of the old one on the end.
+    pub async fn put(&self, path: &str, bytes: &[u8]) -> Result<(), String> {
+        let mut file = self
+            .sftp
+            .open_with_flags(path, PUT_FLAGS)
+            .await
+            .map_err(|e| format!("Cannot create {path}: {}", explain(&e)))?;
+        // `write_all` goes through the file's own `AsyncWrite`, which chunks to
+        // the negotiated packet size — a 10 MB spritesheet is not one packet.
+        file.write_all(bytes)
+            .await
+            .map_err(|e| format!("Cannot write {path}: {e}"))?;
+        file.shutdown()
+            .await
+            .map_err(|e| format!("Cannot close {path}: {e}"))
+    }
+
+    /// Whether the directory a publish is aimed at is there, said plainly.
+    ///
+    /// Checked before anything is written, because the failure it replaces is
+    /// the worst kind: SFTP answers `SSH_FX_NO_SUCH_FILE` for a write into a
+    /// directory that does not exist, so the error named the *file* and read
+    /// as though the file were the problem. Naming the directory once, up
+    /// front, is the difference between a minute and an afternoon.
+    ///
+    /// It is not created. Making a directory somewhere in a stranger's
+    /// document root is not something to do because a field had a typo in it,
+    /// and the message says how to make it instead.
+    pub async fn require(&self, directory: &str) -> Result<(), String> {
+        match self.sftp.metadata(directory.to_string()).await {
+            Ok(meta) if meta.is_dir() => Ok(()),
+            Ok(_) => Err(format!("{directory} is a file, not a directory")),
+            Err(_) => Err(format!(
+                "{directory} does not exist on the server, or this login cannot \
+                 see it. Publishing writes into a directory; it does not create \
+                 one. Make it first — `mkdir -p {directory}` — and check the \
+                 login owns it."
+            )),
+        }
+    }
+
     pub async fn close(self) {
         let _ = self.sftp.close().await;
     }
+}
+
+/// How a file is opened to be written.
+///
+/// A named constant so the bug it fixes has somewhere to be asserted. All
+/// three flags are load-bearing: `WRITE` alone — which is what
+/// `SftpSession::write` uses — means "open this file for writing" and fails
+/// with `SSH_FX_NO_SUCH_FILE` when there is no such file, so every new file
+/// failed and the message named the file rather than the flag. `TRUNCATE`
+/// matters on its own: without it, rewriting a file with a shorter one leaves
+/// the tail of the old one on the end.
+pub(crate) const PUT_FLAGS: OpenFlags = OpenFlags::CREATE
+    .union(OpenFlags::TRUNCATE)
+    .union(OpenFlags::WRITE);
+
+/// An SFTP error, in words that say what to do.
+///
+/// The protocol's own vocabulary is four status codes, and two of them arrive
+/// for reasons that have nothing to do with what they are called: *no such
+/// file* is what a server says when the **directory** above a file is missing,
+/// and *failure* is what it says for most permission problems.
+fn explain(error: &russh_sftp::client::error::Error) -> String {
+    let said = error.to_string();
+    if said.contains("No such file") {
+        return format!("{said} — the directory above it may not exist");
+    }
+    if said.contains("Permission denied") {
+        return format!("{said} — this login cannot write there");
+    }
+    said
 }
 
 /// Send what was chosen, remove what was chosen, and leave the manifest saying
@@ -216,29 +320,31 @@ pub async fn push(
     site: &Path,
     chosen: Option<&[String]>,
     remove: &[String],
-    dry_run: bool,
+    say: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<Report, String> {
     let directory = clean_directory(&target.directory)?;
+    // Before anything is written, and before the manifest is read: a missing
+    // directory is the commonest way this fails and the one whose native error
+    // message points at the wrong thing entirely.
+    session.require(&directory).await?;
+
     let local = site_files::scan(site)?;
     let previous = session.manifest(&directory).await;
     let sending = site_files::selected(&local, &previous, chosen);
-
-    if dry_run {
-        return Ok(rehearsal(server, &directory, &local, &sending, remove));
-    }
+    say(&format!(
+        "{} of {} files to send to {directory}",
+        sending.len(),
+        local.len()
+    ));
 
     make_dirs(&session.sftp, &directory, &sending).await;
-    for entry in &sending {
+    let total = sending.len();
+    for (index, entry) in sending.iter().enumerate() {
         let path = format!("{directory}/{}", entry.rel);
         let bytes = std::fs::read(site.join(&entry.rel))
             .map_err(|e| format!("Cannot read {}: {e}", entry.rel))?;
-        // `write` goes through the file's own `AsyncWrite`, which chunks to the
-        // negotiated packet size — a 10 MB spritesheet is not one SFTP packet.
-        session
-            .sftp
-            .write(&path, &bytes)
-            .await
-            .map_err(|e| format!("Cannot write {path}: {e}"))?;
+        say(&format!("{}/{total} {}", index + 1, entry.rel));
+        session.put(&path, &bytes).await?;
     }
 
     // Counted rather than assumed: a file that would not delete — a permission,
@@ -246,25 +352,22 @@ pub async fn push(
     // It is not a reason to fail the publish either; the site itself is up.
     let mut removed = Vec::new();
     for rel in remove {
-        if session
-            .sftp
-            .remove_file(format!("{directory}/{rel}"))
-            .await
-            .is_ok()
-        {
-            removed.push(rel.clone());
+        match session.sftp.remove_file(format!("{directory}/{rel}")).await {
+            Ok(()) => {
+                say(&format!("removed {rel}"));
+                removed.push(rel.clone());
+            }
+            Err(e) => say(&format!("could not remove {rel}: {e}")),
         }
     }
 
     let manifest = site_files::next_manifest(&previous, &sending, &removed);
     session
-        .sftp
-        .write(
+        .put(
             &format!("{directory}/{MANIFEST}"),
             site_files::render_manifest(&manifest).as_bytes(),
         )
-        .await
-        .map_err(|e| format!("Cannot write the manifest: {e}"))?;
+        .await?;
 
     // A first connection says which host key it accepted. There is no terminal
     // to have asked at, so the next best thing is telling somebody afterwards
@@ -275,6 +378,7 @@ pub async fn push(
         _ => String::new(),
     };
 
+    say("Done");
     Ok(Report {
         summary: format!("Published to {directory} on {}", server.name()),
         log: format!(
@@ -298,36 +402,7 @@ pub async fn push(
                 40,
             )
         ),
-        dry_run: false,
     })
-}
-
-/// What a publish would do, without doing any of it.
-fn rehearsal(
-    server: &Server,
-    directory: &str,
-    local: &[Entry],
-    sending: &[&Entry],
-    remove: &[String],
-) -> Report {
-    let mut lines: Vec<String> = sending
-        .iter()
-        .map(|entry| format!("send   {}", entry.rel))
-        .collect();
-    lines.extend(remove.iter().map(|path| format!("remove {path}")));
-    if lines.is_empty() {
-        lines.push("Nothing to send — the far end already matches.".into());
-    }
-    Report {
-        summary: format!(
-            "Would publish {} of {} files to {directory} on {}",
-            sending.len(),
-            local.len(),
-            server.name()
-        ),
-        log: tail(&lines.join("\n"), 40),
-        dry_run: true,
-    }
 }
 
 /// `mkdir -p`, once per directory rather than once per file.

@@ -490,6 +490,55 @@
    so every filename in the pane still starts at the same x. */
 .check-box-gap { flex: none; width: 22px; }
 
+/* ── A publish, while it is happening ───────────────────────────────────────
+
+   The sheet stays up and becomes the transfer. It used to close and write to
+   the console, which is fine for a zip — over before the dialog has shut — and
+   wrong for a network transfer of tens of megabytes: a modal that vanishes at
+   the moment the slow part starts reads as one that did nothing. */
+
+.publish-running {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 24px;
+  min-height: 0;
+}
+
+/* The step the publish is on, large enough to be read from across a desk.
+   This is the line that matters: if it stops, it is also the diagnosis. */
+.publish-now {
+  font: 500 14px var(--font-body);
+  line-height: 1.5;
+  min-height: 42px;
+  white-space: pre-wrap;
+}
+.publish-now.good { color: var(--color-accent-400); }
+.publish-now.bad {
+  color: var(--color-accent-400);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Everything it has said so far, under it. Bounded, because a site is hundreds
+   of files and the sheet is not where anybody reads all of them — the console
+   keeps every line. */
+.publish-trace {
+  max-height: 34vh;
+  min-height: 90px;
+  border: 1px solid var(--chrome-rule);
+  padding: 8px 10px;
+  font: 400 11px var(--font-mono);
+  color: var(--chrome-dim);
+}
+.publish-trace-line { padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
+/* The latest, which is the one the eye goes to when the list is scrolling. */
+.publish-trace-line:last-child { color: var(--chrome-text); }
+
+/* A notice in an options form carries several lines when it is a test result:
+   the five steps a connection got through, in the order it got through them. */
+.options-notice { white-space: pre-wrap; }
+
 /* The list of logins is not drawn here. It is an options page — see
    `styles/options.css`, which is the settings vocabulary this app's other
    options screens are meant to be built on, and which deliberately departs

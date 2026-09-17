@@ -50,44 +50,6 @@ use git2::build::RepoBuilder;
 use git2::{Cred, FetchOptions, PushOptions, RemoteCallbacks, Repository, Signature};
 use std::path::{Path, PathBuf};
 
-/// Check the repository and the branch are reachable, and write nothing.
-///
-/// Deliberately **not** a flag on `push`: a rehearsal does not need the site,
-/// and staging tens of megabytes to then ask one question over the network
-/// would make "Check it first" the slow half of the pair. The server half is
-/// the other way round — it compares file lists, so it does need the site —
-/// which is why the two are routed separately in `deploy::publish_to_target`.
-pub fn check(account: &Github, target: &PublishTarget) -> Result<Report, String> {
-    let (url, branch) = address(target)?;
-    let mut remote = git2::Remote::create_detached(url.as_str())
-        .map_err(|e| format!("Cannot reach {url}: {e}"))?;
-
-    let mut callbacks = RemoteCallbacks::new();
-    let token = account.token.clone();
-    callbacks.credentials(move |_, _, _| Cred::userpass_plaintext("x-access-token", &token));
-
-    remote
-        .connect_auth(git2::Direction::Fetch, Some(callbacks), None)
-        .map_err(|e| reachability(&e, target, &redact(e.message(), &account.token)))?;
-    let wanted = format!("refs/heads/{branch}");
-    let exists = remote
-        .list()
-        .map_err(|e| redact(e.message(), &account.token))?
-        .iter()
-        .any(|head| head.name() == wanted);
-    let _ = remote.disconnect();
-
-    Ok(Report {
-        summary: format!("Would publish to {}", target.describe()),
-        log: if exists {
-            format!("{branch} is there and reachable with the token stored.")
-        } else {
-            format!("Reachable. {branch} does not exist yet — publishing starts it.")
-        },
-        dry_run: true,
-    })
-}
-
 pub fn push(
     account: &Github,
     target: &PublishTarget,
@@ -96,11 +58,18 @@ pub fn push(
     work: &Path,
     chosen: Option<&[String]>,
     remove: &[String],
+    say: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<Report, String> {
     let (url, branch) = address(target)?;
     let inside = checked_path(&target.path)?;
 
+    say(&format!("Fetching {branch} from {}/{}", target.owner, target.repo));
     let (repo, existed) = open(&url, &branch, work, account)?;
+    say(if existed {
+        "Branch is here — applying your changes"
+    } else {
+        "Branch does not exist yet — starting it"
+    });
     apply(work, &inside, site, chosen, remove)?;
 
     let tree_id = stage(&repo).map_err(|e| redact(e.message(), &account.token))?;
@@ -117,14 +86,16 @@ pub fn push(
         return Ok(Report {
             summary: format!("{} is already up to date", target.describe()),
             log: "Nothing in the site had changed since the last publish.".into(),
-            dry_run: false,
         });
     }
 
     let message = format!("Publish {project_name} from Idlewild");
+    say("Committing");
     commit(&repo, tree_id, parent.as_ref(), account, &message)
         .map_err(|e| redact(e.message(), &account.token))?;
+    say(&format!("Pushing to {branch}"));
     send(&repo, &url, &branch, account)?;
+    say("Done");
 
     let counted = match chosen {
         Some(paths) => format!("{} file(s)", paths.len()),
@@ -147,7 +118,6 @@ pub fn push(
             ),
             20,
         ),
-        dry_run: false,
     })
 }
 
@@ -324,30 +294,13 @@ fn address(target: &PublishTarget) -> Result<(String, String), String> {
     Ok((format!("https://github.com/{owner}/{repo}.git"), branch))
 }
 
-/// A connection failure, said in terms of what somebody can do about it.
+/// A rejected push, said in terms of what to do about it.
 ///
-/// libgit2's own message for a bad token is a 401 with the URL in it, which
-/// tells nobody which of the three likely things went wrong.
-fn reachability(error: &git2::Error, target: &PublishTarget, message: &str) -> String {
-    if error.code() == git2::ErrorCode::Auth || message.contains("401") {
-        return format!(
-            "GitHub would not accept the token for {}/{}. It needs Contents \
-             write on that repository, and a fine-grained token has to list it \
-             explicitly.",
-            target.owner, target.repo
-        );
-    }
-    if message.contains("404") || error.code() == git2::ErrorCode::NotFound {
-        return format!(
-            "{}/{} is not a repository this token can see. A private one needs \
-             the token to have been given access to it.",
-            target.owner, target.repo
-        );
-    }
-    format!("Cannot reach {}/{}: {message}", target.owner, target.repo)
-}
-
-/// A rejected push, which nearly always means one thing.
+/// This is where every GitHub failure lands, because the clone before it
+/// treats *any* error as "no such branch" and starts a fresh one — a
+/// repository that does not exist and a branch that does not exist look
+/// identical at that point, and only the push can tell them apart. So the
+/// cases libgit2 reports as a bare 401 or 404 are named here instead.
 fn push_failure(error: &git2::Error, branch: &str, message: &str) -> String {
     if message.contains("non-fast-forward") || message.contains("fetch first") {
         return format!(
@@ -356,11 +309,18 @@ fn push_failure(error: &git2::Error, branch: &str, message: &str) -> String {
              what is there now."
         );
     }
-    if error.code() == git2::ErrorCode::Auth {
+    if error.code() == git2::ErrorCode::Auth || message.contains("401") {
         return format!(
             "GitHub accepted the connection but refused the push to {branch}. \
-             The token needs Contents write, not just read."
+             The token needs Contents write, not just read — and a \
+             fine-grained token has to list the repository explicitly."
         );
+    }
+    if message.contains("404") || error.code() == git2::ErrorCode::NotFound {
+        return "GitHub says that repository is not there, or not visible to \
+                this token. A private one needs the token to have been given \
+                access to it."
+            .to_string();
     }
     format!("Could not push to {branch}: {message}")
 }

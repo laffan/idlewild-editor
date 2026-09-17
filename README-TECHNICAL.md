@@ -2974,6 +2974,34 @@ kind as a chip in the key column rather than as two headings. They are one kind
 of thing — a credential this device holds, shared by every project — and two
 sections would say they were two.
 
+**The keys are offered rather than hunted for.** They live in `~/.ssh`, a
+directory beginning with a dot, and macOS's open panel hides those. There is a
+keystroke — ⇧⌘. — and it is not something anybody should have to know to
+publish a website. `ssh_keys::list_ssh_keys` reads the directory, excludes what
+ssh keeps there that is not a key by name, and checks the rest for a PEM
+header; the sheet offers them on a menu. The file dialog stays for a key kept
+elsewhere and opens *inside* `~/.ssh` when there is one, so even that route
+starts where the keys are. An iPad has no such directory, answers with nothing,
+and gets the dialog it always had.
+
+**The branch box offers and accepts.** A typo in a branch name is the least
+visible mistake in this sheet: publishing to `gh_pages` *succeeds* — it makes
+the branch — and then nothing is where anybody looks for it. So the branches a
+repository has are on a menu beside the box. A name that is not among them is
+not refused, because starting a branch by naming one is how you publish to a
+fresh `gh-pages`; the line under the box says which of the two is about to
+happen instead of leaving it to be found out afterwards.
+
+**Typing must not redraw.** Every field in the destination sheet went through
+the same handler as the pickers, which rebuilt both columns — so the input the
+caret was in was replaced on every keystroke and the Branch box lost focus
+after each character. Nothing a *field* changes alters the shape of the sheet,
+so `set` takes a value and updates only whether **Use this** is available,
+while `choose` — a kind, an account, a repository — is the one that redraws.
+The same distinction stops a render that renders itself: the server column
+picks a default during a draw, and asking for another draw from inside one is a
+loop.
+
 **The repositories are searched rather than typed.** `owner` and `repo` were
 two text fields; a name typed from memory is a name typed wrong and the failure
 arrived as a 404 at the far end of a round trip. The token can already see
@@ -3248,17 +3276,81 @@ Writing the full site's hashes after sending two files would tell the next
 publish that files it never sent are already there, which is the one way a
 manifest causes a wrong site rather than a slow one.
 
-### A rehearsal is the same command
+### Two flags, and the bug they were missing
 
-`dry_run` is a parameter rather than a second command, because the useful
-question — "is this pointed where I think it is?" — is one people ask with a
-finger already on Publish. The server half lists what it would send, which
-means staging the site and reading the far end's manifest. The GitHub half is
-`ls-remote` through libgit2, which needs the token to be valid, the account to
-be able to see the repository, and the network to be there — every way a
-publish fails that is not about the site itself — and it deliberately does
-**not** stage the site, because staging tens of megabytes to then ask one
-question would make "Check it first" the slow half of the pair.
+`russh_sftp::SftpSession::write` opens a file with `OpenFlags::WRITE` alone.
+That is "open this file for writing", not "make me this file" — so a server
+answers `SSH_FX_NO_SUCH_FILE`, and what a person saw was **No such file**
+naming the file they were trying to create. Which is to say the server publish
+never worked for a site that was not already there, and read as a permissions
+problem every time, because the message points at a file and the file is not
+the problem.
+
+`Session::put` opens with `PUT_FLAGS` — `CREATE | TRUNCATE | WRITE`. The
+truncate is load-bearing on its own: without it, replacing a file with a
+shorter one leaves the tail of the old one on the end, which is a corrupt site
+that mostly works. It is a named constant so `deploying.rs` has something to
+assert, and so the next person to notice that `write` is shorter finds out why
+it is not used.
+
+Two things changed around it, both of them about the *message* rather than the
+transfer, because the transfer was only half of what went wrong:
+
+- **The target directory is checked before anything is written.** SFTP answers
+  the same `SSH_FX_NO_SUCH_FILE` for a write into a directory that does not
+  exist, so a missing destination also arrived as an error about a file.
+  `Session::require` stats it first and says so by name, with the `mkdir -p`
+  that fixes it. It does not create it: making a directory in a stranger's
+  document root because a field had a typo in it is not a thing to do.
+- **`explain` translates the two status codes that lie.** *No such file* is
+  what a server says when the directory above a file is missing, and *failure*
+  is what it says for most permission problems. Both get a clause saying what
+  they usually mean.
+
+### A publish narrates itself
+
+Every step goes out on `deploy::PUBLISH_LINE` as it is reached, and the Publish
+sheet becomes that list while the transfer runs. Two reasons, and the second is
+the one that mattered:
+
+- A network transfer of tens of megabytes behind a modal that closed on the
+  press is a modal that looks like it did nothing. It used to close and write
+  to the console, which is right for a zip — over before the dialog has shut —
+  and wrong for this.
+- **Publishing is five things that fail differently.** Reaching the host,
+  agreeing the host key, the key being accepted, SFTP starting, the directory
+  existing. A failure with none of them named is a failure somebody has to
+  guess at, and "authenticated fine, SFTP would not start" is a different
+  afternoon from "could not reach the host".
+
+The same channel carries progress and trace on purpose: what the publish is
+doing now is exactly what you want written down when it stops doing it. The
+console keeps every line, because a sheet somebody has closed is a record that
+is gone.
+
+**"Check it first" is gone.** It was a `dry_run` parameter on the publish and
+it answered a question two better things now answer: *Test* on the server sheet
+does the five steps before the server is even saved, and the two panes say what
+would be sent before anything is. A rehearsal that stages the whole site to
+tell you what the comparison already showed you was a slower way to learn less.
+
+### Trying a server before saving it
+
+A server row that has never been tried looks exactly like one that works, and
+the first time anybody found out otherwise was in the middle of a publish.
+`test_publish_server` takes the details **as they stand in the form** — reading
+`key_file` now if one was picked, falling back to the key already stored under
+that id — builds a `Server` that is never written to disk, and runs
+`Session::open` against it, collecting the lines rather than emitting them.
+
+It carries the existing row's `host_key`, which matters twice: the check is
+against the fingerprint this server is supposed to have, and a first visit
+during a test is recorded once rather than asked about again at the publish.
+
+The directory box on that sheet is **not saved anywhere**. The destination
+belongs to the project, not the server; that field exists so Test has something
+to look for, because checking a login without checking it can reach anything is
+half a test.
 
 ### What cannot be tested here
 

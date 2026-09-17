@@ -75,6 +75,23 @@ fn staging_empties_what_was_there_before() {
     result.expect("staging should not panic");
 }
 
+/// The bug this pins made the server publish fail for every new file, and say
+/// *No such file* about the file it was trying to create — which reads as a
+/// permissions problem and is not one.
+///
+/// `russh_sftp`'s own `write` opens with `OpenFlags::WRITE` alone. That means
+/// "open this file for writing", not "make me this file", so a server answers
+/// `SSH_FX_NO_SUCH_FILE` and the publish stops on its first file. Truncating
+/// matters separately: without it, replacing a file with a shorter one leaves
+/// the tail of the old one behind.
+#[test]
+fn a_file_is_created_and_truncated_rather_than_merely_opened() {
+    use russh_sftp::protocol::OpenFlags;
+    assert!(deploy_ssh::PUT_FLAGS.contains(OpenFlags::CREATE), "or a new file fails");
+    assert!(deploy_ssh::PUT_FLAGS.contains(OpenFlags::TRUNCATE), "or a shorter file keeps its tail");
+    assert!(deploy_ssh::PUT_FLAGS.contains(OpenFlags::WRITE));
+}
+
 /// A blank directory would be the login's home, published over.
 #[test]
 fn a_remote_directory_cannot_be_a_blank_or_climb() {

@@ -496,6 +496,102 @@ pub fn list_github_repos(id: String) -> Result<Vec<crate::github_api::Repo>, Str
     crate::github_api::list_repos(&account.token)
 }
 
+/// Every branch a repository has, so the branch box can offer rather than ask.
+#[tauri::command(async)]
+pub fn list_github_branches(
+    id: String,
+    owner: String,
+    repo: String,
+) -> Result<Vec<String>, String> {
+    let settings = read();
+    let account = account_for(&settings, &id)?;
+    crate::github_api::list_branches(&account.token, &owner, &repo)
+}
+
+/// Try a server with the details **currently in the form**, and say what
+/// happened at each step.
+///
+/// Before saving, deliberately. A server row that has never been tried is a
+/// row that looks exactly like one that works, and the first time anybody
+/// finds out otherwise is in the middle of a publish — where the same five
+/// failures are indistinguishable from "publishing is broken". Reaching the
+/// host, agreeing the host key, the key being accepted, SFTP starting and the
+/// directory existing are five different problems with five different fixes.
+///
+/// `key_file` is read now if given, exactly as saving would read it; without
+/// one, the key already stored under `id` is used, so testing an edit does not
+/// mean finding the key file again.
+#[tauri::command]
+pub async fn test_publish_server(
+    id: Option<String>,
+    host: String,
+    user: String,
+    port: Option<u16>,
+    key_file: Option<String>,
+    passphrase: Option<String>,
+    directory: Option<String>,
+) -> Result<crate::deploy::Report, String> {
+    let settings = read();
+    let existing = id
+        .as_deref()
+        .and_then(|id| settings.servers.iter().find(|s| s.id == id))
+        .cloned()
+        .unwrap_or_default();
+
+    let passphrase = passphrase
+        .map(|p| p.trim().to_string())
+        .unwrap_or(existing.passphrase);
+    let key = match key_file.filter(|p| !p.trim().is_empty()) {
+        Some(path) => {
+            let path = crate::psd_write::source_path(&path);
+            std::fs::read_to_string(&path)
+                .map_err(|e| format!("Cannot read {}: {e}", path.display()))?
+        }
+        None => existing.key,
+    };
+
+    let server = Server {
+        // Carried so the host key recorded for this server is the one checked
+        // against, and so a first visit during a test is recorded once rather
+        // than asked about again at the publish.
+        id: existing.id,
+        label: existing.label,
+        host: host.trim().to_string(),
+        user: user.trim().to_string(),
+        port,
+        key_source: existing.key_source,
+        key,
+        passphrase,
+        host_key: existing.host_key,
+    };
+
+    // Collected rather than emitted: this is a question with an answer, not a
+    // transfer to follow, and the answer belongs in the sheet that asked.
+    let lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let collect = {
+        let lines = lines.clone();
+        move |line: &str| {
+            if let Ok(mut lines) = lines.lock() {
+                lines.push(line.to_string());
+            }
+        }
+    };
+
+    let session = crate::deploy_ssh::Session::open(&server, &collect).await?;
+    if let Some(directory) = directory.map(|d| d.trim().to_string()).filter(|d| !d.is_empty()) {
+        let directory = crate::deploy_ssh::clean_directory(&directory)?;
+        session.require(&directory).await?;
+        collect(&format!("{directory} is there and this login can see it"));
+    }
+    session.close().await;
+
+    let log = lines.lock().map(|l| l.join("\n")).unwrap_or_default();
+    Ok(crate::deploy::Report {
+        summary: format!("{} answered", server.host),
+        log,
+    })
+}
+
 // ── a project's own destination ─────────────────────────────────────────────
 
 #[tauri::command]

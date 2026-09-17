@@ -26,6 +26,7 @@ mod psd_write;
 mod publish;
 mod publish_targets;
 mod site_files;
+mod ssh_keys;
 mod store;
 mod templates;
 
@@ -580,6 +581,9 @@ pub fn run() {
             publish_targets::save_github_login,
             publish_targets::delete_github_login,
             publish_targets::list_github_repos,
+            publish_targets::list_github_branches,
+            publish_targets::test_publish_server,
+            ssh_keys::list_ssh_keys,
             publish_targets::forget_host_key,
             publish_targets::read_publish_target,
             publish_targets::save_publish_target,

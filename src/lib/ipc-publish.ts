@@ -13,6 +13,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { ProjectMeta } from "./types";
 import type { PublishTarget } from "./publish-target";
 
@@ -109,6 +110,26 @@ export const publish = {
   signOutOfGithub: (id: string) => invoke<void>("delete_github_login", { id }),
   /** Every repository an account can see, for the picker to search. */
   repos: (id: string) => invoke<GithubRepo[]>("list_github_repos", { id }),
+  /** Every branch a repository has, so the branch box offers rather than asks. */
+  branches: (id: string, owner: string, repo: string) =>
+    invoke<string[]>("list_github_branches", { id, owner, repo }),
+  /** The private keys already in `~/.ssh`, so the picker offers them. */
+  sshKeys: () => invoke<SshKey[]>("list_ssh_keys"),
+  /**
+   * Try a server with what is in the form, before it is saved.
+   *
+   * Five things can fail and they have five different fixes; a row that has
+   * never been tried looks exactly like one that works.
+   */
+  testServer: (server: {
+    id?: string;
+    host: string;
+    user: string;
+    port?: number;
+    keyFile?: string;
+    passphrase?: string;
+    directory?: string;
+  }) => invoke<PublishReport>("test_publish_server", server),
 
   /** Where this project publishes to. */
   target: (id: string) => invoke<PublishTarget>("read_publish_target", { id }),
@@ -122,20 +143,45 @@ export const publish = {
    */
   compare: (id: string) => invoke<Comparison>("compare_target", { id }),
   /**
-   * Publish, or rehearse one.
+   * Publish.
    *
    * `chosen` is the right pane's ticks and `remove` is the left pane's;
-   * leaving `chosen` out means everything that differs. `dryRun` is the same
-   * command deliberately: the useful question — "is this set up right?" — is
-   * one people ask with a finger already on Publish.
+   * leaving `chosen` out means everything that differs. Progress arrives on
+   * the `publish-line` event as it happens — see `watchPublish`.
    */
-  toTarget: (
-    id: string,
-    dryRun: boolean,
-    chosen?: readonly string[],
-    remove?: readonly string[],
-  ) => invoke<PublishReport>("publish_to_target", { id, dryRun, chosen, remove }),
+  toTarget: (id: string, chosen?: readonly string[], remove?: readonly string[]) =>
+    invoke<PublishReport>("publish_to_target", { id, chosen, remove }),
 };
+
+/** One private key found in `~/.ssh`. */
+export interface SshKey {
+  path: string;
+  name: string;
+  /** Whether a matching `.pub` sits beside it. */
+  hasPublic: boolean;
+}
+
+/**
+ * Follow a publish, line by line, until the returned function is called.
+ *
+ * The same channel carries progress and trace, because they are the same
+ * sentences: what the publish is doing now is exactly what you want written
+ * down when it stops doing it. See `deploy::PUBLISH_LINE`.
+ */
+export function watchPublish(onLine: (line: string) => void): () => void {
+  let unlisten: (() => void) | null = null;
+  let stopped = false;
+  void listen<string>("publish-line", (event) => onLine(event.payload)).then((off) => {
+    // Stopped before the listener was even registered — which happens when a
+    // publish fails in its first moments.
+    if (stopped) off();
+    else unlisten = off;
+  });
+  return () => {
+    stopped = true;
+    unlisten?.();
+  };
+}
 
 /** One GitHub account this device can publish as. Never its token. */
 export interface GithubAccount {
@@ -211,10 +257,9 @@ export interface PublishSettings {
   accounts: GithubAccount[];
 }
 
-/** What a publish did, or would have done. */
+/** What a publish did. */
 export interface PublishReport {
   summary: string;
-  /** What rsync or git said, redacted and trimmed to its last lines. */
+  /** The detail, redacted and trimmed to its last lines. */
   log: string;
-  dryRun: boolean;
 }
