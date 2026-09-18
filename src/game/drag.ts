@@ -25,8 +25,10 @@ import type {
   Point,
   Rect,
   Selection,
+  TextItem,
   Zone,
 } from "../lib/types";
+import { addText, textById, updateText } from "../lib/text-items";
 import type { DragModifiers } from "./camera-rig";
 import { pointInPolygon, pointReach } from "./picking";
 import {
@@ -86,6 +88,14 @@ type DragState =
       grabCell: Cell;
       /** The space it was on at pointer-down, so the drag never compounds. */
       cell: Cell;
+    }
+  | {
+      kind: "text";
+      layerId: string;
+      id: string;
+      grabCell: Cell;
+      /** Where it was at pointer-down, so the drag never compounds. */
+      at: Point;
     }
   | {
       kind: "resize";
@@ -201,6 +211,11 @@ export class DragController {
         this.beginPoint(selection, world, grabCell, modifiers.alt),
       );
     }
+    if (selection.kind === "text") {
+      return this.grouped(() =>
+        this.beginText(selection, world, grabCell, modifiers.alt),
+      );
+    }
     return false;
   }
 
@@ -277,6 +292,19 @@ export class DragController {
       // outline needs, because there is no sub-cell offset to preserve.
       store.updatePoint(drag.layerId, drag.id, {
         cell: { cx: drag.cell.cx + dx, cy: drag.cell.cy + dy },
+      });
+      return;
+    }
+
+    if (drag.kind === "text") {
+      // World pixels moved a whole space at a time, the way a boundary is —
+      // see the note below. A word keeps whatever sub-cell offset it was put
+      // down with, which is what lets it sit over a doorway rather than over
+      // the space the doorway is in.
+      const step = grid.cellToWorld({ cx: dx, cy: dy });
+      updateText(store, drag.layerId, drag.id, {
+        x: drag.at.x + step.x,
+        y: drag.at.y + step.y,
       });
       return;
     }
@@ -462,6 +490,50 @@ export class DragController {
    * the region it encloses, and asking someone to catch a 1.5px stroke with a
    * finger would make the gesture unusable on the platform it is mostly for.
    */
+  /**
+   * A word, picked up anywhere inside its measured box.
+   *
+   * The box rather than the letters, for the reason `pickText` gives: the gap
+   * inside an O is not a hole a drag should fall through.
+   */
+  private beginText(
+    selection: Extract<Selection, { kind: "text" }>,
+    world: Point,
+    grabCell: Cell,
+    alt: boolean,
+  ): boolean {
+    const layer = this.host.store.layer(selection.layerId);
+    if (!layer || layer.locked) return false;
+    const item = textById(layer, selection.textId);
+    if (!item) return false;
+    if (
+      world.x < item.x ||
+      world.x > item.x + item.width ||
+      world.y < item.y ||
+      world.y > item.y + item.height
+    ) {
+      return false;
+    }
+
+    // Option-drag copies, as it does for a fill, an image and a boundary: the
+    // copy is what moves, and the original stays where it was.
+    const dragged = alt ? this.copyText(layer.id, item) : item;
+    this.start({
+      kind: "text",
+      layerId: layer.id,
+      id: dragged.id,
+      grabCell,
+      at: { x: dragged.x, y: dragged.y },
+    });
+    return true;
+  }
+
+  private copyText(layerId: string, item: TextItem): TextItem {
+    const copy = addText(this.host.store, layerId, { ...item, id: makeId("text") });
+    this.host.setSelection({ kind: "text", layerId, textId: copy.id });
+    return copy;
+  }
+
   private beginZone(
     selection: Extract<Selection, { kind: "zone" }>,
     world: Point,

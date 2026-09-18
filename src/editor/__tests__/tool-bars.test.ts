@@ -37,6 +37,12 @@ describe("the two columns", () => {
     // rail whose buttons moved under your hand. Pattern and Shape sit beside
     // the Pencil because all three are things that lay a mark down — what
     // differs is what the mark is made of.
+    //
+    // Text is last, and it is the one tool on this column that does not hand
+    // the pointer to the drawing layer. It is here rather than on the rail
+    // because the columns are about *ownership*: a word on the canvas is a
+    // note in the margin of the artwork, and the next thing anybody does with
+    // one is turn it into pixels.
     expect(bar("draw")).toEqual([
       "pencil",
       "pattern",
@@ -44,6 +50,7 @@ describe("the two columns", () => {
       "eraser",
       "lasso",
       "fill",
+      "text",
     ]);
   });
 

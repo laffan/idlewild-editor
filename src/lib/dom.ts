@@ -172,6 +172,9 @@ export const ICONS = {
   /* A picture: a frame with a horizon and a sun in it. Export Assets, which is
      the one exit that hands back artwork rather than a program. */
   image: ["M4 5h16v14H4z", "m4 16 5-5 4 4 3-3 4 4", "M9 9.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"],
+  /* A capital T with serifs on the bar, which is what every editor's text
+     tool is — and the one glyph nobody has to be told the meaning of. */
+  text: ["M5 5h14", "M12 5v14", "M9 19h6"],
   folder: "M3 6h6l2 3h10v11H3V6Z",
   /* Two objects inside a selection box — a group, drawn the way every editor
      draws one. The corner brackets rather than a closed rectangle because what

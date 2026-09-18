@@ -28,6 +28,8 @@ import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
 import { layerImage, type LayerImage } from "./psd-loader";
+import { addPointAt, addTextAt, type TapHost } from "./tap-makes";
+import { DEFAULT_TEXT_STYLE, type TextStyle } from "./text-style";
 import { pruneLayerGroups } from "../lib/groups";
 import { fillRegion } from "./fill-region";
 import type { Paint } from "../lib/paint";
@@ -80,6 +82,15 @@ export class WorldScene extends Phaser.Scene {
   activeLayerId = "";
   /** The rail's tool, as the gesture arbiter sees it — see `setGestureMode`. */
   private gestureMode: RigMode = "select";
+  /**
+   * What the next piece of text is written in.
+   *
+   * Held rather than read off a document, because it is a property of the
+   * *tool*: set the size once and the next five notes are that size, the way
+   * the pencil keeps its own. The inspector writes it when the style of a
+   * selected piece is changed, which is the only control there is.
+   */
+  textStyle: TextStyle = DEFAULT_TEXT_STYLE;
   /**
    * The placed PSD whose layers are being moved individually.
    *
@@ -308,6 +319,16 @@ export class WorldScene extends Phaser.Scene {
     this.gridRenderer.setVisible(on);
   }
 
+  /** What the two tap tools need from this scene — see `tap-makes.ts`. */
+  private tapHost(): TapHost {
+    return {
+      store: this.store,
+      grid: this.grid,
+      activeLayerId: this.activeLayerId,
+      setSelection: (selection) => this.setSelection(selection),
+    };
+  }
+
   /** How the world maps onto the screen right now. */
   viewport(): Viewport {
     return this.cam.viewport();
@@ -361,11 +382,20 @@ export class WorldScene extends Phaser.Scene {
     // shape's faces. Either way it never reaches the document underneath.
     if (this.modes.tap(screenX, screenY)) return;
 
-    // Under the Point tool a tap puts one down rather than picking up what is
-    // already there — the only tool for which a tap on empty space makes
-    // something. It still falls through when the layer will not take it, so
-    // the tap clears the selection rather than doing nothing at all.
-    if (this.gestureMode === "point" && this.addPoint(world)) return;
+    // Under the Point and Text tools a tap puts one down rather than picking
+    // up what is already there — the two tools for which a tap on empty space
+    // makes something. Both still fall through when the layer will not take
+    // one, so the tap clears the selection rather than doing nothing at all.
+    // Both are `tap-makes.ts`: same gesture, same three things that have to
+    // be true about it, and the difference between a space and a position is
+    // the only thing in either of them.
+    if (this.gestureMode === "point" && addPointAt(this.tapHost(), world)) return;
+    if (
+      this.gestureMode === "text" &&
+      addTextAt(this.tapHost(), world, this.textStyle)
+    ) {
+      return;
+    }
 
     // A tap on a grouped file means the group — the same rule a placed PSD
     // keeps, one level out. See `widenToGroup`.
@@ -376,24 +406,6 @@ export class WorldScene extends Phaser.Scene {
         this.adjusting,
       ),
     );
-  }
-
-  /**
-   * Put a named place on the active layer, on the space that was tapped.
-   *
-   * The space rather than the pixel, because a point is a thing standing on
-   * one and the space is what the game reads it back as. A blank project's
-   * space is a single pixel, so there it is the pixel that was tapped.
-   */
-  private addPoint(world: Phaser.Math.Vector2): boolean {
-    const layer = this.store.layer(this.activeLayerId);
-    if (!layer || layer.locked) {
-      log.warn("The active layer is locked");
-      return false;
-    }
-    const point = this.store.addPoint(layer.id, this.grid.worldToCell(world));
-    this.setSelection({ kind: "point", layerId: layer.id, pointId: point.id });
-    return true;
   }
 
   private beginMarquee(

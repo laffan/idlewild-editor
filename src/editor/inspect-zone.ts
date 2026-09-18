@@ -76,6 +76,7 @@ export function layerOf(selection: Selection): string {
     case "fill":
     case "point":
     case "zone":
+    case "text":
     case "background":
     case "strokes":
       return selection.layerId;

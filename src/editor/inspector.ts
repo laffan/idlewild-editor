@@ -48,6 +48,8 @@ import {
   type ZoneOptions,
 } from "./inspect-zone";
 import { renderBackground } from "./inspect-background";
+import { renderText, type TextActions } from "./inspect-text";
+import { captureFocus, restoreFocus } from "./inspect-focus";
 import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
 import { layerKind } from "../lib/layer-kinds";
 import {
@@ -77,7 +79,8 @@ import type { FillPatch, Selection, ToolId } from "../lib/types";
 export interface InspectorCallbacks
   extends PatternActions,
     PanelActions,
-    PlacementActions {
+    PlacementActions,
+    TextActions {
   /**
    * The paint control settled on something — a colour, a pattern or a shape.
    *
@@ -315,7 +318,8 @@ export class Inspector {
   }
 
   render(): void {
-    const editing = this.captureName();
+    // The caret, if somebody is typing in here — see `inspect-focus.ts`.
+    const editing = captureFocus(this.body);
     clear(this.body);
     this.renderTool();
     this.renderLayerZone();
@@ -338,7 +342,7 @@ export class Inspector {
     // files that make sections — see `inspect-collapse.ts`. It reads which are
     // folded from the heading each one already carries.
     makeSectionsCollapsible(this.body);
-    this.restoreName(editing);
+    restoreFocus(this.body, editing);
     if (this.revealPsd) {
       this.revealPsd = false;
       this.showPsdSection();
@@ -445,6 +449,9 @@ export class Inspector {
       case "zone":
         renderZone(this.surface(), this.store, this.callbacks, selection);
         break;
+      case "text":
+        renderText(this.surface(), this.store, this.callbacks, selection);
+        break;
       case "background":
         renderBackground(this.surface(), this.store, this.callbacks, selection);
         break;
@@ -459,36 +466,6 @@ export class Inspector {
   private open(name: string, options: ZoneOptions = {}): void {
     this.zone = createZone(name, options);
     this.current = this.zone.body;
-  }
-
-  /**
-   * The filename being typed when the panel was rebuilt under it.
-   *
-   * The same problem the layer panel has, for the same reason: this panel
-   * rebuilds on every document change, a name commits on Enter or blur rather
-   * than per keystroke, and anything that touches the document while the
-   * caret is in the field would otherwise throw away what has been typed.
-   */
-  private captureName(): { value: string; start: number; end: number } | null {
-    const el = document.activeElement;
-    if (!(el instanceof HTMLInputElement) || !this.body.contains(el)) return null;
-    if (!el.classList.contains("inspect-name")) return null;
-    return {
-      value: el.value,
-      start: el.selectionStart ?? el.value.length,
-      end: el.selectionEnd ?? el.value.length,
-    };
-  }
-
-  private restoreName(
-    memo: { value: string; start: number; end: number } | null,
-  ): void {
-    if (!memo) return;
-    const input = this.body.querySelector(".inspect-name");
-    if (!(input instanceof HTMLInputElement)) return;
-    input.value = memo.value;
-    input.focus();
-    input.setSelectionRange(memo.start, memo.end);
   }
 
   /**

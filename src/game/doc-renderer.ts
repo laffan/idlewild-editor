@@ -16,6 +16,7 @@ import { layerKind } from "../lib/layer-kinds";
 import { alphaOf, hexToNumber } from "../lib/color";
 import { paintIsPlain } from "../lib/paint";
 import { FillPaintRender } from "./fill-paint";
+import { TextRender } from "./text-render";
 import { ordersByHand } from "../lib/units";
 import { unitOf } from "./unit";
 import {
@@ -37,9 +38,11 @@ import type {
 import {
   pickPlacement,
   pickPoint,
+  pickText,
   pickZone,
   type PickResult,
   type PointPickResult,
+  type TextPickResult,
   type ZonePickResult,
 } from "./picking";
 import * as log from "../lib/log";
@@ -108,6 +111,8 @@ export class DocRenderer {
    * about which patches it has taken over.
    */
   private readonly fillPaint: FillPaintRender;
+  /** Words on the canvas — `text-render.ts`. */
+  private readonly texts: TextRender;
   private readonly zoneGraphics: Phaser.GameObjects.Graphics;
   private readonly pointGraphics: Phaser.GameObjects.Graphics;
   private readonly placements = new Map<string, PlacementView>();
@@ -164,6 +169,7 @@ export class DocRenderer {
     this.grid = grid;
     this.fillGraphics = scene.add.graphics();
     this.fillPaint = new FillPaintRender(scene, store, grid);
+    this.texts = new TextRender(scene, store);
     this.zoneGraphics = scene.add.graphics();
     this.pointGraphics = scene.add.graphics();
   }
@@ -268,6 +274,7 @@ export class DocRenderer {
     this.renderFills();
     this.renderZones();
     this.renderPoints();
+    this.texts.render();
     this.syncPlacements();
   }
 
@@ -570,6 +577,11 @@ export class DocRenderer {
     return pickZone(this.store.layers, worldX, worldY);
   }
 
+  /** And for words written on the canvas. See `pickText`. */
+  pickText(worldX: number, worldY: number): TextPickResult | undefined {
+    return pickText(this.store.layers, worldX, worldY);
+  }
+
   /** And for named places, within a finger's reach of one. */
   pickPoint(worldX: number, worldY: number): PointPickResult | undefined {
     return pickPoint(this.grid, this.store.layers, worldX, worldY);
@@ -598,6 +610,15 @@ export class DocRenderer {
       return { kind: "point", layerId: point.layerId, pointId: point.point.id };
     }
 
+    // Before an image, and after a point, because a word is a note *about*
+    // what it is written over: it is drawn at the front of its layer's slot,
+    // so a tap that landed on the letters and picked up the building under
+    // them would be picking something the user cannot see they hit.
+    const text = this.pickText(world.x, world.y);
+    if (text) {
+      return { kind: "text", layerId: text.layerId, textId: text.item.id };
+    }
+
     const hit = this.pick(world.x, world.y);
     if (hit) {
       return {
@@ -622,6 +643,7 @@ export class DocRenderer {
 
   destroy(): void {
     this.fillPaint.destroy();
+    this.texts.destroy();
     this.fillGraphics.destroy();
     this.zoneGraphics.destroy();
     this.pointGraphics.destroy();

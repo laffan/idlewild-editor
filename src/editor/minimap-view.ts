@@ -22,6 +22,7 @@
 import { fillShape, pointsBounds, type Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
 import { strokesBox } from "../drawing";
+import { textsOf } from "../lib/text-items";
 import type { Cell, Layer, Point, Rect } from "../lib/types";
 
 /** How much room is left around the content, as a share of its longer side. */
@@ -71,6 +72,9 @@ export function contentBounds(
       if (zone.points.length) box = union(box, pointsBounds(zone.points));
     }
     for (const point of layer.points) box = union(box, cellBox(grid, point.cell));
+    // A note is a thing standing in the world like anything else, and its
+    // measured box is the one the canvas draws — see `lib/text-items.ts`.
+    for (const item of textsOf(layer)) box = union(box, item);
     box = union(box, strokesBox(layer.strokes));
   }
   return box;

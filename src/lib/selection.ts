@@ -14,6 +14,7 @@
  */
 
 import type { DocStore } from "./doc-store";
+import { textsOf } from "./text-items";
 import type { Selection } from "./types";
 
 export function selectionAlive(store: DocStore, selection: Selection): boolean {
@@ -33,6 +34,8 @@ export function selectionAlive(store: DocStore, selection: Selection): boolean {
       return has(layer.points, selection.pointId);
     case "zone":
       return has(layer.zones, selection.zoneId);
+    case "text":
+      return has(textsOf(layer), selection.textId);
     case "background":
       return has(layer.backgrounds ?? [], selection.backgroundId);
     // Every member, not any: a drag moves them together and the inspector

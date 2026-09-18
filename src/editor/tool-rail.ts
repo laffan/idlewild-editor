@@ -18,10 +18,18 @@
  * patch of empty grid.
  *
  * **The drawing toolbar**, from the bottom, is the ink: Pencil, Pattern,
- * Shape, Slice, Lasso and Fill. Fill and Pattern used to be reachable only
- * inside PSD Edit mode, from that second rail. They are the same tools
+ * Shape, Slice, Lasso, Fill and Text. Fill and Pattern used to be reachable
+ * only inside PSD Edit mode, from that second rail. They are the same tools
  * everywhere, so they are on the toolbar with the rest of the ink, and PSD
  * Edit mode borrows them rather than owning them.
+ *
+ * **Text is on the ink column rather than the rail**, although what it makes
+ * is a document object and its gesture is a tap, the way Point's is. The two
+ * columns are about *ownership*, and what a word on the canvas is for is
+ * saying something on the artwork — it is a note in the margin, and the next
+ * thing anybody does with one is turn it into pixels. It is the only tool on
+ * that column that does not hand the pointer to the drawing layer, which is
+ * the cost of putting it where it belongs.
  *
  * Three of the six paint with the **library** rather than with a colour —
  * Pattern always, Shape always, Fill when it is aimed at one — and all three
@@ -107,6 +115,13 @@ export const TOOLS: ToolSpec[] = [
     hint: "Sweep a closed shape, or tap its corners out",
     bar: "draw",
     path: ICONS.fill,
+  },
+  {
+    id: "text",
+    name: "Text",
+    hint: "Tap to write on the canvas; it becomes a PSD when you say so",
+    bar: "draw",
+    path: ICONS.text,
   },
 ];
 

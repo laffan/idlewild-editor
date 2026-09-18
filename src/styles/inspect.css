@@ -154,6 +154,28 @@
    panel with no head of its own sits straight under. */
 .inspect-head + .inspect-section,
 .inspect-zone-body > .inspect-section:first-child { border-top: 0; }
+/* The words of a note, typed here rather than on the canvas — a caret over a
+   Phaser scene would be a second input model for a string three words long.
+   See editor/inspect-text.ts. It commits on every keystroke, because the
+   canvas is the preview. */
+.inspect-textarea {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  padding: 6px 8px;
+  border: var(--rule-chrome);
+  border-radius: 3px;
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.inspect-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
 .inspect-section-title {
   font-size: 10px;
   color: var(--chrome-dim);

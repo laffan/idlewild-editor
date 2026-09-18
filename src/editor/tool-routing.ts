@@ -101,6 +101,7 @@ const ANNOUNCE: Partial<Record<ToolId, string>> = {
   eraser: "Slice — drag across a stroke to cut it in two where the blade passes",
   lasso: "Lasso — sweep around strokes to select them",
   fill: "Fill — sweep a closed shape, or tap its corners out",
+  text: "Text — tap to write on the canvas; a drag still pans",
 };
 
 /**
@@ -190,13 +191,22 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     const scene = host.scene();
     scene?.suspendGestures(drawingTool !== null);
     scene?.setGestureMode(
-      tool === "pan" ? "pan" : tool === "point" ? "point" : "select",
+      tool === "pan"
+        ? "pan"
+        : tool === "point"
+          ? "point"
+          : tool === "text"
+            ? "text"
+            : "select",
     );
     // A hand over the canvas, whether Pan was picked from the rail or
     // borrowed with the space bar. The class carries it rather than an inline
     // style so the drawing layer's own crosshair still wins where it is up.
     host.canvas.classList.toggle("panning", tool === "pan");
-    host.canvas.classList.toggle("placing", tool === "point");
+    // Both of the tools whose gesture is a tap on bare ground get the same
+    // cursor: what they say is "this is a place", and which of the two lands
+    // is the button that is lit.
+    host.canvas.classList.toggle("placing", tool === "point" || tool === "text");
     drawing?.setTool(drawingTool);
     host.inspector.setTool(tool, drawing?.style ?? null);
     if (!announce) return;

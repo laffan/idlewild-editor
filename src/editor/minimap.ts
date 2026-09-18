@@ -26,7 +26,8 @@ import type { DocStore } from "../lib/doc-store";
 import { fillShape, type Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
 import { STRIDE, type Viewport } from "../drawing";
-import type { FillPatch, Rect, Stroke, Zone } from "../lib/types";
+import type { FillPatch, Rect, Stroke, TextItem, Zone } from "../lib/types";
+import { textsOf } from "../lib/text-items";
 import { createResizer, type Resizer } from "./resizer";
 import {
   cameraRect,
@@ -308,6 +309,10 @@ export class Minimap {
       }
       for (const stroke of layer.strokes) this.paintStroke(stroke, px);
       for (const zone of layer.zones) this.paintZone(zone, px);
+      // A note as the block it takes up, in its own colour: the words
+      // themselves are illegible at a map's framing, and a rectangle where
+      // one is standing is the honest thing to draw instead.
+      for (const item of textsOf(layer)) this.paintText(item);
     }
     // Markers go over everything, as they do on the canvas: a point behind a
     // building is a point nobody can find.
@@ -386,6 +391,15 @@ export class Minimap {
     }
     ctx.closePath();
     ctx.stroke();
+  }
+
+  /** A note, as the block it takes up. */
+  private paintText(item: TextItem): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = item.color;
+    ctx.globalAlpha = 0.65;
+    ctx.fillRect(item.x, item.y, item.width, item.height);
+    ctx.globalAlpha = 1;
   }
 
   /**

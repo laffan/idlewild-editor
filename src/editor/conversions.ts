@@ -1,13 +1,13 @@
 /**
  * The ways something on the canvas becomes something else.
  *
- * A sketch to a PSD or to a boundary, a fill to a PSD, and a copy to a file
- * of its own. The work is `stroke-actions.ts`, `fill-actions.ts` and
- * `psd-actions.ts`; what is here is the shell's half of each — reading the
- * selection, checking it is the kind the conversion is about, and handing
- * over the scene it landed in.
+ * A sketch to a PSD or to a boundary, a fill to a PSD, a word to a PSD, and a
+ * copy to a file of its own. The work is `stroke-actions.ts`,
+ * `fill-actions.ts`, `text-actions.ts` and `psd-actions.ts`; what is here is
+ * the shell's half of each — reading the selection, checking it is the kind
+ * the conversion is about, and handing over the scene it landed in.
  *
- * Four near-identical guards, which is what makes them worth one file: every
+ * Five near-identical guards, which is what makes them worth one file: every
  * one of them is "what is selected, is it the right kind, is the canvas up".
  * They were four functions in the middle of the shell, between the panels
  * they are wired to and the mode switch they have nothing to do with.
@@ -20,6 +20,7 @@ import type { DrawingLayer } from "../drawing";
 import type { WorldScene } from "../game/world-scene";
 import { convertStrokesToPsd, convertStrokesToZone } from "./stroke-actions";
 import { convertFillToPsd } from "./fill-actions";
+import { convertTextToPsd } from "./text-actions";
 import type { PsdFileActions } from "./psd-actions";
 
 export interface ConversionDeps {
@@ -36,6 +37,8 @@ export interface Conversions {
   strokesToPsd: () => Promise<void>;
   strokesToZone: () => void;
   fillToPsd: () => Promise<void>;
+  /** A word on the canvas, as pixels — `text-actions.ts` says why. */
+  textToPsd: () => Promise<void>;
   /**
    * Give this placed PSD a copy of the file behind `key`, so editing it stops
    * changing the other instances of it — **Make Unique**.
@@ -76,6 +79,13 @@ export function createConversions(deps: ConversionDeps): Conversions {
       const scene = deps.scene();
       if (selection.kind !== "fill" || !scene) return;
       await convertFillToPsd(deps.projectId, deps.store, deps.grid, scene, selection);
+    },
+
+    async textToPsd() {
+      const selection = selectionOf();
+      const scene = deps.scene();
+      if (selection.kind !== "text" || !scene) return;
+      await convertTextToPsd(deps.projectId, deps.store, deps.grid, scene, selection);
     },
 
     /**

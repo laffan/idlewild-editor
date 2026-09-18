@@ -19,6 +19,7 @@ import { confirmSheet } from "../lib/sheet";
 import type { DocStore } from "../lib/doc-store";
 import { removeBackground } from "../lib/layer-kinds";
 import { pruneLayerGroups } from "../lib/groups";
+import { removeText, textsOf } from "../lib/text-items";
 import type { Layer, Selection } from "../lib/types";
 import { count } from "./layer-items";
 import * as log from "../lib/log";
@@ -63,6 +64,8 @@ export function deleteSelected(selection: Selection, deps: DeleteDeps): void {
     store.removePoint(selection.layerId, selection.pointId);
   } else if (selection.kind === "zone") {
     store.removeZone(selection.layerId, selection.zoneId);
+  } else if (selection.kind === "text") {
+    removeText(store, selection.layerId, selection.textId);
   } else if (selection.kind === "background") {
     removeBackground(store, selection.layerId, selection.backgroundId);
   } else if (selection.kind === "strokes") {
@@ -124,6 +127,8 @@ function describeContents(layer: Layer): string {
   const zones = layer.zones.length;
   if (zones) parts.push(`${zones} ${zones === 1 ? "boundary" : "boundaries"}`);
   if (layer.strokes.length) parts.push(count(layer.strokes.length, "stroke"));
+  const texts = textsOf(layer).length;
+  if (texts) parts.push(`${texts} ${texts === 1 ? "note" : "notes"}`);
   if (parts.length === 0) return "";
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;

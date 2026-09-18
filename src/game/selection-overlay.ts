@@ -9,6 +9,7 @@ import { Grid, fillShape } from "../lib/grid";
 import type { Selection } from "../lib/types";
 import { CORNERS, cornerPoint, HANDLE_SCREEN_PX, placementBox } from "./resize";
 import { strokesBox } from "../drawing";
+import { textById } from "../lib/text-items";
 import { isInstance } from "./instances";
 import { unitMembers, unitOf, unionRect } from "./unit";
 
@@ -189,6 +190,21 @@ export class SelectionOverlay {
         g.fillStyle(ACCENT, 0.12);
         g.lineStyle(2 * scale, ACCENT, 1);
         polygon(g, zone.points, true);
+        break;
+      }
+      case "text": {
+        const item = textById(
+          store.layer(selection.layerId),
+          selection.textId,
+        );
+        if (!item) break;
+        // The measured box, which is the box a tap picks it up from and the
+        // box a conversion crops to — see `lib/text-items.ts`. Outlined
+        // rather than filled: a wash over words is a wash over the one thing
+        // here that has to stay readable while it is selected.
+        const scale = 1 / zoom;
+        g.lineStyle(2 * scale, ACCENT, 1);
+        g.strokeRect(item.x, item.y, item.width, item.height);
         break;
       }
       case "strokes": {

@@ -1,6 +1,6 @@
 /**
- * The contents of a layer, listed under it: placed images, fills, points and
- * boundaries. Selecting one here is the same as selecting it on the canvas —
+ * The contents of a layer, listed under it: placed images, fills, points,
+ * boundaries and the words written on it. Selecting one here is the same as selecting it on the canvas —
  * useful when a thing is off-screen, underneath something else, or failed to
  * render.
  *
@@ -17,6 +17,7 @@
 
 import { h, ICONS, icon } from "../lib/dom";
 import { groupOfUnit, liveGroups } from "../lib/groups";
+import { textsOf } from "../lib/text-items";
 import { unitKey, unitsInDrawOrder } from "../lib/units";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { LayerKind } from "../lib/types";
@@ -217,6 +218,18 @@ export function layerItems(
     });
   }
 
+  // Its own words are its name: a note already says what it is, and a row
+  // reading "Text 3" would say less than the thing it is about.
+  for (const item of textsOf(layer)) {
+    const line = item.text.split("\n")[0]?.trim() ?? "";
+    items.push({
+      selection: { kind: "text", layerId: layer.id, textId: item.id },
+      label: line.length > 24 ? `${line.slice(0, 23)}\u2026` : line || "Empty",
+      detail: `${Math.round(item.size)} px`,
+      path: ICONS.text,
+    });
+  }
+
   return items;
 }
 
@@ -414,6 +427,8 @@ export function isSelected(item: LayerItem, selection: Selection): boolean {
       return selection.kind === "point" && a.pointId === selection.pointId;
     case "zone":
       return selection.kind === "zone" && a.zoneId === selection.zoneId;
+    case "text":
+      return selection.kind === "text" && a.textId === selection.textId;
     case "background":
       return (
         selection.kind === "background" &&

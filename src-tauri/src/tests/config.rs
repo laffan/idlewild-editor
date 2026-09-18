@@ -510,6 +510,85 @@ fn every_kind_of_layer_reaches_the_config() {
     }
 }
 
+/// A word on the canvas is the editor's too, and never reaches the config.
+///
+/// Text is temporary on purpose — see `lib/text-items.ts`. A `TextItem` is
+/// drawn by the browser, in a family that is on *this* device because the
+/// operating system ships it, and a published game is a directory somebody
+/// serves to a machine that may have none of them. Shipping the words as words
+/// would mean shipping a font, choosing a fallback, and accepting that a sign
+/// reflows on the day the fallback is wrong. **Convert to PSD** is the one
+/// exit, and until somebody takes it the words are a note to the person
+/// building the level and nothing the game can see.
+///
+/// The same tolerance that keeps a group out keeps this out, and it is
+/// asserted for the same reason: the day somebody adds `deny_unknown_fields`
+/// for a good reason is the day a project with a note in it stops exporting.
+#[test]
+fn a_note_on_the_canvas_never_reaches_the_config() {
+    let meta = store::create_project(
+        "Noted",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let doc = |texts: serde_json::Value| -> String {
+            serde_json::json!({
+                "version": 2,
+                "projection": "orthogonal",
+                "genre": "topdown",
+                "gridSize": 32,
+                "activeSceneId": "scene-main",
+                "scenes": [{
+                    "id": "scene-main",
+                    "name": "Main",
+                    "layers": [{
+                        "id": "l-1", "name": "Terrain", "visible": true,
+                        "fills": [], "zones": [], "strokes": [], "points": [],
+                        "placements": [], "texts": texts
+                    }]
+                }]
+            })
+            .to_string()
+        };
+
+        let read = |id: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &store::read_game_file(id, "js/game.config.json").expect("config should read"),
+            )
+            .expect("config should be JSON")
+        };
+
+        store::write_doc(&meta.id, &doc(serde_json::json!([]))).expect("document should save");
+        let plain = read(&meta.id);
+
+        store::write_doc(
+            &meta.id,
+            &doc(serde_json::json!([{
+                "id": "t1", "text": "door to the cave",
+                "x": 64.0, "y": 32.0, "size": 24.0,
+                "color": "#1d1f22", "font": "system-ui, sans-serif",
+                "align": "left", "width": 180.0, "height": 30.0
+            }])),
+        )
+        .expect("document should save");
+        let noted = read(&meta.id);
+
+        assert_eq!(plain, noted);
+        assert!(!noted.to_string().contains("door to the cave"));
+        assert!(!noted.to_string().contains("\"texts\""));
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 /// A group is the editor's, and the game is never told about it.
 ///
 /// `Layer.groups` is the first thing in `doc.json` that is not a fact about

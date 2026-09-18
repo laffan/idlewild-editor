@@ -1084,15 +1084,23 @@ one pressed state across them, because only one tool is ever in hand):
 | Column | Where | Tools | What they have in common |
 |---|---|---|---|
 | rail | hangs from the top left | Select, Pan, Point, Boundary | what you do *to* the canvas: the camera and the pointer, then the two that make something out of bare ground — nothing already on it can be promoted into either |
-| draw | stands on the bottom left | Pencil, Pattern, Shape, Slice, Lasso, Fill | the ink |
+| draw | stands on the bottom left | Pencil, Pattern, Shape, Slice, Lasso, Fill, Text | the ink |
 
-Three of the six paint with the **library** rather than with a colour —
+**Text is the exception on that column**, and it is worth saying why it is
+there rather than on the rail. Its gesture is a tap on bare ground, like
+Point's, and it is the one tool on the draw column that does not hand the
+pointer to the drawing layer. But the columns are about *ownership*, and a word
+on the canvas is a note in the margin of the artwork: what it is for is saying
+something on the drawing, and the next thing anybody does with one is turn it
+into pixels. See *Words on the canvas*, below.
+
+Three of the seven paint with the **library** rather than with a colour —
 Pattern always, Shape always, Fill when it is aimed at one — and all three are
 set from the same control. See *The pattern and shape libraries*, below.
 
-Four of the six can be **turned round and used as erasers** — Pencil, Pattern,
-Shape and Fill, which is `ERASABLE` in `tool-rail.ts`, the set of tools that
-lay a mark down. Slice is not one of them: it cuts a stroke in two rather than
+Four of the seven can be **turned round and used as erasers** — Pencil,
+Pattern, Shape and Fill, which is `ERASABLE` in `tool-rail.ts`, the set of
+tools that lay a mark down. Slice is not one of them: it cuts a stroke in two rather than
 rubbing pixels out, which is a different thing that used to share the name
 *Eraser* and now has a knife for an icon. Lasso and the rail's four draw
 nothing at all. See *Erasing is a flag, not a mode*, below.
@@ -5087,6 +5095,94 @@ back-most source's, which is what the rest was built around nine times in ten.
 Refused for a source carrying masks or clipping, for the reason every rewrite
 in this editor refuses one: the fork cannot express either, so what came out
 would have quietly lost work.
+
+### Words on the canvas
+
+Blocking a level out means writing on it — *door to the cave*, *boss here*, a
+sign's own words — and until the Text tool there was no way to put a word on
+the canvas but to draw it by hand or to go and make a PSD of it somewhere else.
+A tap with Text puts a `TextItem` where the finger landed, selected, with the
+inspector already open on the field to type into.
+
+**It is temporary, in exactly the sense a sketch is.** It sits on a layer, it
+moves, restyles and deletes, and the game is never told about it — asserted in
+`tests::config::a_note_on_the_canvas_never_reaches_the_config`, byte for byte
+against the same document without it. **Convert to PSD** is the one exit, the
+same exit a fill and a lassoed sketch take.
+
+That is not a limitation dressed up. A `TextItem` is drawn by the *browser*, in
+a family that is on this device because the operating system ships it — and a
+published game is a directory somebody serves to a machine that may have none
+of them. Shipping the words as words would mean shipping a font, choosing a
+fallback, and accepting that a sign reflows on the day the fallback is wrong.
+Pixels have none of those questions in them, and a PSD of the words is also a
+file somebody can open and paint over, which is usually what a sign in a game
+wants next. `TEXT_FONTS` is three families for the same reason: no webfonts on
+a device that works offline, and nothing whose metrics can arrive after the box
+was measured.
+
+**The box is measured once and stored**, which is the decision everything else
+here rests on. Text is the only thing in this document whose size nobody typed:
+it comes out of the font, the size and the string, and the browser is what
+knows. So `updateText` measures on every edit that could have changed it — the
+words, the size, the family, and not the position — and writes `width` and
+`height` onto the item. Picking, dragging, the selection outline, the minimap
+and the conversion's crop then all read a plain rectangle, the same rectangle a
+placement has, instead of laying the text out again. Measuring goes through one
+2D canvas kept for the life of the page, because a canvas per measurement is a
+canvas per keystroke.
+
+Phaser's `Text` renders through a 2D canvas too, with the same font string, so
+what is on screen is the box the document holds. `game/text-render.ts` keeps
+one object per item and updates it rather than rebuilding — a `Text` allocates a
+canvas and uploads a texture — and draws it at the **front of its layer's
+slot**: a note written over a building belongs over it, and a note on a layer
+behind one is behind it, because that is what putting it there said.
+
+**There is no caret on the canvas.** A text editor over a Phaser scene would be
+a second input model — an iPad keyboard, an IME, a selection, a cursor drawn at
+whatever the camera's zoom happens to be — carried for a string that is usually
+three words long. The field is in the inspector, where every other property of
+every other object is typed, and the canvas is its preview. That is also why it
+commits on **every keystroke** rather than on blur: text whose shape only
+appears when the field loses focus is text laid out by guesswork. Which in turn
+is why `editor/inspect-focus.ts` exists — every keystroke rebuilds the panel
+under the caret that produced it, so the caret is read off before the rebuild
+and put back after it, and without that, typing a note gets one character in
+and stops.
+
+**Restyling one sets the tool**, so the next word is written the same way — the
+reading every brush keeps about its own size, and the reason there is no second
+control for "what the next one will look like". Two controls for one question
+is how they end up disagreeing. The style lives on the scene
+(`game/text-style.ts`), beside the active layer, because those are the two
+facts a tap on bare ground needs.
+
+Point and Text are the only two tools whose gesture *makes* something out of
+bare ground, and the three things that have to be true about that gesture are
+the same for both — so they are written side by side in `game/tap-makes.ts`,
+where the one difference is on screen: **a point takes a space and a word takes
+a position**. A point is a place the game reads back by name, so a space is
+what it *is* and a sub-cell offset would be a number nothing downstream could
+use; a word wants to sit beside a doorway rather than over the space the
+doorway is in. Both are dragged a whole space at a time afterwards, which keeps
+whatever offset the word landed with.
+
+A tap picks a word up **before an image and after a point**, which is the order
+its depth already implies: it is drawn at the front of its layer, so a tap that
+landed on the letters and picked up the building under them would be picking
+something the user cannot see they hit. What is hit-tested is the measured box
+rather than the glyphs — the gap inside an O is not a hole anybody expects a
+tap to fall through.
+
+**Converting rasterises at `EXPORT_SCALE`** through the same font and the same
+leading `lib/text-items.ts` measured with, on the **alphabetic** baseline:
+`textBaseline: "top"` puts the ascent's own box at the top and moves every
+glyph down by whatever padding the family leaves, which is exactly the kind of
+difference that shows as a note landing two pixels lower than it was. The file
+is named after the words — `door to the cave` becomes `door-to-the-cave.psd` —
+which is better than the `text-m2k9f1` every other conversion has to settle for,
+because a fill and a sketch have no words in them to name it with.
 
 ### A layer that has wandered, and the way back
 

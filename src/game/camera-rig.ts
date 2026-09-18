@@ -24,7 +24,7 @@ export type RigPhase = "idle" | "pan" | "pinch" | "marquee" | "drag";
  * moves the camera exactly as Pan does — and what the tap then means is the
  * scene's to decide, not this one's.
  */
-export type RigMode = "select" | "pan" | "point";
+export type RigMode = "select" | "pan" | "point" | "text";
 
 /** What was held when the drag began. */
 export interface DragModifiers {
@@ -312,15 +312,16 @@ export class CameraRig {
 
     // What counts as a tap depends on the tool. Under Select it is a hold
     // that never got to fire — the timer was still pending, so the finger
-    // neither moved nor stayed. Under Point there is no hold to wait on and
-    // the tap *is* the gesture, so a pointer that went down and came up
+    // neither moved nor stayed. Under Point and Text there is no hold to wait
+    // on and the tap *is* the gesture, so a pointer that went down and came up
     // without becoming a pan is one. Pan reports none at all: the camera tool
     // picks nothing up, which is what makes it safe to hold space over
     // anything.
     const wasPending = this.holdTimer !== null;
     this.clearHold();
     const tapped =
-      this.phase === "idle" && (wasPending || this.mode === "point");
+      this.phase === "idle" &&
+      (wasPending || this.mode === "point" || this.mode === "text");
     if (tapped) this.reportTap(event);
     this.phase = "idle";
   };

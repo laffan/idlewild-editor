@@ -19,7 +19,16 @@
 
 import { convexOverlapsRect, type Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
-import type { Layer, MapPoint, Placement, Point, Rect, Zone } from "../lib/types";
+import { textsOf } from "../lib/text-items";
+import type {
+  Layer,
+  MapPoint,
+  Placement,
+  Point,
+  Rect,
+  TextItem,
+  Zone,
+} from "../lib/types";
 
 /**
  * Whether the pointer can mean anything on this layer.
@@ -52,6 +61,12 @@ export interface ZonePickResult {
 export interface PointPickResult {
   layerId: string;
   point: MapPoint;
+}
+
+/** And for a word written on the canvas. */
+export interface TextPickResult {
+  layerId: string;
+  item: TextItem;
 }
 
 /**
@@ -95,6 +110,37 @@ export function pickZone(
       const zone = layer.zones[i];
       if (pointInPolygon({ x: worldX, y: worldY }, zone.points)) {
         return { layerId: layer.id, zone };
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The word under a world point, front-most first.
+ *
+ * Its measured box, which is what the document stores and what the canvas
+ * draws — see `lib/text-items.ts`. A box rather than the letters themselves:
+ * the gap inside an O is not a hole somebody expects a tap to fall through,
+ * and hit-testing glyphs would mean laying the text out again on every tap.
+ */
+export function pickText(
+  layers: readonly Layer[],
+  worldX: number,
+  worldY: number,
+): TextPickResult | undefined {
+  for (const layer of layers) {
+    if (!pickable(layer)) continue;
+    const texts = textsOf(layer);
+    for (let i = texts.length - 1; i >= 0; i--) {
+      const item = texts[i];
+      if (
+        worldX >= item.x &&
+        worldX <= item.x + item.width &&
+        worldY >= item.y &&
+        worldY <= item.y + item.height
+      ) {
+        return { layerId: layer.id, item };
       }
     }
   }

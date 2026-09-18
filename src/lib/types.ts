@@ -12,6 +12,7 @@ export * from "./project-types";
 
 import type { Genre, Projection } from "./project-types";
 import type { PaintSpec } from "./paint";
+import type { TextItem } from "./text-items";
 
 /** Integer grid coordinates. Not pixels — see lib/grid.ts for the mapping. */
 export interface Cell {
@@ -64,6 +65,16 @@ export interface FillPatch {
   paint?: PaintSpec;
   walkable: boolean;
 }
+
+/**
+ * A line of text on the canvas — see `lib/text-items.ts`, which owns the
+ * shape and everything that measures or edits one.
+ *
+ * Re-exported here because this is where a document's shapes are read from and
+ * because `Layer` names it; it lives there because what a `TextItem` *is* is
+ * inseparable from how it is measured, and the measuring needs a canvas.
+ */
+export type { TextItem };
 
 /** A PSD (or a layer inside one) placed into the world. */
 export interface Placement {
@@ -385,6 +396,12 @@ export interface Layer {
   zones: Zone[];
   strokes: Stroke[];
   /**
+   * Words written on the canvas. Absent on every layer written before the text
+   * tool existed, and absent again once the last one has gone — read through
+   * `textsOf` in `lib/text-items.ts` rather than directly.
+   */
+  texts?: TextItem[];
+  /**
    * What this layer is for. Absent on every layer written before there was
    * more than one kind, and absent means **object** — which is what a layer
    * has always been. Read through `layerKind` rather than directly.
@@ -589,6 +606,8 @@ export type Selection =
    * mean *it* rather than whatever is standing in front of it.
    */
   | { kind: "background"; layerId: string; backgroundId: string }
+  /** A word written on the canvas — see `TextItem`. */
+  | { kind: "text"; layerId: string; textId: string }
   | { kind: "strokes"; layerId: string; ids: string[] };
 
 /**
@@ -609,22 +628,22 @@ export type EditorMode = "draw" | "code" | "play";
 /**
  * What the pointer is doing.
  *
- * Ten tools over two columns — the rail's four and the drawing toolbar's six
- * — and every one of them has a button. There was an eleventh, "rub", which
- * had none: it was the pencil with the paint taken out, offered as a toggle
- * on PSD Edit mode's own bar. It went when the four brushes learned to be
- * turned round, which gave that mode four erasers that work the way every
- * other eraser in the editor does. See `editor/tool-rail.ts` for which button
- * is where and `tool-routing.ts` for what each one means.
+ * Eleven tools over two columns — the rail's four and the drawing toolbar's
+ * seven — and every one of them has a button. There was another with none:
+ * "rub", the pencil with the paint taken out, offered as a toggle on PSD Edit
+ * mode's own bar. It went when the four brushes learned to be turned round,
+ * which gave that mode four erasers that work the way every other eraser in
+ * the editor does. See `editor/tool-rail.ts` for which button is where and
+ * `tool-routing.ts` for what each one means.
  *
  * "pattern" and "shape" paint with the library rather than with a colour, and
  * all four brushes can be turned round to erase — see `editor/tool-rail.ts`.
  *
- * "point" and "zone" are the two ways of making something out of bare ground:
- * there is nothing already on an empty patch of canvas to promote into
- * either, so both have to be things you do to it. A boundary can still be
- * made the other way — from strokes already drawn and lassoed — which is an
- * action on a selection rather than a tool.
+ * "point", "zone" and "text" are the three ways of making something out of
+ * bare ground: there is nothing already on an empty patch of canvas to promote
+ * into any of them, so each has to be a thing you do to it. A boundary can
+ * still be made the other way — from strokes already drawn and lassoed — which
+ * is an action on a selection rather than a tool.
  */
 export const TOOL_IDS = [
   "select",
@@ -637,6 +656,7 @@ export const TOOL_IDS = [
   "eraser",
   "lasso",
   "fill",
+  "text",
 ] as const;
 
 export type ToolId = (typeof TOOL_IDS)[number];

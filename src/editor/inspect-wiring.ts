@@ -120,6 +120,15 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     onRenameGroup: (layerId, groupId, name) =>
       renameGroup(store, layerId, groupId, name),
     onMerge: () => deps.groups().merge(),
+    // The one exit a note has: the words become pixels in a file of their
+    // own, placed where they were standing — see `editor/text-actions.ts`.
+    onTextToPsd: () => deps.convert().textToPsd(),
+    // Restyling a piece of text sets the tool, so the next one is written to
+    // match — the same reading every brush keeps about its own size.
+    onTextStyle: (style) => {
+      const scene = deps.scene();
+      if (scene) scene.textStyle = style;
+    },
     onDeleteLayer: (layerId) => deps.deleteLayer(layerId),
     onRenamePoint: (layerId, pointId, name) =>
       store.updatePoint(layerId, pointId, { name }),

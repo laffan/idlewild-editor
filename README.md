@@ -405,12 +405,28 @@ remaining pieces are wired to real slots rather than mocked.
   the top corner and is what you do *to* the canvas: Select, Pan, Point and
   Boundary — the camera and the pointer, then the two that make something out
   of bare ground. The **drawing toolbar** stands on the bottom corner and is
-  the ink: Pencil, Pattern, Shape, Slice, Lasso and Fill. They were one column with a
+  the ink: Pencil, Pattern, Shape, Slice, Lasso, Fill and Text. They were one column with a
   gap in the middle doing the work of saying that Select and Pencil answer to
   different owners, and it grew a second column under it whenever PSD Edit
   mode was up. Which end a column hangs from carries that now — and the ink is
   at the corner a hand resting on an iPad's glass is nearest, which is the
   right way round for the thing a hand is doing most often
+- **Text**, at the foot of the drawing toolbar: tap and write on the canvas.
+  What lands is a **temporary object**, the same kind of thing a sketch is — it
+  sits on a layer, drags a space at a time, restyles and deletes, and the game
+  is never told about it. **Convert to PSD** is its one exit, and the words
+  become pixels in a file of their own standing exactly where they were. That
+  is not a limitation dressed up: a font on this device is a font a published
+  game's players may not have, so shipping words as words would mean shipping a
+  typeface and accepting that a sign reflows on the day the fallback is wrong.
+  Pixels ask none of that, and a PSD of the words is also a file somebody can
+  open and paint over. Three families, six sizes, a colour and an alignment,
+  and restyling one sets the next — the same way a brush keeps its size. The
+  field is in the inspector rather than on the canvas, because a caret over a
+  running Phaser scene is a second keyboard, a second selection and a second
+  cursor for a string three words long; the canvas is the preview instead, and
+  it follows every keystroke. The file even comes out named after the words:
+  *door to the cave* is `door-to-the-cave.psd`
 - **Boundary**, beside Point: sweep an outline on bare grid and it becomes a
   blocking zone, named, selected and listed under its layer. A boundary could
   only be made from strokes you had already drawn and lassoed, which is the
@@ -1097,6 +1113,9 @@ remaining pieces are wired to real slots rather than mocked.
 
 **Next**
 
+- A note that wraps. Text is lines you typed rather than a box the words flow
+  into, which is right for a label and wrong for a paragraph — and a wrap width
+  is a fourth number on the record and a handle on the canvas to drag it by
 - Groups inside groups. A group is flat: a unit is in one of them and a group
   holds no groups. Nesting costs a tree in the panel, a path in the selection
   and a decision about what a double tap means at each level, and none of that
