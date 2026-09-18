@@ -188,9 +188,18 @@
   border-color: var(--color-accent);
 }
 
+/* The panel's full text colour, not the dim one.
+
+   A heading used to be the quietest thing in its own section, which is the
+   wrong way round once every heading is also the control that folds the
+   section away: the reader is scanning the headings to find the one to open,
+   and they were the hardest thing in the column to read. The zone headings
+   above them keep the two-tone treatment — a thin, half-opacity name beside a
+   full-strength subject — so the structure still reads as three levels rather
+   than two. */
 .inspect-section-title {
   font-size: 10px;
-  color: var(--chrome-dim);
+  color: var(--chrome-text);
   margin-bottom: 12px;
 }
 /* A section heading can carry a subject after a colon the way a zone heading
@@ -235,17 +244,23 @@
   user-select: none;
   -webkit-user-select: none;
 }
+/* The caret keeps its own colour rather than the heading's, now that the
+   heading is white: a column of headings is a column of names, and eight
+   full-strength arrows down the right-hand edge would be the loudest thing in
+   a panel where they are the least interesting. It brightens on hover, which
+   is the part that says the heading is a control. */
 .inspect-section-fold::after {
   content: "";
   flex: none;
   margin-left: auto;
   width: 5px;
   height: 5px;
+  color: var(--chrome-dim);
   border-right: 1px solid currentColor;
   border-bottom: 1px solid currentColor;
   transform: rotate(45deg);
 }
-.inspect-section-fold:hover { color: var(--chrome-text); }
+.inspect-section-fold:hover::after { color: var(--chrome-text); }
 .inspect-section.collapsed > .inspect-section-fold::after {
   transform: rotate(-45deg);
 }
@@ -256,6 +271,13 @@
 /* Rows carry their own side padding for the panels that put them straight in
    the body; inside a section that padding is the section's. */
 .inspect-section .inspect-row { padding: 0; }
+/* A row the panel has drawn but is not showing — the text size's own field,
+   which only appears once somebody has asked for a size the menu does not
+   offer. `display: flex` above beats the user-agent's `[hidden]`, so the row
+   has to say it itself. Built and hidden rather than left out, because
+   revealing it is not a change to the document and must not rebuild the
+   panel: the field would take the caret and lose it in the same frame. */
+.inspect-row[hidden] { display: none; }
 
 /* Editable values are set at the label's size, like the read-only ones they
    sit among — a 16px field in a column of 10px rows reads as a heading. */
@@ -499,3 +521,112 @@
   font-size: 13px;
   text-align: center;
 }
+
+/* The settings sheets' segmented control, spread across the panel rather than
+   sized to its own words.
+
+   On a sheet it sits at the *end* of a row whose label takes the left half, so
+   hugging its labels is right: it is one control among several on a line. Here
+   it is the whole line, and a bar of `Left · Centre · Right` shrunk against
+   the left edge with a third of the column empty beside it reads as three
+   buttons somebody forgot to lay out. Every one of these in the panel is a
+   choice among two or three short words, so an equal share each is both the
+   tidiest and the largest each can be — which is what matters on an iPad,
+   where these are finger targets.
+
+   `min-width: 0` because a flex item will not shrink past its content
+   otherwise: without it `NW→SE` and `SW→NE` would keep their own widths and
+   the two would come out uneven the moment one arrow is wider than the other. */
+.side-panel .opt-seg { width: 100%; }
+.side-panel .opt-seg-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 6px;
+  text-align: center;
+}
+
+/* A bar that is a segmented control and one button beside it — the grid's two
+   axes, and Upright.
+
+   **The button is outside the segmented control's border**, which is the whole
+   point of the arrangement: the axes are a choice of one from two, and Upright
+   is an independent switch. Inside the same outline they would read as three
+   mutually exclusive options, and picking Upright would look like it turned
+   the axis off. Sharing a row says they are one subject; the gap between the
+   outlines says they are two questions.
+
+   The control takes the slack and the button takes its own words, because the
+   button's label is the fixed thing here. `align-items: stretch` so the two
+   are the same height without either naming a number. */
+.inspect-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.inspect-bar .opt-seg { flex: 1; min-width: 0; }
+.inspect-bar .panel-btn {
+  flex: none;
+  width: auto;
+  margin-top: 0;
+  justify-content: center;
+}
+
+/* A column of controls that are all one section's.
+
+   Everything inside a section used to be a section of its own, which is what
+   put a rule and 18px of air under every heading — see the note on
+   `.inspect-section` above. With the contents where they belong, the spacing
+   between them has to come from somewhere, and a gap on the column is the
+   honest place: the alternative is a margin on each control, which means
+   every control in the app carrying a number about this panel. */
+.inspect-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inspect-stack > .panel-btn { margin-top: 0; }
+/* Every control in the column against the panel's right edge, so the size,
+   the leading and the column width line up as a column of fields rather than
+   as three controls each starting wherever its own label happened to end. */
+.inspect-stack > .inspect-row > :last-child { margin-left: auto; }
+
+/* One of a short list, chosen from a menu: the text sizes, which were a row of
+   six chips until there were seven of them and a field underneath.
+
+   Drawn as the number field it sits among rather than as a `panel-btn`, since
+   what it holds *is* a number and the row above and below it are fields. The
+   caret is the section heading's, at the end of the button: two borders on a
+   square turned 45°, so there is still no asset in this panel. */
+.inspect-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  /* The width of the number field under it, so the menu and the field it
+     reveals are the same shape — they are two ways of saying one number, and
+     one of them being narrower would read as a different kind of control. */
+  min-width: 84px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--opt-edge);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--chrome-text);
+  font: 500 12px var(--font-mono);
+}
+.inspect-pick:hover { background: var(--chrome-rule); }
+.inspect-pick::after {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-bottom: 2px;
+  color: var(--chrome-dim);
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg);
+}
+/* The value takes the slack, so the caret sits at the button's own edge rather
+   than trailing a short number across a wide button. */
+.inspect-pick > span { flex: 1; text-align: right; }

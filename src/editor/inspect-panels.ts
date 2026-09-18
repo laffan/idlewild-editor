@@ -10,7 +10,7 @@
  * also live.
  */
 
-import { h } from "../lib/dom";
+import { append, h } from "../lib/dom";
 import { strokesBox } from "../drawing";
 import { createPaintPicker } from "./paint-picker";
 import { fillColliderSection } from "./inspect-collider";
@@ -384,15 +384,17 @@ export function renderPlacements(
     panel.row(`${placement.psdKey}.psd`, placement.layerPath);
   }
 
-  panel.section(
-    "Group",
-    "A group is the editor's own: it is saved with the project and travels " +
-      "in an export, and the game is never told about it.",
-  );
-  panel.body.appendChild(
-    h(
-      "div",
-      { class: "inspect-section" },
+  // Into the section the heading opened rather than beside it. A second
+  // `.inspect-section` after the first draws its own rule and its own 18px of
+  // padding, which put a horizontal line directly under the heading — and,
+  // worse, left the buttons outside the thing the heading folds.
+  append(
+    panel.section(
+      "Group",
+      "A group is the editor's own: it is saved with the project and travels " +
+        "in an export, and the game is never told about it.",
+    ),
+    [
       units.size > 1 && !group
         ? h("button", {
             class: "panel-btn",
@@ -409,22 +411,20 @@ export function renderPlacements(
             onClick: actions.onUngroup,
           })
         : null,
-    ),
+    ],
   );
 
   // Its own section, under the group's, because it is the one thing here that
   // writes a file: grouping is a way of working on several PSDs and merging
   // means there are no longer several. The line says what survives it, since
   // the arrangement surviving is the entire reason to press it.
-  panel.section(
-    "Merge",
-    "One PSD, holding these in the places they are standing and in the " +
-      "order they draw. The files themselves stay in the project.",
-  );
-  panel.body.appendChild(
-    h(
-      "div",
-      { class: "inspect-section" },
+  append(
+    panel.section(
+      "Merge",
+      "One PSD, holding these in the places they are standing and in the " +
+        "order they draw. The files themselves stay in the project.",
+    ),
+    [
       units.size > 1
         ? h("button", {
             class: "panel-btn",
@@ -437,7 +437,7 @@ export function renderPlacements(
         text: "Delete images",
         onClick: actions.onDeleteSelection,
       }),
-    ),
+    ],
   );
 }
 
