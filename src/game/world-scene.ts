@@ -40,55 +40,10 @@ import {
   toggleUnit,
 } from "./adjusting";
 import type { Viewport } from "../drawing";
+import type { WorldSceneConfig } from "./world-scene-config";
 
-export interface WorldSceneConfig {
-  store: DocStore;
-  assetBase: string;
-  /**
-   * The zoom a scene with no camera of its own opens at. Asked for rather
-   * than handed over: Project Options changes it under a running editor, and
-   * a number taken once is a scene still opening at what the editor booted at.
-   */
-  defaultZoom: () => number;
-  onSelectionChange: (selection: Selection) => void;
-  onCameraChange: () => void;
-  /**
-   * A drag mutates the document on every pointer move. The panels listen for
-   * document changes, so without this the inspector would rebuild its colour
-   * picker — and the layer panel its name inputs — on every frame of a drag.
-   */
-  onDragStateChange: (dragging: boolean) => void;
-  /**
-   * The camera, whenever it has actually moved. The drawing layer's stage is
-   * slaved to this: its ink is baked in world coordinates and presented
-   * with a transform, so it has to be told where the camera is, and told
-   * only when there is something to tell.
-   */
-  onViewport?: (view: Viewport) => void;
-  /**
-   * An option-shift drag has just made a copy that should not be an instance of
-   * the original — it wants a PSD of its own. The editor owns the duplication
-   * because it owns the IPC.
-   */
-  onDetachCopy?: (layerId: string, placementId: string, key: string) => void;
-  /** Extrude mode has started, finished, or changed what it is holding. */
-  onExtrudeChange?: () => void;
-  /** Collider mode has started, finished, or changed the spaces it holds. */
-  onColliderChange?: () => void;
-  /** PSD Edit mode has started or finished. */
-  onPsdEditChange?: () => void;
-  /** Mask mode has started, finished, or changed the spaces it holds. */
-  onMaskChange?: () => void;
-  /**
-   * Every PSD the open scene places has loaded.
-   *
-   * The panels ask the plugin what is in a file — whether it carries an
-   * anchor mark — and the answer changes the moment the manifest arrives.
-   * Nothing about the *document* changes when it does, so without this the
-   * rows would keep showing what was true before anything had been read.
-   */
-  onPsdsLoaded?: () => void;
-}
+export type { WorldSceneConfig };
+
 
 export class WorldScene extends Phaser.Scene {
   private config!: WorldSceneConfig;
@@ -338,6 +293,17 @@ export class WorldScene extends Phaser.Scene {
     // A no-op while the mode is down.
     this.modes.psdEdit.refresh();
     this.cam.publish();
+  }
+
+  /**
+   * Whether the lattice is drawn — the Grid switch in Overlays.
+   *
+   * A per-install preference rather than anything in the document, so it
+   * arrives from the panel and is never written down here. See
+   * `editor/overlays-panel.ts`.
+   */
+  setGridVisible(on: boolean): void {
+    this.gridRenderer.setVisible(on);
   }
 
   /** How the world maps onto the screen right now. */

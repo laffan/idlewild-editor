@@ -57,6 +57,20 @@ export class GridRenderer {
     this.graphics.setDepth(front === null ? BELOW_EVERYTHING : front + 0.5);
   }
 
+  /**
+   * Whether the lattice is drawn at all — the Grid switch in Overlays.
+   *
+   * The graphics object is hidden rather than the redraw skipped, because
+   * `visibleRange` is what the pattern layers are synced over and that reading
+   * of the camera has to go on happening whether or not the ground under them
+   * is showing. Hiding costs the renderer a flag and nothing else; the strokes
+   * that are already in the object stay valid, so switching back on is a frame
+   * rather than a re-walk of the viewport.
+   */
+  setVisible(on: boolean): void {
+    this.graphics.setVisible(on);
+  }
+
   /** Redraw if the visible cell range changed. Cheap to call every frame. */
   update(camera: Phaser.Cameras.Scene2D.Camera): void {
     // The blank template has no lattice: its cells are single pixels, and a

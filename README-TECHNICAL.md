@@ -744,28 +744,53 @@ pointer-down, and held for the gesture; the fit is redone on release.
 
 ### The switches above it
 
-Three things on this canvas are drawn *about* the document rather than being
-part of it: the boundary around the screen the game opens at, the crosshair on
-world `0, 0`, and this map. All three are useful and none of them is useful all
-of the time — a boundary is what you lay a building against and then want out
-of the way, and the map is worth a third of the sidebar right up until you are
-working close in. So `editor/overlays-panel.ts` gives each one a switch, in a
-foldable **Overlays** section directly above the map.
+Four things on this canvas are drawn *about* the document rather than being
+part of it: the lattice, the boundary around the screen the game opens at, the
+crosshair on world `0, 0`, and this map. All four are useful and none of them is
+useful all of the time — a boundary is what you lay a building against and then
+want out of the way, and the map is worth a third of the sidebar right up until
+you are working close in. So `editor/overlays-panel.ts` gives each one a switch,
+in a foldable **Overlays** section directly above the map.
 
 **Beside the thing they switch, not behind the header's menu.** The Minimap row
-sits on top of the minimap it hides, and the other two are in the column you
+sits on top of the minimap it hides, and the rest are in the column you
 are already looking at when you notice a mark is in the way.
 
 **Folded to begin with, with every mark showing**, which is two decisions
 rather than one. A *mark* switched off by default is a mark somebody has to be
-told exists, so all three start on. The *section* is chrome about the canvas
-rather than part of it, and three rows of it permanently above the map cost the
+told exists, so all of them start on. The *section* is chrome about the canvas
+rather than part of it, and four rows of it permanently above the map cost the
 map a third of what it had, every session, to say something you act on rarely —
 so it starts folded, with the heading left standing, one tap away and named.
 
-**The order is not the order they were asked for.** Boundary and centre point
-are the two marks `screen-guide.ts` draws — one subject, so they go together —
-and Minimap is last because that is what puts it against its own map.
+**The grid is the fourth, and it is the one this list was always about.** It is
+the most overlay-ish thing the canvas draws: it exists nowhere in the game, it
+is recomputed from the camera rather than stored (see [The infinite
+grid](#one-screen-pixel-whatever-the-camera-is-doing)), and a scene that is
+mostly artwork by now is one where a pale blue lattice printed over every
+sprite is exactly the mark you want out of the way while you judge what you
+drew. It sits **first**, because it is the ground the other three are marks
+*on*, and because the list then reads outward from the canvas: the lattice, the
+two things about the game's screen, and finally the picture of the whole scene.
+
+**A project with no lattice gets no row**, rather than a dead one. The blank
+template's cells are single pixels and `GridRenderer.update` returns before it
+strokes anything, so a `Grid` switch there would be a control over something
+that was never drawn — which reads as broken rather than as absent.
+`overlayRows(hasLattice)` is that decision, and it is the panel's one piece of
+per-project shape; `editor.ts` asks `grid.snaps` for the answer.
+
+**Hidden, not skipped.** `GridRenderer.setVisible` takes the Phaser `Graphics`
+object down rather than short-circuiting the redraw, because `visibleRange` is
+what the pattern layers are synced over in `WorldScene.update` and that reading
+of the camera has to go on happening whether or not the ground under them is
+showing. The strokes already in the object stay valid, so switching back on is
+a frame rather than a re-walk of the viewport — and the depth `setBackdropDepth`
+keeps putting it at is still right when it returns.
+
+**The rest of the order is not the order they were asked for.** Boundary and
+centre point are the two marks `screen-guide.ts` draws — one subject, so they go
+together — and Minimap is last because that is what puts it against its own map.
 
 **It is panel state, not document state.** Which marks somebody wants on is a
 per-install convenience, like a sidebar's width or a folded inspector section,
@@ -777,6 +802,13 @@ also hand back a half-written string or another tab's JSON, and **anything not
 plainly a boolean falls back to showing the mark** — a mark switched off that
 nobody asked to switch off, with the switch that would explain it reading *on*,
 is the one outcome that cannot be debugged from the screen.
+
+**The lattice is the one exception to that**, because it is paint rather than a
+DOM element: it is switched on the renderer, through a `LatticeHost` the panel
+is handed once the canvas has booted. The handoff is `setLattice`, beside
+`setGuide` and for the same reason — a grid somebody switched off last week has
+to be off on the first frame of the scene rather than on the first toggle, and
+the scene is the last thing `editor.ts` builds.
 
 **Each switch is a class, and the stylesheet does the hiding.** `display: none`
 on the map is the same rule Code and Play already take it down under, and it

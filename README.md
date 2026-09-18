@@ -122,11 +122,16 @@ remaining pieces are wired to real slots rather than mocked.
   game's window life size on the canvas; at any other zoom it grows and
   shrinks with the camera, and stays centred on the crosshair. It is Draw's
   alone — in Code and Play the real screen is the thing in front of you
-- **Overlays**, a folded section above the minimap, switches those two marks
-  and the minimap itself on and off one at a time. A boundary is what you lay a
-  building against and then want out of the way; the map is worth a third of
-  the sidebar right up until you are working close in. It arrives folded, with
-  everything showing — the switches are for the times a mark is in the way, and
+- **Overlays**, a folded section above the minimap, switches those two marks,
+  the minimap itself and **the grid** on and off one at a time. A boundary is
+  what you lay a building against and then want out of the way; the map is
+  worth a third of the sidebar right up until you are working close in; and the
+  lattice is the mark you want gone when a scene has enough artwork in it to
+  judge on its own — it is drawn about the document rather than being part of
+  it, exactly like the other three, and it is nowhere in the game. It is first
+  in the list, because it is the ground the others are marks on. A blank
+  project has no lattice to switch and gets no row rather than a dead one. It
+  arrives folded, with everything showing — the switches are for the times a mark is in the way, and
   a row of them standing over the map the rest of the time costs more than it
   saves. What is switched, and whether the section is open, is remembered per
   install rather than saved into the project, the way a sidebar's width is

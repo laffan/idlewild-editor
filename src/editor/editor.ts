@@ -111,7 +111,9 @@ export async function mountEditor(
   const minimap = new Minimap(store, grid, {
     centreOn: (x, y) => handle?.scene.centreOn(x, y),
   });
-  const overlays = new OverlaysPanel(minimap);
+  // `grid.snaps` decides whether the Grid switch is drawn at all: a blank
+  // project's cells are single pixels and no lattice is ever stroked over them.
+  const overlays = new OverlaysPanel(minimap, grid.snaps);
 
   const layers = new LayersPanel(
     store,
@@ -486,6 +488,10 @@ export async function mountEditor(
     render.options,
   );
   handle.scene.activeLayerId = activeLayerId;
+  // And the lattice, which is the fourth thing Overlays switches. Told here
+  // rather than through a closure for the reason `setGuide` gives: a grid
+  // somebody switched off last week has to be off on the first frame.
+  overlays.setLattice(handle.scene);
 
   // Undo and redo: the two header buttons, and which history a press means —
   // the document's, the code editor's, or whichever mode owns the canvas.

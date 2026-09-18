@@ -1,25 +1,39 @@
 /**
  * Which of the canvas's own marks are showing, above the minimap.
  *
- * Three of the things on this canvas are drawn *about* the document rather
- * than being part of it: the dashed boundary around the screen the game opens
- * at, the crosshair on world `0, 0`, and the minimap itself. They are all
- * useful and none of them is useful all of the time — a boundary is what you
- * lay a building against and then want out of the way, and the map is worth
- * a third of the sidebar right up until you are working close in.
+ * Four of the things on this canvas are drawn *about* the document rather
+ * than being part of it: the lattice itself, the dashed boundary around the
+ * screen the game opens at, the crosshair on world `0, 0`, and the minimap.
+ * They are all useful and none of them is useful all of the time — a boundary
+ * is what you lay a building against and then want out of the way, and the map
+ * is worth a third of the sidebar right up until you are working close in.
  *
  * So they get switches, and they get them **here** rather than behind the
  * header's menu. A switch belongs beside the thing it switches: the Minimap
- * row sits directly on top of the minimap it hides, and the other two are in
+ * row sits directly on top of the minimap it hides, and the rest are in
  * the column you are already looking at when you notice a mark is in the way.
- * The section is folded to begin with, because three rows of chrome
+ * The section is folded to begin with, because four rows of chrome
  * permanently above the map cost the map more than switches you act on rarely
  * are worth — and the heading stays, so what is behind it is one tap away and
  * named.
  *
- * **The order is not the order they were asked for.** Boundary and centre
- * point are the two marks `screen-guide.ts` draws — one subject, so they go
- * together — and Minimap is last because that puts it against its own map.
+ * **The grid belongs on this list for the same reason the others do.** It is
+ * the most overlay-ish thing the canvas draws: it exists nowhere in the game,
+ * it is recomputed from the camera rather than stored, and a scene drawn
+ * mostly of artwork is one where a pale blue lattice printed over every sprite
+ * is exactly the mark you want out of the way while you judge what you drew.
+ * It sits **first**, because it is the ground the other three are marks *on* —
+ * and because the list then reads outward from the canvas: the lattice, the
+ * two things about the game's screen, and finally the picture of the whole
+ * scene.
+ *
+ * A project with no lattice — the blank template, whose cells are single
+ * pixels — gets no row rather than a dead one: see `hasLattice`.
+ *
+ * **The rest of the order is not the order they were asked for.** Boundary and
+ * centre point are the two marks `screen-guide.ts` draws — one subject, so
+ * they go together — and Minimap is last because that puts it against its own
+ * map.
  *
  * **What is switched is the panel's state, not the document's.** Which marks
  * somebody wants on is a per-install convenience, like a sidebar's width or a
@@ -32,10 +46,22 @@ import { h, ICONS, icon } from "../lib/dom";
 import type { Minimap } from "./minimap";
 import type { ScreenGuide } from "./screen-guide";
 
+/**
+ * The half of the canvas this panel needs: whether the lattice is drawn.
+ *
+ * Named as what is wanted rather than typed as `WorldScene`, so the panel
+ * carries no dependency on the scene — and so the switch can be exercised in a
+ * test with four lines of object literal.
+ */
+export interface LatticeHost {
+  setGridVisible(on: boolean): void;
+}
+
 const STORAGE_KEY = "idlewild.overlays";
 
-/** What the panel remembers: the three marks, and whether it is folded. */
+/** What the panel remembers: the four marks, and whether it is folded. */
 export interface OverlayState {
+  grid: boolean;
   boundary: boolean;
   centre: boolean;
   minimap: boolean;
@@ -48,12 +74,13 @@ export interface OverlayState {
  * The two halves of that are not the same decision. Every **mark** starts
  * showing, because a mark switched off by default is a mark somebody has to be
  * told exists. The **section** starts folded, because it is chrome about the
- * canvas rather than part of it: three rows permanently above the map cost the
+ * canvas rather than part of it: four rows permanently above the map cost the
  * map a third of what it had, every session, to say something you act on
  * rarely. The heading stays, so it is one tap away and still says what is
  * behind it.
  */
 export const OVERLAY_DEFAULTS: OverlayState = {
+  grid: true,
   boundary: true,
   centre: true,
   minimap: true,
@@ -92,7 +119,21 @@ interface Row {
   title: string;
 }
 
+/**
+ * Which rows a project gets.
+ *
+ * Every project has the three marks. The lattice is the one that can be
+ * missing: the blank template's cells are single pixels, so `Grid` there would
+ * be a switch over something that was never drawn — and `grid-renderer.ts`
+ * returns before it strokes anything. A row that does nothing is worse than no
+ * row, because it says the feature is broken rather than absent.
+ */
+export function overlayRows(hasLattice: boolean): readonly Row[] {
+  return hasLattice ? ROWS : ROWS.filter((row) => row.key !== "grid");
+}
+
 const ROWS: readonly Row[] = [
+  { key: "grid", label: "Grid", title: "The lattice the document is measured in" },
   {
     key: "boundary",
     label: "Camera boundary",
@@ -109,17 +150,24 @@ export class OverlaysPanel {
   private readonly minimap: Minimap;
   private readonly section: HTMLElement;
   private readonly body: HTMLElement;
+  private readonly rows: readonly Row[];
   private readonly buttons = new Map<Row["key"], HTMLElement>();
   private state: OverlayState;
   /** Handed over once it exists — see `setGuide`. */
   private guide: ScreenGuide | null = null;
+  /** And the canvas, once it has booted — see `setLattice`. */
+  private lattice: LatticeHost | null = null;
 
-  constructor(minimap: Minimap) {
+  /**
+   * @param hasLattice whether this project's grid draws one — `Grid.snaps`.
+   */
+  constructor(minimap: Minimap, hasLattice = true) {
     this.minimap = minimap;
+    this.rows = overlayRows(hasLattice);
     this.state = readOverlays(get(STORAGE_KEY));
 
     this.body = h("div", { class: "overlays-body" });
-    for (const row of ROWS) {
+    for (const row of this.rows) {
       // The whole width is the switch. Nothing else is on the row — no name to
       // type into, no grip — so a finger should be able to land anywhere, which
       // is the same argument Code's layer directory makes about its own rows.
@@ -172,6 +220,20 @@ export class OverlaysPanel {
     this.apply();
   }
 
+  /**
+   * The canvas, once it has booted.
+   *
+   * Same handoff as `setGuide` and for the same reason: a lattice somebody
+   * switched off last week has to be off on the first frame of the scene
+   * rather than on the first toggle. The scene is the last thing the editor
+   * builds — it needs the element it draws into — so this is the moment it
+   * exists to be told.
+   */
+  setLattice(lattice: LatticeHost): void {
+    this.lattice = lattice;
+    this.apply();
+  }
+
   private set(key: Row["key"], on: boolean): void {
     this.state = { ...this.state, [key]: on };
     this.save();
@@ -188,7 +250,7 @@ export class OverlaysPanel {
   /** The switches, as they stand. */
   private paint(): void {
     this.section.classList.toggle("closed", !this.state.open);
-    for (const row of ROWS) {
+    for (const row of this.rows) {
       const button = this.buttons.get(row.key);
       if (!button) continue;
       const on = this.state[row.key];
@@ -204,6 +266,7 @@ export class OverlaysPanel {
   private apply(): void {
     this.minimap.setVisible(this.state.minimap);
     this.guide?.setMarksVisible(this.state.boundary, this.state.centre);
+    this.lattice?.setGridVisible(this.state.grid);
   }
 
   destroy(): void {
