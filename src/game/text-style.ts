@@ -15,10 +15,16 @@
  */
 
 import { GENERIC_FONTS } from "../lib/system-fonts";
-import type { TextItem } from "../lib/types";
+import type { TextStyleFields } from "../lib/text-items";
 
-/** The four things a piece of text is written in. */
-export type TextStyle = Pick<TextItem, "size" | "color" | "font" | "align">;
+/**
+ * Everything a piece of text is written in, which is everything about it
+ * except its words, its place and its measured box.
+ *
+ * `lib/text-items.ts` owns the list, so a property added to a note is carried
+ * from one to the next without this file being told.
+ */
+export type TextStyle = TextStyleFields;
 
 /**
  * What the first note in a project is written in.

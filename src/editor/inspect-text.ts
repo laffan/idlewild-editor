@@ -31,10 +31,20 @@
 
 import { h } from "../lib/dom";
 import { createColorPicker } from "../lib/color-picker";
-import { optionSegmented, optionSwitch } from "../lib/options-controls";
+import {
+  optionNumber,
+  optionSegmented,
+  optionSwitch,
+} from "../lib/options-controls";
 import type { Grid } from "../lib/grid";
 import type { DocStore } from "../lib/doc-store";
-import { textById, updateText } from "../lib/text-items";
+import {
+  DEFAULT_LINE_HEIGHT,
+  styleOf,
+  textById,
+  updateText,
+  type TextStyleFields,
+} from "../lib/text-items";
 import { fontLabel, systemFonts } from "../lib/system-fonts";
 import { openMenu } from "../lib/menu";
 import type { Selection, TextItem } from "../lib/types";
@@ -51,7 +61,7 @@ export interface TextActions {
    * The scene holds it, because the scene is what a tap on bare ground reaches
    * — see `game/text-style.ts`.
    */
-  onTextStyle: (style: Pick<TextItem, "size" | "color" | "font" | "align">) => void;
+  onTextStyle: (style: TextStyleFields) => void;
 }
 
 /** The sizes offered, and a number for anything between or beyond them. */
@@ -72,14 +82,7 @@ export function renderText(
   const write = (patch: Partial<Omit<TextItem, "id">>) => {
     updateText(store, layerId, textId, patch);
     const next = textById(store.layer(layerId), textId);
-    if (next) {
-      actions.onTextStyle({
-        size: next.size,
-        color: next.color,
-        font: next.font,
-        align: next.align,
-      });
-    }
+    if (next) actions.onTextStyle(styleOf(next));
   };
 
   panel.head("Text", firstLine(item));
@@ -125,29 +128,102 @@ export function renderText(
     ),
   );
 
+  // The chips are the sizes anybody reaches for and the field is the one they
+  // do not. Both write the same number, and the chips stop looking chosen the
+  // moment it is something else — a row that went on claiming 24 while the
+  // note was 31 would be the one control here saying something untrue.
+  panel.body.appendChild(
+    numberRow("Size", "px", item.size, 4, 400, (size) => write({ size })),
+  );
+  // Against the size rather than in pixels, which is what a leading *is*: a
+  // note retyped twice as big keeps its spacing without anybody re-deciding.
+  panel.body.appendChild(
+    numberRow(
+      "Line height",
+      "×",
+      item.lineHeight ?? DEFAULT_LINE_HEIGHT,
+      0.5,
+      4,
+      (lineHeight) => write({ lineHeight }),
+      0.05,
+    ),
+  );
+
+  panel.section(
+    "Wrapping",
+    "Off, a line ends where you put a new line. On, the words are broken " +
+      "into a column you can drag the width of on the canvas.",
+  );
+  panel.body.appendChild(
+    switchRow(
+      "Wrap the words",
+      item.wrapWidth !== undefined,
+      // The column starts at whatever the note is already as wide as, so
+      // turning it on reflows nothing and the handle appears where the words
+      // already end. Turning it off drops the width rather than remembering
+      // it: an invisible column that comes back on the next toggle is a
+      // number nobody can see and nobody asked to keep.
+      (on) => write({ wrapWidth: on ? Math.max(32, Math.round(item.width)) : undefined }),
+    ),
+  );
+  if (item.wrapWidth !== undefined) {
+    panel.body.appendChild(
+      numberRow("Column", "px", Math.round(item.wrapWidth), 32, 4000, (wrapWidth) =>
+        write({ wrapWidth }),
+      ),
+    );
+  }
+
   // Only where it means anything. On an orthogonal or blank project the grid's
   // plane *is* the screen, so the switch would be a control that does nothing
   // — and a switch that does nothing is worse than no switch, because it says
   // the feature is broken rather than inapplicable.
   if (grid.projection === "isometric") {
-    const track = optionSwitch(
-      item.tracksGrid === true,
-      (on) => write({ tracksGrid: on || undefined }),
-      "Lie in the grid's plane",
-    );
+    panel.section("The grid");
     panel.body.appendChild(
-      h(
-        "div",
-        {
-          class: "inspect-section inspect-row",
-          title:
-            "The words are laid along the grid's own two axes, so they read " +
-            "as painted on the floor rather than floating in front of it.",
-        },
-        h("span", { class: "inspect-key m", text: "Track the grid" }),
-        track.root,
+      switchRow(
+        "Track the grid",
+        item.tracksGrid === true,
+        (on) => write({ tracksGrid: on || undefined }),
+        "The words are laid along the grid's own two axes, so they read as " +
+          "part of the world rather than floating in front of it.",
       ),
     );
+    // The two halves of the orientation, and they only exist inside the
+    // switch: a note drawn flat has no axis to run along and no plane to
+    // stand up in, so offering either would be offering a choice with no
+    // subject. **Two controls rather than four named orientations**, because
+    // they are two independent decisions — which axis, and which way up — and
+    // a list of four would be a list somebody has to decode.
+    if (item.tracksGrid) {
+      panel.body.appendChild(
+        h(
+          "div",
+          {
+            class: "inspect-section",
+            title: "Which of the grid's two diagonals a line of text follows.",
+          },
+          optionSegmented(
+            [
+              { value: "cx", label: "NW→SE" },
+              { value: "cy", label: "SW→NE" },
+            ],
+            item.runs ?? "cx",
+            (runs) => write({ runs: runs === "cy" ? "cy" : undefined }),
+          ).root,
+        ),
+      );
+      panel.body.appendChild(
+        switchRow(
+          "Stand it up",
+          item.upright === true,
+          (on) => write({ upright: on || undefined }),
+          "Lying down, the lines step across the floor. Standing up, they " +
+            "step straight down the screen, the way a sign on the face of a " +
+            "wall does.",
+        ),
+      );
+    }
   }
 
   const picker = createColorPicker({
@@ -181,6 +257,42 @@ export function renderText(
         onClick: () => actions.onDeleteSelection(),
       }),
     ),
+  );
+}
+
+/** A labelled row with a switch at the end of it. */
+function switchRow(
+  label: string,
+  on: boolean,
+  onChange: (on: boolean) => void,
+  hint?: string,
+): HTMLElement {
+  return h(
+    "div",
+    {
+      class: "inspect-section inspect-row",
+      ...(hint ? { title: hint } : {}),
+    },
+    h("span", { class: "inspect-key m", text: label }),
+    optionSwitch(on, onChange, label).root,
+  );
+}
+
+/** And one with a number in it. */
+function numberRow(
+  label: string,
+  unit: string,
+  value: number,
+  min: number,
+  max: number,
+  onChange: (value: number) => void,
+  step = 1,
+): HTMLElement {
+  return h(
+    "div",
+    { class: "inspect-section inspect-row" },
+    h("span", { class: "inspect-key m", text: label }),
+    optionNumber({ value, min, max, step, unit, label, onChange }).root,
   );
 }
 

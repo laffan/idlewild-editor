@@ -5200,6 +5200,56 @@ got still reads as its own name — `fontLabel` unpicks it from the stack it was
 stored as — because the note is set to it and a panel showing the fallback
 instead would be agreeing with something nobody chose.
 
+### What a note is made of
+
+The words go through three files, and the split is what keeps the canvas and
+the PSD it becomes from ever disagreeing:
+
+- `lib/text-markdown.ts` reads one line into **runs of emphasis**. Three marks
+  and no more — `**bold**`, `*italic*`, `<u>underline</u>` — because every other
+  thing Markdown has is a *block*, and a block changes the size, the leading or
+  the left edge of a line, which would make this a document renderer. `<u>`
+  rather than a fourth mark because CommonMark deliberately leaves underline to
+  HTML, and inventing a dialect is worse than borrowing a tag. **Unmatched
+  marks are text**: `2 * 3 * 4` is arithmetic, `game_config.json` is a filename,
+  and `a **thing` is somebody mid-sentence — a parser you have to escape your
+  way out of is worse than no parser in a field three words wide.
+- `lib/text-layout.ts` turns those runs into **lines**, wrapping and measuring
+  them. It measures through a `Ruler` it is handed rather than touching a
+  canvas, which is what makes the awkward half testable: the tests use a ruler
+  where every character is ten wide, because line breaking is arithmetic over
+  widths and a real font would make every expected number a magic one.
+- `lib/text-items.ts` owns the item, the store edits and the drawing.
+
+**Emphasis is the font string's**, not a transform on the glyphs: `fontString`
+takes `bold` and `italic` and puts them where the CSS shorthand wants them, so
+what is measured and what is drawn are the family's own faces. A run measured
+upright and drawn slanted is a run that overlaps its neighbour.
+
+**Wrapping breaks on words, and the spans come apart with them.** A run of
+emphasis can be half a sentence, so a line cannot be chosen between whole
+spans: each word is measured in its own face, and a span that straddles a break
+is written into both lines still bold. A word wider than the column is left
+over the edge — hyphenation is a language's business and a URL cut in half is
+worse than one that overhangs.
+
+**A wrapped note's box is the column, not its longest line.** That is what
+makes the handle on the canvas mean something: the box is what somebody set, so
+it stays still while the words inside it change. Without it the handle would
+walk as you typed.
+
+**The handle is at the end of the text, not the corner of the box.** On a note
+laid into the grid the column runs off along a diagonal, so `textFrame` gives a
+note its own coordinate space and `textPoint` puts the handle at text-space
+`(width, height / 2)` in whichever of the four orientations it is in.
+`textWidthAt` is the way back, and it is the **inverse of the plane** rather
+than a projection onto the axis the text runs along. That distinction is the
+one bug a test caught here: the two axes are not perpendicular — that is the
+whole of what a shear is — so a dot product with one picks up a share of the
+distance along the other, and since the handle sits half the note's height down
+the second axis, grabbing it would have snapped the column to a different width
+before the pointer moved at all.
+
 ### Lying in the grid's plane
 
 On an isometric project a note drawn flat is the one thing on the canvas facing
@@ -5207,6 +5257,15 @@ the viewer while everything else is seen from above and to the side, so it reads
 as floating in front of the world rather than being part of it. **Track the
 grid** lays it into the grid's own plane instead: a line runs along `+cx` and
 the next line steps along `+cy`, so a label reads as painted on the floor.
+
+**Four orientations, which are two decisions.** Which of the grid's diagonals a
+line runs along — NW→SE or SW→NE — and whether the lines step *across the
+floor* or *straight down the screen*. Standing up changes only the second axis:
+the line still follows the grid, and the lines below it drop vertically, which
+is what makes a run of text read as a sign on the face of a wall rather than a
+label on the floor in front of it. Two controls rather than four named
+orientations, because they are independent and a list of four is a list
+somebody has to decode.
 
 `groundPlane` is the whole of it — the two grid axes from `Grid.cellToWorld`,
 each **normalised to length one**. Normalised rather than raw is the part that

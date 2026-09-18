@@ -25,7 +25,17 @@
 import { makeId } from "./doc-shape";
 import type { DocStore } from "./doc-store";
 import { Grid } from "./grid";
+import {
+  DEFAULT_LINE_HEIGHT,
+  layout,
+  leadingOf,
+  type Laid,
+  type Layable,
+  type Ruler,
+} from "./text-layout";
 import type { Layer } from "./types";
+
+export { DEFAULT_LINE_HEIGHT };
 
 /**
  * A line of text on the canvas, as a thing rather than as artwork.
@@ -51,7 +61,10 @@ import type { Layer } from "./types";
  */
 export interface TextItem {
   id: string;
-  /** What it says. Newlines are lines; there is no wrapping. */
+  /**
+   * What it says, in the little bit of Markdown `lib/text-markdown.ts` reads:
+   * `**bold**`, `*italic*` and `<u>underline</u>`. A newline is a new line.
+   */
   text: string;
   /** World pixels: the top-left of the box the text is laid out in. */
   x: number;
@@ -62,6 +75,20 @@ export interface TextItem {
   /** A CSS font family, from the short list the inspector offers. */
   font: string;
   align: "left" | "center" | "right";
+  /**
+   * How far one line advances against the size. Absent is `DEFAULT_LINE_HEIGHT`.
+   */
+  lineHeight?: number;
+  /**
+   * The column the words are broken into, in world pixels.
+   *
+   * Absent means no wrapping at all, which is what a label usually wants: a
+   * line ends where the writer put a newline. Set, it is the width of the box
+   * whether or not any line reaches it — that is what makes the handle on the
+   * canvas mean something, since the column somebody set stays still while the
+   * words inside it change.
+   */
+  wrapWidth?: number;
   /**
    * Whether the words lie **in the grid's plane** rather than flat on screen.
    *
@@ -78,6 +105,22 @@ export interface TextItem {
    */
   tracksGrid?: boolean;
   /**
+   * Which of the grid's two axes a line of text runs along, when it tracks the
+   * grid. `"cx"` is the NW→SE line and is the default; `"cy"` is SW→NE.
+   */
+  runs?: "cx" | "cy";
+  /**
+   * Whether the words **stand up** in that plane rather than lying in it.
+   *
+   * Lying down, a line runs along one grid axis and the next line steps along
+   * the other — a label painted on the floor. Standing up, a line runs along
+   * the same axis but the lines step straight down the screen, which is how a
+   * sign on the face of a wall reads. The two are the same decision made twice
+   * — which axis, and which way up — so they are two fields rather than four
+   * named orientations.
+   */
+  upright?: boolean;
+  /**
    * The measured box, in world pixels.
    *
    * Written by whatever last changed the text — see `updateText` below. A
@@ -93,6 +136,27 @@ export interface TextItem {
 export const TEXT_PLACEHOLDER = "Text";
 
 /**
+ * Everything about a note except its words, its place and its measured box.
+ *
+ * What the tool carries from one note to the next, and what the inspector
+ * writes back when any of it is changed — see `game/text-style.ts`. A field
+ * added here is carried without anything else being told, which is the reason
+ * it is a type rather than a list repeated in three places.
+ */
+export type TextStyleFields = Pick<
+  TextItem,
+  | "size"
+  | "color"
+  | "font"
+  | "align"
+  | "lineHeight"
+  | "wrapWidth"
+  | "tracksGrid"
+  | "runs"
+  | "upright"
+>;
+
+/**
  * Which families a note can be set in: `lib/system-fonts.ts`.
  *
  * Whatever this device has, found by measuring rather than by asking — the API
@@ -106,9 +170,6 @@ export const TEXT_PLACEHOLDER = "Text";
  * ships is the pixels a conversion writes, so the typeface never has to exist
  * anywhere but on the machine the words were typed on.
  */
-
-/** How tall a line is against its font size — the usual typographic ratio. */
-export const LINE_HEIGHT = 1.25;
 
 /** A layer's text. Absent on every layer written before the tool existed. */
 export function textsOf(layer: Layer | undefined): readonly TextItem[] {
@@ -137,22 +198,40 @@ export interface TextPlane {
   by: number;
 }
 
-export function groundPlane(grid: Grid | null | undefined): TextPlane | null {
+export function groundPlane(
+  grid: Grid | null | undefined,
+  how: Pick<TextItem, "runs" | "upright"> = {},
+): TextPlane | null {
   if (!grid || grid.projection !== "isometric") return null;
-  // A `+cx` step is (tw/2, th/2) and a `+cy` step is (-tw/2, th/2) — see
-  // `Grid.cellToWorld`, which this is read straight off.
+  // A `+cx` step is (tw/2, th/2) — down-right, the NW→SE line — and a `+cy`
+  // step is (-tw/2, th/2), down-left. Read straight off `Grid.cellToWorld`.
   const hw = grid.tileWidth / 2;
   const hh = grid.tileHeight / 2;
   const len = Math.hypot(hw, hh) || 1;
-  return { ax: hw / len, ay: hh / len, bx: -hw / len, by: hh / len };
+  const se = { x: hw / len, y: hh / len };
+  const sw = { x: -hw / len, y: hh / len };
+  // SW→NE is the *other* diagonal, which is `+cy` walked backwards.
+  const ne = { x: hw / len, y: -hh / len };
+
+  // Which axis a line runs along, and which way the lines step.
+  const along = how.runs === "cy" ? ne : se;
+  const down = how.upright
+    ? // Standing up: the lines step straight down the screen, which is what
+      // makes a run of text read as a sign on the face of a wall rather than
+      // as a label on the floor in front of it.
+      { x: 0, y: 1 }
+    : how.runs === "cy"
+      ? se
+      : sw;
+  return { ax: along.x, ay: along.y, bx: down.x, by: down.y };
 }
 
 /** The plane an item should be laid out in, which is its switch and the grid. */
 export function planeFor(
-  item: Pick<TextItem, "tracksGrid">,
+  item: Pick<TextItem, "tracksGrid" | "runs" | "upright">,
   grid: Grid | null | undefined,
 ): TextPlane | null {
-  return item.tracksGrid ? groundPlane(grid) : null;
+  return item.tracksGrid ? groundPlane(grid, item) : null;
 }
 
 /**
@@ -180,14 +259,21 @@ export function planeBox(
   };
 }
 
-/** The `font` shorthand a 2D context wants, for one item at one scale. */
-export function fontString(item: Pick<TextItem, "size" | "font">, scale = 1): string {
-  return `${Math.max(1, Math.round(item.size * scale))}px ${item.font}`;
-}
-
-/** The lines it is drawn as. Newlines are lines; nothing wraps. */
-export function textLines(item: Pick<TextItem, "text">): string[] {
-  return item.text.split("\n");
+/**
+ * The `font` shorthand a 2D context wants, for one item at one scale.
+ *
+ * `italic` and `bold` in front, which is where the CSS shorthand puts them and
+ * the only way to get the family's *own* italic and bold rather than a slant
+ * and a smear painted over the upright.
+ */
+export function fontString(
+  item: Pick<TextItem, "size" | "font">,
+  scale = 1,
+  bold = false,
+  italic = false,
+): string {
+  const style = `${italic ? "italic " : ""}${bold ? "700 " : ""}`;
+  return `${style}${Math.max(1, Math.round(item.size * scale))}px ${item.font}`;
 }
 
 /**
@@ -199,11 +285,11 @@ export function textLines(item: Pick<TextItem, "text">): string[] {
  * screen, rather than around the font's own ascent and descent.
  */
 export function measure(
-  item: Pick<TextItem, "text" | "size" | "font">,
+  item: Layable & Pick<TextItem, "font">,
   plane: TextPlane | null = null,
 ): { width: number; height: number } {
-  const flat = measureFlat(item);
-  if (!plane) return flat;
+  const flat = laidOut(item);
+  if (!plane) return { width: flat.width, height: flat.height };
   // Laid into the grid's plane, what the document has to hold is the box the
   // words come out in *on the canvas* — every reader of it, from the tap that
   // picks the note up to the crop a conversion makes, wants the rectangle that
@@ -212,27 +298,39 @@ export function measure(
   return { width: box.width, height: box.height };
 }
 
-/** The box before any plane: the widest line, and the lines times the leading. */
-function measureFlat(item: Pick<TextItem, "text" | "size" | "font">): {
-  width: number;
-  height: number;
-} {
-  const lines = textLines(item);
-  const height = Math.max(1, Math.round(lines.length * item.size * LINE_HEIGHT));
+/**
+ * The note's lines and runs, measured in this device's own faces.
+ *
+ * The one place `lib/text-layout.ts` is handed a ruler, so the measuring and
+ * the drawing are the same layout — see `rasteriseText`, which asks for it
+ * again rather than being passed one, because a texture is rebuilt far less
+ * often than a box is read.
+ */
+export function laidOut(item: Layable & Pick<TextItem, "font">): Laid {
+  return layout(item, ruler(item));
+}
+
+/**
+ * How wide a run of characters is, in the face its emphasis asks for.
+ *
+ * Bold and italic are **the font string's**, not a transform on the glyphs: a
+ * synthesised slant is not what the family's own italic looks like, and a run
+ * measured in the upright and drawn in the italic is a run that overlaps its
+ * neighbour. So every measurement and every `fillText` go through the same
+ * shorthand — which is what `fontString` takes those two flags for.
+ */
+function ruler(item: Pick<TextItem, "size" | "font">, scale = 1): Ruler {
   const context = measuringContext();
   if (!context) {
     // No canvas — a test environment. Half the size per character is close
     // enough to keep a box from being zero, and the first edit on a real
     // canvas replaces it.
-    const longest = lines.reduce((n, line) => Math.max(n, line.length), 0);
-    return { width: Math.max(1, Math.round(longest * item.size * 0.5)), height };
+    return (text) => text.length * item.size * scale * 0.5;
   }
-  context.font = fontString(item);
-  const width = lines.reduce(
-    (n, line) => Math.max(n, context.measureText(line).width),
-    0,
-  );
-  return { width: Math.max(1, Math.round(width)), height };
+  return (text, bold, italic) => {
+    context.font = fontString(item, scale, bold, italic);
+    return context.measureText(text).width;
+  };
 }
 
 /**
@@ -256,7 +354,7 @@ function measuringContext(): CanvasRenderingContext2D | null {
 /** What a piece of text looks like before anybody has touched it. */
 export function newText(
   at: { x: number; y: number },
-  style: Pick<TextItem, "size" | "color" | "font" | "align" | "tracksGrid">,
+  style: TextStyleFields,
   grid?: Grid | null,
 ): TextItem {
   const item: TextItem = {
@@ -311,12 +409,21 @@ export function updateText(
     texts: textsOf(layer).map((item) => {
       if (item.id !== textId) return item;
       const next = { ...item, ...patch };
+      // Everything that can move the box, which is everything but the
+      // position and the colour. Listed rather than "anything at all", because
+      // a drag writes `x` and `y` on every pointer move and re-measuring there
+      // would be a canvas measurement per frame for an answer that cannot have
+      // changed.
       const resized =
         patch.text !== undefined ||
         patch.size !== undefined ||
         patch.font !== undefined ||
+        patch.lineHeight !== undefined ||
+        patch.wrapWidth !== undefined ||
         // The plane changes the box without changing a word of the text.
-        patch.tracksGrid !== undefined;
+        patch.tracksGrid !== undefined ||
+        patch.runs !== undefined ||
+        patch.upright !== undefined;
       return resized
         ? { ...next, ...measure(next, planeFor(next, grid)) }
         : next;
@@ -335,12 +442,114 @@ export function removeText(store: DocStore, layerId: string, textId: string): vo
   });
 }
 
+/**
+ * Everything but the words, the place and the box — what the tool carries on.
+ *
+ * Built by picking rather than by spreading and deleting, so a field that is
+ * genuinely per-note — the id, the text, the position — cannot leak into the
+ * tool's style by being added to the record later.
+ */
+export function styleOf(item: TextItem): TextStyleFields {
+  return {
+    size: item.size,
+    color: item.color,
+    font: item.font,
+    align: item.align,
+    lineHeight: item.lineHeight,
+    wrapWidth: item.wrapWidth,
+    tracksGrid: item.tracksGrid,
+    runs: item.runs,
+    upright: item.upright,
+  };
+}
+
 /** The one a selection names, if it is still there. */
 export function textById(
   layer: Layer | undefined,
   textId: string,
 ): TextItem | undefined {
   return textsOf(layer).find((item) => item.id === textId);
+}
+
+/**
+ * A note's own coordinate frame on the canvas.
+ *
+ * Text is laid out left-to-right and top-to-bottom in its own space, and what
+ * ends up on the canvas is that space through a plane — so anything that wants
+ * to put something *at a place in the text* has to go the same way. The wrap
+ * handle is the one caller: it belongs at the end of the column, which is a
+ * text-space x and has no fixed direction on screen at all.
+ *
+ * Computed rather than stored, because it is derived from the item and the
+ * grid, and a fourth copy of the layout in the document is a fourth thing to
+ * keep in step.
+ */
+export interface TextFrame {
+  /** Where text-space `(0, 0)` is in the world. */
+  origin: { x: number; y: number };
+  plane: TextPlane | null;
+  /** The box before any plane: the column, and the lines times the leading. */
+  flat: { width: number; height: number };
+}
+
+export function textFrame(item: TextItem, plane: TextPlane | null): TextFrame {
+  const flat = laidOut(item);
+  if (!plane) {
+    return { origin: { x: item.x, y: item.y }, plane, flat };
+  }
+  // The sheared box's own corner is up and to the left of text-space zero, so
+  // the origin is the note's corner *plus* that offset back.
+  const box = planeBox(plane, flat.width, flat.height);
+  return {
+    origin: { x: item.x - box.x, y: item.y - box.y },
+    plane,
+    flat: { width: flat.width, height: flat.height },
+  };
+}
+
+/** A point in the text, in the world. */
+export function textPoint(
+  frame: TextFrame,
+  tx: number,
+  ty: number,
+): { x: number; y: number } {
+  const { plane, origin } = frame;
+  if (!plane) return { x: origin.x + tx, y: origin.y + ty };
+  return {
+    x: origin.x + plane.ax * tx + plane.bx * ty,
+    y: origin.y + plane.ay * tx + plane.by * ty,
+  };
+}
+
+/**
+ * How wide a column a pointer is asking for, in text space.
+ *
+ * The pointer's offset from the origin, taken **back through the plane** — the
+ * inverse of the transform `textPoint` applies, so a point put at a width and
+ * read back comes out as that width in every orientation.
+ *
+ * It is not a projection onto the axis the text runs along, which is what this
+ * was and which is wrong for a reason worth writing down: the two axes are
+ * *not perpendicular* — that is the whole of what a shear is — so a dot product
+ * with one of them picks up a share of the distance along the other. The
+ * handle sits half the note's height down the second axis, so grabbing it
+ * would have snapped the column to a different width before the pointer moved
+ * at all. On a note drawn flat the matrix is the identity and this is `x -
+ * item.x`, the way it always was.
+ */
+export function textWidthAt(
+  frame: TextFrame,
+  world: { x: number; y: number },
+): number {
+  const dx = world.x - frame.origin.x;
+  const dy = world.y - frame.origin.y;
+  const plane = frame.plane;
+  if (!plane) return dx;
+  const det = plane.ax * plane.by - plane.bx * plane.ay;
+  // Two axes pointing the same way have no inverse and no plane worth the
+  // name; nothing builds one, so this is a floor rather than a case.
+  if (Math.abs(det) < 1e-6) return dx;
+  return (plane.by * dx - plane.bx * dy) / det;
 }
 
 /**
@@ -396,29 +605,43 @@ export function rasteriseText(
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
+  const laid = laidOut(item);
   ctx.scale(scale, scale);
   if (plane) {
     // Text space onto the grid's two axes, shifted so the parallelogram's own
     // corner lands on the canvas's. The box was measured through the same
-    // `planeBox`, so what is drawn fills it exactly.
-    const flat = measureFlat(item);
-    const box = planeBox(plane, flat.width, flat.height);
+    // `planeBox`, so what is drawn fills it exactly — and the layout below is
+    // in text space either way, which is what keeps every orientation one
+    // transform rather than four drawings.
+    const box = planeBox(plane, laid.width, laid.height);
     ctx.transform(plane.ax, plane.ay, plane.bx, plane.by, -box.x, -box.y);
   }
-  ctx.font = fontString(item);
   ctx.fillStyle = item.color;
   ctx.textBaseline = "alphabetic";
 
-  // Laid out in text space either way: the transform above is what turns a
-  // line running left-to-right into one running along `+cx`, so nothing here
-  // has to know which of the two it is drawing.
-  const flat = plane ? measureFlat(item) : { width: item.width, height: item.height };
-  const leading = item.size * LINE_HEIGHT;
-  textLines(item).forEach((line, index) => {
-    const at = lineOffset({ align: item.align, width: flat.width }, ctx.measureText(line).width);
+  const leading = leadingOf(item);
+  laid.lines.forEach((line, index) => {
     // The baseline within its line box. One number for every family here,
     // which is what makes the box `measure` wrote the box that is filled.
-    ctx.fillText(line, at, index * leading + item.size);
+    const baseline = index * leading + item.size;
+    const left = lineOffset({ align: item.align, width: laid.width }, line.width);
+    for (const span of line.spans) {
+      ctx.font = fontString(item, 1, span.bold, span.italic);
+      ctx.fillText(span.text, left + span.x, baseline);
+      if (!span.underline) continue;
+      // Drawn rather than asked for: a 2D canvas has no text decoration, and
+      // the two numbers a rule needs — how far under the baseline, how thick —
+      // are the ones every type designer picks by eye anyway. A fifteenth of
+      // the size sits under the descenders of the faces here without touching
+      // the line below.
+      const drop = Math.max(1, item.size / 12);
+      ctx.fillRect(
+        left + span.x,
+        baseline + drop,
+        span.width,
+        Math.max(1, item.size / 16),
+      );
+    }
   });
   return canvas;
 }

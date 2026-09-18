@@ -25,10 +25,10 @@ import type {
   Point,
   Rect,
   Selection,
-  TextItem,
   Zone,
 } from "../lib/types";
-import { addText, textById, updateText } from "../lib/text-items";
+import { textWidthAt, updateText, type TextFrame } from "../lib/text-items";
+import { beginTextDrag, beginWrapDrag } from "./drag-text";
 import type { DragModifiers } from "./camera-rig";
 import { pointInPolygon, pointReach } from "./picking";
 import {
@@ -48,7 +48,7 @@ import {
 } from "./resize";
 
 /** What a drag gesture is moving, captured at pointer-down. */
-type DragState =
+export type DragState =
   | {
       kind: "placement";
       layerId: string;
@@ -96,6 +96,14 @@ type DragState =
       grabCell: Cell;
       /** Where it was at pointer-down, so the drag never compounds. */
       at: Point;
+    }
+  | {
+      kind: "wrap";
+      layerId: string;
+      id: string;
+      /** The note's own frame, captured once: the drag is a projection onto
+       *  the axis its text runs along — see `textWidthAt`. */
+      frame: TextFrame;
     }
   | {
       kind: "resize";
@@ -212,8 +220,15 @@ export class DragController {
       );
     }
     if (selection.kind === "text") {
-      return this.grouped(() =>
-        this.beginText(selection, world, grabCell, modifiers.alt),
+      return this.grouped(
+        () =>
+          // The handle first, for the reason a placement's corners come before
+          // its box: it sits on the edge of the thing it resizes, so a box test
+          // would always win and the handle would never be reachable.
+          beginWrapDrag(this.host, selection, world, (state) => this.start(state)) ||
+          beginTextDrag(this.host, selection, world, grabCell, modifiers.alt, (state) =>
+            this.start(state),
+          ),
       );
     }
     return false;
@@ -247,6 +262,17 @@ export class DragController {
           },
         });
       }
+      return;
+    }
+
+    if (drag.kind === "wrap") {
+      // World pixels rather than cell steps, like a resize and for the same
+      // reason: a column's width is a property of the words, and the grid has
+      // nothing to say about how wide a paragraph should be. A column is at
+      // least a few characters wide, or every word wraps onto its own line and
+      // the handle ends up under the note's origin where nothing can reach it.
+      const wrapWidth = Math.max(32, Math.round(textWidthAt(drag.frame, world)));
+      updateText(store, drag.layerId, drag.id, { wrapWidth });
       return;
     }
 
@@ -490,50 +516,6 @@ export class DragController {
    * the region it encloses, and asking someone to catch a 1.5px stroke with a
    * finger would make the gesture unusable on the platform it is mostly for.
    */
-  /**
-   * A word, picked up anywhere inside its measured box.
-   *
-   * The box rather than the letters, for the reason `pickText` gives: the gap
-   * inside an O is not a hole a drag should fall through.
-   */
-  private beginText(
-    selection: Extract<Selection, { kind: "text" }>,
-    world: Point,
-    grabCell: Cell,
-    alt: boolean,
-  ): boolean {
-    const layer = this.host.store.layer(selection.layerId);
-    if (!layer || layer.locked) return false;
-    const item = textById(layer, selection.textId);
-    if (!item) return false;
-    if (
-      world.x < item.x ||
-      world.x > item.x + item.width ||
-      world.y < item.y ||
-      world.y > item.y + item.height
-    ) {
-      return false;
-    }
-
-    // Option-drag copies, as it does for a fill, an image and a boundary: the
-    // copy is what moves, and the original stays where it was.
-    const dragged = alt ? this.copyText(layer.id, item) : item;
-    this.start({
-      kind: "text",
-      layerId: layer.id,
-      id: dragged.id,
-      grabCell,
-      at: { x: dragged.x, y: dragged.y },
-    });
-    return true;
-  }
-
-  private copyText(layerId: string, item: TextItem): TextItem {
-    const copy = addText(this.host.store, layerId, { ...item, id: makeId("text") });
-    this.host.setSelection({ kind: "text", layerId, textId: copy.id });
-    return copy;
-  }
-
   private beginZone(
     selection: Extract<Selection, { kind: "zone" }>,
     world: Point,

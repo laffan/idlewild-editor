@@ -9,7 +9,7 @@ import { Grid, fillShape } from "../lib/grid";
 import type { Selection } from "../lib/types";
 import { CORNERS, cornerPoint, HANDLE_SCREEN_PX, placementBox } from "./resize";
 import { strokesBox } from "../drawing";
-import { textById } from "../lib/text-items";
+import { planeFor, textById, textFrame, textPoint } from "../lib/text-items";
 import { isInstance } from "./instances";
 import { unitMembers, unitOf, unionRect } from "./unit";
 
@@ -205,6 +205,29 @@ export class SelectionOverlay {
         const scale = 1 / zoom;
         g.lineStyle(2 * scale, ACCENT, 1);
         g.strokeRect(item.x, item.y, item.width, item.height);
+
+        // And, on a note that wraps, the column itself with a handle at the
+        // end of it. Not the right-hand edge of the box: on a note laid into
+        // the grid the column runs off along a diagonal, and a handle on the
+        // box's corner would be nowhere near where the words stop. `textPoint`
+        // is what puts it at the end of the *text* in all four orientations.
+        if (item.wrapWidth !== undefined) {
+          const frame = textFrame(item, planeFor(item, this.grid));
+          const top = textPoint(frame, frame.flat.width, 0);
+          const foot = textPoint(frame, frame.flat.width, frame.flat.height);
+          g.lineStyle(2 * scale, ACCENT, 0.6);
+          g.beginPath();
+          g.moveTo(top.x, top.y);
+          g.lineTo(foot.x, foot.y);
+          g.strokePath();
+
+          const at = textPoint(frame, frame.flat.width, frame.flat.height / 2);
+          const size = HANDLE_SCREEN_PX * scale;
+          g.fillStyle(0xf3f2f2, 1);
+          g.fillRect(at.x - size / 2, at.y - size / 2, size, size);
+          g.lineStyle(2 * scale, ACCENT, 1);
+          g.strokeRect(at.x - size / 2, at.y - size / 2, size, size);
+        }
         break;
       }
       case "strokes": {

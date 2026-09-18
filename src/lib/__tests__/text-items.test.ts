@@ -17,7 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DocStore } from "../doc-store";
 import {
-  LINE_HEIGHT,
+  DEFAULT_LINE_HEIGHT,
   TEXT_PLACEHOLDER,
   addText,
   fontString,
@@ -27,14 +27,16 @@ import {
   newText,
   planeBox,
   planeFor,
+  textFrame,
+  textPoint,
+  textWidthAt,
   removeText,
   textById,
-  textLines,
   textsOf,
   updateText,
 } from "../text-items";
 import { Grid } from "../grid";
-import type { GameDoc } from "../types";
+import type { GameDoc, TextItem } from "../types";
 
 // The store writes through `ipc.doc.write`, which wants Tauri, and debounces
 // that write on window timers, where this runs in node. Neither is what any of
@@ -102,7 +104,7 @@ describe("the box", () => {
   it("is as many lines tall as the text has", () => {
     const one = measure({ text: "door", size: 20, font: STYLE.font });
     const two = measure({ text: "door\nto the cave", size: 20, font: STYLE.font });
-    expect(two.height).toBe(Math.round(2 * 20 * LINE_HEIGHT));
+    expect(two.height).toBe(Math.round(2 * 20 * DEFAULT_LINE_HEIGHT));
     expect(two.height).toBeGreaterThan(one.height);
   });
 
@@ -120,8 +122,18 @@ describe("the box", () => {
   });
 
   it("reads a newline as a line and nothing else as one", () => {
-    expect(textLines({ text: "a\nb\nc" })).toEqual(["a", "b", "c"]);
-    expect(textLines({ text: "one long line that does not wrap" })).toHaveLength(1);
+    const one = measure({ text: "a b c", size: 20, font: STYLE.font });
+    const three = measure({ text: "a\nb\nc", size: 20, font: STYLE.font });
+    expect(three.height).toBe(Math.round(3 * 20 * DEFAULT_LINE_HEIGHT));
+    expect(one.height).toBe(Math.round(20 * DEFAULT_LINE_HEIGHT));
+  });
+
+  /** The leading is the note's own when it has one. */
+  it("follows the line height it was given", () => {
+    const tight = measure({ text: "a\nb", size: 20, font: STYLE.font, lineHeight: 1 });
+    const loose = measure({ text: "a\nb", size: 20, font: STYLE.font, lineHeight: 2 });
+    expect(tight.height).toBe(40);
+    expect(loose.height).toBe(80);
   });
 });
 
@@ -200,6 +212,19 @@ describe("laying it out", () => {
     );
     // At `EXPORT_SCALE`, which is what a conversion rasterises at.
     expect(fontString({ size: 24, font: "serif" }, 2)).toBe("48px serif");
+  });
+
+  /**
+   * Emphasis goes in the **font string**, in the order the CSS shorthand wants
+   * it. Not a transform on the glyphs: a synthesised slant is not the family's
+   * own italic, and a run measured upright and drawn slanted overlaps the run
+   * beside it.
+   */
+  it("asks for the family's own bold and italic", () => {
+    const face = { size: 24, font: "serif" };
+    expect(fontString(face, 1, true, false)).toBe("700 24px serif");
+    expect(fontString(face, 1, false, true)).toBe("italic 24px serif");
+    expect(fontString(face, 1, true, true)).toBe("italic 700 24px serif");
   });
 
   /**
@@ -310,5 +335,127 @@ describe("the grid's plane", () => {
     // which is the assertion: throwing the switch where it means nothing must
     // not move anything.
     expect(after?.width).toBe(before.width);
+  });
+});
+
+/**
+ * The four orientations, which are two decisions rather than four pictures:
+ * which of the grid's diagonals a line runs along, and whether the lines step
+ * across the floor or straight down the screen.
+ *
+ * Each is invisible when wrong in the ordinary way — text at the wrong angle
+ * looks like text at an angle — so what is asserted is the *direction* each
+ * axis points, which is the thing that would be swapped.
+ */
+describe("which way the words run", () => {
+  const iso = new Grid("isometric", 64);
+  const on = { tracksGrid: true as const };
+
+  it("runs NW→SE by default, with the lines stepping SW", () => {
+    const plane = planeFor(on, iso);
+    if (!plane) throw new Error("isometric should have a plane");
+    // Down-right along the line, down-left between them: a label on the floor.
+    expect(plane.ax).toBeGreaterThan(0);
+    expect(plane.ay).toBeGreaterThan(0);
+    expect(plane.bx).toBeLessThan(0);
+    expect(plane.by).toBeGreaterThan(0);
+  });
+
+  it("runs SW→NE on the other diagonal, with the lines stepping SE", () => {
+    const plane = planeFor({ ...on, runs: "cy" }, iso);
+    if (!plane) throw new Error("isometric should have a plane");
+    // Up-right along the line, down-right between them.
+    expect(plane.ax).toBeGreaterThan(0);
+    expect(plane.ay).toBeLessThan(0);
+    expect(plane.bx).toBeGreaterThan(0);
+    expect(plane.by).toBeGreaterThan(0);
+  });
+
+  /**
+   * Standing up is the one that changes only the *second* axis: the line still
+   * follows the grid, and the lines below it step straight down the screen —
+   * which is what makes a run of text read as a sign on the face of a wall.
+   */
+  it("stands up without changing which way the line runs", () => {
+    const lying = planeFor(on, iso);
+    const upright = planeFor({ ...on, upright: true }, iso);
+    if (!lying || !upright) throw new Error("isometric should have a plane");
+    expect(upright.ax).toBeCloseTo(lying.ax, 6);
+    expect(upright.ay).toBeCloseTo(lying.ay, 6);
+    expect(upright.bx).toBe(0);
+    expect(upright.by).toBe(1);
+  });
+
+  it("stands up on the other diagonal too", () => {
+    const plane = planeFor({ ...on, runs: "cy", upright: true }, iso);
+    if (!plane) throw new Error("isometric should have a plane");
+    expect(plane.ay).toBeLessThan(0);
+    expect(plane.bx).toBe(0);
+    expect(plane.by).toBe(1);
+  });
+
+  it("keeps every axis one unit long, whichever way it is turned", () => {
+    for (const how of [
+      {},
+      { runs: "cy" as const },
+      { upright: true },
+      { runs: "cy" as const, upright: true },
+    ]) {
+      const plane = planeFor({ ...on, ...how }, iso);
+      if (!plane) throw new Error("isometric should have a plane");
+      expect(Math.hypot(plane.ax, plane.ay)).toBeCloseTo(1, 6);
+      expect(Math.hypot(plane.bx, plane.by)).toBeCloseTo(1, 6);
+    }
+  });
+});
+
+/**
+ * The note's own frame, which is what puts the wrap handle at the end of the
+ * column rather than at the corner of the box.
+ *
+ * The round trip is the assertion worth having: a point put at a text-space
+ * width and read back as a width has to come out as the width it went in as,
+ * in every orientation. That one property is what makes the handle draggable
+ * on a note laid into the grid at all — and it is why `textWidthAt` is a
+ * projection rather than a subtraction.
+ */
+describe("a note's own frame", () => {
+  const iso = new Grid("isometric", 64);
+
+  function note(over: Partial<TextItem> = {}): TextItem {
+    return {
+      ...newText({ x: 200, y: 120 }, STYLE),
+      text: "door to the cave",
+      wrapWidth: 180,
+      ...over,
+    };
+  }
+
+  it("reads a width back as the width it drew at, drawn flat", () => {
+    const item = note();
+    const frame = textFrame(item, null);
+    const at = textPoint(frame, 140, 20);
+    expect(textWidthAt(frame, at)).toBeCloseTo(140, 6);
+  });
+
+  it("reads it back in every orientation", () => {
+    for (const how of [
+      { tracksGrid: true },
+      { tracksGrid: true, runs: "cy" as const },
+      { tracksGrid: true, upright: true },
+      { tracksGrid: true, runs: "cy" as const, upright: true },
+    ]) {
+      const item = note(how);
+      const frame = textFrame(item, planeFor(item, iso));
+      const at = textPoint(frame, 140, 20);
+      expect(textWidthAt(frame, at)).toBeCloseTo(140, 6);
+    }
+  });
+
+  /** Text-space zero is the note's own corner when nothing is sheared. */
+  it("puts text-space zero at the note's corner when it is flat", () => {
+    const item = note();
+    const frame = textFrame(item, null);
+    expect(textPoint(frame, 0, 0)).toEqual({ x: item.x, y: item.y });
   });
 });

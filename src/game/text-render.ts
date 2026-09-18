@@ -93,9 +93,14 @@ export class TextRender {
       item.color,
       item.font,
       item.align,
-      // A note laid into the grid's plane is a different picture from the same
-      // words drawn flat, so the switch is part of what the texture is of.
+      item.lineHeight ?? null,
+      item.wrapWidth ?? null,
+      // How a note is laid into the grid's plane is part of what the texture
+      // *is* — the same words flat, on the other diagonal, or standing up are
+      // three different pictures.
       item.tracksGrid === true,
+      item.runs ?? null,
+      item.upright === true,
       Math.round(item.width),
       Math.round(item.height),
     ]);

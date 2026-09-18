@@ -432,10 +432,19 @@ remaining pieces are wired to real slots rather than mocked.
   installed falls through to a generic and measures the same as one. Each name
   in the list is set in its own face, because *Didot* in the panel's own font
   says nothing about Didot. Six sizes, a colour and an alignment beside it, and
-  restyling one sets the next — the same way a brush keeps its size. On an
-  isometric project there is one more switch: **Track the grid** lays the words
-  along the grid's own two axes, so a label reads as painted on the floor
-  rather than floating in front of it. The
+  restyling one sets the next — the same way a brush keeps its size, and it is
+  the whole style rather than a list somebody has to remember to extend. A
+  **line height** against the size, so a note retyped twice as big keeps its
+  spacing. The field reads a little **Markdown** — `**bold**`, `*italic*` and
+  `<u>underline</u>`, and nothing else, because everything else Markdown has
+  would change the size or the left edge of a line. A mark with no partner is
+  just the character it is, so `2 * 3` is still arithmetic and
+  `game_config.json` is still a filename. **Wrapping** is a switch: turn it on
+  and the note gets a column with a handle at the end of it, dragged on the
+  canvas to set the width. On an isometric project there are the grid controls:
+  **Track the grid** lays the words along the grid's own two axes, and once it
+  is on, which diagonal they run along — NW→SE or SW→NE — and whether they lie
+  on the floor or **stand up** like a sign on the face of a wall. The
   field is in the inspector rather than on the canvas, because a caret over a
   running Phaser scene is a second keyboard, a second selection and a second
   cursor for a string three words long; the canvas is the preview instead, and
