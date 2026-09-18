@@ -73,12 +73,20 @@ pub struct MergePart {
 /// `read` hands back the bytes of one source by key, so the caller owns where
 /// files live and this owns what is done with them — which is also what makes
 /// the whole of this testable without a project on disk.
+///
+/// `emit_log` is the same channel `psd_pipeline` narrates itself on, and it is
+/// here for the same reason: a merge of nine files is seconds of work inside
+/// one `invoke`, and a sheet that says *Reading the files…* for all of it
+/// cannot be told from one that has hung. Each source named as it is opened,
+/// and each part as it is laid out, is both the progress and — if it stops —
+/// the diagnosis.
 pub fn merge(
     width: u32,
     height: u32,
     parts: &[MergePart],
     marks: &AnchorMarks,
     read: &dyn Fn(&str) -> Result<Vec<u8>, String>,
+    emit_log: &dyn Fn(&str),
 ) -> Result<Vec<u8>, String> {
     if parts.len() < 2 {
         return Err("A merge needs two or more placed PSDs".to_string());
@@ -98,8 +106,9 @@ pub fn merge(
     let mut cache: HashMap<String, Psd> = HashMap::new();
     let mut names = NameRun::default();
 
-    for part in parts {
+    for (at, part) in parts.iter().enumerate() {
         if !cache.contains_key(&part.key) {
+            emit_log(&format!("Reading psd/{}.psd", part.key));
             let bytes = read(&part.key)?;
             let doc = Psd::from_bytes(&bytes)
                 .map_err(|e| format!("Cannot read {}.psd: {e}", part.key))?;
@@ -109,6 +118,15 @@ pub fn merge(
             cache.insert(part.key.clone(), doc);
         }
         let doc = &cache[&part.key];
+        // Counted rather than merely named: the number is what says a long
+        // wait is moving rather than stuck, and a merge is the one thing here
+        // whose length is up to the person who started it.
+        emit_log(&format!(
+            "Laying out {} ({} of {})",
+            part.path,
+            at + 1,
+            parts.len()
+        ));
         match built(doc, part, &mut names)? {
             Some(Built::Layer(layer)) => {
                 builder.add_layer(layer);
@@ -123,6 +141,7 @@ pub fn merge(
         }
     }
 
+    emit_log("Packing the merged PSD");
     builder
         .to_bytes()
         .map_err(|e| format!("Failed to write the merged PSD: {e:?}"))

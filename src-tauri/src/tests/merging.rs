@@ -111,6 +111,7 @@ fn a_merge_keeps_each_file_where_it_was_standing() {
         ],
         &marks(48.0, 16.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -154,6 +155,7 @@ fn the_merged_stack_is_the_order_they_were_drawn_in() {
         ],
         &marks(8.0, 8.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -205,6 +207,7 @@ fn a_multi_layer_source_keeps_its_own_composition() {
         ],
         &marks(32.0, 24.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -253,6 +256,7 @@ fn a_merged_group_stays_a_group() {
         ],
         &marks(32.0, 16.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -300,6 +304,7 @@ fn two_files_with_the_same_layer_name_do_not_collide() {
         ],
         &marks(16.0, 8.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -333,6 +338,7 @@ fn a_resized_placement_is_resampled_to_the_size_it_looked() {
         ],
         &marks(40.0, 16.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -369,6 +375,7 @@ fn the_merged_file_writes_one_anchor_of_its_own() {
         ],
         &marks(32.0, 16.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -424,6 +431,7 @@ fn a_file_this_editor_wrote_is_found_by_its_manifest_name() {
         ],
         &marks(64.0, 32.0),
         &read_fn,
+        &|_| {},
     )
     .expect("a file this editor wrote should merge");
 
@@ -466,6 +474,7 @@ fn a_layers_attributes_survive_the_rename() {
         ],
         &marks(32.0, 16.0),
         &read_fn,
+        &|_| {},
     )
     .expect("merge should succeed");
 
@@ -486,6 +495,7 @@ fn a_merge_of_one_is_refused() {
         &[part("wall", "wall", 0.0, 0.0, 16.0)],
         &marks(16.0, 16.0),
         &read_fn,
+        &|_| {},
     )
     .expect_err("one part is not a merge");
     assert!(err.contains("two or more"));
@@ -511,6 +521,7 @@ fn a_layer_that_is_not_there_stops_the_merge() {
         ],
         &marks(32.0, 16.0),
         &read_fn,
+        &|_| {},
     )
     .expect_err("a missing layer should stop it");
     assert!(err.contains("chimney"));

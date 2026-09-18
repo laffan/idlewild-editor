@@ -292,10 +292,19 @@ fn merge_psds(
 ) -> Result<ImportResult, String> {
     let key = psd_pipeline::free_key(&id, &name)?;
     let project = id.clone();
-    let bytes = psd_merge::merge(width, height, &parts, &marks, &move |source: &str| {
-        std::fs::read(psd_pipeline::psd_path(&project, source)?)
-            .map_err(|e| format!("Cannot open {source}.psd: {e}"))
-    })?;
+    let say = logger(&app);
+    let bytes = psd_merge::merge(
+        width,
+        height,
+        &parts,
+        &marks,
+        &move |source: &str| {
+            std::fs::read(psd_pipeline::psd_path(&project, source)?)
+                .map_err(|e| format!("Cannot open {source}.psd: {e}"))
+        },
+        &say,
+    )?;
+    say(&format!("Writing psd/{key}.psd"));
     std::fs::write(psd_pipeline::psd_path(&id, &key)?, bytes).map_err(|e| e.to_string())?;
 
     // The file's own size, not the artwork's: the marks grow the canvas around

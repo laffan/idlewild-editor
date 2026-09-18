@@ -155,9 +155,13 @@ export async function mergeSelection(deps: MergeDeps): Promise<void> {
     height: placement.height * EXPORT_SCALE,
   }));
 
+  // The Rust side names each source as it opens it and each part as it lays
+  // it out, counted — `psd_merge.rs` — and those lines arrive here as they
+  // happen. A merge of nine files is seconds of work inside one call, and a
+  // sheet that said one thing for all of it could not be told from a hang.
   const progress = openPsdProgress(
     "Merging",
-    `${chosen.units.length} placed PSDs`,
+    `${chosen.units.length} placed PSDs into one file`,
     "Reading the files…",
   );
 
