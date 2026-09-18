@@ -19,6 +19,7 @@ import { applyFillPaint } from "./fill-actions";
 import { exportSelectionPng } from "./export-selection";
 import { openAddImage, openExportSelection } from "./sheets";
 import * as log from "../lib/log";
+import { renameGroup } from "../lib/groups";
 import { describeRange, type Grid } from "../lib/grid";
 import type { DocStore } from "../lib/doc-store";
 import type { DrawingLayer } from "../drawing";
@@ -53,6 +54,8 @@ export interface InspectWiringDeps {
   activeLayerId: () => string;
   deleteSelection: () => void;
   deleteLayer: (layerId: string) => void;
+  /** Tying placed PSDs together and letting them go — `group-actions.ts`. */
+  groups: () => { group: () => void; ungroup: () => void };
   /**
    * Which tool is in hand and which way round it is.
    *
@@ -107,6 +110,12 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
       deps.inspector().updateStrokeStyle(drawing.style);
     },
     onDeleteSelection: () => deps.deleteSelection(),
+    // ⌘G and ⇧⌘G, as the two buttons an iPad needs — `group-actions.ts` is the
+    // same code the keyboard reaches.
+    onGroup: () => deps.groups().group(),
+    onUngroup: () => deps.groups().ungroup(),
+    onRenameGroup: (layerId, groupId, name) =>
+      renameGroup(store, layerId, groupId, name),
     onDeleteLayer: (layerId) => deps.deleteLayer(layerId),
     onRenamePoint: (layerId, pointId, name) =>
       store.updatePoint(layerId, pointId, { name }),

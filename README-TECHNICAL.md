@@ -4948,6 +4948,81 @@ the file has been opened up and only that row goes — `Remove "roof" from
 layer`. That is the same question `doomedPlacements` answers, asked where it is
 about to be acted on.
 
+### Groups, which the game is never told about
+
+⌘G ties the placed PSDs that are selected together; ⇧⌘G lets them go. A wall,
+a roof and a door become one thing to *work on*: tapping any of them selects
+the lot, a drag moves all of them, and the layer panel lists them under a row
+of their own.
+
+**It is the first thing in `doc.json` that is not a fact about the game.**
+Everything else in the document is there because it is in
+`game.config.json` too — a layer is Phaser's draw order, a collider is what
+stops a character, a point is a place the project's own code reads back by
+name. A group is a statement about somebody's hands. `game_config.rs` reads the
+fields it names and ignores the rest, which is the same tolerance that lets a
+document written before zones existed still export, so a grouped project
+generates the config an ungrouped one does — asserted in
+`tests::config::a_group_never_reaches_the_config`, byte for byte, because the
+day somebody adds `deny_unknown_fields` for a good reason is the day a grouped
+project stops exporting at all.
+
+**It is still saved**, which is the difference between this and the overlay
+switches. A group travels in a `.idlewild`, comes back on another machine, is
+undone and redone with the rest of the document, and is the same for two people
+opening the same project. An overlay switch is none of those things and lives
+in `localStorage` accordingly.
+
+`lib/groups.ts` is the model and it works in **units**, not placements — a
+placed PSD is one thing however many layers came in with it, and a file
+re-parsed into a different number of layers then needs nothing here rewritten.
+Four rules, each of which is invisible when it is wrong:
+
+- **Two is the floor.** A group of one names something that already has a name,
+  so ⌘G on a single file writes no document and pushes no undo step.
+- **A unit is in at most one group**, and grouping a selection that already
+  holds grouped units *absorbs* them. A group left with one member goes.
+- **The members are brought together into one run of the layer's placements**,
+  at the position of the earliest of them. Not tidiness: the panel lists
+  placements in the order they draw, so a group drawn as a cluster of rows
+  whose members are scattered through that order would be a list saying
+  something the canvas does not do. On an isometric object layer the list is
+  sorted by screen Y instead, so there the cluster *is* the one place the panel
+  departs from strict draw order — and it departs from it to say something
+  true.
+- **A group that has lost its members is not a group.** Deleting a placement
+  and carrying one to another layer are the two ways a unit leaves a layer, and
+  neither knows what a group is. `liveGroups` is therefore what every reader
+  goes through — stored units filtered to the ones still there, groups filtered
+  to those with two left — so a stale id is never something anybody sees.
+  `pruneLayerGroups` writes that answer back, and the two callers wrap it with
+  their own edit in one `history.group`: a group that lost its last member is
+  not a step somebody took.
+
+**Flat, deliberately.** A group holds no groups. Nesting is what every drawing
+program does eventually and it costs a tree in the panel, a path in the
+selection, and a decision about what a double tap means at each level — none of
+which is worth guessing at before the flat version has been lived with.
+
+**Reaching inside one is the sidebar's job, not a second double tap.** A tap on
+the canvas means the group (`widenToGroup`, beside the unit rules in
+`game/adjusting.ts`, and skipped for a unit that has been opened up). Double
+tap is already taken — it opens a file up into its own layers — and a gesture
+meaning two different things at two different depths is a gesture nobody can
+aim. So the panel lists a group's members indented under it, and picking one
+there picks that file alone, which is where you already go to reach something
+standing behind something else.
+
+**The buttons are the iPad's half.** There is no ⌘ under a finger, so Group and
+Ungroup sit in the inspector beside the list of what is selected — which is
+exactly what they act on — and when the selection *is* a group, the heading is
+the group's own name and can be retyped. `renderPlacements` asks whether the
+selection is a group rather than whether it overlaps one: a heading naming a
+group that half the selection belongs to would be a heading saying something
+untrue. The panel's own row follows the same rule — `isSelected` lights a
+group's row only when **every** member is held, so reaching in to pick one file
+does not leave two rows claiming to be the selection.
+
 ### A layer that has wandered, and the way back
 
 Opening a unit up is the one gesture that can leave a PSD's layers somewhere the

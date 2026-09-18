@@ -28,6 +28,7 @@ import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
 import { layerImage, type LayerImage } from "./psd-loader";
+import { pruneLayerGroups } from "../lib/groups";
 import { fillRegion } from "./fill-region";
 import type { Paint } from "../lib/paint";
 import { selectionLayer } from "../lib/selection";
@@ -38,6 +39,7 @@ import {
   inAdjustedInstance,
   selectedPlacement,
   toggleUnit,
+  widenToGroup,
 } from "./adjusting";
 import type { Viewport } from "../drawing";
 import type { WorldSceneConfig } from "./world-scene-config";
@@ -365,7 +367,15 @@ export class WorldScene extends Phaser.Scene {
     // the tap clears the selection rather than doing nothing at all.
     if (this.gestureMode === "point" && this.addPoint(world)) return;
 
-    this.setSelection(this.docRenderer.pickAt(world, this.activeLayerId));
+    // A tap on a grouped file means the group — the same rule a placed PSD
+    // keeps, one level out. See `widenToGroup`.
+    this.setSelection(
+      widenToGroup(
+        this.store,
+        this.docRenderer.pickAt(world, this.activeLayerId),
+        this.adjusting,
+      ),
+    );
   }
 
   /**
@@ -466,10 +476,15 @@ export class WorldScene extends Phaser.Scene {
   /** Remove what is selected, when it is a placed PSD — see `adjusting.ts`. */
   removeSelectedPlacement(): void {
     if (this.selection.kind !== "placement") return;
+    const layerId = this.selection.layerId;
     const doomed = doomedPlacements(this.store, this.selection, this.adjusting);
-    for (const member of doomed) {
-      this.store.removePlacement(this.selection.layerId, member.id);
-    }
+    // One step: the removals, and the group the last of them may have emptied.
+    this.store.history.group(() => {
+      for (const member of doomed) {
+        this.store.removePlacement(layerId, member.id);
+      }
+      if (doomed.length > 0) pruneLayerGroups(this.store, layerId);
+    });
     if (doomed.length > 0) this.setSelection({ kind: "none" });
   }
 

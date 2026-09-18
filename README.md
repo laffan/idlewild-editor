@@ -326,6 +326,17 @@ remaining pieces are wired to real slots rather than mocked.
   the pipeline is doing while it happens. That file is a placement like any
   other, so it drags, exports and stacks the way everything else does; what
   makes it a background is the layer it is on
+- **⌘G puts placed PSDs together, and ⇧⌘G lets them go.** A wall, a roof and
+  a door become one thing to work on: tapping any of them picks up the lot, a
+  drag moves all of them, and the layer panel lists them under a row of their
+  own with their names indented beneath it. To reach one file inside a group,
+  pick it there — the canvas always means the group, because a double tap is
+  already how a PSD opens up into its own layers. Group and Ungroup are
+  buttons in the inspector too, since an iPad has no ⌘. **The game is never
+  told.** It is the first thing in the document that is not a fact about what
+  runs — it says how somebody is working — so a grouped project exports exactly
+  the game an ungrouped one does. It is saved all the same: a group travels in
+  a `.idlewild`, comes back on another machine, and undoes with everything else
 - **Several PSDs at once, from the sidebar.** A marquee on the canvas has
   always caught more than one image, but it asks where things are standing —
   and three trees in a wood are not a rectangle. So the rows pick too: tap one
@@ -1076,6 +1087,10 @@ remaining pieces are wired to real slots rather than mocked.
 
 **Next**
 
+- Groups inside groups. A group is flat: a unit is in one of them and a group
+  holds no groups. Nesting costs a tree in the panel, a path in the selection
+  and a decision about what a double tap means at each level, and none of that
+  is worth guessing at before the flat version has been lived with
 - Hush's blit-forward re-anchor, so panning a stroke-heavy layer past the
   drawing backing's edge slides its pixels instead of re-baking them
 - A flat top-down project sorts nothing on Y, so its character draws in front

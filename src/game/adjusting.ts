@@ -15,6 +15,7 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
+import { groupOfPlacement, groupPlacements } from "../lib/groups";
 import type { Placement, Selection } from "../lib/types";
 import type { PickResult } from "./picking";
 import { unitMembers, unitOf } from "./unit";
@@ -99,4 +100,44 @@ export function doomedPlacements(
   return adjusting === unitOf(placement)
     ? [placement]
     : unitMembers(store.layers, selection.layerId, unitOf(placement));
+}
+
+/**
+ * A tap on a grouped file means the group.
+ *
+ * The same rule a placed PSD already keeps, one level out: a file is one thing
+ * until a double tap says otherwise, and a group is one thing until you reach
+ * into it. Tapping a wall that has been grouped with a roof and a door selects
+ * the building, which is the whole of what grouping is for — see
+ * `lib/groups.ts`.
+ *
+ * **The way in is the sidebar, not a second double tap.** Double tap is
+ * already taken: it opens a file up into its own layers, and a gesture that
+ * meant two different things at two different depths would be a gesture nobody
+ * could aim. So the layer panel lists a group's members under it and picking
+ * one there picks that file alone — which is also where you already go to
+ * reach something standing behind something else.
+ *
+ * A unit that has been opened up keeps its own selection, because the
+ * adjustment is about that file's layers and widening to the group would take
+ * the thing being adjusted out of the panel describing it.
+ */
+export function widenToGroup(
+  store: DocStore,
+  selection: Selection,
+  adjusting: string | null,
+): Selection {
+  if (selection.kind !== "placement") return selection;
+  const layer = store.layer(selection.layerId);
+  const placement = layer?.placements.find(
+    (p) => p.id === selection.placementId,
+  );
+  if (!placement || unitOf(placement) === adjusting) return selection;
+  const group = groupOfPlacement(layer, placement);
+  if (!group) return selection;
+  const ids = groupPlacements(layer, group).map((p) => p.id);
+  // One member left is not a group; `liveGroups` has already dropped that
+  // case, so this is the floor rather than the usual path.
+  if (ids.length < 2) return selection;
+  return { kind: "placements", layerId: selection.layerId, ids };
 }

@@ -18,6 +18,8 @@ import { describeFill } from "../lib/doc-shape";
 import { DEFAULT_PAINT_SPEC, paintLabel, type Paint } from "../lib/paint";
 import { count } from "./layer-items";
 import { unionRect } from "../game/unit";
+import { groupOfUnit, groupPlacements, liveGroups } from "../lib/groups";
+import { unitKey } from "../lib/units";
 import type { DocStore } from "../lib/doc-store";
 import { describeRange, type Grid } from "../lib/grid";
 import type { FillPatch, Selection } from "../lib/types";
@@ -90,6 +92,16 @@ export interface PanelActions {
   onRenamePoint: (layerId: string, pointId: string, name: string) => void;
   /** Say where this scene starts play, or that it starts nowhere. */
   onSetStartPoint: (pointId: string | null) => void;
+  /**
+   * ⌘G and ⇧⌘G, as buttons.
+   *
+   * There is no ⌘ on an iPad, so the two shortcuts need somewhere to be — and
+   * beside the list of what is selected is the place, because that list is
+   * exactly what they act on. See `editor/group-actions.ts`.
+   */
+  onGroup: () => void;
+  onUngroup: () => void;
+  onRenameGroup: (layerId: string, groupId: string, name: string) => void;
 }
 
 /**
@@ -302,13 +314,19 @@ export function renderRegion(
   );
 }
 /**
- * Several images, caught by a marquee.
+ * Several images: caught by a marquee, picked in the sidebar, or tied together
+ * as a group.
  *
- * Deliberately thin. There is nothing to say about a group of images that is
- * true of all of them — they have different files, sizes and anchors — so
- * this says what was caught, lists it, and offers the one thing that makes
- * sense on the lot: getting rid of them. Everything else is reached by
- * picking one.
+ * Deliberately thin about the images themselves. There is nothing to say about
+ * a set of them that is true of all of them — they have different files, sizes
+ * and anchors — so this says what was caught and lists it, and everything
+ * about one file is reached by picking that one.
+ *
+ * What it does offer is the two things that are about the **set**: tying it
+ * together and letting it go. Those are ⌘G and ⇧⌘G, which do not exist on an
+ * iPad, and beside the list of what is selected is where they belong — that
+ * list is exactly what they act on. When the selection *is* a group, the
+ * heading is the group's own name and it can be retyped there.
  */
 export function renderPlacements(
   panel: PanelSurface,
@@ -322,7 +340,24 @@ export function renderPlacements(
   const placements = layer.placements.filter((p) => chosen.has(p.id));
   if (placements.length === 0) return panel.empty();
 
-  panel.head("Selection", count(placements.length, "image"));
+  // The group this selection *is*, rather than one it merely overlaps: a
+  // heading naming a group that only half of what is selected belongs to would
+  // be a heading saying something untrue.
+  const group = liveGroups(layer).find(
+    (g) =>
+      groupPlacements(layer, g).length === placements.length &&
+      groupPlacements(layer, g).every((p) => chosen.has(p.id)),
+  );
+  const units = new Set(placements.map(unitKey));
+  const grouped = [...units].some((unit) => !!groupOfUnit(layer, unit));
+
+  if (group) {
+    panel.editableHead("Group", group.name, "", (name) =>
+      actions.onRenameGroup(layer.id, group.id, name),
+    );
+  } else {
+    panel.head("Selection", count(units.size, "placed PSD"));
+  }
   panel.section("Info");
   panel.row("Layer", layer.name);
   const box = unionRect(placements);
@@ -331,15 +366,41 @@ export function renderPlacements(
     panel.row("Origin", `${Math.round(box.x)}, ${Math.round(box.y)}`);
   }
 
-  panel.section("Images", "Drag to move them together. Tap one to work on it.");
+  panel.section(
+    "Images",
+    group
+      ? "They move and delete together. Reach one from the layer panel."
+      : "Drag to move them together. Tap one to work on it.",
+  );
   for (const placement of placements) {
     panel.row(`${placement.psdKey}.psd`, placement.layerPath);
   }
 
+  panel.section(
+    "Group",
+    "A group is the editor's own: it is saved with the project and travels " +
+      "in an export, and the game is never told about it.",
+  );
   panel.body.appendChild(
     h(
       "div",
       { class: "inspect-section" },
+      units.size > 1 && !group
+        ? h("button", {
+            class: "panel-btn",
+            text: "Group",
+            title: "⌘G — tap any of them to select the lot",
+            onClick: actions.onGroup,
+          })
+        : null,
+      grouped
+        ? h("button", {
+            class: "panel-btn",
+            text: "Ungroup",
+            title: "⇧⌘G",
+            onClick: actions.onUngroup,
+          })
+        : null,
       h("button", {
         class: "panel-btn",
         text: "Delete images",

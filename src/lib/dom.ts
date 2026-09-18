@@ -173,6 +173,18 @@ export const ICONS = {
      the one exit that hands back artwork rather than a program. */
   image: ["M4 5h16v14H4z", "m4 16 5-5 4 4 3-3 4 4", "M9 9.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"],
   folder: "M3 6h6l2 3h10v11H3V6Z",
+  /* Two objects inside a selection box — a group, drawn the way every editor
+     draws one. The corner brackets rather than a closed rectangle because what
+     holds them together is a decision rather than a thing: see
+     `lib/groups.ts`. */
+  group: [
+    "M3 7V3h4",
+    "M17 3h4v4",
+    "M21 17v4h-4",
+    "M7 21H3v-4",
+    "M7 8h4v4H7z",
+    "M13 12h4v4h-4z",
+  ],
   trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 14h10l1-14"],
   rename: "M4 20l4-1 10-10-3-3L5 16l-1 4Z",
   copy: ["M8 8h12v12H8z", "M4 16V4h12"],

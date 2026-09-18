@@ -392,6 +392,12 @@
   box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
+/* A member of a group, under the group's own row. The indent is the whole of
+   how a group is drawn — it has no mark on the canvas, because the outline
+   round it is the outline any multi-selection gets. See lib/groups.ts. */
+.layer-item.nested { padding-left: 66px; }
+.layer-item.nested.has-grip { padding-left: 44px; }
+
 .layer-item-label {
   flex: 1;
   min-width: 0;

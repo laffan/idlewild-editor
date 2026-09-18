@@ -7,7 +7,7 @@ import { clear, h } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import { assetBase, checkAssetServer, platform } from "../lib/ipc";
-import type { EditorMode, ProjectMeta, Selection, ToolId } from "../lib/types";
+import type { ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
 import { saveThumbnail } from "./thumbnail";
@@ -34,7 +34,9 @@ import { createConversions } from "./conversions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
 import { createToolRouting } from "./tool-routing";
 import { libraryPointer, libraryStyle } from "./stamp-box";
-import { createDeletes } from "./layer-actions";
+import { createDeletes, type DeleteWiring } from "./layer-actions";
+import { createModeSwitch } from "./mode-switch";
+import { groupSelection, ungroupSelection } from "./group-actions";
 import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
@@ -60,7 +62,6 @@ export async function mountEditor(
   const os = await platform();
 
   let activeLayerId = store.layers[0]?.id ?? "";
-  let mode: EditorMode = "draw";
   let handle: GameHandle | null = null;
   let drawing: DrawingLayer | null = null;
   // Built once the scene is up — see below. The header's two buttons and the
@@ -199,6 +200,10 @@ export async function mountEditor(
       activeLayerId: () => activeLayerId,
       deleteSelection: () => deleteSelection(),
       deleteLayer: (layerId) => void deleteLayer(layerId),
+      groups: () => ({
+        group: () => groupSelection(selected),
+        ungroup: () => ungroupSelection(selected),
+      }),
       tools: () => tools,
     }),
   );
@@ -400,7 +405,7 @@ export async function mountEditor(
     // A scene is a different place, and the game places the open one. In Code
     // the game is up while the scene dropdown is reachable, which is the whole
     // point of that mode — so switching restarts it on where you have gone.
-    if (mode !== "draw") runGame();
+    if (modeSwitch.mode() !== "draw") modeSwitch.runGame();
   });
 
   // A paste and a drop are the same import: the bytes become a PSD, marked
@@ -414,7 +419,7 @@ export async function mountEditor(
     os,
     canvas: canvasWrap,
     scene: () => handle?.scene ?? null,
-    enabled: () => mode === "draw",
+    enabled: () => modeSwitch.mode() === "draw",
     onPsdReplaced: async (key, manifest) => {
       await handle?.scene.reloadPsd(key, manifest);
       inspector.reloadPsdLayers(key);
@@ -434,6 +439,8 @@ export async function mountEditor(
     onDelete: () => deleteSelection(),
     onUndo: () => history?.undo(),
     onRedo: () => history?.redo(),
+    onGroup: () => groupSelection(selected),
+    onUngroup: () => ungroupSelection(selected),
   });
   layout.restore();
 
@@ -591,9 +598,10 @@ export async function mountEditor(
     layers.render();
   }
 
-  // Deleting a selection and deleting a layer, in `layer-actions.ts` beside
-  // the sheet one of them puts up and the switch the other walks.
-  const { deleteSelection, deleteLayer } = createDeletes({
+  // What the three things that act on a whole selection are handed: deleting
+  // it, grouping it and letting a group go. Deleting is `layer-actions.ts`,
+  // beside the sheet it puts up; grouping is `group-actions.ts`.
+  const selected: DeleteWiring = {
     store,
     selection: () => handle?.scene.getSelection() ?? null,
     setSelection: (selection) => handle?.scene.setSelection(selection),
@@ -602,65 +610,21 @@ export async function mountEditor(
     removeSelectedPlacement: () => handle?.scene.removeSelectedPlacement(),
     removeStrokes: (ids) => drawing?.removeStrokes(ids),
     clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
+  };
+  const { deleteSelection, deleteLayer } = createDeletes(selected);
+
+  // Draw, Code or Play, and what each of them does to the shell —
+  // `mode-switch.ts`, which holds the mode itself.
+  const modeSwitch = createModeSwitch({
+    store,
+    header,
+    shell,
+    layers,
+    code,
+    gameFrame,
+    scene: () => handle?.scene ?? null,
   });
-
-  /**
-   * Draw, Code or Play.
-   *
-   * **Code shows what Play shows.** The project's own game runs over the
-   * canvas in both, because a code editor beside a still picture of the game
-   * is a code editor you cannot check anything in: save a file and the thing
-   * in front of you restarts on it. What Code keeps that Play does not is the
-   * left sidebar and the panel — so the scene can be switched and the project
-   * read while the game runs, before a full test in Play. The inspector goes
-   * down with the tools: it describes what is selected on a canvas nobody can
-   * reach through a running game.
-   *
-   * Code is a section rather than a panel that happens to be open: entering it
-   * puts the panel up wherever it was last docked, and leaving takes it down.
-   * Anything that wants a file on screen — a console line naming where it was
-   * written — asks for the mode first.
-   */
-  function setMode(next: EditorMode): void {
-    mode = next;
-    header.setMode(next);
-    shell.classList.toggle("play-mode", next === "play");
-    shell.classList.toggle("code-mode", next === "code");
-    handle?.scene.setMode(next);
-    // Code keeps the left sidebar, and turns it into a directory: the game is
-    // over the canvas, so there is nothing in that column to act on, and what
-    // is wanted beside the code is the names — scenes, layers, PSDs, and the
-    // layers inside each file. See `editor/layer-directory.ts`.
-    layers.setBrowsing(next === "code");
-
-    if (next === "code") code.show();
-    else code.hide();
-
-    if (next === "draw") {
-      gameFrame.stop();
-      return;
-    }
-    log.info(
-      next === "play"
-        ? "Play — running this project's own code"
-        : "Code — the game is running beside it; a save restarts it",
-    );
-    runGame();
-  }
-
-  /**
-   * Start the game, or start it again.
-   *
-   * The document is flushed first, and awaited: the config the game reads is
-   * rewritten by the document's save, so starting without waiting would run
-   * the project against whatever the last debounce happened to have written.
-   */
-  function runGame(): void {
-    void store.flush().then(() => {
-      // The canvas may have been come back to while that was in flight.
-      if (mode !== "draw") void gameFrame.start();
-    });
-  }
+  const setMode = modeSwitch.setMode;
 
   async function leave(): Promise<void> {
     await teardown();
@@ -673,7 +637,7 @@ export async function mountEditor(
     history = null;
     intake.stop();
     // A thumbnail is of the canvas, so the game comes down first.
-    if (mode === "play") setMode("draw");
+    if (modeSwitch.mode() === "play") setMode("draw");
     await saveThumbnail(handle?.game ?? null, meta.id);
     await store.flush();
     header.destroy();

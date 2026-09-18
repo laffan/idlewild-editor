@@ -18,6 +18,7 @@
 import { confirmSheet } from "../lib/sheet";
 import type { DocStore } from "../lib/doc-store";
 import { removeBackground } from "../lib/layer-kinds";
+import { pruneLayerGroups } from "../lib/groups";
 import type { Layer, Selection } from "../lib/types";
 import { count } from "./layer-items";
 import * as log from "../lib/log";
@@ -51,8 +52,13 @@ export function deleteSelected(selection: Selection, deps: DeleteDeps): void {
   } else if (selection.kind === "placements") {
     // Every image the marquee caught, whole. A unit opened up for layer
     // adjustment is the one case where part of a PSD can go, and a marquee
-    // is never that.
-    for (const id of selection.ids) store.removePlacement(selection.layerId, id);
+    // is never that. One step, with whatever group they were in going quietly
+    // along with the last member of it.
+    const layerId = selection.layerId;
+    store.history.group(() => {
+      for (const id of selection.ids) store.removePlacement(layerId, id);
+      pruneLayerGroups(store, layerId);
+    });
   } else if (selection.kind === "point") {
     store.removePoint(selection.layerId, selection.pointId);
   } else if (selection.kind === "zone") {

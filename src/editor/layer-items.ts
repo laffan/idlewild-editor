@@ -16,6 +16,7 @@
  */
 
 import { h, ICONS, icon } from "../lib/dom";
+import { groupOfUnit, liveGroups } from "../lib/groups";
 import { unitKey, unitsInDrawOrder } from "../lib/units";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { LayerKind } from "../lib/types";
@@ -56,6 +57,20 @@ export interface LayerItem {
    * `layer-directory.ts`.
    */
   psdKey?: string;
+  /**
+   * The group this row *is*, when it is a group's own row.
+   *
+   * Set on the row that stands for the whole group and on nothing else, so the
+   * inspector and the panel can tell a group's row from the rows under it.
+   */
+  groupId?: string;
+  /**
+   * Whether this row is a member of the group listed directly above it.
+   *
+   * Drawn indented, which is the whole of how the relationship is shown: a
+   * group has no mark on the canvas, so the list is where it is visible.
+   */
+  nested?: boolean;
   /**
    * What is wrong with this thing, in the fewest words that say it.
    *
@@ -125,27 +140,41 @@ export function layerItems(
     });
   }
 
-  for (const unit of unitsInDrawOrder(layer, context.isometric ?? false)) {
-    const [first] = unit;
-    // Only on an object layer. A pattern layer's placements are its palette
-    // and a background layer's are scenery — neither is a thing standing on a
-    // grid space, so neither has anywhere to be anchored *to*.
-    const unanchored =
-      kind === "object" && context.isAnchored?.(first.psdKey) === false;
+  // Grouped files are listed under the group's own row, which stands where
+  // its front-most member does. A group has no mark on the canvas — the
+  // outline round it is the outline any multi-selection gets — so this list is
+  // where the relationship is actually visible. See `lib/groups.ts`.
+  const units = unitsInDrawOrder(layer, context.isometric ?? false);
+  const groups = liveGroups(layer);
+  const drawn = new Set<string>();
+
+  for (const unit of units) {
+    const group = groups.length ? groupOfUnit(layer, unitKey(unit[0])) : undefined;
+    if (!group) {
+      items.push(unitItem(layer, kind, unit, context));
+      continue;
+    }
+    if (drawn.has(group.id)) continue;
+    drawn.add(group.id);
+
+    const members = units.filter(
+      (other) => groupOfUnit(layer, unitKey(other[0]))?.id === group.id,
+    );
     items.push({
       selection: {
-        kind: "placement",
+        kind: "placements",
         layerId: layer.id,
-        placementId: first.id,
+        ids: members.flat().map((p) => p.id),
       },
-      label: `${first.psdKey}.psd`,
-      detail: describeUnit(unit),
-      path: ICONS.file,
-      members: unit.map((p) => p.id),
-      unit: unitKey(first),
-      psdKey: first.psdKey,
-      ...(unanchored ? { warning: "No anchor" } : {}),
+      label: group.name,
+      detail: count(members.length, "file"),
+      path: ICONS.group,
+      members: members.flat().map((p) => p.id),
+      groupId: group.id,
     });
+    for (const member of members) {
+      items.push({ ...unitItem(layer, kind, member, context), nested: true });
+    }
   }
 
   for (const fill of layer.fills) {
@@ -191,6 +220,31 @@ export function layerItems(
   return items;
 }
 
+/** One placed PSD's row, grouped or not. */
+function unitItem(
+  layer: Layer,
+  kind: LayerKind,
+  unit: readonly Placement[],
+  context: LayerItemContext,
+): LayerItem {
+  const [first] = unit;
+  // Only on an object layer. A pattern layer's placements are its palette
+  // and a background layer's are scenery — neither is a thing standing on a
+  // grid space, so neither has anywhere to be anchored *to*.
+  const unanchored =
+    kind === "object" && context.isAnchored?.(first.psdKey) === false;
+  return {
+    selection: { kind: "placement", layerId: layer.id, placementId: first.id },
+    label: `${first.psdKey}.psd`,
+    detail: describeUnit(unit),
+    path: ICONS.file,
+    members: unit.map((p) => p.id),
+    unit: unitKey(first),
+    psdKey: first.psdKey,
+    ...(unanchored ? { warning: "No anchor" } : {}),
+  };
+}
+
 /**
  * What the row says beside the filename.
  *
@@ -234,6 +288,9 @@ export function renderLayerItem(
   const classes = ["layer-item"];
   if (active) classes.push("active");
   if (onGrip) classes.push("has-grip");
+  // Indented under the group's own row, which is the whole of how a group is
+  // drawn — see `lib/groups.ts`.
+  if (item.nested) classes.push("nested");
   // Greyed rather than hidden or crossed out: the file is there and it draws,
   // and what the row is saying is that one thing about it is missing.
   if (item.warning) classes.push("warned");
@@ -328,6 +385,19 @@ export function isSelected(item: LayerItem, selection: Selection): boolean {
   // landed on. The same list answers a marquee, which is the one place the
   // row's kind and the selection's differ.
   const members = item.members ?? [];
+  // A group's row is about **all** of its members, not any of them: reaching
+  // into a group from this list to pick one file must not light the row for
+  // the group it was picked out of, or there would be nothing on screen to
+  // say which of the two is selected.
+  if (a.kind === "placements") {
+    const held =
+      selection.kind === "placements"
+        ? selection.ids
+        : selection.kind === "placement"
+          ? [selection.placementId]
+          : [];
+    return a.ids.length > 0 && a.ids.every((id) => held.includes(id));
+  }
   if (a.kind === "placement" && selection.kind === "placements") {
     return selection.ids.some((id) => members.includes(id));
   }

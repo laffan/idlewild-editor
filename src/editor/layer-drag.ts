@@ -23,6 +23,7 @@
 
 import type { DocStore } from "../lib/doc-store";
 import { reorderUnit } from "../lib/units";
+import { pruneLayerGroups } from "../lib/groups";
 import type { Selection } from "../lib/types";
 
 /** A layer row being moved to a position in the list. */
@@ -331,7 +332,14 @@ export class LayerDrags {
     }
 
     if (target && target !== drag.layerId) {
-      this.host.store.movePlacements(drag.layerId, drag.placementIds, target);
+      const from = drag.layerId;
+      // One step: the carry, and the group it may have taken the last member
+      // out of. A group is one layer's, so a unit carried away leaves it —
+      // see `lib/groups.ts`.
+      this.host.store.history.group(() => {
+        this.host.store.movePlacements(from, drag.placementIds, target);
+        pruneLayerGroups(this.host.store, from);
+      });
       // Follow it: the row the finger let go of is now under a different
       // layer, and leaving the selection pointing at the old one would show
       // the inspector an image that is no longer there.

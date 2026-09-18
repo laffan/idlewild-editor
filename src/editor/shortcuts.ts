@@ -10,6 +10,11 @@
  * from wherever you are, and the tool comes back the moment the key is up.
  * An iPad has no space bar, which is why Pan is a rail tool as well.
  *
+ * ⌘G and ⇧⌘G group and ungroup the placed PSDs that are selected — an
+ * editor-only relationship that is saved with the project and never reaches
+ * the game. There is no ⌘ on an iPad, so both are also buttons in the
+ * inspector, the way Copy PSD is in the header's menu.
+ *
  * ⌘Z and ⇧⌘Z are undo and redo, on the surface the focus is in — see
  * `editor/history.ts`, which decides that and owns the two header buttons
  * that do the same thing without a keyboard. An iPad with a hardware keyboard
@@ -34,6 +39,9 @@ export interface ShortcutHost {
   onDelete: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  /** ⌘G and ⇧⌘G — see `editor/group-actions.ts`. */
+  onGroup: () => void;
+  onUngroup: () => void;
 }
 
 /** Listen until the returned teardown is called. */
@@ -66,6 +74,17 @@ export function bindShortcuts(host: ShortcutHost): () => void {
       event.preventDefault();
       if (event.shiftKey) host.onRedo();
       else host.onUndo();
+      return;
+    }
+
+    // ⌘G / ⇧⌘G, read the same way: `key` is an upper-case G under shift.
+    // Prevented for the reason ⌘Z is — WKWebView has its own ideas about a
+    // ⌘ chord it is handed — and because Safari's Find Again is on ⌘G.
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "g") {
+      if (event.altKey) return;
+      event.preventDefault();
+      if (event.shiftKey) host.onUngroup();
+      else host.onGroup();
       return;
     }
 

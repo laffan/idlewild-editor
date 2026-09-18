@@ -335,6 +335,34 @@ export interface Background {
   gradient?: { from: string; to: string; angle: number };
 }
 
+/**
+ * Placed PSDs tied together by hand — a group, in the sense every drawing
+ * program means it.
+ *
+ * **The first thing in this document that the game is never told about.**
+ * Everything else here is in `doc.json` because it is in `game.config.json`
+ * too: a layer is Phaser's draw order, a collider is what stops a character, a
+ * point is a place the project's own code reads back by name. A group is a
+ * statement about how somebody is *working* — these three things are a
+ * building — and `game_config.rs` reads the fields it names and ignores the
+ * rest, so a grouped document exports the same game an ungrouped one does.
+ *
+ * It is saved all the same, which is the difference between this and the
+ * overlay switches: a group travels in a `.idlewild`, comes back on another
+ * machine, and is undone and redone with the rest of the document.
+ *
+ * What it holds is **unit keys** — see `lib/units.ts` — because a placed PSD
+ * is one thing on the canvas however many layers came in with it, and because
+ * a file re-parsed into a different number of layers then needs nothing here
+ * rewritten. See `lib/groups.ts` for the rules, including why it is flat.
+ */
+export interface PlacementGroup {
+  id: string;
+  name: string;
+  /** Unit keys, in the order they were put together. */
+  units: string[];
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -342,6 +370,12 @@ export interface Layer {
   visible: boolean;
   fills: FillPatch[];
   placements: Placement[];
+  /**
+   * Placed PSDs tied together by hand. Absent until something on this layer
+   * has been grouped, and absent again once the last group has gone — see
+   * `lib/groups.ts`.
+   */
+  groups?: PlacementGroup[];
   /**
    * Named places. Absent on every document written before the Point tool
    * existed, which is why `withScenes` fills it in on the way through rather

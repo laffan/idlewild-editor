@@ -509,3 +509,100 @@ fn every_kind_of_layer_reaches_the_config() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// A group is the editor's, and the game is never told about it.
+///
+/// `Layer.groups` is the first thing in `doc.json` that is not a fact about
+/// the game: it says that a wall, a roof and a door are one thing to *work
+/// on*, which is a statement about somebody's hands rather than about what
+/// runs. So the config generated from a grouped document has to be the config
+/// generated from the same document ungrouped, byte for byte — otherwise a
+/// project would play differently for having been tidied up.
+///
+/// Nothing here does any work to make that true: the structs this file
+/// deserialises into name the fields they want and ignore the rest, which is
+/// the same tolerance that lets a document written before zones existed still
+/// export. This asserts the tolerance rather than trusting it, because the
+/// day somebody adds `deny_unknown_fields` for a good reason is the day a
+/// grouped project stops exporting at all.
+#[test]
+fn a_group_never_reaches_the_config() {
+    let meta = store::create_project(
+        "Grouped",
+        Projection::Orthogonal,
+        Genre::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let doc = |groups: serde_json::Value| -> String {
+            serde_json::json!({
+                "version": 2,
+                "projection": "orthogonal",
+                "genre": "topdown",
+                "gridSize": 32,
+                "activeSceneId": "scene-main",
+                "scenes": [{
+                    "id": "scene-main",
+                    "name": "Main",
+                    "layers": [{
+                        "id": "l-1", "name": "Terrain", "visible": true,
+                        "fills": [], "zones": [], "strokes": [], "points": [],
+                        "groups": groups,
+                        "placements": [
+                            {
+                                "id": "p1", "psdKey": "wall", "layerPath": "S | wall",
+                                "x": 0.0, "y": 0.0, "width": 32.0, "height": 32.0,
+                                "anchor": { "cx": 0, "cy": 0 }, "instance": "u-wall"
+                            },
+                            {
+                                "id": "p2", "psdKey": "roof", "layerPath": "S | roof",
+                                "x": 32.0, "y": 0.0, "width": 32.0, "height": 32.0,
+                                "anchor": { "cx": 1, "cy": 0 }, "instance": "u-roof"
+                            }
+                        ]
+                    }]
+                }]
+            })
+            .to_string()
+        };
+
+        let read = |id: &str| -> serde_json::Value {
+            serde_json::from_str(
+                &store::read_game_file(id, "js/game.config.json").expect("config should read"),
+            )
+            .expect("config should be JSON")
+        };
+
+        store::write_doc(&meta.id, &doc(serde_json::json!([]))).expect("document should save");
+        let plain = read(&meta.id);
+
+        store::write_doc(
+            &meta.id,
+            &doc(serde_json::json!([{
+                "id": "g1", "name": "Group 1", "units": ["u-wall", "u-roof"]
+            }])),
+        )
+        .expect("document should save");
+        let grouped = read(&meta.id);
+
+        assert_eq!(plain, grouped);
+        // And the word itself is nowhere in the file, under any layer.
+        assert!(!grouped.to_string().contains("\"groups\""));
+        assert!(!grouped.to_string().contains("Group 1"));
+        // The placements themselves are of course still there.
+        assert_eq!(
+            grouped["layers"][0]["placements"]
+                .as_array()
+                .map(Vec::len),
+            Some(2)
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
