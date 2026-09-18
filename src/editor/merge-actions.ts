@@ -56,6 +56,17 @@ export interface MergeDeps {
   selection: () => Selection | null;
   /** Redraw the left panel: rows go, and one arrives. */
   redrawLayers: () => void;
+  /**
+   * Make this the layer new work lands on, before the merged file is placed.
+   *
+   * `placePsd` puts a file on the *active* layer, and what is selected decides
+   * which layer a merge is about — two facts that agree on every route into
+   * this today, because picking anything sets the active layer. Saying it here
+   * rather than relying on that is the difference between a guarantee and a
+   * coincidence: a merged file landing on a different layer from the files it
+   * was made of would be a silent change of draw order.
+   */
+  focusLayer: (layerId: string) => void;
   /** The file's own layer list is what anybody wants to see next. */
   onMerged?: () => void;
 }
@@ -164,6 +175,8 @@ export async function mergeSelection(deps: MergeDeps): Promise<void> {
     );
 
     await progress.stage("Placing the artwork…");
+    // The merged file goes where its sources were — see `focusLayer`.
+    deps.focusLayer(chosen.layerId);
     store.history.begin();
     try {
       await scene.placePsd(result.key, result.manifest, anchor, IMPORT_SCALE);

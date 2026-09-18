@@ -614,6 +614,7 @@ export async function mountEditor(
     scene: () => handle?.scene ?? null,
     selection: () => handle?.scene.getSelection() ?? null,
     redrawLayers: () => layers.render(),
+    focusLayer: (layerId) => setActiveLayer(layerId),
     onMerged: () => inspector.revealPsdLayers(),
   };
 
