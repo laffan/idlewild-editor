@@ -17,7 +17,7 @@ import { h } from "../../lib/dom";
 import { openSheet } from "../../lib/sheet";
 import { patternLibrary, type PatternData } from "../../lib/library";
 import { publish } from "../../lib/ipc";
-import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { saveAs } from "../../lib/save-as";
 import * as log from "../../lib/log";
 import { imageToBits } from "./brushes";
 import {
@@ -536,17 +536,12 @@ function pickImage(onImage: (image: HTMLImageElement) => void): void {
 
 /** The pattern as a PNG on disk, one pixel per pixel. */
 async function savePng(pattern: PatternData, name: string): Promise<void> {
-  try {
-    const url = patternPngUrl(pattern);
-    if (!url) return;
-    const path = await saveFileDialog({
-      defaultPath: `${name.replace(/[^\w-]+/g, "-").toLowerCase() || "pattern"}.png`,
-      filters: [{ name: "PNG", extensions: ["png"] }],
-    });
-    if (!path) return;
-    await publish.saveBytes(path, url);
-    log.info(`Saved ${path}`);
-  } catch (err) {
-    log.error("Could not save the pattern:", err);
-  }
+  const url = patternPngUrl(pattern);
+  if (!url) return;
+  await saveAs({
+    fileName: `${name.replace(/[^\w-]+/g, "-").toLowerCase() || "pattern"}.png`,
+    filter: { name: "PNG", extensions: ["png"] },
+    what: "Saved the pattern",
+    write: (path) => publish.saveBytes(path, url),
+  });
 }

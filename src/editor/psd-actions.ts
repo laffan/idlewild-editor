@@ -20,12 +20,12 @@
  * now rather than being a thing only a Mac could do.
  */
 
-import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { psd, publish } from "../lib/ipc";
 import * as log from "../lib/log";
 import { isMobile } from "../lib/platform";
+import { saveAs } from "../lib/save-as";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
 import { resetLayerPositions } from "./layer-positions";
@@ -129,13 +129,16 @@ function isAbort(err: unknown): boolean {
  * longer.
  */
 async function savePsdCopy(projectId: string, key: string): Promise<void> {
-  const path = await saveFileDialog({
-    defaultPath: `${key}.psd`,
-    filters: [{ name: "Photoshop document", extensions: ["psd"] }],
+  // Read before `saveAs`, because on iOS the file is built before the picker
+  // and a PSD that cannot be read should say so instead of opening one.
+  const bytes = await psd.bytes(projectId, key);
+  const path = await saveAs({
+    fileName: `${key}.psd`,
+    filter: { name: "Photoshop document", extensions: ["psd"] },
+    what: "Saved a copy",
+    write: (dest) => publish.saveBytes(dest, bytes),
   });
-  if (!path) return;
-  await publish.saveBytes(path, await psd.bytes(projectId, key));
-  log.info(`Saved a copy to ${path} — Re-parse it from Files when you have edited it`);
+  if (path) log.info("Re-parse it from Files when you have edited it");
 }
 
 /**

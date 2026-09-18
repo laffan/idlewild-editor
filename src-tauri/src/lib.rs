@@ -26,6 +26,7 @@ mod psd_rebuild;
 mod psd_write;
 mod publish;
 mod publish_targets;
+mod save_staging;
 mod site_files;
 mod ssh_keys;
 mod store;
@@ -647,6 +648,8 @@ pub fn run() {
             import_assets::import_psd_from_project,
             archive::export_project,
             archive::import_project,
+            save_staging::save_staging,
+            save_staging::save_staged_done,
             save_bytes,
         ])
         .run(tauri::generate_context!())

@@ -8,7 +8,7 @@
 //! else.
 
 use crate::project::{GameOptions, Genre, Projection};
-use crate::{export_assets, psd_pipeline, psd_write, publish, store};
+use crate::{export_assets, psd_pipeline, psd_write, publish, save_staging, store};
 
 /// The bug this pins: an export shipped the game tree and the processed
 /// assets but left `game.config.json` as the empty one the scaffold wrote, so
@@ -447,4 +447,114 @@ fn names_in_zip(bytes: &[u8]) -> Vec<String> {
     let mut names: Vec<String> = archive.file_names().map(str::to_string).collect();
     names.sort();
     names
+}
+
+// ── where a file is built before the save dialog sees it ────────────────────
+//
+// The bug: every exit wrote to the path the save dialog returned, and on iOS
+// that path is inside another process's container. The write failed, and what
+// the person found in Files was the empty placeholder the export picker had
+// already copied — a 0-byte zip, every time, on one platform. See
+// `save_staging.rs`.
+
+/// The staging path is a file *in* the documents directory, and nothing else.
+///
+/// The name arrives from the frontend, built out of a project's name. A
+/// separator in it would put the staged file somewhere the export picker does
+/// not look — which is the 0-byte export again, by a different route — so it
+/// is refused here rather than sanitised into something else's name.
+#[test]
+fn a_staging_path_is_a_bare_name_under_documents() {
+    // Refused before the directory is even looked up, so this half holds on a
+    // host that has no documents directory to answer with — which a Linux
+    // container without XDG user dirs is.
+    for refused in ["", ".", "..", "../tower.zip", "psd/tower.psd", "a\\b.zip"] {
+        assert!(
+            save_staging::staging_path(refused).is_err(),
+            "{refused:?} should not be taken as a file name",
+        );
+    }
+
+    let Some(documents) = dirs::document_dir() else {
+        return;
+    };
+    let path = save_staging::staging_path("tower.zip").expect("a bare name is a file name");
+    assert_eq!(path, documents.join("tower.zip"));
+    assert_eq!(
+        path.parent(),
+        Some(documents.as_path()),
+        "the picker only ever looks in the documents directory itself",
+    );
+}
+
+/// Off iOS there is nothing to stage: the dialog there names a destination the
+/// app may write to, and building somewhere else first would be a copy for its
+/// own sake. `None` is what keeps the ordinary order — ask, then write.
+#[test]
+fn nothing_is_staged_where_the_dialog_names_a_writable_path() {
+    let staged = save_staging::save_staging("tower.zip".into()).expect("staging should answer");
+    assert_eq!(
+        staged,
+        None,
+        "only iOS builds before the picker; every other platform asks first",
+    );
+}
+
+/// What the console can honestly report about an export on iOS: the size of
+/// the file iOS was handed. The destination is in another container and cannot
+/// be measured from here, so this is measured instead — before it is cleared,
+/// because a cancelled export has still built a file and a project zip left in
+/// `Documents` would be tens of megabytes of nothing.
+#[test]
+fn finishing_a_save_measures_the_file_and_then_clears_it() {
+    let dir = std::env::temp_dir().join(format!("idlewild-staged-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let staged = dir.join("tower.zip");
+    std::fs::write(&staged, b"not really a zip").expect("write");
+
+    let done = save_staging::save_staged_done(staged.to_string_lossy().into_owned())
+        .expect("finishing should answer");
+    assert_eq!(done.bytes, 16);
+    assert_eq!(done.note, "", "a file with bytes in it needs no comment");
+    assert!(!staged.exists(), "the staged file should be cleared");
+
+    // The failure this exists to make loud. A build that wrote nothing used to
+    // be indistinguishable from one that worked, because the only evidence was
+    // a file in another app's folder.
+    std::fs::write(&staged, b"").expect("write");
+    let empty = save_staging::save_staged_done(staged.to_string_lossy().into_owned())
+        .expect("finishing should answer");
+    assert_eq!(empty.bytes, 0);
+    assert!(
+        empty.note.contains("empty"),
+        "an empty export should say so: {:?}",
+        empty.note,
+    );
+
+    // And nothing built at all, which is what a failed build leaves behind.
+    let missing = save_staging::save_staged_done(staged.to_string_lossy().into_owned())
+        .expect("finishing should answer");
+    assert_eq!(missing.bytes, 0);
+    assert!(!missing.note.is_empty());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// The `file://` URL an iPad's picker hands back is a path on the way in, and
+/// `save_staged_done` is one of the commands that takes one — the same
+/// decoding every other exit does. Pinned here because the staged path makes a
+/// round trip through the frontend before it comes back.
+#[test]
+fn a_staged_path_arrives_as_a_url_or_as_a_path() {
+    let dir = std::env::temp_dir().join(format!("idlewild-staged-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let staged = dir.join("my export.zip");
+    std::fs::write(&staged, b"eight!!!").expect("write");
+
+    let url = format!("file://{}", staged.to_string_lossy().replace(' ', "%20"));
+    let done = save_staging::save_staged_done(url).expect("finishing should answer");
+    assert_eq!(done.bytes, 8);
+    assert!(!staged.exists());
+
+    std::fs::remove_dir_all(&dir).ok();
 }

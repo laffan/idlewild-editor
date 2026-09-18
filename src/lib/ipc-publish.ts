@@ -153,6 +153,36 @@ export const publish = {
     invoke<PublishReport>("publish_to_target", { id, chosen, remove }),
 };
 
+/** What an export turned out to be, once it has been built and handed over. */
+export interface StagedSave {
+  /** How big the file that left actually is. */
+  bytes: number;
+  /** Empty when there is nothing to say; a sentence when there is. */
+  note: string;
+}
+
+/**
+ * Where a file has to be built before the save dialog can hand it over.
+ *
+ * The one platform difference `saveAs` exists to hold. iOS has no save dialog
+ * — it has an export picker, which copies a file that already exists — so a
+ * file bound for it is built first, at the path `stageSave` answers with, and
+ * the picker exports it. Everywhere else the dialog names a destination this
+ * app may write to, `stageSave` answers `null`, and the ordinary order holds.
+ *
+ * See `lib/save-as.ts` for the seam and `save_staging.rs` for the path.
+ */
+export const files = {
+  stageSave: (fileName: string) =>
+    invoke<string | null>("save_staging", { fileName }),
+  /**
+   * Measure the staged file and clear it. Called whether the picker was used
+   * or backed out of — a cancelled export has still built a file.
+   */
+  stagedSaveDone: (path: string) =>
+    invoke<StagedSave>("save_staged_done", { path }),
+};
+
 /** One private key found in `~/.ssh`. */
 export interface SshKey {
   path: string;

@@ -3,7 +3,7 @@
  * Publish and Project Options.
  */
 
-import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
 import { psd, publish, toBase64 } from "../lib/ipc";
@@ -15,6 +15,7 @@ import {
   type ProjectMeta,
 } from "../lib/types";
 import { isMobile } from "../lib/platform";
+import { saveAs } from "../lib/save-as";
 import * as log from "../lib/log";
 import { openExportAssets } from "./export-assets";
 import { clipboardImage } from "./clipboard";
@@ -264,18 +265,23 @@ export function openExportSelection(
 
   const savePng = async () => {
     sheet.close();
+    // Rendered before `saveAs`, not inside its `write`: the same canvas is
+    // what the Copy button hands the clipboard, and on iOS `write` runs
+    // before the picker, where a render failure would be a picker that never
+    // appeared rather than a message.
+    let dataUrl: string;
     try {
-      const dataUrl = await renderPng();
-      const path = await saveFileDialog({
-        defaultPath: "selection.png",
-        filters: [{ name: "PNG", extensions: ["png"] }],
-      });
-      if (!path) return;
-      await publish.saveBytes(path, dataUrl);
-      log.info(`Saved ${path}`);
+      dataUrl = await renderPng();
     } catch (err) {
       log.error("Export failed:", err);
+      return;
     }
+    await saveAs({
+      fileName: "selection.png",
+      filter: { name: "PNG", extensions: ["png"] },
+      what: "Saved the selection",
+      write: (path) => publish.saveBytes(path, dataUrl),
+    });
   };
 
   const copyPng = async () => {
@@ -342,17 +348,16 @@ export function openExport(projectId: string, projectName: string): void {
     write: (path: string) => Promise<void>,
   ) => {
     sheet.close();
-    try {
-      const path = await saveFileDialog({
-        defaultPath: `${stem}.${extension}`,
-        filters: [{ name: filterName, extensions: [extension] }],
-      });
-      if (!path) return;
-      await write(path);
-      log.info(`${what} → ${path}`);
-    } catch (err) {
-      log.error(`${what} failed:`, err);
-    }
+    // `saveAs` rather than a dialog and a write, because the order of those
+    // two is the platform difference: an iPad exports a file that already
+    // exists, so it is built before the picker rather than after it. See
+    // `lib/save-as.ts`.
+    await saveAs({
+      fileName: `${stem}.${extension}`,
+      filter: { name: filterName, extensions: [extension] },
+      what,
+      write,
+    });
   };
 
   const list = h("div", { class: "sheet-list" });

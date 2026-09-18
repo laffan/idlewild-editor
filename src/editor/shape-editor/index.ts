@@ -15,7 +15,7 @@ import { h } from "../../lib/dom";
 import { openSheet } from "../../lib/sheet";
 import { shapeLibrary } from "../../lib/library";
 import { publish } from "../../lib/ipc";
-import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { saveAs } from "../../lib/save-as";
 import * as log from "../../lib/log";
 import {
   addPath,
@@ -353,18 +353,14 @@ function pickSvg(onText: (text: string) => void): void {
 }
 
 async function saveSvg(state: ShapeEditorState): Promise<void> {
-  try {
-    const svg = pathsToSvg(state.paths);
-    const path = await saveFileDialog({
-      defaultPath: `${state.name.replace(/[^\w-]+/g, "-").toLowerCase() || "shape"}.svg`,
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (!path) return;
+  const svg = pathsToSvg(state.paths);
+  await saveAs({
+    fileName: `${state.name.replace(/[^\w-]+/g, "-").toLowerCase() || "shape"}.svg`,
+    filter: { name: "SVG", extensions: ["svg"] },
+    what: "Saved the shape",
     // The same route every other export takes: base64 over IPC, written by
     // Rust. A webview cannot be trusted with a download on either platform.
-    await publish.saveBytes(path, btoa(unescape(encodeURIComponent(svg))));
-    log.info(`Saved ${path}`);
-  } catch (err) {
-    log.error("Could not save the shape:", err);
-  }
+    write: (path) =>
+      publish.saveBytes(path, btoa(unescape(encodeURIComponent(svg)))),
+  });
 }

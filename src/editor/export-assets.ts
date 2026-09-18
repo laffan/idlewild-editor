@@ -22,7 +22,7 @@
  * none.
  */
 
-import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { saveAs } from "../lib/save-as";
 import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
 import { publish, type PsdSummary } from "../lib/ipc";
@@ -86,26 +86,16 @@ export function openExportAssets(projectId: string, projectName: string): void {
     const keys = [...chosen];
     const want = wanted;
     sheet.close();
-    try {
-      const path = await saveFileDialog({
-        defaultPath: `${stem}-assets.zip`,
-        filters: [{ name: "Zip archive", extensions: ["zip"] }],
-      });
-      if (!path) return;
-      await publish.assets(
-        projectId,
-        path,
-        keys,
-        want !== "psds",
-        want !== "assets",
-      );
-      log.info(
-        `Exported ${keys.length} ${keys.length === 1 ? "PSD" : "PSDs"} ` +
-          `(${want === "both" ? "assets and sources" : want}) → ${path}`,
-      );
-    } catch (err) {
-      log.error("Export Assets failed:", err);
-    }
+    const what =
+      `Exported ${keys.length} ${keys.length === 1 ? "PSD" : "PSDs"} ` +
+      `(${want === "both" ? "assets and sources" : want})`;
+    await saveAs({
+      fileName: `${stem}-assets.zip`,
+      filter: { name: "Zip archive", extensions: ["zip"] },
+      what,
+      write: (path) =>
+        publish.assets(projectId, path, keys, want !== "psds", want !== "assets"),
+    });
   };
 
   // Which files. Built before the segmented control below it, because it is
