@@ -202,17 +202,32 @@ export function onPaletteChange(listener: () => void): () => void {
  *
  * The browser is a panel docked to the editor's sidebar, and the picker that
  * offers it lives in `lib/` — which nothing in `editor/` may be imported
- * from. So the editor registers the opener on its way up and drops it on the
- * way down, and a picker with nothing registered simply does not draw the
- * button. The same arrangement as `eyedropper.ts`'s engine sampler, and for
- * the same reason.
+ * from. So the editor registers it on its way up and drops it on the way
+ * down, and a picker with nothing registered simply does not draw the button.
+ * The same arrangement as `eyedropper.ts`'s engine sampler, and for the same
+ * reason.
+ *
+ * It registers a handle rather than a function because the button says which
+ * way it goes — *Browse Palettes* or *Close Palettes* — and a button that
+ * toggles something has to be able to ask what state that something is in.
  */
-let browser: (() => void) | null = null;
+export interface PaletteBrowserHandle {
+  /** Open it if it is shut, shut it if it is open. */
+  toggle: () => void;
+  isOpen: () => boolean;
+}
 
-export function setPaletteBrowser(open: (() => void) | null): () => void {
-  browser = open;
+let browser: PaletteBrowserHandle | null = null;
+
+export function setPaletteBrowser(
+  handle: PaletteBrowserHandle | null,
+): () => void {
+  browser = handle;
+  announce();
   return () => {
-    if (browser === open) browser = null;
+    if (browser !== handle) return;
+    browser = null;
+    announce();
   };
 }
 
@@ -221,8 +236,24 @@ export function hasPaletteBrowser(): boolean {
   return browser !== null;
 }
 
-export function openPaletteBrowser(): void {
-  browser?.();
+export function isPaletteBrowserOpen(): boolean {
+  return browser?.isOpen() ?? false;
+}
+
+export function togglePaletteBrowser(): void {
+  browser?.toggle();
+}
+
+/**
+ * Say that something the palette row draws has moved.
+ *
+ * Called by the browser when it opens or shuts. It goes out as the same
+ * `change` the colours and the toggle send, because the row is redrawn whole
+ * either way and a second event would be a second subscription in every copy
+ * of the picker for no difference in what happens.
+ */
+export function announce(): void {
+  palette.dispatchEvent(new Event("change"));
 }
 
 function read(): string[] {

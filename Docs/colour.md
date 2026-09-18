@@ -37,7 +37,8 @@ Top to bottom the control is now:
 │  ▪ ▪ ▪ ▪ ▪ ▪ ▪ ▪                   │   ← recents: a record
 ├────────────────────────────────────┤
 │  [+] ▪ ▪ ▪ ▪ ▪                     │   ← the palette: a decision
-│  [ Browse Palettes ][ Attach… ]    │
+│  [      Browse Palettes        ]   │   ← says Close while it is open
+│  [   Attach palette to PSDs    ]   │   ← a toggle, not an action
 └────────────────────────────────────┘
 ```
 
@@ -86,17 +87,44 @@ that will also hand back the shade of grey behind a toolbar button is wrong
 about a third of the time.
 
 So it samples **canvases and nothing else**. `elementsFromPoint` gives the
-whole stack under the pointer, it is filtered to canvases, and each is asked
-for its pixel front to back until one answers something that is not
-see-through. In the editor that is the drawing stage's two canvases over
-Phaser's — see [The drawing layer](drawing.md) — and on the home screen it is
-the project thumbnails, which is a happy accident.
+whole stack under the pointer and it is filtered to canvases. In the editor
+that is the drawing stage's two canvases over Phaser's — see
+[The drawing layer](drawing.md) — and on the home screen it is the project
+thumbnails, which is a happy accident.
+
+### It reads a patch, not a pixel
+
+One sample is an eleven-pixel square of the screen, composited **back to
+front** through every canvas under the pointer, and the colour is the middle
+of it. Two things follow and both are the point.
+
+The colour is **what you can see**, rather than what the topmost layer holding
+anything happens to contain: a half-transparent stroke over the grid samples
+as the blend, the way an eye reads it, instead of as the stroke's own hue at
+full strength. Reading front-to-back and stopping at the first opaque pixel —
+which is what this did first — answers a different question.
+
+And the patch is what the **loupe** draws, magnified twelve times with the
+pixel that would be taken boxed in the middle. A preview that is a flat chip
+of the answer tells you what you have got; a magnified patch tells you what you
+are *about* to get, which is the question being asked while the pointer is
+still moving. On a 16px grid the difference between two neighbouring pixels is
+the difference between the tileset and its outline.
+
+The radius is in **CSS pixels**, so each canvas is asked for however much of
+its own backing store falls under that square — a different number per canvas,
+since the drawing stage is several times the size of what is on screen — and
+each is drawn into the patch scaled to fit. The patch is a picture of the
+screen rather than of any one canvas's pixels.
 
 **A press and a drag are one gesture.** A tap picks what is under it; a press
 that then moves keeps picking and settles on wherever it is let go. That is
 the only usable gesture on an iPad, where the thing being pointed at is under
-a finger: the readout rides *above* the touch so the colour can be read while
-the finger is still down, and the pick is made on lift rather than on land.
+a finger — so the loupe is centred on the pointer for a mouse or a pen, where
+a magnified view of what is underneath is not in the way of anything, and
+lifts clear of a **touch**, where it is. The pick is made on lift rather than
+on land, from a fresh read at the point it was let go of: a drag that outran
+the renderer left the loupe a sample or two behind.
 
 ### Why the engine's canvas needs a favour
 
@@ -105,12 +133,23 @@ drawing buffer is cleared after each frame unless it was asked at creation to
 keep one, and Phaser's is not. Asking for `preserveDrawingBuffer` would cost
 every frame of the editor a copy, for a tool used a few times an hour.
 
-The renderer will read a pixel *during* a frame, though, and that is
-`snapshotPixel`: four bytes rather than a composited `Image`, and the only
-snapshot cheap enough to do on every move of a drag. It is a frame away rather
-than immediate, so the whole sampling path is asynchronous, one read is in
-flight at a time, and the lift takes a fresh read rather than whatever the
-readout is showing.
+The renderer will read pixels *during* a frame, though, which is what
+Phaser's snapshots are. There are two, and they cost different things.
+`snapshotPixel` reads four bytes and hands back a colour; `snapshotArea` reads
+the region, copies it to a canvas and builds an `Image` from a data URL. At
+eleven pixels square that second route is a few hundred bytes of PNG, which is
+what makes it affordable on every move of a drag — it is the same call that
+would be ruinous over a viewport.
+
+Both are **one frame** of latency and no more, which is the number that
+matters: the loupe is allowed to trail the pointer by a frame and is not
+allowed to drag. Getting `snapshotArea` down to that meant *not* waiting on
+`image.decode()` — Phaser already calls back from the image's own `onload`, so
+the wait bought nothing and cost a second frame. Measured in the harness at
+one frame each, against two before.
+
+So the whole sampling path is asynchronous, one read is in flight at a time,
+and the lift takes a fresh read rather than whatever the loupe is showing.
 
 The game registers itself through `setEngineSampler`
 (`game/sample-pixel.ts`, wired in `editor/editor.ts`) rather than being
@@ -173,7 +212,7 @@ until they press the button.
 
 ---
 
-## Attach to PSDs
+## Attach palette to PSDs
 
 `psd_palette.rs`, reached from `editor/psd-actions.ts` on the way out.
 

@@ -70,7 +70,7 @@ export function openPsdLabel(os: string): string {
  *
  * **The palette goes first, if it is going.** This is the one moment the
  * artwork is about to be edited somewhere that has never heard of this
- * editor, and it is the moment *Attach to PSDs* exists for — see
+ * editor, and it is the moment *Attach palette to PSDs* exists for — see
  * `attachPalette` below and `psd_palette.rs`. Before the bytes are read on
  * mobile rather than after, because those bytes are the file that gets
  * shared: a strip written afterwards would reach the store and miss the copy

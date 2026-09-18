@@ -243,29 +243,64 @@
   touch-action: none;
 }
 
-/* The readout that rides above the pointer. Above, because on an iPad the
-   pixel being sampled is under a finger. */
+/* The magnifier, which is the preview: the screen around the pointer blown up,
+   with the pixel that would be taken boxed in the middle of it.
+
+   `left`/`top` are the pointer and the transform does the rest, so there is
+   one position to set per move. Centred on the pointer by default — a
+   magnified view of what is underneath is not in the way of anything — and
+   pushed clear on `.above`, which is what a touch gets, because a finger is.
+   It is hidden until `.live`, so it does not sit in the corner of the screen
+   before the pointer has been anywhere. */
 .eyedrop-loupe {
+  --eyedrop-ink: transparent;
   position: fixed;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px 6px 6px;
+  /* A point rather than a box: the glass and the readout are hung off it, so
+     what gets centred on the pointer is the *lens* rather than the column the
+     two of them make. Centring the column put the magnified middle — which is
+     the pixel being taken — a label's height above the crosshair pointing at
+     it, which is the one thing this must not do. */
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.eyedrop-loupe.live { opacity: 1; }
+/* A touch: the whole thing lifts clear of the finger. */
+.eyedrop-loupe.above { transform: translateY(-104px); }
+
+/* Round, because it is a lens. The ring is the colour being picked, so the
+   answer is legible at a glance without reading the hex under it. */
+.eyedrop-glass {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  border: 3px solid var(--eyedrop-ink);
+  box-shadow:
+    0 0 0 1px rgba(32, 30, 29, 0.6),
+    var(--shadow-lg);
+  background: var(--color-neutral-900);
+  /* The canvas is drawn at one device pixel per magnified cell; this stops the
+     browser smoothing the squares back into a gradient. */
+  image-rendering: pixelated;
+}
+
+.eyedrop-hex {
+  position: absolute;
+  left: 0;
+  top: 76px;
+  transform: translateX(-50%);
+  padding: 3px 7px;
   background: var(--color-neutral-900);
   border: 1px solid var(--color-neutral-700);
-  box-shadow: var(--shadow-lg);
-  pointer-events: none;
-  white-space: nowrap;
-}
-.eyedrop-chip {
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--color-neutral-700);
-}
-.eyedrop-hex {
   font: 500 11px var(--font-mono);
   letter-spacing: 0.04em;
   color: var(--color-neutral-100);
+  white-space: nowrap;
 }
 
 /* ── the working palette ─────────────────────────────────────────────────── */
@@ -309,30 +344,16 @@
 }
 .cp-palette-add:disabled { opacity: 0.4; }
 
-.cp-palette-actions {
-  display: flex;
-  gap: 6px;
-}
-/* Two buttons across a 300px column, so the padding a `.btn` normally carries
-   is what decides whether the longer of the two labels wraps. It does at the
-   default, and a two-line "Browse Palettes" over a one-line neighbour is the
-   row looking broken rather than looking full. */
-.cp-palette-btn {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 4px;
-  justify-content: center;
-  font-size: 11px;
-  white-space: nowrap;
-}
-.cp-palette-btn[aria-pressed="true"] {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-/* On, with nothing to attach. The toggle is telling the truth about itself
-   and the row above it is telling the truth about the palette; this is the
-   one saying the two do not add up to anything yet. */
-.cp-palette-btn.empty { opacity: 0.55; }
+/* The two controls under the row are `lib-row-buttons` and `lib-toggle` —
+   the library's own, which the pattern and shape palettes directly above this
+   already use. Nothing here restyles them; all this file says is that the
+   toggle carries no margin of its own inside a box that is already spaced.
+
+   On, with nothing to attach: the toggle is telling the truth about itself and
+   the row above it is telling the truth about the palette, and this is the one
+   saying the two do not add up to anything yet. */
+.cp-palette-box .lib-toggle { margin: 0; }
+.cp-palette-box .lib-toggle.empty { opacity: 0.55; }
 
 /* ── the indeterminate progress bar ──────────────────────────────────────── */
 

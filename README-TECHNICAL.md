@@ -159,7 +159,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Section | Page |
 |---|---|
 | A colour carries its own opacity | [`Docs/drawing.md`](Docs/drawing.md) |
-| Attach to PSDs | [`Docs/colour.md`](Docs/colour.md) |
+| Attach palette to PSDs | [`Docs/colour.md`](Docs/colour.md) |
 | Adding a layer, and the empty one | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Browse Palettes | [`Docs/colour.md`](Docs/colour.md) |
 | Colliders | [`Docs/colliders.md`](Docs/colliders.md) |
@@ -170,6 +170,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Editing a PSD, and getting it back | [`Docs/psd-pipeline.md`](Docs/psd-pipeline.md) |
 | Extrude mode | [`Docs/extrude.md`](Docs/extrude.md) |
 | Eyedropper | [`Docs/colour.md`](Docs/colour.md) |
+| It reads a patch, not a pixel | [`Docs/colour.md`](Docs/colour.md) |
 | Gesture routing | [`Docs/gestures.md`](Docs/gestures.md) |
 | Import Assets, which is that door inward | [`Docs/exports.md`](Docs/exports.md) |
 | IPC surface | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |

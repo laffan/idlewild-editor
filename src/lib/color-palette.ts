@@ -25,9 +25,10 @@ import { h, ICONS, icon } from "./dom";
 import { isValidHex, normaliseHex } from "./color";
 import {
   hasPaletteBrowser,
+  isPaletteBrowserOpen,
   onPaletteChange,
-  openPaletteBrowser,
   palette,
+  togglePaletteBrowser,
 } from "./palette";
 
 export interface PaletteRowOptions {
@@ -51,19 +52,33 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
     type: "button",
   }) as HTMLButtonElement;
 
+  // `lib-row-buttons` and `lib-toggle` rather than anything of this control's
+  // own: they are what the pattern and shape libraries' buttons directly above
+  // this already are, and they carry the panel's ink. A bare `.btn` in a
+  // sidebar is the home screen's dark text on the sidebar's dark ground.
   const browse = h("button", {
-    class: "btn btn-ghost cp-palette-btn",
+    class: "btn btn-ghost",
     type: "button",
-    text: "Browse Palettes",
     title: "Palettes collected from five places on the web",
-    onClick: () => openPaletteBrowser(),
-    hidden: hasPaletteBrowser() ? undefined : "true",
+    onClick: () => togglePaletteBrowser(),
   });
+  const browseRow = h("div", { class: "lib-row-buttons" }, browse);
+  if (!hasPaletteBrowser()) browseRow.hidden = true;
 
+  /**
+   * Its own line, and a toggle rather than a button.
+   *
+   * It is not an action beside Browse Palettes — it does nothing when pressed
+   * and everything the next time a PSD leaves — so a row of two made it look
+   * like the other half of a pair of verbs. `lib-toggle` is the switch the
+   * Pattern brush's **Invert** already uses: full width, and filled with the
+   * accent while it is on, which is how the rest of this sidebar says a
+   * setting is on.
+   */
   const attach = h("button", {
-    class: "btn btn-ghost cp-palette-btn",
+    class: "lib-toggle",
     type: "button",
-    text: "Attach to PSDs",
+    text: "Attach palette to PSDs",
     title:
       "Write the palette into a PSD as its topmost layer whenever one goes " +
       "out to another app, so the colours are there to sample",
@@ -72,8 +87,7 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
     },
   });
 
-  const actions = h("div", { class: "cp-palette-actions" }, browse, attach);
-  const root = h("div", { class: "cp-palette-box" }, row, actions);
+  const root = h("div", { class: "cp-palette-box" }, row, browseRow, attach);
 
   lead.addEventListener("click", () => {
     const hex = options.current();
@@ -115,10 +129,17 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
       row.appendChild(swatch);
     }
 
+    // The button says which way it goes rather than what it is about. A
+    // toggle whose label never moves leaves the panel with two ways of being
+    // shut — the drawer gone, and the button still inviting you to open it.
+    const open = isPaletteBrowserOpen();
+    browse.textContent = open ? "Close Palettes" : "Browse Palettes";
+    browse.setAttribute("aria-expanded", String(open));
+
     attach.setAttribute("aria-pressed", String(palette.attach));
-    // The count rather than a bare on: what the toggle does is nothing at all
-    // while the palette is empty, and a button lit up over an empty row is
-    // the panel promising something it will not deliver.
+    // On, with nothing to attach. The toggle is telling the truth about
+    // itself and the row above it is telling the truth about the palette;
+    // this is the one saying the two do not add up to anything yet.
     attach.classList.toggle("empty", palette.attach && palette.list().length === 0);
   };
 

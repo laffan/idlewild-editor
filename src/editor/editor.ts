@@ -512,7 +512,10 @@ export async function mountEditor(
     main: layout.main,
     sidebar: inspector.root,
   });
-  const unregisterBrowser = setPaletteBrowser(() => palettes.toggle());
+  const unregisterBrowser = setPaletteBrowser({
+    toggle: () => palettes.toggle(),
+    isOpen: () => palettes.isOpen(),
+  });
 
   // Undo and redo: the two header buttons, and which history a press means —
   // the document's, the code editor's, or whichever mode owns the canvas.

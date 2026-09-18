@@ -28,7 +28,7 @@
  */
 
 import { h, ICONS, icon } from "../lib/dom";
-import { palette } from "../lib/palette";
+import { announce, palette } from "../lib/palette";
 import { PALETTE_SOURCES } from "../lib/palettes";
 import * as log from "../lib/log";
 
@@ -37,6 +37,8 @@ export interface PaletteBrowser {
   open: () => void;
   close: () => void;
   toggle: () => void;
+  /** What the picker's button reads to say Browse or Close. */
+  isOpen: () => boolean;
   destroy: () => void;
 }
 
@@ -134,6 +136,7 @@ export function createPaletteBrowser(
   };
 
   const open = (): void => {
+    if (open_) return;
     // Lazily, once. It is 123 rows of five buttons, which is six hundred
     // elements nobody has asked for until they press the button.
     if (!built) build();
@@ -142,13 +145,19 @@ export function createPaletteBrowser(
     sync();
     window.addEventListener("resize", sync);
     document.addEventListener("keydown", onKey, true);
+    // The button that opened this says *Close Palettes* while it is open, and
+    // it is one of several copies of the picker on screen — so the change goes
+    // out through the palette's own channel rather than back to one caller.
+    announce();
   };
 
   const close = (): void => {
+    if (!open_) return;
     open_ = false;
     root.hidden = true;
     window.removeEventListener("resize", sync);
     document.removeEventListener("keydown", onKey, true);
+    announce();
   };
 
   const onKey = (event: KeyboardEvent): void => {
@@ -167,6 +176,7 @@ export function createPaletteBrowser(
     open,
     close,
     toggle: () => (open_ ? close() : open()),
+    isOpen: () => open_,
     destroy: () => {
       close();
       watcher.disconnect();

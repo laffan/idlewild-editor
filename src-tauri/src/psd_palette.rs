@@ -1,6 +1,6 @@
 //! The palette, written into a PSD on its way out to another app.
 //!
-//! **Attach to PSDs** is a promise about *leaving*, not about the store: when
+//! **Attach palette to PSDs** is a promise about *leaving*, not about the store: when
 //! a file goes out through Open PSD or the iPadOS share sheet, the colours the
 //! project is being drawn in go with it, as a strip of flat squares on the
 //! topmost layer. Photoshop, Procreate and anything else that opens a PSD

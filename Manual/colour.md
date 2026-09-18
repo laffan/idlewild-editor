@@ -27,10 +27,18 @@ Part of [the Idlewild manual](README.md).
   Press it, then press anywhere on your artwork. It samples the picture — the
   ink and the placed files under it — and not the app around them, so it
   cannot hand you back the grey of a toolbar by mistake
+- **A magnifier rides with the pointer** showing the screen blown up twelve
+  times, with the pixel you are about to take boxed in the middle and its hex
+  underneath. Its ring is that colour, so the answer reads at a glance. The
+  point of it is the hard part of an eyedropper: knowing which side of an edge
+  you are on before you commit to it
 - **Press and drag to hunt.** A tap picks what is under it; holding and moving
-  keeps picking as you go and settles on wherever you let go. A readout rides
-  above your finger showing the colour and its hex, because on an iPad the
-  pixel you are pointing at is underneath the finger pointing at it
+  keeps picking as you go and settles on wherever you let go. With a mouse or a
+  pencil the magnifier sits over the pointer, since it shows you what is
+  underneath; with a finger it lifts above, since a finger does not
+- **What you get is what you can see.** A half-transparent stroke over the grid
+  samples as the blend your eye reads, not as the stroke's colour at full
+  strength
 - **Escape, a right-click, or lifting off nothing** leaves the colour as it was
 
 ## Your palette
@@ -55,7 +63,8 @@ Under the recent colours is a second row that works the other way round.
 ## Browse Palettes
 
 - **A hundred and twenty-three palettes**, in a drawer that slides out of the
-  left edge of the properties sidebar. They come from
+  left edge of the properties sidebar. The button says **Close Palettes** while
+  it is open, so the same press puts it away. They come from
   [simple-tileset-generator](https://laffan.github.io/simple-tileset-generator/) —
   muzli, Adobe Color, ColourLovers, Coolors and ColorHunt, each credited with a
   link under its own rows
@@ -66,9 +75,9 @@ Under the recent colours is a second row that works the other way round.
   you are filling stays on screen and nothing moves while you fill it. Escape
   closes it, as does the button in its corner
 
-## Attach to PSDs
+## Attach palette to PSDs
 
-- **Turn it on and your palette travels inside the artwork.** With it on, every
+- **Turn the switch on and your palette travels inside the artwork.** With it on, every
   file sent out through **Open PSD** (or **Share PSD** on an iPad) gets the
   palette written into it as a strip of flat squares on the topmost layer — so
   the moment it opens in Photoshop or Procreate, the project's colours are
