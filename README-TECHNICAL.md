@@ -5054,10 +5054,10 @@ wrong — a roof under its walls is a roof under its walls, whether a merge put
 it there or a hand did:
 
 - **Position.** Each source lands where the editor said, relative to the
-  others. Because the box sent is the placement's, a file somebody resized on
-  the grid arrives at the size it actually *looked*: `raster` resamples it, and
-  skips the resample entirely when the sizes match, which is every unresized
-  placement.
+  others, measured from the anchor at the middle of the new file. Because the
+  box sent is the placement's, a file somebody resized on the grid arrives at
+  the size it actually *looked*: `raster` resamples it, and skips the resample
+  entirely when the sizes match, which is every unresized placement.
 - **Depth.** Parts arrive **back-first** and `add_*` stacks bottom-up. On an
   isometric object layer the drawn order is screen Y rather than the
   document's, so `mergeOrder` sorts through `unitsInDrawOrder` — the merged
@@ -5069,15 +5069,50 @@ it there or a hand did:
   same reason — per-layer scaling about per-layer origins lets a composition
   drift apart.
 
-Two things must not survive. **A name collision**: two files each holding an
-`S | layer 1` would land as two rows with one name, and psd-to-phaser keys a
-texture on the layer's own name — so the second becomes `S | layer 1-2`. The
-editor already fixes this for separate files by naming a texture after the file
-it came from; inside one merged document there is no file left to name it
-after. And **the sources' own marks**: nine anchors would be nine answers to a
-question with one. They are never sent, because a placement is made for the
-artwork layers alone, and the merged file writes its own pair for the footprint
-it covers.
+**Every layer is renamed `[kind] | [layer]-[source psd] | [attrs]`** — the
+hut's wall becomes `S | wall-hut`, and `S | hero | animation` becomes
+`S | hero-guy | animation`, attributes and all. That says where each part came
+from in a document that is no longer either file, and it makes the name unique
+by construction: psd-to-phaser keys a texture on the layer's own name, so two
+files that each call a layer `layer 1` would otherwise be one key for two
+pictures. It is the same collision the editor already closes between separate
+files by scoping a texture to the file it came from; inside one merged document
+there is no file left to scope to, so the name carries it. Applied at **every
+depth**, because a key is the layer's name wherever in the stack it sits, and
+two merged groups can each hold their own `S | x`.
+
+**The sources' own marks do not survive**: nine anchors would be nine answers
+to a question with one. They are never sent, because a placement is made for
+the artwork layers alone, and the merged file writes its own pair for the
+footprint it covers.
+
+**The anchor goes in the middle of the merged artwork**, not on a corner. A
+conversion of one thing anchors on the lowest corner of the spaces it covers,
+because it is a thing standing on ground and that corner is where it stands.
+What comes out of a merge is not one thing standing anywhere — it is a
+composition with its own extent — so the honest fixed point is its centre,
+which is also where an import with no opinion is centred. `art` then comes out
+negative, which `psd_marks::layout` already handles: every position it lays out
+is relative to the anchor either way.
+
+### The pipe prefix, which is why this did not work at first
+
+Every merge failed on every file this editor had ever written, with
+*`extrude-mu70cjz3.psd` has no layer called "extrude-mu70cjz3"* — naming the
+layer that was right there in the file.
+
+A placement's `layerPath` is what the **manifest** calls a layer, and
+psd-to-json strips the pipe prefix on the way through: the group an extrusion
+writes as `G | extrude-mu70cjz3` is `extrude-mu70cjz3` by the time it reaches
+the document. `psd_merge` was matching raw Photoshop names by equality, so it
+never hit anything, and the failure named the stripped form because that is
+what it had been asked for.
+
+`parse_name` is the fix and it earns its place twice: the same split into
+`kind | name | attrs` is what the lookup compares on *and* what the rename
+above is built from. `tests::merging::a_file_this_editor_wrote_is_found_by_its_manifest_name`
+is the shape of a real Apply — a `G | …` group holding an extrusion's three
+parts, beside the marks — so the bug cannot come back quietly.
 
 **The source files stay in the project.** What goes is the *placements* — a
 placement is a drawing of a file, the file lives in `psd/`, and another scene

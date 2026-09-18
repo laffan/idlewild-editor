@@ -332,10 +332,14 @@ remaining pieces are wired to real slots rather than mocked.
   wood. It is every other conversion backwards: the rest of them turn one thing
   into one file, and this takes files already on the grid and writes the
   arrangement. A file somebody resized on the grid arrives at the size it
-  actually looked, a PSD with a wall and a roof in it stays two layers rather
-  than one flattened picture, and two files that each call a layer `layer 1` do
-  not collide. What goes is the *placements*: the source PSDs stay in the
-  project, because another scene may be drawing them
+  actually looked, and a PSD with a wall and a roof in it stays two layers
+  rather than one flattened picture. Every layer is renamed for where it came
+  from — the hut's wall is `S | wall-hut`, and an animation keeps its
+  attributes as `S | hero-guy | animation` — which says what each part is in a
+  file that is no longer either of them, and means two files that each call a
+  layer `layer 1` cannot collide. The new file is anchored at its own centre.
+  What goes is the *placements*: the source PSDs stay in the project, because
+  another scene may be drawing them
 - **⌘G puts placed PSDs together, and ⇧⌘G lets them go.** A wall, a roof and
   a door become one thing to work on: tapping any of them picks up the lot, a
   drag moves all of them, and the layer panel lists them under a row of their

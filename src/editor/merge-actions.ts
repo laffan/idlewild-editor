@@ -129,12 +129,20 @@ export async function mergeSelection(deps: MergeDeps): Promise<void> {
     return;
   }
 
-  // Where the merged artwork hangs from: the spaces it actually covers, and
-  // the lowest corner of them in cell space. The same two questions a fill's
-  // conversion asks, for the same reason — the range *enclosing* an isometric
-  // footprint is a far bigger diamond than the footprint.
+  // Where the merged artwork hangs from: **the middle of it**, rather than a
+  // corner. A conversion of one thing anchors on the lowest corner of the
+  // spaces it covers, because it is a thing standing on ground and that corner
+  // is where it stands. What comes out of a merge is not one thing standing
+  // anywhere — it is a composition with its own extent — so the honest fixed
+  // point is its centre, which is also where an import with no opinion is
+  // centred. Everything else follows from it: `art` is where the artwork's
+  // corner sits relative to the anchor, and the anchor moving to the middle
+  // simply makes those two numbers negative.
   const footprint = footprintForBox(grid, box);
-  const anchor = footprint.anchor;
+  const anchor = grid.worldToCell({
+    x: box.x + box.width / 2,
+    y: box.y + box.height / 2,
+  });
   const anchorWorld = grid.cellToWorld(anchor);
   const art = { x: box.x - anchorWorld.x, y: box.y - anchorWorld.y };
 

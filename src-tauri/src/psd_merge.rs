@@ -153,21 +153,28 @@ fn built(doc: &Psd, part: &MergePart, names: &mut NameRun) -> Result<Option<Buil
         width: part.width.max(1.0),
         height: part.height.max(1.0),
     };
-    Ok(emit(doc, source, &from, &to, names))
+    Ok(emit(doc, source, &from, &to, &part.key, names))
 }
 
 /// One item of a source, and everything under it, into the merged file.
+///
+/// `source` is the PSD's key, which every name it writes carries — see
+/// `merged_name`. One `NameRun` for the whole merged file rather than one per
+/// group, because a texture key is the layer's name wherever in the stack it
+/// sits.
 fn emit(
     doc: &Psd,
     item: Item,
     from: &Box2,
     to: &Box2,
+    source: &str,
     names: &mut NameRun,
 ) -> Option<Built> {
     match item {
         Item::Layer(index) => {
             let layer = doc.layer_by_idx(index);
-            let built = raster(doc, layer, from, to, names.take(layer.name()))?;
+            let name = names.take(layer.name(), source);
+            let built = raster(doc, layer, from, to, name)?;
             Some(Built::Layer(
                 built
                     .opacity(layer.opacity())
@@ -177,16 +184,13 @@ fn emit(
         }
         Item::Group(id) => {
             let group = doc.groups().get(&id)?;
-            let mut out = GroupBuilder::new(names.take(group.name()))
+            let mut out = GroupBuilder::new(names.take(group.name(), source))
                 .opacity(group.opacity())
                 .visible(group.visible())
                 .blend_mode(group.blend_mode());
-            // Children keep their own names: they are inside a group, so one
-            // file's `S | layer 1` is not the other's row. `items` reads
-            // top-first and `add_*` stacks bottom-up.
-            let mut inside = NameRun::default();
+            // `items` reads top-first and `add_*` stacks bottom-up.
             for child in items(doc, Some(id)).into_iter().rev() {
-                match emit(doc, child, from, to, &mut inside) {
+                match emit(doc, child, from, to, source, names) {
                     Some(Built::Layer(layer)) => out = out.add_layer(layer),
                     Some(Built::Group(inner)) => out = out.add_group(inner),
                     None => {}
@@ -289,63 +293,144 @@ fn leaves(doc: &Psd, item: Item) -> Vec<usize> {
     }
 }
 
+/// A layer name read as psd-to-json's pipe convention.
+///
+/// `S | hero | animation` is three things: what the pipeline should *make* of
+/// the layer, what the layer is called, and whatever else that kind wants.
+/// Every part is optional except the middle one — a layer somebody named
+/// `sketch` with no pipes in it is a name and nothing else.
+struct Named<'a> {
+    kind: Option<&'a str>,
+    name: &'a str,
+    attrs: Option<&'a str>,
+}
+
+/// The one letter psd-to-json reads as a category. See README's naming table.
+const KINDS: [&str; 5] = ["S", "T", "G", "P", "Z"];
+
+/// Split a raw Photoshop layer name into its three parts.
+///
+/// **This is the whole of why merging did not work.** A placement's
+/// `layerPath` is what the *manifest* calls the layer, and psd-to-json strips
+/// the prefix on the way through: the group `G | extrude-mu70cjz3` in the file
+/// is `extrude-mu70cjz3` in the manifest, and therefore in the document. So a
+/// lookup against raw PSD names by equality never matched anything this editor
+/// had written, and every merge failed naming a layer that was right there.
+fn parse_name(raw: &str) -> Named<'_> {
+    let parts: Vec<&str> = raw.split('|').map(str::trim).collect();
+    if parts.len() >= 2 && KINDS.contains(&parts[0]) {
+        return Named {
+            kind: Some(parts[0]),
+            name: parts[1],
+            // Rejoined rather than taken as one more part: nothing in the
+            // convention says a kind has only one attribute, and putting a
+            // stray `|` back the way it was found is cheaper than a rule.
+            attrs: (parts.len() > 2).then(|| parts[2]),
+        };
+    }
+    Named {
+        kind: None,
+        name: raw.trim(),
+        attrs: None,
+    }
+}
+
 /// Which top-level item of a file a placement stands for.
 ///
-/// By name, which is the only handle a placement has on it: `layerPath` is
-/// what psd-to-json called it. An unknown name is an error rather than a
-/// guess — the editor sends what the manifest said, so a miss means the file
-/// has changed under the document, and merging the wrong artwork puts it
-/// somewhere it cannot be told from the right artwork.
+/// By name, which is the only handle a placement has on it — and by the
+/// *manifest's* name, which is the middle of the three parts above. An unknown
+/// name is an error rather than a guess: the editor sends what the manifest
+/// said, so a miss means the file has changed under the document, and merging
+/// the wrong artwork puts it somewhere it cannot be told from the right
+/// artwork.
 fn pick(doc: &Psd, path: &str) -> Option<Item> {
+    // A placement's path is a top-level name and so has no slash in it. A
+    // Photoshop layer may itself be *called* something with a slash, so the
+    // whole string is tried first and its last segment only after.
     let want = path.trim();
     if want.is_empty() {
         return None;
     }
-    // The whole string first, then its last segment. A placement's `layerPath`
-    // is a top-level name and so has no slash in it — but a Photoshop layer may
-    // itself be *called* something with a slash, and splitting that one first
-    // would look for half of its own name.
+    // Read the same way the file's own names are, so a caller that happens to
+    // hold the raw spelling — `S | wall` rather than `wall` — is answered too.
+    // Nothing sends that today; being total over both costs a line.
+    let want = parse_name(want).name;
     named(doc, want).or_else(|| {
         let tail = want.rsplit('/').next().unwrap_or(want);
         (tail != want).then(|| named(doc, tail)).flatten()
     })
 }
 
-/// The top-level layer or group of this exact name.
-fn named(doc: &Psd, name: &str) -> Option<Item> {
-    items(doc, None).into_iter().find(|item| match item {
-        Item::Layer(index) => doc.layer_by_idx(*index).name() == name,
-        Item::Group(id) => doc.groups().get(id).is_some_and(|g| g.name() == name),
-    })
+/// The top-level layer or group whose *name part* is this.
+fn named(doc: &Psd, want: &str) -> Option<Item> {
+    items(doc, None)
+        .into_iter()
+        .find(|item| parse_name(&raw_name(doc, *item)).name == want)
 }
 
-/// Names already used at one level of the merged file.
+/// One item's raw name, as Photoshop holds it.
+fn raw_name(doc: &Psd, item: Item) -> String {
+    match item {
+        Item::Layer(index) => doc.layer_by_idx(index).name().to_string(),
+        Item::Group(id) => doc
+            .groups()
+            .get(&id)
+            .map(|group| group.name().to_string())
+            .unwrap_or_default(),
+    }
+}
+
+/// What a layer is called once it is in the merged file.
 ///
-/// Two files each holding an `S | layer 1` — which is what New layer calls its
-/// rows, counting within each file — would land in one document as two rows
-/// with one name. psd-to-phaser keys a texture on the layer's own name, so
-/// that is not a cosmetic collision: it is one file's artwork drawn for the
-/// other's, the same bug the editor already fixes by naming a texture after
-/// the file it came from. Inside a merged document there is no file left to
-/// name it after, so the second one becomes `S | layer 1-2`.
+/// `[kind] | [name]-[source psd] | [attrs]`, which does two things at once.
+/// It **says where each part came from** — `S | wall-hut` is the hut's wall,
+/// in a document that is no longer either — and it makes the name unique by
+/// construction, which matters more than it reads: psd-to-phaser keys a
+/// texture on the layer's own name, so two files that each call a layer
+/// `layer 1` would otherwise be one key for two pictures. That is the same
+/// collision the editor already closes for separate files by scoping a texture
+/// to the file it came from; inside a merged document there is no file left to
+/// scope to, so the name carries it instead.
+///
+/// Applied at **every depth**, not only to the top-level item, because two
+/// merged groups can each hold their own `S | x` and the key is the name
+/// wherever it sits in the stack.
+fn merged_name(raw: &str, source: &str) -> String {
+    let parsed = parse_name(raw);
+    let body = format!("{}-{source}", parsed.name);
+    match (parsed.kind, parsed.attrs) {
+        (Some(kind), Some(attrs)) => format!("{kind} | {body} | {attrs}"),
+        (Some(kind), None) => format!("{kind} | {body}"),
+        (None, Some(attrs)) => format!("{body} | {attrs}"),
+        (None, None) => body,
+    }
+}
+
+/// Names already used in the merged file, as a last resort.
+///
+/// `merged_name` makes a collision nearly impossible — two names collide only
+/// if one file holds the same layer name twice, which Photoshop allows — so
+/// this is the floor rather than the usual path, and a second `S | wall-hut`
+/// becomes `S | wall-hut-2`.
 #[derive(Default)]
 struct NameRun {
     taken: Vec<String>,
 }
 
 impl NameRun {
-    fn take(&mut self, name: &str) -> String {
-        if !self.taken.iter().any(|held| held == name) {
-            self.taken.push(name.to_string());
-            return name.to_string();
+    fn take(&mut self, raw: &str, source: &str) -> String {
+        let name = merged_name(raw, source);
+        if !self.taken.iter().any(|held| held == &name) {
+            self.taken.push(name.clone());
+            return name;
         }
         for n in 2..1000 {
-            let tried = format!("{name}-{n}");
+            let tried = merged_name(raw, &format!("{source}-{n}"));
             if !self.taken.iter().any(|held| held == &tried) {
                 self.taken.push(tried.clone());
                 return tried;
             }
         }
-        name.to_string()
+        name
     }
 }
