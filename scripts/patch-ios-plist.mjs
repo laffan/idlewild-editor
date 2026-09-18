@@ -5,7 +5,7 @@
  * `UIApplicationSceneManifest` is the one the app will not launch without.
  * Apps built against the iOS 27 SDK must adopt the UIScene life cycle or
  * UIKit refuses to start them — see **The iPad needs a scene** in
- * README-TECHNICAL. Tauri's generated plist does not declare it, and the tao
+ * `Docs/ipad.md`. Tauri's generated plist does not declare it, and the tao
  * this project is pinned to reads that key to decide whether to take the
  * scene path at all.
  *
