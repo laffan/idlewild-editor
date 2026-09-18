@@ -15,8 +15,8 @@ import {
   pickUnit,
   selectionOf,
   type PickableUnit,
-} from "../layer-select";
-import type { Selection } from "../../lib/types";
+} from "../unit-select";
+import type { Selection } from "../types";
 
 /** Four placed files, the second of which is a three-layer PSD. */
 const UNITS: PickableUnit[] = [
@@ -52,8 +52,20 @@ describe("what the modifiers mean", () => {
    * ⌘⇧-click in every list that has both means *add this run* — which is what
    * a range unioned with what is held already does.
    */
-  it("lets ⇧ win over ⌘", () => {
+  it("lets ⇧ win over ⌘ in a list", () => {
     expect(pickMode({ shiftKey: true, metaKey: true })).toBe("range");
+  });
+
+  /**
+   * On a canvas there is no run to take: the things in it are at positions
+   * rather than at indices, so "everything between that tower and this one"
+   * names no set anybody could predict. ⇧ there is the same *and this one as
+   * well* that ⌘ is, which is what every canvas editor does with it.
+   */
+  it("reads ⇧ as another toggle where there is no order", () => {
+    expect(pickMode({ shiftKey: true }, false)).toBe("toggle");
+    expect(pickMode({ shiftKey: true, metaKey: true }, false)).toBe("toggle");
+    expect(pickMode({}, false)).toBe("replace");
   });
 });
 

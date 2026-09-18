@@ -26,15 +26,33 @@ export type RigPhase = "idle" | "pan" | "pinch" | "marquee" | "drag";
  */
 export type RigMode = "select" | "pan" | "point" | "text";
 
-/** What was held when the drag began. */
-export interface DragModifiers {
+/**
+ * What was held when the gesture began.
+ *
+ * One record for a drag and a tap, because they are the same question asked of
+ * the same event — and keeping two would be two places to forget a key. A drag
+ * reads `alt` and `shift`; a tap reads `shift` and `meta`. See
+ * `game/world-scene.ts` for what each means where.
+ */
+export interface Modifiers {
   alt: boolean;
   shift: boolean;
+  /** ⌘, or Ctrl standing in for it on a keyboard that has no Command key. */
+  meta: boolean;
 }
 
+/** What was held when the drag began. The older name for the same record. */
+export type DragModifiers = Modifiers;
+
 export interface RigEvents {
-  /** A tap that did not turn into a pan, hold or pinch. */
-  onTap: (screenX: number, screenY: number) => void;
+  /**
+   * A tap that did not turn into a pan, hold or pinch.
+   *
+   * The modifiers ride along for the reason they do on a drag: ⌘ and ⇧ change
+   * what the tap *means* — adding to the selection rather than replacing it —
+   * and only the scene knows what is selected to add to.
+   */
+  onTap: (screenX: number, screenY: number, modifiers: Modifiers) => void;
   /**
    * A second tap in the same place, soon after the first.
    *
@@ -189,10 +207,7 @@ export class CameraRig {
     // Dragging a selected object wins over both panning and the hold: the
     // finger is already on something the user picked.
     if (
-      this.events.onDragStart(event.clientX, event.clientY, {
-        alt: event.altKey,
-        shift: event.shiftKey,
-      })
+      this.events.onDragStart(event.clientX, event.clientY, modifiersOf(event))
     ) {
       this.phase = "drag";
       this.dragMoved = false;
@@ -327,7 +342,7 @@ export class CameraRig {
   };
 
   private reportTap(event: PointerEvent): void {
-    this.events.onTap(event.clientX, event.clientY);
+    this.events.onTap(event.clientX, event.clientY, modifiersOf(event));
     if (this.doublesLastTap(event)) {
       // Reported after the tap, not instead of it: the first tap picked the
       // thing, and this says what to do with what is now picked.
@@ -372,4 +387,20 @@ export class CameraRig {
     if (!a || !b) return { x: 0, y: 0 };
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
+}
+
+/**
+ * What was held down, off the event that reported it.
+ *
+ * Ctrl stands in for ⌘ the way it does for undo in `editor/shortcuts.ts`: a
+ * keyboard with no Command key is not locked out of the editor's own gestures.
+ * Read at the moment of the press rather than tracked, because a key let go of
+ * halfway through a gesture never changed what the gesture was.
+ */
+function modifiersOf(event: PointerEvent): Modifiers {
+  return {
+    alt: event.altKey,
+    shift: event.shiftKey,
+    meta: event.metaKey || event.ctrlKey,
+  };
 }

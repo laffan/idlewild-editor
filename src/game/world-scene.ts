@@ -37,6 +37,7 @@ import { selectionLayer } from "../lib/selection";
 import { patternSpec } from "../lib/layer-kinds";
 import { unitOf } from "./unit";
 import {
+  addToSelection,
   doomedPlacements,
   inAdjustedInstance,
   selectedPlacement,
@@ -201,7 +202,8 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.rig = new CameraRig(this.game.canvas, {
-      onTap: (x, y) => this.handleTap(x, y),
+      onTap: (x, y, modifiers) =>
+        this.handleTap(x, y, modifiers.meta || modifiers.shift),
       onDoubleTap: (x, y) => this.handleDoubleTap(x, y),
       // The two canvas modes are asked before anything else at every stage:
       // whichever is up owns the pointer, and what it does with a drag — paint
@@ -371,7 +373,7 @@ export class WorldScene extends Phaser.Scene {
     );
   }
 
-  private handleTap(screenX: number, screenY: number): void {
+  private handleTap(screenX: number, screenY: number, adding = false): void {
     // The running game is a frame over this canvas and takes its own input;
     // nothing down here is meant for it.
     if (!this.editing) return;
@@ -399,12 +401,18 @@ export class WorldScene extends Phaser.Scene {
 
     // A tap on a grouped file means the group — the same rule a placed PSD
     // keeps, one level out. See `widenToGroup`.
+    const hit = widenToGroup(
+      this.store,
+      this.docRenderer.pickAt(world, this.activeLayerId),
+      this.adjusting,
+    );
+    // ⌘ or ⇧ means *and this one as well*, which is the same gesture as
+    // ⌘-clicking a row in the layer panel and goes through the same
+    // arithmetic — see `addToSelection`.
     this.setSelection(
-      widenToGroup(
-        this.store,
-        this.docRenderer.pickAt(world, this.activeLayerId),
-        this.adjusting,
-      ),
+      adding
+        ? addToSelection(this.store, this.selection, hit)
+        : hit,
     );
   }
 

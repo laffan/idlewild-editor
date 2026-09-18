@@ -1,36 +1,43 @@
 /**
- * Picking more than one placed PSD in the layer panel.
+ * Picking more than one placed PSD — in the layer panel, and on the canvas.
  *
- * The canvas has had a multi-selection since the marquee did: drag a box
- * around three towers and `{ kind: "placements" }` is what comes out. The
- * sidebar had no way to make one, which mattered the moment there were things
- * to *do* with several files at once — group them, merge them — because the
- * marquee is a gesture about where things are standing and those two are
- * questions about which files they are. Three trees in a wood are not a
- * rectangle.
+ * The marquee could always make a multi-selection: drag a box around three
+ * towers and `{ kind: "placements" }` is what comes out. But a marquee asks
+ * where things are *standing*, and the two things there are to do with several
+ * files at once — group them, merge them — are questions about which files
+ * they are. Three trees in a wood are not a rectangle, and a box round them
+ * takes the fence as well.
  *
- * **What a row stands for is a unit, not a placement.** A placed PSD is one
- * row and several placements — see `lib/units.ts` — so everything here works
- * in whole units and flattens to placement ids only at the end, which is what
- * the document and the canvas both speak.
+ * So ⌘ and ⇧ pick, and they pick on **both surfaces** through this one file:
+ * the panel row and the tap on the canvas end up in the same `pickUnit`, so
+ * ⌘-clicking a tower and then ⌘-clicking its row cannot disagree about what is
+ * selected. It is `lib/` rather than `editor/` for exactly that reason —
+ * nothing in `game/` imports from `editor/`, and this is document arithmetic
+ * either way.
+ *
+ * **What is picked is a unit, not a placement.** A placed PSD is one thing
+ * however many layers came in with it — see `lib/units.ts` — so everything
+ * here works in whole units and flattens to placement ids only at the end,
+ * which is what the document and the canvas both speak.
  *
  * **One layer's worth**, like the marquee's. `{ kind: "placements" }` carries
  * a single `layerId` because a drag moves every member by the same cell step
  * and carrying placements between layers is the panel's own drag rather than
- * something a selection should do by accident. So picking a row on a different
- * layer starts again on that layer rather than growing a selection that spans
- * two — which is also the only reading that can be drawn: the rows the second
- * layer would light up are under a different heading.
+ * something a selection should do by accident. So picking on a different layer
+ * starts again there rather than growing a selection that spans two — which is
+ * also the only reading the panel could draw, since the rows it would light up
+ * are under a different heading.
  *
- * **Three ways to pick, and the third is the iPad's.** A plain tap replaces,
- * ⌘ or Ctrl toggles one row, and ⇧ takes the run between the last plain tap
- * and this one. None of those exist under a finger, so the row also carries a
- * ⊕ — the same affordance, and the same argument, as the shape editor's path
- * list: tapping a row picks it, and the ⊕ beside it adds or removes it from
- * the selection without moving what the selection is *about*.
+ * **The modifiers mean slightly different things on the two surfaces**, and
+ * the difference is not a compromise. A list has an order, so ⇧ on a row takes
+ * the *run* between the last plain tap and this one. A canvas has no order for
+ * a run to be measured along — the things in it are at positions, not at
+ * indices — so there ⇧ and ⌘ both mean the same thing: *and this one as well*.
+ * `pickMode` is where that is decided, from a flag rather than from two copies
+ * of the arithmetic.
  */
 
-import type { Selection } from "../lib/types";
+import type { Selection } from "./types";
 
 /** What a click on a row meant. */
 export type PickMode = "replace" | "toggle" | "range";
@@ -50,19 +57,23 @@ export interface PickableUnit {
 /**
  * What the modifiers on a click mean.
  *
- * ⇧ wins over ⌘ when both are down, because a range is the more specific ask —
- * and because ⌘⇧-click in every editor that has both means *add this run*,
- * which is what taking the range and unioning it already does.
+ * In a **list**, ⇧ wins over ⌘ when both are down: a range is the more
+ * specific ask, and ⌘⇧-click in every editor that has both means *add this
+ * run*, which is what unioning the range with what is held already does.
  *
- * Ctrl stands in for ⌘, the way it does for undo in `shortcuts.ts`: a keyboard
- * with no Command key is not locked out of the editor's own shortcuts.
+ * On the **canvas** there is no run to take — the things in it are at
+ * positions rather than at indices, and "everything between that tower and
+ * this one" names no set anybody could predict. So ⇧ there is the same *and
+ * this one as well* that ⌘ is, which is what every canvas editor does with it.
+ *
+ * Ctrl stands in for ⌘, the way it does for undo in `editor/shortcuts.ts`: a
+ * keyboard with no Command key is not locked out of the editor's own gestures.
  */
-export function pickMode(event: {
-  shiftKey?: boolean;
-  metaKey?: boolean;
-  ctrlKey?: boolean;
-}): PickMode {
-  if (event.shiftKey) return "range";
+export function pickMode(
+  event: { shiftKey?: boolean; metaKey?: boolean; ctrlKey?: boolean },
+  ordered = true,
+): PickMode {
+  if (event.shiftKey) return ordered ? "range" : "toggle";
   if (event.metaKey || event.ctrlKey) return "toggle";
   return "replace";
 }

@@ -16,6 +16,8 @@
 
 import type { DocStore } from "../lib/doc-store";
 import { groupOfPlacement, groupPlacements } from "../lib/groups";
+import { pickUnit } from "../lib/unit-select";
+import { unitsOf } from "../lib/units";
 import type { Placement, Selection } from "../lib/types";
 import type { PickResult } from "./picking";
 import { unitMembers, unitOf } from "./unit";
@@ -140,4 +142,50 @@ export function widenToGroup(
   // case, so this is the floor rather than the usual path.
   if (ids.length < 2) return selection;
   return { kind: "placements", layerId: selection.layerId, ids };
+}
+
+/**
+ * A tap that was meant to *add to* what is already selected.
+ *
+ * ⌘ or ⇧ on the canvas, which is the same gesture as ⌘-clicking a row in the
+ * layer panel and goes through the same arithmetic — `lib/unit-select.ts` — so
+ * the two surfaces cannot disagree about what a toggle leaves behind.
+ *
+ * **Only placed PSDs.** A `placements` selection is the one multi-selection
+ * the document has, so ⌘-tapping a fill, a boundary, a point or a note is read
+ * as a plain tap: it selects that thing, because there is nothing it could be
+ * added to. A tap on bare ground with ⌘ down keeps the selection rather than
+ * clearing it, which is what every editor does — the modifier says *as well
+ * as*, and a miss is not a request to throw the rest away.
+ *
+ * Handed the hit rather than doing the picking, because what is under the
+ * pointer is the renderer's question and this is only what to make of it.
+ */
+export function addToSelection(
+  store: DocStore,
+  current: Selection,
+  hit: Selection,
+): Selection {
+  if (hit.kind === "none") return current;
+  if (hit.kind !== "placement") return hit;
+
+  const layer = store.layer(hit.layerId);
+  if (!layer) return hit;
+  const units = unitsOf(layer.placements).map((unit) => ({
+    members: unit.map((p) => p.id),
+  }));
+  const index = units.findIndex((unit) => unit.members.includes(hit.placementId));
+  if (index < 0) return hit;
+
+  return pickUnit({
+    current,
+    layerId: hit.layerId,
+    units,
+    index,
+    // Always a toggle, and there is no branch to write: a canvas has no order
+    // for a range to run along, so ⇧ and ⌘ are one gesture here — `pickMode`
+    // is where that is decided. The anchor is a list's idea and goes with it.
+    anchor: null,
+    mode: "toggle",
+  }).selection;
 }

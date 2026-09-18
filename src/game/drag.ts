@@ -174,7 +174,7 @@ export class DragController {
   begin(
     screenX: number,
     screenY: number,
-    modifiers: DragModifiers = { alt: false, shift: false },
+    modifiers: DragModifiers = { alt: false, shift: false, meta: false },
   ): boolean {
     // Copy to a local so TypeScript narrows the union past the closure.
     const selection = this.host.getSelection();

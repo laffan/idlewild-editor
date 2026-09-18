@@ -44,7 +44,7 @@ import {
   layerItems,
   renderLayerItem,
 } from "./layer-items";
-import { pickMode, pickUnit } from "./layer-select";
+import { pickMode, pickUnit } from "../lib/unit-select";
 import { ScenesBar } from "./scenes-bar";
 import { renderDirectory } from "./layer-directory";
 import type { ManifestLayer } from "../lib/manifest";
@@ -330,7 +330,8 @@ export class LayersPanel {
             item,
             isSelected(item, selection),
             draggable
-              ? (_next, event) => this.pick(layer.id, units, index, pickMode(event))
+              ? (_next, event) =>
+                  this.pick(layer.id, units, index, pickMode(event))
               : (next) => this.callbacks.onSelectItem(next),
             draggable
               ? (event) =>
@@ -351,11 +352,6 @@ export class LayersPanel {
                       ? item.unit ?? null
                       : null,
                   )
-              : undefined,
-            // The ⊕, which is ⌘-click for a finger. Only where there is
-            // something to add to a selection — see `layer-select.ts`.
-            draggable
-              ? () => this.pick(layer.id, units, index, "toggle")
               : undefined,
           ),
         );

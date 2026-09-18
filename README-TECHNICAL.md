@@ -1335,7 +1335,7 @@ box keeps its layers in the arrangement they were built in (see *A placed PSD
 is one thing*), and there is no such relationship between things that only
 happen to be near each other — so sizes stay each image's own.
 
-### The sidebar makes one too
+### ⌘ and ⇧ pick, on both surfaces
 
 The marquee was the only way to make a `placements` selection, and it asks a
 question about *where things are standing*: a rectangle. That is the wrong
@@ -1344,30 +1344,45 @@ grouping them and merging them — because those are about which files they are.
 Three trees in a wood are not a rectangle, and a marquee round them takes the
 fence as well.
 
-So the layer panel's rows pick too, in `editor/layer-select.ts`. **A row stands
-for a unit**, not a placement (see `lib/units.ts`), so everything there works in
-whole units and flattens to placement ids at the end, which is what the document
-and the canvas both speak. **One layer's worth**, like the marquee's, and for
-the same reason: `placements` carries a single `layerId` because a drag moves
-every member by the same cell step. Picking a row on another layer starts again
-on that layer rather than growing a selection spanning two — which is also the
-only reading that could be *drawn*, since the rows it would light up are under a
-different heading.
+So **⌘-click and ⇧-click pick**, on a row in the layer panel and on the canvas
+alike, and they go through one file — `lib/unit-select.ts`. It is `lib/` rather
+than `editor/` for a reason that is not filing: nothing in `game/` imports from
+`editor/`, and a second copy of this arithmetic on the canvas side would be two
+answers to *what does a toggle leave behind* waiting to drift apart. Ctrl
+stands in for ⌘ the way it does for undo, so a keyboard with no Command key is
+not locked out.
 
-**Three ways to pick, and the third is the iPad's.** A plain tap replaces, ⌘ or
-Ctrl toggles one row, ⇧ takes the run between the last plain tap and this one.
-⇧ wins when both modifiers are down, because a range is the more specific ask
-and ⌘⇧-click everywhere else means *add this run* — which is what unioning the
-range with what is held already does. Ctrl stands in for ⌘ the way it does for
-undo, so a keyboard with no Command key is not locked out.
+**What is picked is a unit**, not a placement (see `lib/units.ts`), so
+everything there works in whole units and flattens to placement ids at the end,
+which is what the document and the canvas both speak. ⌘-tapping a tower's roof
+adds the building; otherwise the selection would hold half a tower and a drag
+would tear it apart. **One layer's worth**, like the marquee's, and for the same
+reason: `placements` carries a single `layerId` because a drag moves every
+member by the same cell step. Picking on another layer starts again there rather
+than growing a selection spanning two — which is also the only reading the panel
+could *draw*, since the rows it would light up are under a different heading.
 
-None of that exists under a finger, so a placed PSD's row also carries a **⊕**
-at its far end: the same affordance, and the same argument, as the shape
-editor's path list — tapping a row picks it, and the ⊕ adds or removes it from
-the selection without moving what the selection is *about*. It is quiet until
-the row is hovered or already picked, because a column of plus signs down the
-side of a list of files reads as an invitation to add files; a device with no
-hover gets it outright.
+**The modifiers mean slightly different things on the two surfaces**, and that
+is not a compromise. A list has an order, so ⇧ on a row takes the **run**
+between the last plain tap and this one, and wins over ⌘ when both are down —
+⌘⇧-click everywhere else means *add this run*, which is what unioning the range
+with what is held already does. A canvas has no order for a run to be measured
+along: the things in it are at positions, not at indices, and "everything
+between that tower and this one" names no set anybody could predict. So there ⇧
+and ⌘ are one gesture, *and this one as well*, which is what every canvas editor
+does with them. `pickMode` takes a flag and is the only place that differs.
+
+**Two things a modifier does not apply to**, both silent when wrong. A ⌘-tap on
+**bare ground** keeps the selection rather than clearing it: the modifier says
+*as well as*, and clearing is indistinguishable from a mis-aim. And a ⌘-tap on
+anything that is **not a placed PSD** — a fill, a boundary, a point, a note — is
+read as a plain tap, because `placements` is the one multi-selection the
+document has and there is nothing for those to be added to.
+
+There was a **⊕** on each row for a while, on the grounds that an iPad has no ⌘.
+It is gone: it was a column of plus signs down a list of files, which reads as
+an invitation to add files, and it was chrome standing in for a keyboard that
+most of the time is attached. The iPad answer is the marquee and the row itself.
 
 Three details are the ones worth a test, because each is invisible when wrong:
 
@@ -1389,7 +1404,8 @@ Three details are the ones worth a test, because each is invisible when wrong:
 
 The anchor is panel state, dropped when the scene changes or when a run is
 started on a different layer — a fact about the last row somebody tapped, not
-about the document.
+about the document. The canvas passes `null` for it, because a run is a list's
+idea and goes with the list.
 
 ---
 

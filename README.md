@@ -351,14 +351,16 @@ remaining pieces are wired to real slots rather than mocked.
   runs — it says how somebody is working — so a grouped project exports exactly
   the game an ungrouped one does. It is saved all the same: a group travels in
   a `.idlewild`, comes back on another machine, and undoes with everything else
-- **Several PSDs at once, from the sidebar.** A marquee on the canvas has
-  always caught more than one image, but it asks where things are standing —
-  and three trees in a wood are not a rectangle. So the rows pick too: tap one
-  to select it, ⌘-tap to add or remove a second, ⇧-tap to take the run between.
-  On an iPad there is no ⌘, so every placed PSD's row carries a **⊕** at its
-  far end which adds or removes it — the same answer the shape editor's path
-  list gives, for the same reason. It is one layer's worth, like the marquee's,
-  because that is what drags, groups and merges together
+- **Several PSDs at once, with ⌘ and ⇧.** A marquee on the canvas has always
+  caught more than one image, but it asks where things are standing — and three
+  trees in a wood are not a rectangle. So ⌘-click adds or removes one, on the
+  **canvas and in the layer panel alike**, and ⇧-click in the panel takes the
+  run between the last plain click and this one. On the canvas ⇧ does what ⌘
+  does, because there is no order between two towers for a run to be measured
+  along. ⌘-clicking a tower's roof takes the whole building, and ⌘-clicking
+  bare ground keeps what you have rather than clearing it. It is one layer's
+  worth, like the marquee's, because that is what drags, groups and merges
+  together
 - Layers, under the scene they belong to: drag by the grip to reorder, rename,
   lock, hide, with live counts and an expandable list of what is on each one —
   selecting there selects on the canvas, and a placed PSD listed under a layer
