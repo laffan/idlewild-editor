@@ -1,6 +1,6 @@
 /**
- * A full colour picker: saturation/value field, hue and opacity sliders, hex
- * entry and recent colours.
+ * A full colour picker: saturation/value field, hue and opacity sliders, an
+ * eyedropper, hex entry, recent colours and the working palette.
  *
  * Hand-built rather than `<input type="color">` because that control is
  * unreliable in WKWebView on iPadOS, and this is a touch-first editor — the
@@ -14,9 +14,18 @@
  * what it is showing. So what this hands back is one string — `#rrggbb`, or
  * `#rrggbbaa` once the slider leaves the top — and the opaque case is spelt
  * exactly as it always was. See `color.ts`.
+ *
+ * **Two rows of swatches, and they are opposite kinds of list.** The recents
+ * are a record of what has been used; the palette under them is a set of
+ * decisions, and nothing enters or leaves it without being asked. They look
+ * alike because they are both a row of colours to tap, and the palette is the
+ * one with buttons under it because it is the one you can change. See
+ * `palette.ts` and `color-palette.ts`.
  */
 
-import { h } from "./dom";
+import { h, ICONS, icon } from "./dom";
+import { createPaletteRow } from "./color-palette";
+import { pickColor } from "./eyedropper";
 import {
   alphaOf,
   contrastInk,
@@ -42,6 +51,15 @@ export interface ColorPicker {
   root: HTMLElement;
   setValue: (hex: string) => void;
   getValue: () => string;
+  /**
+   * Let go of the palette subscription.
+   *
+   * Optional for a caller to bother with: the row drops its own listener the
+   * first time it fires against an element that has left the page, which is
+   * how every panel in the inspector already behaves. This is for the callers
+   * that know exactly when they are done.
+   */
+  destroy: () => void;
 }
 
 export function createColorPicker(options: ColorPickerOptions): ColorPicker {
@@ -77,6 +95,28 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
   });
   const recentRow = h("div", { class: "cp-recent" });
 
+  /**
+   * The eyedropper, at the head of the hex row.
+   *
+   * There rather than beside the field because it answers the same question
+   * the two things next to it do — *what colour is this, exactly* — and the
+   * row already reads left to right as pick it, see it, type it. Beside the
+   * saturation field it would have read as a third way of choosing a colour
+   * from scratch, which is not what it is.
+   */
+  const dropper = h("button", {
+    class: "cp-dropper",
+    type: "button",
+    title: "Pick a colour off the canvas",
+    "aria-label": "Pick a colour off the canvas",
+    onClick: () => {
+      void pickColor().then((hex) => {
+        if (hex) settle(hex);
+      });
+    },
+  });
+  dropper.appendChild(icon(ICONS.dropper, 15));
+
   const paint = () => {
     const solid = hsvToHex(hsv);
     const hex = current();
@@ -101,11 +141,34 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
     preview.style.color = contrastInk(solid);
     preview.textContent = hex.toUpperCase();
     if (document.activeElement !== hexInput) hexInput.value = hex;
+    // The palette's one button is about the colour in hand — a `+` or a `−`
+    // depending on whether the palette already holds it — so it moves with
+    // every drag of the field. Guarded because `paint` runs once while the
+    // control is still being assembled, before the row exists.
+    paletteRow?.sync();
   };
 
   const emit = () => {
     paint();
     options.onChange(current());
+  };
+
+  /**
+   * Move to a colour chosen whole, rather than dragged out of the field.
+   *
+   * What a recent swatch, a palette swatch and the eyedropper all do: there is
+   * no in-flight gesture to settle, so the change and the commit happen in the
+   * same breath, and the colour goes into the recents exactly as one dragged
+   * out of the field would.
+   */
+  const settle = (hex: string): void => {
+    hsv = hexToHsv(hex);
+    alpha = alphaOf(hex);
+    paint();
+    rememberColor(hex);
+    renderRecent();
+    options.onChange(hex);
+    options.onCommit?.(hex);
   };
 
   // One drag handler for both surfaces; each maps the position differently.
@@ -188,13 +251,7 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
         class: "cp-swatch",
         title: hex,
         type: "button",
-        onClick: () => {
-          hsv = hexToHsv(hex);
-          alpha = alphaOf(hex);
-          paint();
-          options.onChange(hex);
-          options.onCommit?.(hex);
-        },
+        onClick: () => settle(hex),
       });
       swatch.appendChild(
         h("span", { class: "cp-swatch-ink", style: { background: hex } }),
@@ -203,13 +260,22 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
     }
   }
 
+  // The palette, which is the picker's only outward-facing row: a colour
+  // added here shows up in every other copy of this control, and goes out
+  // with the artwork when the toggle under it is on.
+  const paletteRow = createPaletteRow({
+    current,
+    onPick: (hex) => settle(hex),
+  });
+
   const root = h(
     "div",
     { class: "cp" },
     field,
     h("div", { class: "cp-side" }, hue, opacity),
-    h("div", { class: "cp-row" }, preview, hexInput),
+    h("div", { class: "cp-row" }, dropper, preview, hexInput),
     recentRow,
+    paletteRow.root,
   );
 
   renderRecent();
@@ -223,6 +289,7 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
       alpha = alphaOf(hex);
       paint();
     },
+    destroy: () => paletteRow.destroy(),
   };
 }
 

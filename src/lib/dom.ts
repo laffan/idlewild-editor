@@ -100,6 +100,10 @@ export function icon(
 
 export const ICONS = {
   plus: ["M12 5v14", "M5 12h14"],
+  /* The same glyph with the upright taken off: the palette's one button says
+     add or take out depending on the colour in hand, and the pair has to read
+     as one button in two states rather than as two buttons. */
+  minus: "M5 12h14",
   chevronLeft: "m14 6-6 6 6 6",
   chevronRight: "m10 6 6 6-6 6",
   chevronUp: "m6 15 6-6 6 6",
@@ -137,6 +141,14 @@ export const ICONS = {
     "m4 20 4.2-4.2",
   ],
   fill: "M6 12 12 6l6 6-6 6-6-6Zm13 4c0 1.7 1 2.6 2 2.6",
+  /* A pipette: the bulb at the top right, the barrel on the diagonal, and the
+     tip it draws up through. On the same diagonal as the pencil and the pen
+     because it is the same kind of thing — something held over the canvas —
+     and it is the wide bulb that tells the three apart at 15px. */
+  dropper: [
+    "M17.5 3a3 3 0 0 1 3.5 3.5L18 9.5 14.5 6 17.5 3Z",
+    "m13.5 7 3.5 3.5L8 19.5l-4 .5.5-4L13.5 7Z",
+  ],
   /* A checkerboard, for the brush that reveals a pattern rather than laying
      ink down. Four filled squares of a 4×4 grid, which is the smallest
      arrangement that reads as a pattern at 21px rather than as four dots. */

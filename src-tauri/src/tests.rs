@@ -10,6 +10,7 @@
 //! writes; `rewrite` is what a *second* write to the same file has to keep;
 //! `painting` is the two writes PSD Edit mode makes. `scaffolds` is what a
 //! *project* is made of and `exports` is what leaving with one takes.
+//! `palette` is the swatch strip a PSD carries out to another app.
 //! `options` is the per-project settings; `scenes` is the file each scene is
 //! written in. `search` is ⇧⌘F over the game tree. `deploying` is what a bad
 //! publish is made of before it leaves, and `publishing` is a whole GitHub
@@ -25,6 +26,7 @@ mod marks;
 mod merging;
 mod options;
 mod painting;
+mod palette;
 mod presentation;
 mod publishing;
 mod rewrite;

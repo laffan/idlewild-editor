@@ -25,6 +25,7 @@ import type { Grid } from "../lib/grid";
 import { psd, publish } from "../lib/ipc";
 import * as log from "../lib/log";
 import { isMobile } from "../lib/platform";
+import { palette, psdSwatchSize } from "../lib/palette";
 import { saveAs } from "../lib/save-as";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
@@ -66,12 +67,23 @@ export function openPsdLabel(os: string): string {
  * webview never needs a filesystem scope over the store. On mobile it is the
  * share sheet, which shares a `File` the page holds rather than a path — so
  * the bytes come across and are wrapped here.
+ *
+ * **The palette goes first, if it is going.** This is the one moment the
+ * artwork is about to be edited somewhere that has never heard of this
+ * editor, and it is the moment *Attach to PSDs* exists for — see
+ * `attachPalette` below and `psd_palette.rs`. Before the bytes are read on
+ * mobile rather than after, because those bytes are the file that gets
+ * shared: a strip written afterwards would reach the store and miss the copy
+ * somebody is about to draw on.
  */
 export async function openPsdExternally(
   projectId: string,
   key: string,
   os: string,
+  gridSize: number,
 ): Promise<void> {
+  await attachPalette(projectId, key, gridSize);
+
   if (!isMobile(os)) {
     await psd.openExternally(projectId, key);
     log.info(`Opened ${key}.psd — Re-parse it when you have saved your edits`);
@@ -104,6 +116,54 @@ export async function openPsdExternally(
   }
 
   await savePsdCopy(projectId, key);
+}
+
+/**
+ * Bring the file's palette layer into line with the toggle, before it leaves.
+ *
+ * **It never stops the send.** A palette that could not be written is a
+ * courtesy that did not happen; the PSD is still the file somebody asked to
+ * open, and failing the round trip over a strip of swatches would be this
+ * feature taking the feature it decorates down with it. So every outcome
+ * except success is a line in the console and nothing else — including the
+ * one real refusal, a file using layer masks, which cannot be rewritten at
+ * all without losing work (see `psd_layers`).
+ *
+ * `null` when the toggle is off is deliberate and is not the same as not
+ * calling this: it is what takes out a strip an earlier send put in, so
+ * turning the toggle off is something a file can be told about rather than
+ * only something the next file hears.
+ */
+async function attachPalette(
+  projectId: string,
+  key: string,
+  gridSize: number,
+): Promise<void> {
+  const colors = palette.list();
+  // An empty palette attaches nothing whatever the toggle says — a strip of
+  // no squares is a layer of one transparent pixel and a lie about the
+  // feature being on. It still goes through as `null`, so a strip written
+  // when the palette had colours in it is taken out once it has not.
+  const strip =
+    palette.attach && colors.length > 0
+      ? { colors, cell: psdSwatchSize(gridSize) }
+      : null;
+
+  try {
+    const result = await psd.syncPalette(projectId, key, strip);
+    if (result.skipped) {
+      log.warn(`The palette did not go into ${key}.psd: ${result.skipped}`);
+    } else if (result.changed && strip) {
+      log.info(
+        `Put ${colors.length} palette colour${colors.length === 1 ? "" : "s"} ` +
+          `into ${key}.psd as its topmost layer`,
+      );
+    } else if (result.changed) {
+      log.info(`Took the palette layer out of ${key}.psd`);
+    }
+  } catch (err) {
+    log.warn(`The palette did not go into ${key}.psd:`, err);
+  }
 }
 
 /**
@@ -229,7 +289,10 @@ export function createPsdFileActions(
 
   async function open(key: string): Promise<void> {
     try {
-      await openPsdExternally(projectId, key, os);
+      await openPsdExternally(projectId, key, os, store.gridSize);
+      // The palette may have put a layer in the file, so the inspector's copy
+      // of its stack is out of date the same way it is after a re-parse.
+      inspector.reloadPsdLayers(key);
     } catch (err) {
       log.error(`Could not open ${key}.psd:`, err);
     }

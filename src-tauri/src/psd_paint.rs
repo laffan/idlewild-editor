@@ -103,6 +103,27 @@ impl Paint {
             rgba,
         })
     }
+
+    /// Ink built on this side of the bridge, as a `Paint`.
+    ///
+    /// `Paint` is the wire form — base64 because the editor's ink crosses
+    /// Tauri's IPC as JSON — and `psd_palette` has no wire to cross: it draws
+    /// its strip here and wants it in one layer of a rebuild. Going out
+    /// through base64 and straight back in costs an encode and a decode of a
+    /// few kilobytes, once per share, and it is worth that: the alternative
+    /// is a second shape of ink for `LayerEdit` to carry and for
+    /// `psd_rebuild::painted` to handle, which is a fork in the one path
+    /// every write to a PSD goes down.
+    pub fn from_patch(patch: &Patch) -> Paint {
+        Paint {
+            x: patch.left,
+            y: patch.top,
+            width: patch.width,
+            height: patch.height,
+            rgba_base64: STANDARD.encode(&patch.rgba),
+            erase_base64: None,
+        }
+    }
 }
 
 /// Take the part of a patch that is actually on the canvas.

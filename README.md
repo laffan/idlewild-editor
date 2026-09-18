@@ -80,6 +80,7 @@ One page per area, in roughly the order you meet them.
 | [Placing, moving and grouping](Manual/placing.md) | Colliders, dragging, copying, and treating several files as one |
 | [Scenes and layers](Manual/scenes-and-layers.md) | What a scene is, the three kinds of layer, and the layer list |
 | [Drawing](Manual/drawing.md) | The brushes, Fill, the Pattern and Shape brushes, erasing, Slice, Text |
+| [Colour](Manual/colour.md) | The picker, the eyedropper, your palette, Browse Palettes, Attach to PSDs |
 | [Patterns and shapes](Manual/patterns-and-shapes.md) | The two libraries, and the two editors that fill them |
 | [Fills, generated PSDs and Extrude mode](Manual/fills-and-extrude.md) | Filling grid spaces, pulling a solid out of them, turning either into a file |
 | [The properties sidebar](Manual/inspector.md) | Three zones, folding sections, and where the explanations live |
@@ -136,7 +137,7 @@ npm run vendor:p2p
 | [psd-to-json-rust](https://github.com/laffan/psd-to-json-rust) | PSD → game assets, in-process |
 | [psd](https://github.com/laffan/psd) | Reading PSDs, and the write half that turns images and sketches into them |
 | [hush](https://github.com/laffan/hush) | The drawing layer: stroke engine, infinite canvas, Apple Pencil |
-| [simple-tileset-generator](https://github.com/laffan/simple-tileset-generator) | The pattern and shape libraries, and both of their editors |
+| [simple-tileset-generator](https://github.com/laffan/simple-tileset-generator) | The pattern and shape libraries, both of their editors, and the palettes behind Browse Palettes |
 
 The reference in the code modal carries [MDN Web Docs](https://developer.mozilla.org)
 content, used under CC BY-SA 2.5, alongside Phaser's and psd-to-phaser's own

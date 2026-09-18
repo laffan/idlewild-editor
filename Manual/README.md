@@ -14,6 +14,7 @@ meet the things they describe.
 | [Placing, moving and grouping](placing.md) | Colliders, dragging, copying, and treating several placed files as one |
 | [Scenes and layers](scenes-and-layers.md) | What a scene is, the three kinds of layer, and the layer list |
 | [Drawing](drawing.md) | The brushes, Fill, the Pattern and Shape brushes, erasing, Slice, Text |
+| [Colour](colour.md) | The picker, the eyedropper, your palette, Browse Palettes, Attach to PSDs |
 | [Patterns and shapes](patterns-and-shapes.md) | The two libraries and the two editors that fill them |
 | [Fills, generated PSDs and Extrude mode](fills-and-extrude.md) | Filling grid spaces, pulling a solid out of them, and turning either into a file |
 | [The properties sidebar](inspector.md) | Three zones, folding sections, and where the explanations live |

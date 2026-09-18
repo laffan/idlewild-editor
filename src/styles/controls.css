@@ -75,9 +75,10 @@
      they replace, so the field keeps the width it had. */
   grid-template-columns: 1fr 52px;
   grid-template-areas:
-    "field hue"
-    "row   row"
-    "recent recent";
+    "field   hue"
+    "row     row"
+    "recent  recent"
+    "palette palette";
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -210,6 +211,128 @@
   display: block;
 }
 .cp-swatch:hover { border-color: var(--color-accent); }
+.cp-swatch[aria-pressed="true"] { border-color: var(--color-accent); }
+
+/* ── the eyedropper ──────────────────────────────────────────────────────── */
+
+/* Square, and the same height as the hex field it sits two along from, so the
+   row reads as one control rather than as a button with a form beside it. */
+.cp-dropper {
+  flex: none;
+  width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--color-neutral-700);
+  background: transparent;
+  color: inherit;
+}
+.cp-dropper:hover { border-color: var(--color-accent); }
+
+/* What covers the screen while a colour is being pointed at. Transparent —
+   there is nothing to dim, because what is being looked at is the thing
+   underneath — and it exists only to hold the pointer capture and the
+   crosshair. */
+.eyedrop-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* The readout that rides above the pointer. Above, because on an iPad the
+   pixel being sampled is under a finger. */
+.eyedrop-loupe {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  background: var(--color-neutral-900);
+  border: 1px solid var(--color-neutral-700);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.eyedrop-chip {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-neutral-700);
+}
+.eyedrop-hex {
+  font: 500 11px var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--color-neutral-100);
+}
+
+/* ── the working palette ─────────────────────────────────────────────────── */
+
+.cp-palette-box {
+  grid-area: palette;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: var(--rule-chrome);
+}
+
+/* The same row the recents are, so the two read as the same kind of thing —
+   and it does not collapse when empty, because the `+` at its head is the
+   only thing that says a palette is available at all. */
+.cp-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* The head of the row: `+` while the colour in hand is not in the palette,
+   `−` while it is. Accented rather than outlined, because it is the one
+   square in either row that is a verb. */
+.cp-palette-add {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px dashed var(--color-neutral-600);
+  background: transparent;
+  color: inherit;
+}
+.cp-palette-add:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.cp-palette-add:disabled { opacity: 0.4; }
+
+.cp-palette-actions {
+  display: flex;
+  gap: 6px;
+}
+/* Two buttons across a 300px column, so the padding a `.btn` normally carries
+   is what decides whether the longer of the two labels wraps. It does at the
+   default, and a two-line "Browse Palettes" over a one-line neighbour is the
+   row looking broken rather than looking full. */
+.cp-palette-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
+  justify-content: center;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.cp-palette-btn[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+/* On, with nothing to attach. The toggle is telling the truth about itself
+   and the row above it is telling the truth about the palette; this is the
+   one saying the two do not add up to anything yet. */
+.cp-palette-btn.empty { opacity: 0.55; }
 
 /* ── the indeterminate progress bar ──────────────────────────────────────── */
 

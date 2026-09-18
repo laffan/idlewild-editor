@@ -47,6 +47,7 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  psd_write.rs    image / RGBA → PSD  (psd fork, write half)    │
 │  psd_merge.rs    several placed PSDs, written back out as one  │
 │  psd_paint.rs    ink → a layer already in a PSD                │
+│  psd_palette.rs  the palette, into a PSD leaving for Photoshop │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
 │  templates.rs    per-genre scaffolds, per-projection grid      │
@@ -136,6 +137,7 @@ a Mac, that is usually why. See [`Docs/ipad.md`](Docs/ipad.md),
 | [A PSD's own layers](Docs/psd-layers.md) | The stack inside a file: the inspector's list, visibility, reordering, the empty layer, PSD Edit mode |
 | [Three kinds of layer](Docs/layers.md) | Object, pattern and background |
 | [The drawing layer](Docs/drawing.md) | The surface, the brushes, the tools, and how a colour carries its opacity |
+| [The colour picker](Docs/colour.md) | One control everywhere, the eyedropper, the palette, the browsed ones, and the strip a PSD carries out |
 | [Selection](Docs/selection.md) | Grid runs, bare rectangles, placed PSDs, several at once, lassoed ink |
 | [The pattern and shape libraries](Docs/pattern-and-shape-libraries.md) | Two app-owned libraries and the two editors that fill them |
 | [Extrude mode](Docs/extrude.md) | Pulling a solid out of the grid and writing it back as a PSD |
@@ -157,7 +159,9 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Section | Page |
 |---|---|
 | A colour carries its own opacity | [`Docs/drawing.md`](Docs/drawing.md) |
+| Attach to PSDs | [`Docs/colour.md`](Docs/colour.md) |
 | Adding a layer, and the empty one | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
+| Browse Palettes | [`Docs/colour.md`](Docs/colour.md) |
 | Colliders | [`Docs/colliders.md`](Docs/colliders.md) |
 | Console | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | Data model | [`Docs/data-model.md`](Docs/data-model.md) |
@@ -165,6 +169,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Editing a PSD's layer stack without leaving | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Editing a PSD, and getting it back | [`Docs/psd-pipeline.md`](Docs/psd-pipeline.md) |
 | Extrude mode | [`Docs/extrude.md`](Docs/extrude.md) |
+| Eyedropper | [`Docs/colour.md`](Docs/colour.md) |
 | Gesture routing | [`Docs/gestures.md`](Docs/gestures.md) |
 | Import Assets, which is that door inward | [`Docs/exports.md`](Docs/exports.md) |
 | IPC surface | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
@@ -173,6 +178,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Leaving with a file, and the order iOS needs | [`Docs/exports.md`](Docs/exports.md) |
 | Lines the editor owns | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | One file per scene, named after it | [`Docs/data-model.md`](Docs/data-model.md) |
+| One picker, five places | [`Docs/colour.md`](Docs/colour.md) |
 | One game at a time, and why that is load-bearing | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
 | One screen pixel, whatever the camera is doing | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | PSD Edit mode | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
@@ -189,6 +195,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | The minimap | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | The origin, and the screen the game opens at | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | The page around the game | [`Docs/exported-game.md`](Docs/exported-game.md) |
+| The palette, and the two rows of swatches | [`Docs/colour.md`](Docs/colour.md) |
 | The pattern and shape libraries | [`Docs/pattern-and-shape-libraries.md`](Docs/pattern-and-shape-libraries.md) |
 | The PSD pipeline | [`Docs/psd-pipeline.md`](Docs/psd-pipeline.md) |
 | The reference along the bottom of the code modal | [`Docs/code-panel.md`](Docs/code-panel.md) |

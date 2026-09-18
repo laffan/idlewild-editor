@@ -569,6 +569,10 @@ and `__tests__/geometry.test.ts` pins the cut to the disc's edge.
 
 ## A colour carries its own opacity
 
+This section is about what a *colour* is. The control that chooses one — the
+eyedropper, the palette, the browsed palettes and the strip a PSD carries out
+to Photoshop — is [The colour picker](colour.md).
+
 The picker grew a second slider beside hue, and what it hands back is still one
 string: `#rrggbb`, or **`#rrggbbaa`** once the slider leaves the top. That is
 CSS Color 4's eight-digit form, and choosing it over an `alpha` field beside

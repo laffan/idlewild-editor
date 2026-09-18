@@ -10,6 +10,10 @@ import { assetBase, checkAssetServer, platform } from "../lib/ipc";
 import type { ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
+import { enginePixelSampler } from "../game/sample-pixel";
+import { setEngineSampler } from "../lib/eyedropper";
+import { setPaletteBrowser } from "../lib/palette";
+import { createPaletteBrowser } from "./palette-browser";
 import { saveThumbnail } from "./thumbnail";
 import { DrawingLayer } from "../drawing";
 import { CodePanel } from "./code-panel";
@@ -495,6 +499,21 @@ export async function mountEditor(
   // somebody switched off last week has to be off on the first frame.
   overlays.setLattice(handle.scene);
 
+  // How the eyedropper reads the engine's canvas. Registered here rather than
+  // inside `bootGame` because the tool is the picker's and the picker is in
+  // `lib/`: what the game owes it is one function, and what it owes the game
+  // is to stop calling it the moment the renderer goes — see `sample-pixel.ts`.
+  const unregisterSampler = setEngineSampler(enginePixelSampler(handle.game));
+
+  // And **Browse Palettes**, which is the same arrangement for the same
+  // reason: the button is drawn by the colour picker in `lib/`, and what it
+  // opens is a panel that only exists while a project is open.
+  const palettes = createPaletteBrowser({
+    main: layout.main,
+    sidebar: inspector.root,
+  });
+  const unregisterBrowser = setPaletteBrowser(() => palettes.toggle());
+
   // Undo and redo: the two header buttons, and which history a press means —
   // the document's, the code editor's, or whichever mode owns the canvas.
   // Built after the scene because the modes' own stacks are on it, and the
@@ -638,6 +657,9 @@ export async function mountEditor(
 
   async function teardown(): Promise<void> {
     stopShortcuts();
+    unregisterSampler();
+    unregisterBrowser();
+    palettes.destroy();
     history?.destroy();
     history = null;
     intake.stop();

@@ -21,6 +21,7 @@ mod psd_layers;
 mod psd_marks;
 mod psd_merge;
 mod psd_paint;
+mod psd_palette;
 mod psd_pipeline;
 mod psd_rebuild;
 mod psd_write;
@@ -422,6 +423,22 @@ fn open_psd(app: tauri::AppHandle, id: String, key: String) -> Result<(), String
         .map_err(|e| format!("Cannot open {key}.psd: {e}"))
 }
 
+/// Put the working palette into a PSD, or take it back out again.
+///
+/// Called just before the file goes out to another app — Open PSD on a
+/// desktop, the share sheet on an iPad — so what leaves carries the colours
+/// the project is being drawn in. `strip` is absent when **Attach to PSDs**
+/// is off, which is a request to take out a strip left by an earlier send
+/// rather than a request to do nothing. See `psd_palette`.
+#[tauri::command]
+fn sync_psd_palette(
+    id: String,
+    key: String,
+    strip: Option<psd_palette::PaletteStrip>,
+) -> Result<psd_palette::PaletteSync, String> {
+    psd_palette::sync(&id, &key, strip.as_ref())
+}
+
 /// A project's PSD as base64, for the iPadOS share sheet — which shares a
 /// `File` the webview holds rather than a path it can reach.
 #[tauri::command]
@@ -617,6 +634,7 @@ pub fn run() {
             rename_psd,
             open_psd,
             read_psd_bytes,
+            sync_psd_palette,
             read_psd_layers,
             write_psd_layers,
             add_psd_layer,

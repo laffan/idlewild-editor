@@ -1,0 +1,137 @@
+/* The Browse Palettes drawer.
+
+   Its own file rather than a section of `panels.css`, for the 700-line rule
+   and along the seam that file already had: everything in there is a *sidebar*
+   — the two columns the layout gives width to — and this is the one panel that
+   deliberately takes no width at all.
+
+   It is absolute inside the main row rather than a flex sibling of the
+   sidebars, because it must not take width off the canvas: the whole point of
+   it is that the picker it is filling does not move while it is open. `right`
+   is set from the sidebar's own rectangle every time that rectangle changes —
+   see `editor/palette-browser.ts`, which also says why it is a drawer rather
+   than a sheet. */
+
+.palette-drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  background: var(--chrome-panel);
+  /* The sidebar's own ink, not the page's. It sits over the canvas rather
+     than inside a panel, so it inherits the light ground's text colour and
+     everything in it that does not set its own would be dark on dark. */
+  color: var(--chrome-text);
+  border-left: var(--rule-chrome);
+  border-right: var(--rule-chrome);
+  box-shadow: var(--shadow-lg);
+  animation: palette-slide 140ms ease-out;
+}
+.palette-drawer[hidden] { display: none; }
+
+/* Out of the sidebar's edge, which is the gesture the button describes. */
+@keyframes palette-slide {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .palette-drawer { animation: none; }
+}
+
+.palette-drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 8px 10px 12px;
+  border-bottom: var(--rule-chrome);
+}
+.palette-drawer-title {
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.palette-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px 20px;
+}
+
+.palette-source + .palette-source {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: var(--rule-chrome);
+}
+/* The source's name, at the drawer title's own scale rather than at the body
+   size `.m` leaves it — five of these down a 280px column set in 16px read as
+   five headings competing with the one at the top. */
+.palette-source-name {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-neutral-100);
+}
+
+.palette-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* One palette. The colours stretch to fill whatever is left after Use, so a
+   row of four and a row of five are the same width — a ragged right edge in a
+   column of a hundred and twenty-three rows is the panel looking broken. */
+.palette-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 26px;
+}
+.palette-color {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  /* The outline goes on the row rather than on each square: a border per
+     swatch is a grid of hairlines between colours that are meant to be
+     compared against each other. */
+  box-shadow: none;
+}
+.palette-row:hover .palette-color { outline: none; }
+.palette-color:hover { transform: scaleY(1.18); }
+.palette-color:focus-visible { outline: 2px solid var(--color-neutral-100); outline-offset: -2px; }
+
+.palette-use {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--color-neutral-700);
+  border-left: none;
+  background: transparent;
+  color: inherit;
+  font: 500 10px var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.palette-use:hover { border-color: var(--color-accent); color: var(--color-accent); }
+
+.palette-source-link {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--color-neutral-600);
+  word-break: break-all;
+}
+.palette-source-link:hover { color: var(--color-accent); }
+
+/* Narrow windows: the sidebar already overlays the canvas, so the drawer
+   overlays it in turn rather than trying to sit beside something that is
+   itself floating. */
+@media (max-width: 900px) {
+  .palette-drawer { width: min(280px, 70vw); }
+}
