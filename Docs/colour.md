@@ -38,7 +38,7 @@ Top to bottom the control is now:
 ├────────────────────────────────────┤
 │  [+] ▪ ▪ ▪ ▪ ▪                     │   ← the palette: a decision
 │  [      Browse Palettes        ]   │   ← says Close while it is open
-│  [   Attach palette to PSDs    ]   │   ← a toggle, not an action
+│  Attach palette to PSDs      (●━ ) │   ← a setting, so a switch
 └────────────────────────────────────┘
 ```
 
@@ -61,6 +61,27 @@ libraries. The reasoning is the one
 [`lib/library/store.ts`](../src/lib/library/store.ts) gives at greater length:
 a palette built on Tuesday belongs to the person rather than to whichever
 project happened to be open.
+
+### A button, and a switch
+
+The two controls under the row are different shapes because they are different
+kinds of thing, and both are the design system's own rather than this control's.
+
+**Browse Palettes** opens something, so it is a button — `lib-row-buttons`,
+which is what the pattern and shape palettes directly above it already use.
+That wrapper is not decoration: a bare `.btn` carries `--color-text`, which is
+the *home screen's* ink, and the dark-panel override lives on
+`.side-panel .lib-row-buttons .btn`. A row that invents its own class is black
+text on the sidebar's ground.
+
+**Attach palette to PSDs** does nothing when pressed and everything the next
+time a PSD leaves. That is a setting, and a setting that takes effect as it is
+changed is a switch — the argument `options-controls.ts` already makes for the
+ones in Project Options. So it is `optionSwitch`, unchanged: its tokens sit on
+`:root` rather than on the sheet, so the same control works in a sidebar. Only
+the row around it is local, because `.option` is a 58px row inside a card and
+this column is thirty pixels tall. The words are a hit target as well as the
+switch, since 44 pixels is a small thing to aim a finger at.
 
 ### The one button that changes its mind
 
@@ -299,7 +320,7 @@ store and miss the copy somebody is about to draw on.
 | | |
 |---|---|
 | `src/lib/color-picker.ts` | The field, the two sliders, the hex row, the recents |
-| `src/lib/color-palette.ts` | The palette row and its two buttons |
+| `src/lib/color-palette.ts` | The palette row, its button and its switch |
 | `src/lib/palette.ts` | The palette itself, the attach flag, the browser hook |
 | `src/lib/palettes/` | The five bundled sources, and their credits |
 | `src/lib/eyedropper.ts` | Sampling a canvas, and the picking gesture |

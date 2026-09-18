@@ -1,5 +1,5 @@
 /**
- * The palette row under the picker, and the two buttons under that.
+ * The palette row under the picker, and the button and switch under that.
  *
  * Split out of `color-picker.ts` rather than written into it because the two
  * rows above it — the field and the recents — are *the colour*, and this is
@@ -22,6 +22,7 @@
  */
 
 import { h, ICONS, icon } from "./dom";
+import { optionSwitch } from "./options-controls";
 import { isValidHex, normaliseHex } from "./color";
 import {
   hasPaletteBrowser,
@@ -66,26 +67,43 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
   if (!hasPaletteBrowser()) browseRow.hidden = true;
 
   /**
-   * Its own line, and a toggle rather than a button.
+   * Its own line, and a switch rather than a button.
    *
-   * It is not an action beside Browse Palettes — it does nothing when pressed
-   * and everything the next time a PSD leaves — so a row of two made it look
-   * like the other half of a pair of verbs. `lib-toggle` is the switch the
-   * Pattern brush's **Invert** already uses: full width, and filled with the
-   * accent while it is on, which is how the rest of this sidebar says a
-   * setting is on.
+   * It is not an action beside Browse Palettes: it does nothing when pressed
+   * and everything the next time a PSD leaves, so a row of two verbs was the
+   * wrong shape for it twice over. What it is is a **setting**, and a setting
+   * that takes effect as it is changed is a switch — which is the argument
+   * `options-controls.ts` already makes for the ones in Project Options, and
+   * this is that same control rather than a second one that looks like it.
+   *
+   * Label left, switch right, at the sidebar's scale rather than the settings
+   * sheet's: `.option` is a 58px row inside a card, and a column where
+   * everything else is thirty pixels tall is not that page.
    */
-  const attach = h("button", {
-    class: "lib-toggle",
-    type: "button",
-    text: "Attach palette to PSDs",
-    title:
-      "Write the palette into a PSD as its topmost layer whenever one goes " +
-      "out to another app, so the colours are there to sample",
-    onClick: () => {
-      palette.attach = !palette.attach;
+  const attachSwitch = optionSwitch(
+    palette.attach,
+    (on) => {
+      palette.attach = on;
     },
-  });
+    "Attach palette to PSDs",
+  );
+  const attach = h(
+    "div",
+    {
+      class: "cp-attach",
+      title:
+        "Write the palette into a PSD as its topmost layer whenever one goes " +
+        "out to another app, so the colours are there to sample",
+      // The whole row, so the label is a hit target too — a 44px switch is a
+      // small thing to aim a finger at when the words beside it are inert.
+      // The switch stops its own click from arriving here twice.
+      onClick: () => {
+        palette.attach = !palette.attach;
+      },
+    },
+    h("span", { class: "cp-attach-label", text: "Attach palette to PSDs" }),
+    attachSwitch.root,
+  );
 
   const root = h("div", { class: "cp-palette-box" }, row, browseRow, attach);
 
@@ -136,8 +154,10 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
     browse.textContent = open ? "Close Palettes" : "Browse Palettes";
     browse.setAttribute("aria-expanded", String(open));
 
-    attach.setAttribute("aria-pressed", String(palette.attach));
-    // On, with nothing to attach. The toggle is telling the truth about
+    // The switch is its own state, so it has to be told when the change came
+    // from another copy of this control rather than from a press on this one.
+    attachSwitch.set(palette.attach);
+    // On, with nothing to attach. The switch is telling the truth about
     // itself and the row above it is telling the truth about the palette;
     // this is the one saying the two do not add up to anything yet.
     attach.classList.toggle("empty", palette.attach && palette.list().length === 0);

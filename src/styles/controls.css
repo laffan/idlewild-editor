@@ -344,16 +344,31 @@
 }
 .cp-palette-add:disabled { opacity: 0.4; }
 
-/* The two controls under the row are `lib-row-buttons` and `lib-toggle` —
-   the library's own, which the pattern and shape palettes directly above this
-   already use. Nothing here restyles them; all this file says is that the
-   toggle carries no margin of its own inside a box that is already spaced.
+/* Browse Palettes is `lib-row-buttons` — the library's own, which the pattern
+   and shape palettes directly above this already use, and which carries the
+   panel's ink. Nothing here restyles it.
 
-   On, with nothing to attach: the toggle is telling the truth about itself and
+   Attach is a settings row: the words on the left, `opt-switch` on the right.
+   That is the switch Project Options uses, unchanged — its tokens are on
+   `:root` rather than on the sheet, so it is the same control here — and all
+   this rule does is lay it out at the sidebar's scale instead of the settings
+   page's 58px card row. */
+.cp-attach {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  cursor: pointer;
+}
+.cp-attach-label {
+  font: 500 11px var(--font-body);
+  color: var(--chrome-text);
+}
+/* On, with nothing to attach: the switch is telling the truth about itself and
    the row above it is telling the truth about the palette, and this is the one
    saying the two do not add up to anything yet. */
-.cp-palette-box .lib-toggle { margin: 0; }
-.cp-palette-box .lib-toggle.empty { opacity: 0.55; }
+.cp-attach.empty { opacity: 0.55; }
 
 /* ── the indeterminate progress bar ──────────────────────────────────────── */
 
