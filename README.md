@@ -326,6 +326,16 @@ remaining pieces are wired to real slots rather than mocked.
   the pipeline is doing while it happens. That file is a placement like any
   other, so it drags, exports and stacks the way everything else does; what
   makes it a background is the layer it is on
+- **And merge them into one PSD.** With several selected, **Merge** writes a
+  single file holding all of them in the places they were standing and in the
+  order they drew — a wood drawn as nine PSDs becomes `wood.psd`, and stays a
+  wood. It is every other conversion backwards: the rest of them turn one thing
+  into one file, and this takes files already on the grid and writes the
+  arrangement. A file somebody resized on the grid arrives at the size it
+  actually looked, a PSD with a wall and a roof in it stays two layers rather
+  than one flattened picture, and two files that each call a layer `layer 1` do
+  not collide. What goes is the *placements*: the source PSDs stay in the
+  project, because another scene may be drawing them
 - **⌘G puts placed PSDs together, and ⇧⌘G lets them go.** A wall, a roof and
   a door become one thing to work on: tapping any of them picks up the lot, a
   drag moves all of them, and the layer panel lists them under a row of their

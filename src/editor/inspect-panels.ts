@@ -102,6 +102,14 @@ export interface PanelActions {
   onGroup: () => void;
   onUngroup: () => void;
   onRenameGroup: (layerId: string, groupId: string, name: string) => void;
+  /**
+   * Several placed PSDs, written back out as one file.
+   *
+   * Beside Group because they are the two things you can do to a *set* of
+   * files, and one step further: a group is a way of working on several, and
+   * a merge means there are no longer several. See `editor/merge-actions.ts`.
+   */
+  onMerge: () => void;
 }
 
 /**
@@ -399,6 +407,29 @@ export function renderPlacements(
             text: "Ungroup",
             title: "⇧⌘G",
             onClick: actions.onUngroup,
+          })
+        : null,
+    ),
+  );
+
+  // Its own section, under the group's, because it is the one thing here that
+  // writes a file: grouping is a way of working on several PSDs and merging
+  // means there are no longer several. The line says what survives it, since
+  // the arrangement surviving is the entire reason to press it.
+  panel.section(
+    "Merge",
+    "One PSD, holding these in the places they are standing and in the " +
+      "order they draw. The files themselves stay in the project.",
+  );
+  panel.body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      units.size > 1
+        ? h("button", {
+            class: "panel-btn",
+            text: `Merge ${units.size} into one PSD`,
+            onClick: actions.onMerge,
           })
         : null,
       h("button", {

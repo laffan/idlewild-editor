@@ -37,6 +37,7 @@ import { libraryPointer, libraryStyle } from "./stamp-box";
 import { createDeletes, type DeleteWiring } from "./layer-actions";
 import { createModeSwitch } from "./mode-switch";
 import { groupSelection, ungroupSelection } from "./group-actions";
+import { mergeSelection, type MergeDeps } from "./merge-actions";
 import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
@@ -203,6 +204,7 @@ export async function mountEditor(
       groups: () => ({
         group: () => groupSelection(selected),
         ungroup: () => ungroupSelection(selected),
+        merge: () => void mergeSelection(merging),
       }),
       tools: () => tools,
     }),
@@ -612,6 +614,18 @@ export async function mountEditor(
     clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
   };
   const { deleteSelection, deleteLayer } = createDeletes(selected);
+
+  // And making one file out of several, which needs the pipeline as well as
+  // the document — `merge-actions.ts`.
+  const merging: MergeDeps = {
+    projectId: meta.id,
+    store,
+    grid,
+    scene: () => handle?.scene ?? null,
+    selection: () => handle?.scene.getSelection() ?? null,
+    redrawLayers: () => layers.render(),
+    onMerged: () => inspector.revealPsdLayers(),
+  };
 
   // Draw, Code or Play, and what each of them does to the shell —
   // `mode-switch.ts`, which holds the mode itself.

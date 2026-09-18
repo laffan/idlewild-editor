@@ -441,6 +441,24 @@ export interface SearchResults {
   files: number;
 }
 
+/**
+ * One placed thing going into a merge.
+ *
+ * `key` and `path` name what to take — the PSD, and the top-level layer or
+ * group of it this placement stands for, which is exactly what a `Placement`
+ * already carries. The box is where it lands on the merged canvas, in that
+ * canvas's own pixels: already scaled, so a placement somebody resized on the
+ * grid arrives at the size it actually looked.
+ */
+export interface MergePart {
+  key: string;
+  path: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export const psd = {
   /** Import from an OS path — Files, the share sheet, a deep link. */
   importPath: (
@@ -517,6 +535,34 @@ export const psd = {
     marks: AnchorMarks,
   ) =>
     invoke<ImportResult>("create_psd_group_from_rgba", {
+      id,
+      name,
+      width,
+      height,
+      parts,
+      marks,
+    }),
+  /**
+   * Several placed PSDs, written back out as one file.
+   *
+   * The arrangement is the editor's arithmetic — it is what the placements
+   * say — so each part arrives with its box already in the merged file's own
+   * pixels, **back-first**: the Rust side stacks them in the order they are
+   * given and never asks what a grid is. See `psd_merge.rs`.
+   *
+   * `name` is a suggestion rather than a key. A merge writes a *new* file, so
+   * the first free name is taken — writing over a `tower.psd` still standing
+   * on the grid is the one outcome nobody could have asked for.
+   */
+  merge: (
+    id: string,
+    name: string,
+    width: number,
+    height: number,
+    parts: MergePart[],
+    marks: AnchorMarks,
+  ) =>
+    invoke<ImportResult>("merge_psds", {
       id,
       name,
       width,

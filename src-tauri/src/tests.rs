@@ -22,6 +22,7 @@ mod config;
 mod deploying;
 mod exports;
 mod marks;
+mod merging;
 mod options;
 mod painting;
 mod presentation;

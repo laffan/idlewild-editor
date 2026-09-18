@@ -54,8 +54,11 @@ export interface InspectWiringDeps {
   activeLayerId: () => string;
   deleteSelection: () => void;
   deleteLayer: (layerId: string) => void;
-  /** Tying placed PSDs together and letting them go — `group-actions.ts`. */
-  groups: () => { group: () => void; ungroup: () => void };
+  /**
+   * Tying placed PSDs together, letting them go, and making one file of them
+   * — `group-actions.ts` and `merge-actions.ts`.
+   */
+  groups: () => { group: () => void; ungroup: () => void; merge: () => void };
   /**
    * Which tool is in hand and which way round it is.
    *
@@ -116,6 +119,7 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     onUngroup: () => deps.groups().ungroup(),
     onRenameGroup: (layerId, groupId, name) =>
       renameGroup(store, layerId, groupId, name),
+    onMerge: () => deps.groups().merge(),
     onDeleteLayer: (layerId) => deps.deleteLayer(layerId),
     onRenamePoint: (layerId, pointId, name) =>
       store.updatePoint(layerId, pointId, { name }),

@@ -40,6 +40,7 @@ Extension of [README.md](README.md).
 │  store.rs        per-project directories on disk               │
 │  projects.rs     the command surface over the store of them    │
 │  psd_write.rs    image / RGBA → PSD  (psd fork, write half)    │
+│  psd_merge.rs    several placed PSDs, written back out as one  │
 │  psd_paint.rs    ink → a layer already in a PSD                │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
@@ -1393,7 +1394,7 @@ Registered in `src-tauri/src/lib.rs`, wrapped with types in `src/lib/ipc.ts`.
 | Projects | `list_projects`, `create_project`, `rename_project`, `delete_project`, `duplicate_project`, `read_project_meta` |
 | Document | `read_document`, `write_document`, `read_thumbnail`, `write_thumbnail` |
 | Game tree | `list_game_files`, `read_game_file`, `write_game_file`, `create_game_file`, `create_game_dir`, `move_game_path`, `copy_game_path`, `delete_game_path` |
-| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `rename_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `add_psd_layer`, `paint_psd_layer`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
+| PSD | `import_image`, `import_image_bytes`, `create_psd_from_rgba`, `merge_psds`, `reprocess_psd`, `reimport_psd`, `duplicate_psd`, `rename_psd`, `open_psd`, `read_psd_bytes`, `read_psd_manifest`, `read_psd_layers`, `write_psd_layers`, `add_psd_layer`, `paint_psd_layer`, `is_psd_processed`, `list_psd_outputs`, `psd_thumbnail`, `psd_preview`, `read_asset_data_url` |
 | Clipboard | `read_clipboard`, `copy_psd_to_clipboard` |
 | Publish | `publish_zip`, `save_bytes` |
 | Import Assets | `free_psd_key`, `import_psd_from_project` |
@@ -5022,6 +5023,70 @@ group that half the selection belongs to would be a heading saying something
 untrue. The panel's own row follows the same rule — `isSelected` lights a
 group's row only when **every** member is held, so reaching in to pick one file
 does not leave two rows claiming to be the selection.
+
+### Merging, which is every other conversion backwards
+
+Every conversion in this editor turns one thing into one file — an image, a
+sketch, a fill, a solid pulled off the grid — and the pipeline places what
+comes back. **Merge** goes the other way: files already standing on the grid,
+in the arrangement somebody put them in, written into a single document. A wood
+drawn as nine PSDs becomes `wood.psd`, and stays a wood.
+
+**The editor owns the arrangement and Rust owns the file**, which is the
+division of labour the marks already keep. What crosses the bridge is each
+placement's box in the merged file's own pixels — no cells, no projection, no
+idea of a grid — so `psd_merge.rs` reads layers out of the sources and stacks
+them in the order it is given, and nothing about a diamond has to be true on
+that side. `editor/merge-actions.ts` is the arithmetic: the union of the
+placements' boxes, `footprintForBox` for the spaces it covers and the space it
+hangs from, and each part at `(x - box.x) × EXPORT_SCALE`.
+
+Three things have to survive it, and each is a different way to be quietly
+wrong — a roof under its walls is a roof under its walls, whether a merge put
+it there or a hand did:
+
+- **Position.** Each source lands where the editor said, relative to the
+  others. Because the box sent is the placement's, a file somebody resized on
+  the grid arrives at the size it actually *looked*: `raster` resamples it, and
+  skips the resample entirely when the sizes match, which is every unresized
+  placement.
+- **Depth.** Parts arrive **back-first** and `add_*` stacks bottom-up. On an
+  isometric object layer the drawn order is screen Y rather than the
+  document's, so `mergeOrder` sorts through `unitsInDrawOrder` — the merged
+  file has one stack and it had better be the one that was on screen.
+- **The composition inside each file.** Merging is not flattening. Every layer
+  comes across as a layer, at its own offset inside the source, and a group
+  stays a group. The scale is the **source box's**, not the layer's: one factor
+  about one origin, which is the rule an extrusion's parts keep and for the
+  same reason — per-layer scaling about per-layer origins lets a composition
+  drift apart.
+
+Two things must not survive. **A name collision**: two files each holding an
+`S | layer 1` would land as two rows with one name, and psd-to-phaser keys a
+texture on the layer's own name — so the second becomes `S | layer 1-2`. The
+editor already fixes this for separate files by naming a texture after the file
+it came from; inside one merged document there is no file left to name it
+after. And **the sources' own marks**: nine anchors would be nine answers to a
+question with one. They are never sent, because a placement is made for the
+artwork layers alone, and the merged file writes its own pair for the footprint
+it covers.
+
+**The source files stay in the project.** What goes is the *placements* — a
+placement is a drawing of a file, the file lives in `psd/`, and another scene
+may be drawing it too. So merging four trees into a copse leaves `tree.psd`
+where it was and Export Assets still offers it. The placement of the merged
+file arriving and the originals going are **one history step**, because a
+history that could put the originals back without taking the merged file away
+would leave the same artwork on the grid twice.
+
+The key is taken from `free_key` rather than the name offered outright: a merge
+writes a *new* file, and writing over a `tower.psd` still standing on the grid
+is the one outcome nobody could have asked for. The name it starts from is the
+back-most source's, which is what the rest was built around nine times in ten.
+
+Refused for a source carrying masks or clipping, for the reason every rewrite
+in this editor refuses one: the fork cannot express either, so what came out
+would have quietly lost work.
 
 ### A layer that has wandered, and the way back
 

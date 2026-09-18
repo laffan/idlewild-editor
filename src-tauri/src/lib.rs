@@ -19,6 +19,7 @@ mod projects;
 mod psd_background;
 mod psd_layers;
 mod psd_marks;
+mod psd_merge;
 mod psd_paint;
 mod psd_pipeline;
 mod psd_rebuild;
@@ -260,6 +261,46 @@ fn create_psd_group_from_rgba(
     // The canvas, not the parts: an extrusion asks for a grid space of clear
     // room around what it draws, so the file is a margin bigger on every side.
     let (width, height) = psd_pipeline::psd_dimensions(&dest)?;
+    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
+    Ok(ImportResult {
+        key,
+        width,
+        height,
+        manifest,
+    })
+}
+
+/// Several placed PSDs, written back out as one.
+///
+/// The arrangement is the editor's arithmetic — it is what the placements say
+/// — so every part arrives with its box already in the merged file's own
+/// pixels, back-first. `psd_merge` does the reading and the stacking; here is
+/// the project: where the sources live, what the new file is called, and the
+/// pipeline run over it. The key is taken from the first free name rather than
+/// the one offered outright, because a merge is a *new* file and writing over
+/// a `tower.psd` that is still standing on the grid is the one outcome nobody
+/// asked for.
+#[tauri::command(async)]
+fn merge_psds(
+    app: tauri::AppHandle,
+    id: String,
+    name: String,
+    width: u32,
+    height: u32,
+    parts: Vec<psd_merge::MergePart>,
+    marks: AnchorMarks,
+) -> Result<ImportResult, String> {
+    let key = psd_pipeline::free_key(&id, &name)?;
+    let project = id.clone();
+    let bytes = psd_merge::merge(width, height, &parts, &marks, &move |source: &str| {
+        std::fs::read(psd_pipeline::psd_path(&project, source)?)
+            .map_err(|e| format!("Cannot open {source}.psd: {e}"))
+    })?;
+    std::fs::write(psd_pipeline::psd_path(&id, &key)?, bytes).map_err(|e| e.to_string())?;
+
+    // The file's own size, not the artwork's: the marks grow the canvas around
+    // it, exactly as they do for every other file this editor writes.
+    let (width, height) = psd_pipeline::psd_dimensions(&psd_pipeline::psd_path(&id, &key)?)?;
     let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
     Ok(ImportResult {
         key,
@@ -558,6 +599,7 @@ pub fn run() {
             create_psd_from_rgba,
             psd_background::create_background_psd,
             create_psd_group_from_rgba,
+            merge_psds,
             rewrite_psd_group_from_rgba,
             reprocess_psd,
             reimport_psd,
