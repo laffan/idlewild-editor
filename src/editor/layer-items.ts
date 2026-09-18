@@ -18,6 +18,7 @@
 import { h, ICONS, icon } from "../lib/dom";
 import { groupOfUnit, liveGroups } from "../lib/groups";
 import { textsOf } from "../lib/text-items";
+import { plainText } from "../lib/text-markdown";
 import { unitKey, unitsInDrawOrder } from "../lib/units";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { LayerKind } from "../lib/types";
@@ -221,7 +222,9 @@ export function layerItems(
   // Its own words are its name: a note already says what it is, and a row
   // reading "Text 3" would say less than the thing it is about.
   for (const item of textsOf(layer)) {
-    const line = item.text.split("\n")[0]?.trim() ?? "";
+    // The words, with the marks taken out: a row reading `**door**` would be
+    // listing what was typed rather than what the note says.
+    const line = plainText(item.text.split("\n")[0] ?? "").trim();
     items.push({
       selection: { kind: "text", layerId: layer.id, textId: item.id },
       label: line.length > 24 ? `${line.slice(0, 23)}\u2026` : line || "Empty",

@@ -47,6 +47,7 @@ import {
 } from "../lib/text-items";
 import { fontLabel, systemFonts } from "../lib/system-fonts";
 import { openMenu } from "../lib/menu";
+import { plainText } from "../lib/text-markdown";
 import type { Selection, TextItem } from "../lib/types";
 import type { PanelSurface } from "./inspect-panels";
 
@@ -344,7 +345,9 @@ function fontButton(item: TextItem, onPick: (font: string) => void): HTMLElement
  * heading that says less than the thing under it.
  */
 function firstLine(item: TextItem): string {
-  const line = item.text.split("\n")[0]?.trim() ?? "";
+  // The words rather than the source. A heading reading `**door**` would be
+  // showing the typing rather than the note.
+  const line = plainText(item.text.split("\n")[0] ?? "").trim();
   if (!line) return "Empty";
   return line.length > 28 ? `${line.slice(0, 27)}…` : line;
 }

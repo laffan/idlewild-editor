@@ -23,6 +23,7 @@ import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
 import { planeFor, rasteriseText, removeText, textById } from "../lib/text-items";
+import { plainText } from "../lib/text-markdown";
 import type { Selection, TextItem } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import {
@@ -147,11 +148,15 @@ function textPixels(
  * `door to the cave` becomes `door-to-the-cave.psd`, which is a file anybody
  * can find again in `psd/` — and a great deal better than `text-m2k9f1`, which
  * is what every other conversion in this editor has to settle for because a
- * fill and a sketch have no words in them. Rust sanitises the stem itself; this
- * only has to keep it short and stop it being empty.
+ * fill and a sketch have no words in them.
+ *
+ * The **words**, not the source: a note reading `**door** to the cave` is about
+ * a door, and a file called `door-to-the-cave` is the one anybody would look
+ * for. Rust sanitises the stem itself; this only has to keep it short and stop
+ * it being empty.
  */
 function textName(item: TextItem): string {
-  const words = item.text
+  const words = plainText(item.text)
     .trim()
     .split(/\s+/)
     .slice(0, 5)
@@ -163,6 +168,6 @@ function textName(item: TextItem): string {
 
 /** Its first line, for the sheet and the console line. */
 function firstLine(item: TextItem): string {
-  const line = item.text.split("\n")[0]?.trim() ?? "";
+  const line = plainText(item.text.split("\n")[0] ?? "").trim();
   return line.length > 40 ? `${line.slice(0, 39)}…` : line || "Text";
 }
