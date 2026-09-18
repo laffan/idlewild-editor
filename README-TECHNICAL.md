@@ -1326,6 +1326,62 @@ box keeps its layers in the arrangement they were built in (see *A placed PSD
 is one thing*), and there is no such relationship between things that only
 happen to be near each other — so sizes stay each image's own.
 
+### The sidebar makes one too
+
+The marquee was the only way to make a `placements` selection, and it asks a
+question about *where things are standing*: a rectangle. That is the wrong
+question for the two things there are now to do with several files at once —
+grouping them and merging them — because those are about which files they are.
+Three trees in a wood are not a rectangle, and a marquee round them takes the
+fence as well.
+
+So the layer panel's rows pick too, in `editor/layer-select.ts`. **A row stands
+for a unit**, not a placement (see `lib/units.ts`), so everything there works in
+whole units and flattens to placement ids at the end, which is what the document
+and the canvas both speak. **One layer's worth**, like the marquee's, and for
+the same reason: `placements` carries a single `layerId` because a drag moves
+every member by the same cell step. Picking a row on another layer starts again
+on that layer rather than growing a selection spanning two — which is also the
+only reading that could be *drawn*, since the rows it would light up are under a
+different heading.
+
+**Three ways to pick, and the third is the iPad's.** A plain tap replaces, ⌘ or
+Ctrl toggles one row, ⇧ takes the run between the last plain tap and this one.
+⇧ wins when both modifiers are down, because a range is the more specific ask
+and ⌘⇧-click everywhere else means *add this run* — which is what unioning the
+range with what is held already does. Ctrl stands in for ⌘ the way it does for
+undo, so a keyboard with no Command key is not locked out.
+
+None of that exists under a finger, so a placed PSD's row also carries a **⊕**
+at its far end: the same affordance, and the same argument, as the shape
+editor's path list — tapping a row picks it, and the ⊕ adds or removes it from
+the selection without moving what the selection is *about*. It is quiet until
+the row is hovered or already picked, because a column of plus signs down the
+side of a list of files reads as an invitation to add files; a device with no
+hover gets it outright.
+
+Three details are the ones worth a test, because each is invisible when wrong:
+
+- **A single pick is a `placement`, not a `placements` of one.** Almost
+  everything about a placed PSD — the inspector's file panel, resizing, opening
+  it up into its own layers — is about one thing, and would have to ask "is
+  there exactly one?" on every line otherwise. `selectionOf` is where the count
+  decides which kind, and an empty set is `none`: ⌘-clicking the last held row
+  clears the selection rather than leaving a panel describing zero images.
+- **A row is held when any of its placements is**, which is the rule
+  `isSelected` already draws the highlight by — the canvas selects whichever
+  layer of a file the pointer landed on. So ⌘-clicking a three-layer PSD the
+  canvas caught by its middle layer takes the whole file out rather than adding
+  it again.
+- **The anchor stays where it was through a ⇧-click**, so a run can be
+  stretched and shrunk from the same end. Walking it along with the click is
+  the bug nobody notices until they have lost the selection they were
+  adjusting.
+
+The anchor is panel state, dropped when the scene changes or when a run is
+started on a different layer — a fact about the last row somebody tapped, not
+about the document.
+
 ---
 
 ## IPC surface

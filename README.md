@@ -326,6 +326,14 @@ remaining pieces are wired to real slots rather than mocked.
   the pipeline is doing while it happens. That file is a placement like any
   other, so it drags, exports and stacks the way everything else does; what
   makes it a background is the layer it is on
+- **Several PSDs at once, from the sidebar.** A marquee on the canvas has
+  always caught more than one image, but it asks where things are standing —
+  and three trees in a wood are not a rectangle. So the rows pick too: tap one
+  to select it, ⌘-tap to add or remove a second, ⇧-tap to take the run between.
+  On an iPad there is no ⌘, so every placed PSD's row carries a **⊕** at its
+  far end which adds or removes it — the same answer the shape editor's path
+  list gives, for the same reason. It is one layer's worth, like the marquee's,
+  because that is what drags, groups and merges together
 - Layers, under the scene they belong to: drag by the grip to reorder, rename,
   lock, hide, with live counts and an expandable list of what is on each one —
   selecting there selects on the canvas, and a placed PSD listed under a layer

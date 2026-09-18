@@ -220,8 +220,16 @@ function describeUnit(unit: readonly Placement[]): string {
 export function renderLayerItem(
   item: LayerItem,
   active: boolean,
-  onSelect: (selection: Selection) => void,
+  onSelect: (selection: Selection, event: MouseEvent) => void,
   onGrip?: (event: PointerEvent) => void,
+  /**
+   * The ⊕: in or out of the selection, without a modifier key.
+   *
+   * Only on a placed PSD's row, and only because there is no ⌘ under a
+   * finger — see `layer-select.ts`. The same affordance and the same argument
+   * as the shape editor's path list.
+   */
+  onAdd?: () => void,
 ): HTMLElement {
   const classes = ["layer-item"];
   if (active) classes.push("active");
@@ -238,7 +246,10 @@ export function renderLayerItem(
       dataset: item.unit ? { unit: item.unit } : undefined,
       onClick: (event: Event) => {
         event.stopPropagation();
-        onSelect(item.selection);
+        // The event goes with the selection because ⌘ and ⇧ change what the
+        // click *means* rather than what it lands on, and only the panel has
+        // the list a range is measured over.
+        onSelect(item.selection, event as MouseEvent);
       },
     },
     item.swatch
@@ -259,6 +270,32 @@ export function renderLayerItem(
         )
       : h("span", { class: "layer-item-detail m", text: item.detail }),
   );
+
+  if (onAdd) {
+    // Past the detail, at the end of the row: the row's subject is the file
+    // and this is a question about the *selection*, so it is the last thing
+    // read rather than something between the grip and the name. A span for
+    // the reason the grip is one — a button inside a button is not legal.
+    row.appendChild(
+      h(
+        "span",
+        {
+          class: "layer-item-add",
+          role: "button",
+          "aria-label": active
+            ? `Take ${item.label} out of the selection`
+            : `Add ${item.label} to the selection`,
+          "aria-pressed": String(active),
+          title: active ? "Take out of the selection" : "Add to the selection",
+          onClick: (event: Event) => {
+            event.stopPropagation();
+            onAdd();
+          },
+        },
+        icon(active ? ICONS.check : ICONS.plus, 12),
+      ),
+    );
+  }
 
   if (onGrip) {
     // A button inside a button is not legal HTML, so the grip is a span with

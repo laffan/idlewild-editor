@@ -44,6 +44,7 @@ import {
   layerItems,
   renderLayerItem,
 } from "./layer-items";
+import { pickMode, pickUnit } from "./layer-select";
 import { ScenesBar } from "./scenes-bar";
 import { renderDirectory } from "./layer-directory";
 import type { ManifestLayer } from "../lib/manifest";
@@ -121,6 +122,14 @@ export class LayersPanel {
   /** Whether an object layer's placed files are listed — and reorderable —
    *  in document order or in screen-Y order. See `ordersByHand`. */
   private readonly isometric: boolean;
+  /**
+   * The row a ⇧-click measures its run from: a layer, and a position in that
+   * layer's list of placed files.
+   *
+   * Panel state rather than document state, and forgotten when the scene
+   * changes, because it is a fact about the last thing somebody tapped.
+   */
+  private anchor: { layerId: string; index: number } | null = null;
 
   /**
    * `footer` is what sits under the list, along the bottom of the sidebar:
@@ -176,6 +185,8 @@ export class LayersPanel {
     store.addEventListener("scene", () => {
       this.drags.forget();
       this.expanded.clear();
+      // The row a ⇧-click would have counted from is in the scene just left.
+      this.anchor = null;
       this.render();
     });
     this.render();
@@ -217,6 +228,39 @@ export class LayersPanel {
   setSuspended(suspended: boolean): void {
     this.suspended = suspended;
     if (!suspended) this.render();
+  }
+
+  /**
+   * A placed PSD's row was picked, with whatever the click meant.
+   *
+   * The arithmetic is `layer-select.ts`; this is the part that has the panel's
+   * two pieces of state — which layer the anchor is on, and what is selected
+   * now — and hands the answer on to the editor, which is where a selection
+   * reaches the canvas.
+   *
+   * The anchor is dropped when a run is started on a different layer, because
+   * a selection is one layer's worth and a range across two has nothing to be
+   * measured over.
+   */
+  private pick(
+    layerId: string,
+    units: readonly { members: readonly string[] }[],
+    index: number,
+    mode: ReturnType<typeof pickMode>,
+  ): void {
+    const anchor =
+      this.anchor && this.anchor.layerId === layerId ? this.anchor.index : null;
+    const result = pickUnit({
+      current: this.callbacks.getSelection(),
+      layerId,
+      units,
+      index,
+      anchor,
+      mode,
+    });
+    this.anchor =
+      result.anchor === null ? null : { layerId, index: result.anchor };
+    this.callbacks.onSelectItem(result.selection);
   }
 
   render(): void {
@@ -265,6 +309,13 @@ export class LayersPanel {
         );
       }
 
+      // The placed files on this layer, in the order they are listed, which is
+      // what a ⇧-click's run is measured over and what an index means below.
+      const units = items
+        .filter((item) => item.selection.kind === "placement")
+        .map((item) => ({ members: item.members ?? [] }));
+      let unitIndex = -1;
+
       for (const item of items) {
         // Only a placement is carried between layers. A fill is a run of grid
         // spaces and a boundary is a polygon; both are addressed in world
@@ -272,11 +323,15 @@ export class LayersPanel {
         // order alone and the reorder above already covers it.
         const draggable =
           item.selection.kind === "placement" ? item.members ?? [] : null;
+        if (draggable) unitIndex += 1;
+        const index = unitIndex;
         group.appendChild(
           renderLayerItem(
             item,
             isSelected(item, selection),
-            (next) => this.callbacks.onSelectItem(next),
+            draggable
+              ? (_next, event) => this.pick(layer.id, units, index, pickMode(event))
+              : (next) => this.callbacks.onSelectItem(next),
             draggable
               ? (event) =>
                   this.drags.beginItemDrag(
@@ -296,6 +351,11 @@ export class LayersPanel {
                       ? item.unit ?? null
                       : null,
                   )
+              : undefined,
+            // The ⊕, which is ⌘-click for a finger. Only where there is
+            // something to add to a selection — see `layer-select.ts`.
+            draggable
+              ? () => this.pick(layer.id, units, index, "toggle")
               : undefined,
           ),
         );

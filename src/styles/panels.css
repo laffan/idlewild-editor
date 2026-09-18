@@ -356,6 +356,31 @@
 }
 .layer-item:hover .layer-item-grip { color: var(--chrome-text); }
 
+/* The ⊕ at the far end of a placed PSD's row: in or out of the selection,
+   which is what an iPad has instead of ⌘-click. It is quiet until the row is
+   under the pointer or already picked, because a column of plus signs down
+   the side of a list of files reads as an invitation to add files. The hit
+   area is the full row height, like the grip's, so a finger has something to
+   land on at 22px wide. See editor/layer-select.ts. */
+.layer-item-add {
+  flex: none;
+  width: 22px;
+  align-self: stretch;
+  margin-right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  cursor: pointer;
+}
+.layer-item:hover .layer-item-add { color: var(--color-neutral-600); }
+.layer-item-add:hover { color: var(--chrome-text) !important; }
+.layer-item.active .layer-item-add { color: var(--color-accent); }
+/* A touch device has no hover to reveal it with, so it is simply there. */
+@media (hover: none) {
+  .layer-item-add { color: var(--color-neutral-600); }
+}
+
 /* Carrying one. The rows do not move as the finger travels — there is one
    legal drop per layer rather than a position in a list — so the destination
    is marked instead, the way the code modal's file tree marks a folder. */
