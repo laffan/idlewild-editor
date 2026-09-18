@@ -22,7 +22,7 @@
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
-import { rasteriseText, removeText, textById } from "../lib/text-items";
+import { planeFor, rasteriseText, removeText, textById } from "../lib/text-items";
 import type { Selection, TextItem } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import {
@@ -58,7 +58,7 @@ export async function convertTextToPsd(
     return;
   }
 
-  const raster = textPixels(item);
+  const raster = textPixels(item, grid);
   if (!raster) {
     log.error("Could not draw the text");
     return;
@@ -129,8 +129,9 @@ export async function convertTextToPsd(
  */
 function textPixels(
   item: TextItem,
+  grid: Grid,
 ): { rgba: Uint8ClampedArray; width: number; height: number } | null {
-  const canvas = rasteriseText(item, EXPORT_SCALE);
+  const canvas = rasteriseText(item, EXPORT_SCALE, planeFor(item, grid));
   const ctx = canvas?.getContext("2d", { willReadFrequently: true });
   if (!canvas || !ctx) return null;
   return {

@@ -14,6 +14,7 @@
  * this touches Phaser, the camera or the display list.
  */
 
+import { GENERIC_FONTS } from "../lib/system-fonts";
 import type { TextItem } from "../lib/types";
 
 /** The four things a piece of text is written in. */
@@ -36,6 +37,9 @@ export type TextStyle = Pick<TextItem, "size" | "color" | "font" | "align">;
 export const DEFAULT_TEXT_STYLE: TextStyle = {
   size: 24,
   color: "#1d1f22",
-  font: "system-ui, sans-serif",
+  // The first of the generics `lib/system-fonts.ts` always offers, so a first
+  // note is set to something the picker can show as chosen whatever this
+  // device turns out to have installed.
+  font: GENERIC_FONTS[0].id,
   align: "left",
 };

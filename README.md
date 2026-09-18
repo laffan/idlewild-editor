@@ -426,8 +426,16 @@ remaining pieces are wired to real slots rather than mocked.
   game's players may not have, so shipping words as words would mean shipping a
   typeface and accepting that a sign reflows on the day the fallback is wrong.
   Pixels ask none of that, and a PSD of the words is also a file somebody can
-  open and paint over. Three families, six sizes, a colour and an alignment,
-  and restyling one sets the next — the same way a brush keeps its size. The
+  open and paint over — and it is what makes using a *local* font safe, so the
+  picker offers **the typefaces this device actually has**. There is no honest
+  API for that here, so they are found by measuring: a family that is not
+  installed falls through to a generic and measures the same as one. Each name
+  in the list is set in its own face, because *Didot* in the panel's own font
+  says nothing about Didot. Six sizes, a colour and an alignment beside it, and
+  restyling one sets the next — the same way a brush keeps its size. On an
+  isometric project there is one more switch: **Track the grid** lays the words
+  along the grid's own two axes, so a label reads as painted on the floor
+  rather than floating in front of it. The
   field is in the inspector rather than on the canvas, because a caret over a
   running Phaser scene is a second keyboard, a second selection and a second
   cursor for a string three words long; the canvas is the preview instead, and

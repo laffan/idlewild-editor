@@ -29,7 +29,8 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { rasteriseText, textsOf } from "../lib/text-items";
+import { planeFor, rasteriseText, textsOf } from "../lib/text-items";
+import type { Grid } from "../lib/grid";
 import type { TextItem } from "../lib/types";
 import { DEPTH_STRIDE } from "./draw-order";
 
@@ -55,11 +56,13 @@ interface View {
 export class TextRender {
   private readonly scene: Phaser.Scene;
   private readonly store: DocStore;
+  private readonly grid: Grid;
   private readonly views = new Map<string, View>();
 
-  constructor(scene: Phaser.Scene, store: DocStore) {
+  constructor(scene: Phaser.Scene, store: DocStore, grid: Grid) {
     this.scene = scene;
     this.store = store;
+    this.grid = grid;
   }
 
   /** Bring every word on screen into line with the document. */
@@ -90,6 +93,9 @@ export class TextRender {
       item.color,
       item.font,
       item.align,
+      // A note laid into the grid's plane is a different picture from the same
+      // words drawn flat, so the switch is part of what the texture is of.
+      item.tracksGrid === true,
       Math.round(item.width),
       Math.round(item.height),
     ]);
@@ -101,7 +107,7 @@ export class TextRender {
     }
     if (held) this.drop(item.id, held);
 
-    const drawn = rasteriseText(item, TEXTURE_SCALE);
+    const drawn = rasteriseText(item, TEXTURE_SCALE, planeFor(item, this.grid));
     if (!drawn) return;
 
     const key = `text:${item.id}:${Date.now().toString(36)}`;

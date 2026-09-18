@@ -169,7 +169,7 @@ export class DocRenderer {
     this.grid = grid;
     this.fillGraphics = scene.add.graphics();
     this.fillPaint = new FillPaintRender(scene, store, grid);
-    this.texts = new TextRender(scene, store);
+    this.texts = new TextRender(scene, store, grid);
     this.zoneGraphics = scene.add.graphics();
     this.pointGraphics = scene.add.graphics();
   }

@@ -450,7 +450,13 @@ export class Inspector {
         renderZone(this.surface(), this.store, this.callbacks, selection);
         break;
       case "text":
-        renderText(this.surface(), this.store, this.callbacks, selection);
+        renderText(
+          this.surface(),
+          this.store,
+          this.grid,
+          this.callbacks,
+          selection,
+        );
         break;
       case "background":
         renderBackground(this.surface(), this.store, this.callbacks, selection);

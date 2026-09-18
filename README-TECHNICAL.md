@@ -5168,9 +5168,66 @@ of them. Shipping the words as words would mean shipping a font, choosing a
 fallback, and accepting that a sign reflows on the day the fallback is wrong.
 Pixels have none of those questions in them, and a PSD of the words is also a
 file somebody can open and paint over, which is usually what a sign in a game
-wants next. `TEXT_FONTS` is three families for the same reason: no webfonts on
-a device that works offline, and nothing whose metrics can arrive after the box
-was measured.
+wants next.
+
+**Which is what makes a local font safe here.** Since what ships is artwork, a
+note can be set in anything the device has, and `lib/system-fonts.ts` finds out
+what that is. Not by asking: `queryLocalFonts` would answer outright and is
+Chromium's alone, and this editor runs in WKWebView on both of its platforms;
+`document.fonts.check()` answers about *loading* rather than availability and
+says yes to families that are not installed. So the families are **probed**,
+the way every font picker on the web has done it for twenty years — a string is
+measured in the candidate family with a generic behind it, and again in the
+generic alone; a family that is not installed falls through and the two match.
+Against all three generics, because a face that happens to match `monospace`'s
+metrics will not also match `serif`'s.
+
+It is a **list of candidates, not an enumeration**: nothing can find a typeface
+it was not told to look for, so what the picker offers is `CANDIDATES` — the
+system faces of macOS, iPadOS and Windows — intersected with what is there, and
+a missing one is a line to add. The three generic stacks are always offered, so
+the picker is never empty and a note written elsewhere keeps its own family
+selectable. The probe runs once and is kept: installing a font is not something
+that happens between two renders of a sidebar. **No webfonts**, which is the one
+rule — this editor works offline, and text whose metrics arrive after the box
+was measured is text that no longer sits where its outline says.
+
+The picker is a menu rather than the row of three chips it started as, because
+there are now as many families as the device has. **Each name is drawn in its
+own face**, in the button and in every row: *Didot* set in the panel's own font
+says nothing about Didot. A family the document names and this device has not
+got still reads as its own name — `fontLabel` unpicks it from the stack it was
+stored as — because the note is set to it and a panel showing the fallback
+instead would be agreeing with something nobody chose.
+
+### Lying in the grid's plane
+
+On an isometric project a note drawn flat is the one thing on the canvas facing
+the viewer while everything else is seen from above and to the side, so it reads
+as floating in front of the world rather than being part of it. **Track the
+grid** lays it into the grid's own plane instead: a line runs along `+cx` and
+the next line steps along `+cy`, so a label reads as painted on the floor.
+
+`groundPlane` is the whole of it — the two grid axes from `Grid.cellToWorld`,
+each **normalised to length one**. Normalised rather than raw is the part that
+would be silently wrong: the axes themselves are a *cell* long, so using them
+would scale every note to the size of one grid space however big the words
+were. What the transform keeps is the length of a horizontal and a vertical run;
+what it changes is the angle between them, which is what makes the words lie
+down.
+
+**The shear is baked into the texture, and the box follows it.** `planeBox` puts
+the four corners through the transform and takes the rectangle around them, and
+both the measuring and the drawing ask it — so the canvas a note is drawn into
+is exactly the box the document stores, and picking, dragging, the outline, the
+minimap and the conversion's crop all go on reading a plain rectangle. That is
+also why `tracksGrid` is in the texture's signature and in the list of patches
+that re-measure: it changes the picture and the box without changing a word.
+
+The row is not drawn at all on an orthogonal or blank project, where the grid's
+plane *is* the screen: a switch that does nothing says the feature is broken
+rather than inapplicable, and `groundPlane` answers null there rather than an
+identity transform so every caller skips the work instead of multiplying by one.
 
 **The box is measured once and stored**, which is the decision everything else
 here rests on. Text is the only thing in this document whose size nobody typed:

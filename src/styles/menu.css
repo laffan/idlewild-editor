@@ -44,3 +44,16 @@
 .menu-item:hover { background: var(--chrome-rule); }
 .menu-item svg { flex: none; color: var(--chrome-dim); }
 .menu-item:hover svg { color: var(--chrome-text); }
+
+/* The row for whatever is already chosen, which a long menu needs and a short
+   one never did: the font picker can be forty rows, and scrolling one with no
+   mark on it is scrolling to find out nothing. See lib/menu.ts. */
+.menu-item.current { box-shadow: inset 2px 0 0 var(--color-accent); }
+
+/* And a ceiling, for the same menu. Forty families is taller than the window,
+   and a menu that runs off the bottom of the screen has rows nobody can reach.
+   Every other menu in the app is under a dozen rows and never meets this. */
+.menu {
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+}

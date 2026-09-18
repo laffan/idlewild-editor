@@ -21,15 +21,19 @@ import {
   TEXT_PLACEHOLDER,
   addText,
   fontString,
+  groundPlane,
   lineOffset,
   measure,
   newText,
+  planeBox,
+  planeFor,
   removeText,
   textById,
   textLines,
   textsOf,
   updateText,
 } from "../text-items";
+import { Grid } from "../grid";
 import type { GameDoc } from "../types";
 
 // The store writes through `ipc.doc.write`, which wants Tauri, and debounces
@@ -208,5 +212,103 @@ describe("laying it out", () => {
     expect(lineOffset({ ...box, align: "left" }, 40)).toBe(0);
     expect(lineOffset({ ...box, align: "center" }, 40)).toBe(30);
     expect(lineOffset({ ...box, align: "right" }, 40)).toBe(60);
+  });
+});
+
+/**
+ * Lying in the grid's plane.
+ *
+ * On an isometric project a note drawn flat is the one thing on the canvas
+ * facing the viewer while everything else is seen from above and to the side.
+ * Turned on, the words are laid along the grid's own two axes.
+ *
+ * The arithmetic is worth pinning because **the box has to follow**. A sheared
+ * note fills a bigger rectangle than the same words drawn flat, and four things
+ * read that rectangle as fact — the tap that picks the note up, the drag, the
+ * outline, and the crop a conversion makes. A box that stopped agreeing with
+ * the drawing is an outline in the wrong place and a file with a corner of the
+ * words cut off.
+ */
+describe("the grid's plane", () => {
+  const iso = new Grid("isometric", 64);
+  const flat = new Grid("orthogonal", 64);
+
+  /**
+   * Null on a projection whose plane is already the screen. Not an identity
+   * transform: there is nothing to do, and saying so is what lets every caller
+   * skip the work rather than multiplying by one.
+   */
+  it("is nothing at all on an orthogonal or blank project", () => {
+    expect(groundPlane(flat)).toBeNull();
+    expect(groundPlane(new Grid("blank", 64))).toBeNull();
+    expect(groundPlane(null)).toBeNull();
+  });
+
+  it("is the two grid axes, each one unit long", () => {
+    const plane = groundPlane(iso);
+    expect(plane).not.toBeNull();
+    if (!plane) return;
+    expect(Math.hypot(plane.ax, plane.ay)).toBeCloseTo(1, 6);
+    expect(Math.hypot(plane.bx, plane.by)).toBeCloseTo(1, 6);
+    // `+cx` runs down-right and `+cy` down-left — see `Grid.cellToWorld`.
+    expect(plane.ax).toBeGreaterThan(0);
+    expect(plane.bx).toBeLessThan(0);
+    expect(plane.ay).toBeGreaterThan(0);
+    expect(plane.by).toBeGreaterThan(0);
+  });
+
+  /**
+   * Normalised rather than raw, which is the part that would be silently wrong:
+   * the axes themselves are a *cell* long, so using them would scale every note
+   * to the size of one grid space however big the words were.
+   */
+  it("does not scale with the grid", () => {
+    const small = groundPlane(new Grid("isometric", 16));
+    const large = groundPlane(new Grid("isometric", 256));
+    expect(small?.ax).toBeCloseTo(large?.ax ?? 0, 6);
+    expect(small?.by).toBeCloseTo(large?.by ?? 0, 6);
+  });
+
+  it("only applies where the note asks for it", () => {
+    expect(planeFor({ tracksGrid: true }, iso)).not.toBeNull();
+    expect(planeFor({}, iso)).toBeNull();
+    expect(planeFor({ tracksGrid: false }, iso)).toBeNull();
+    // And never on a projection that has no plane of its own.
+    expect(planeFor({ tracksGrid: true }, flat)).toBeNull();
+  });
+
+  it("gives a sheared note a wider box than the same words flat", () => {
+    const plane = groundPlane(iso);
+    if (!plane) return;
+    const box = planeBox(plane, 100, 40);
+    // Both axes push sideways, so the parallelogram is wider than the text and
+    // shorter than the two runs added up.
+    expect(box.width).toBeGreaterThan(100);
+    expect(box.height).toBeGreaterThan(0);
+    // Its own corner is up and to the left of the origin, because `+cy` runs
+    // left: that offset is what the drawing translates by.
+    expect(box.x).toBeLessThan(0);
+    expect(box.y).toBe(0);
+  });
+
+  it("measures a note as the box it comes out in", () => {
+    const words = { text: "door to the cave", size: 24, font: STYLE.font };
+    const plain = measure(words);
+    const laid = measure(words, groundPlane(iso));
+    expect(laid.width).toBeGreaterThan(plain.width);
+    expect(laid.height).toBeGreaterThan(plain.height);
+  });
+
+  it("re-measures when the switch is thrown, with no word changed", () => {
+    const s = store();
+    const item = addText(s, "layer-1", newText({ x: 0, y: 0 }, STYLE));
+    const before = { ...item };
+    updateText(s, "layer-1", item.id, { tracksGrid: true });
+    const after = textById(s.layer("layer-1"), item.id);
+    expect(after?.text).toBe(before.text);
+    // This store is orthogonal, so the plane is null and the box is unchanged —
+    // which is the assertion: throwing the switch where it means nothing must
+    // not move anything.
+    expect(after?.width).toBe(before.width);
   });
 });

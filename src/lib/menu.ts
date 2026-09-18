@@ -13,6 +13,16 @@ export interface MenuItem {
   label: string;
   /** A `ICONS` entry, drawn at the same size the header uses. */
   glyph?: string | readonly string[];
+  /**
+   * A CSS font stack to draw this row's label in.
+   *
+   * One use so far, and it is the whole reason a menu row can say anything
+   * about its own typography: the font picker, where a list of family names
+   * set in one face is a list nobody can choose from. A name is the specimen.
+   */
+  font?: string;
+  /** Marked as the one currently chosen. */
+  current?: boolean;
   onSelect: () => void;
 }
 
@@ -60,15 +70,19 @@ export function openMenu(
       h(
         "button",
         {
-          class: "menu-item",
+          class: item.current ? "menu-item current" : "menu-item",
           role: "menuitem",
+          ...(item.current ? { "aria-current": "true" } : {}),
           onClick: () => {
             close();
             item.onSelect();
           },
         },
         item.glyph ? icon(item.glyph, 17) : null,
-        h("span", { text: item.label }),
+        h("span", {
+          text: item.label,
+          ...(item.font ? { style: { fontFamily: item.font } } : {}),
+        }),
       ),
     );
   }

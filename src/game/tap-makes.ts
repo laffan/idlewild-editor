@@ -86,7 +86,7 @@ export function addTextAt(
 ): boolean {
   const layer = target(host);
   if (!layer) return false;
-  const item = addText(host.store, layer.id, newText(world, style));
+  const item = addText(host.store, layer.id, newText(world, style, host.grid));
   host.setSelection({ kind: "text", layerId: layer.id, textId: item.id });
   log.info("Text — type what it says in the panel beside it");
   return true;
