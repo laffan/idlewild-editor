@@ -5132,12 +5132,25 @@ placement has, instead of laying the text out again. Measuring goes through one
 2D canvas kept for the life of the page, because a canvas per measurement is a
 canvas per keystroke.
 
-Phaser's `Text` renders through a 2D canvas too, with the same font string, so
-what is on screen is the box the document holds. `game/text-render.ts` keeps
-one object per item and updates it rather than rebuilding — a `Text` allocates a
-canvas and uploads a texture — and draws it at the **front of its layer's
-slot**: a note written over a building belongs over it, and a note on a layer
-behind one is behind it, because that is what putting it there said.
+**The canvas and the conversion draw through one function.** A note on screen
+is not a Phaser `Text`: it is a texture from `rasteriseText`, which is also
+what a conversion reads back as RGBA. Phaser's `Text` would have been a second
+layout engine to keep in step — its line advance is the font's own ascent plus
+descent plus a spacing value, and matching that from outside Phaser means
+guessing at metrics it measured for itself — and a note whose lines sit further
+apart on the canvas than in the file it becomes is exactly the kind of
+difference nobody sees until the artwork has been painted over. The baseline is
+**alphabetic** for the same reason: `textBaseline: "top"` puts the ascent's own
+box at the top and moves every glyph down by whatever padding the family
+leaves.
+
+`game/text-render.ts` makes the same bargain `fill-paint.ts` does, down to the
+signature: one texture per note, rebuilt only when something about that note
+changes, at twice the world scale so it stays sharp as the camera comes in. A
+drag changes no part of the signature, so moving a note costs a `setPosition`.
+It draws at the **front of its layer's slot**: a note written over a building
+belongs over it, and a note on a layer behind one is behind it, because that is
+what putting it there said.
 
 **There is no caret on the canvas.** A text editor over a Phaser scene would be
 a second input model — an iPad keyboard, an IME, a selection, a cursor drawn at
@@ -5175,12 +5188,10 @@ something the user cannot see they hit. What is hit-tested is the measured box
 rather than the glyphs — the gap inside an O is not a hole anybody expects a
 tap to fall through.
 
-**Converting rasterises at `EXPORT_SCALE`** through the same font and the same
-leading `lib/text-items.ts` measured with, on the **alphabetic** baseline:
-`textBaseline: "top"` puts the ascent's own box at the top and moves every
-glyph down by whatever padding the family leaves, which is exactly the kind of
-difference that shows as a note landing two pixels lower than it was. The file
-is named after the words — `door to the cave` becomes `door-to-the-cave.psd` —
+**Converting is that same rasterisation at `EXPORT_SCALE`**, with the pixels
+read back — so `editor/text-actions.ts` adds a `getImageData` to what the
+canvas is already showing and nothing else about the layout. The file is named
+after the words — `door to the cave` becomes `door-to-the-cave.psd` —
 which is better than the `text-m2k9f1` every other conversion has to settle for,
 because a fill and a sketch have no words in them to name it with.
 

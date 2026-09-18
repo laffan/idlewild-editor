@@ -250,3 +250,52 @@ export function lineOffset(
   if (item.align === "right") return item.width - lineWidth;
   return 0;
 }
+
+/**
+ * The words, drawn into a canvas of their own box at `scale`.
+ *
+ * **This is the only place text is turned into pixels**, and that is the whole
+ * point of it. The canvas shows a note by putting the result on the scene as a
+ * texture, and a conversion reads the same result back as RGBA — so what is on
+ * screen and what goes into the PSD cannot disagree about the leading, the
+ * baseline or where a centred line starts. Drawing it once with Phaser's
+ * `Text` and again here would be two layout engines agreeing by luck: Phaser's
+ * line advance is the font's own ascent plus descent plus a spacing value, and
+ * matching that from outside Phaser means guessing at metrics it measured.
+ *
+ * Drawn on the **alphabetic** baseline rather than at the top of each line,
+ * because that is what a font size means. `textBaseline: "top"` puts the
+ * ascent's own box at the top and moves every glyph down by whatever padding
+ * the family leaves — exactly the kind of difference that shows as a note
+ * landing two pixels lower than it was.
+ *
+ * Null where there is no canvas to draw on, which is a test environment.
+ */
+export function rasteriseText(item: TextItem, scale: number): HTMLCanvasElement | null {
+  const width = Math.max(1, Math.ceil(item.width * scale));
+  const height = Math.max(1, Math.ceil(item.height * scale));
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = document.createElement("canvas");
+  } catch {
+    return null;
+  }
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.scale(scale, scale);
+  ctx.font = fontString(item);
+  ctx.fillStyle = item.color;
+  ctx.textBaseline = "alphabetic";
+
+  const leading = item.size * LINE_HEIGHT;
+  textLines(item).forEach((line, index) => {
+    const at = lineOffset(item, ctx.measureText(line).width);
+    // The baseline within its line box. One number for every family here,
+    // which is what makes the box `measure` wrote the box that is filled.
+    ctx.fillText(line, at, index * leading + item.size);
+  });
+  return canvas;
+}

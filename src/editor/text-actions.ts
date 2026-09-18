@@ -22,14 +22,7 @@
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
-import {
-  fontString,
-  lineOffset,
-  removeText,
-  textById,
-  textLines,
-  LINE_HEIGHT,
-} from "../lib/text-items";
+import { rasteriseText, removeText, textById } from "../lib/text-items";
 import type { Selection, TextItem } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import {
@@ -65,7 +58,7 @@ export async function convertTextToPsd(
     return;
   }
 
-  const raster = rasteriseText(item);
+  const raster = textPixels(item);
   if (!raster) {
     log.error("Could not draw the text");
     return;
@@ -127,48 +120,23 @@ export async function convertTextToPsd(
 }
 
 /**
- * The words, drawn at `EXPORT_SCALE` into a buffer of their own box.
+ * The words as RGBA, at `EXPORT_SCALE`.
  *
- * The same canvas the box was measured with, at the same font and the same
- * leading — `lib/text-items.ts` owns both, so what is rasterised is what was
- * on screen rather than a second opinion about how the text lays out.
- *
- * Drawn on the **alphabetic** baseline rather than at the top of each line,
- * because that is what a font size means: `textBaseline: "top"` puts the
- * ascent's own box at the top and moves every glyph down by whatever padding
- * that family leaves, which is exactly the kind of difference that shows when
- * a note is converted and lands two pixels lower than it was.
+ * The drawing itself is `rasteriseText`, which is also what the canvas puts on
+ * screen — so what goes into the PSD is what was being looked at, rather than
+ * a second opinion about how the text lays out. All this adds is reading the
+ * pixels back.
  */
-function rasteriseText(
+function textPixels(
   item: TextItem,
 ): { rgba: Uint8ClampedArray; width: number; height: number } | null {
-  const width = Math.max(1, Math.ceil(item.width * EXPORT_SCALE));
-  const height = Math.max(1, Math.ceil(item.height * EXPORT_SCALE));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
-
-  ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
-  ctx.font = fontString(item);
-  ctx.fillStyle = item.color;
-  ctx.textBaseline = "alphabetic";
-
-  const leading = item.size * LINE_HEIGHT;
-  textLines(item).forEach((line, index) => {
-    const at = lineOffset(item, ctx.measureText(line).width);
-    // The baseline sits within the line box the way Phaser's `Text` puts it:
-    // the ascent from the top, which for every family here is close enough to
-    // the size itself that one number serves.
-    ctx.fillText(line, at, index * leading + item.size);
-  });
-
+  const canvas = rasteriseText(item, EXPORT_SCALE);
+  const ctx = canvas?.getContext("2d", { willReadFrequently: true });
+  if (!canvas || !ctx) return null;
   return {
-    rgba: ctx.getImageData(0, 0, width, height).data,
-    width,
-    height,
+    rgba: ctx.getImageData(0, 0, canvas.width, canvas.height).data,
+    width: canvas.width,
+    height: canvas.height,
   };
 }
 

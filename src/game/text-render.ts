@@ -1,19 +1,24 @@
 /**
  * Words on the canvas.
  *
- * A `TextItem` is drawn with Phaser's own `Text`, which is the one thing on
- * this canvas that is neither `Graphics` nor a texture the pipeline made: text
- * is laid out by the browser, and re-implementing that over a `Graphics` would
- * be re-implementing a font renderer to get a worse one. Phaser's `Text`
- * renders through a 2D canvas, which is also what `lib/text-items.ts` measures
- * with — the same font string through the same engine — so what is on screen
- * is the box the document holds.
+ * **Drawn as a texture rather than with Phaser's `Text`**, which is the one
+ * decision in this file and it is about agreement rather than about speed. A
+ * note is converted into a PSD sooner or later, and what that conversion
+ * writes has to be what was on screen — so both go through
+ * `rasteriseText` in `lib/text-items.ts`, the one place text becomes pixels.
+ * Phaser's `Text` would have been a second layout engine to keep in step: its
+ * line advance is the font's own ascent plus descent plus a spacing value, and
+ * matching that from outside Phaser means guessing at metrics it measured for
+ * itself. A note whose lines sit further apart on the canvas than in the file
+ * it becomes is exactly the kind of difference nobody sees until the artwork
+ * has been painted over.
  *
- * One object per item, kept and updated rather than rebuilt: a `Text` allocates
- * a canvas and uploads a texture, and re-making one per frame while somebody
- * types into the inspector's field would be a keystroke's worth of that every
- * keystroke. The signature is what decides — the same bargain `fill-paint.ts`
- * strikes about its own textures.
+ * It is the same bargain `fill-paint.ts` strikes for a patterned fill, down to
+ * the signature: one texture per note, rebuilt only when something about that
+ * note changes, so panning, zooming and editing anything else cost nothing.
+ * Drawn at `EXPORT_SCALE` and displayed at the box's own size, so a note stays
+ * sharp as the camera comes in — the same "twice the pixels, same geometry"
+ * every conversion in this editor makes.
  *
  * **It draws in its layer's slot**, like a fill and unlike a point: a word
  * written over a building is a note about the building and belongs over it,
@@ -24,15 +29,26 @@
 
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
-import { LINE_HEIGHT, textsOf } from "../lib/text-items";
+import { rasteriseText, textsOf } from "../lib/text-items";
 import type { TextItem } from "../lib/types";
 import { DEPTH_STRIDE } from "./draw-order";
 
 /** Where in a layer's slot the words go: over everything standing in it. */
 const ABOVE_THE_LAYER = DEPTH_STRIDE - 2;
 
+/**
+ * Pixels per world pixel in a note's texture.
+ *
+ * `EXPORT_SCALE`'s value, and deliberately not an import of it: that constant
+ * is the editor's answer about what a *conversion* draws at, and this is the
+ * canvas making the same bargain for its own reasons. Nothing in `game/`
+ * imports from `editor/`.
+ */
+const TEXTURE_SCALE = 2;
+
 interface View {
-  object: Phaser.GameObjects.Text;
+  image: Phaser.GameObjects.Image;
+  key: string;
   signature: string;
 }
 
@@ -61,60 +77,66 @@ export class TextRender {
 
     for (const [id, view] of this.views) {
       if (seen.has(id)) continue;
-      view.object.destroy();
-      this.views.delete(id);
+      this.drop(id, view);
     }
   }
 
   private sync(item: TextItem, depth: number, visible: boolean): void {
+    // The position is not in it: a note that has only been dragged keeps its
+    // texture and is moved, which is what makes a drag cost nothing.
     const signature = JSON.stringify([
       item.text,
       item.size,
       item.color,
       item.font,
       item.align,
-      Math.round(item.x),
-      Math.round(item.y),
       Math.round(item.width),
+      Math.round(item.height),
     ]);
+
     const held = this.views.get(item.id);
     if (held && held.signature === signature) {
-      held.object.setDepth(depth);
-      held.object.setVisible(visible);
+      this.place(held.image, item, depth, visible);
       return;
     }
+    if (held) this.drop(item.id, held);
 
-    const object = held?.object ?? this.make(item);
-    object.setPosition(item.x, item.y);
-    object.setStyle({
-      // Phaser wants the two halves of the shorthand rather than the
-      // shorthand, and a `fontSize` in CSS pixels is world pixels here
-      // because the camera scales the object rather than the text.
-      fontFamily: item.font,
-      fontSize: `${item.size}px`,
-      color: item.color,
-      align: item.align,
-    });
-    object.setText(item.text);
-    // The box the document measured, so a centred line is centred on the same
-    // width the outline is drawn at and the conversion crops to.
-    object.setFixedSize(item.width, item.height);
-    object.setLineSpacing(item.size * (LINE_HEIGHT - 1));
-    object.setDepth(depth);
-    object.setVisible(visible);
-    this.views.set(item.id, { object, signature });
+    const drawn = rasteriseText(item, TEXTURE_SCALE);
+    if (!drawn) return;
+
+    const key = `text:${item.id}:${Date.now().toString(36)}`;
+    // `addCanvas` keeps a reference to the element rather than copying it, so
+    // each note gets a canvas of its own — the same rule `fill-paint.ts` keeps.
+    if (!this.scene.textures.addCanvas(key, drawn)) return;
+
+    const image = this.scene.add.image(0, 0, key);
+    image.setOrigin(0, 0);
+    this.place(image, item, depth, visible);
+    this.views.set(item.id, { image, key, signature });
   }
 
-  private make(item: TextItem): Phaser.GameObjects.Text {
-    const object = this.scene.add.text(item.x, item.y, item.text, {});
-    // Top-left, because that is what `x, y` means everywhere else in this
-    // document — a placement's corner, a fill's bounds, a zone's outline.
-    object.setOrigin(0, 0);
-    return object;
+  /** Where it sits, how big it is drawn, and whether it is drawn at all. */
+  private place(
+    image: Phaser.GameObjects.Image,
+    item: TextItem,
+    depth: number,
+    visible: boolean,
+  ): void {
+    image.setPosition(item.x, item.y);
+    // The box the document measured, so the words fill exactly the rectangle a
+    // tap picks them up from and a conversion crops to.
+    image.setDisplaySize(item.width, item.height);
+    image.setDepth(depth);
+    image.setVisible(visible);
+  }
+
+  private drop(id: string, view: View): void {
+    view.image.destroy();
+    this.scene.textures.remove(view.key);
+    this.views.delete(id);
   }
 
   destroy(): void {
-    for (const view of this.views.values()) view.object.destroy();
-    this.views.clear();
+    for (const [id, view] of [...this.views]) this.drop(id, view);
   }
 }

@@ -29,6 +29,7 @@ import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { openNewBackground, type BackgroundDeps } from "./background-actions";
 import { createPatternShapes } from "./pattern-actions";
 import { layerKind } from "../lib/layer-kinds";
+import { layerOf } from "./inspect-zone";
 import { addImageToRegion, generatePsdForRegion } from "./fill-actions";
 import { createConversions } from "./conversions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
@@ -130,17 +131,9 @@ export async function mountEditor(
       onSelectItem: (selection) => {
         // Selecting something inside a layer makes that layer the active one,
         // so the next Fill or Add Image lands where the user is looking.
-        const layerId =
-          selection.kind === "placement" ||
-          selection.kind === "placements" ||
-          selection.kind === "fill" ||
-          selection.kind === "point" ||
-          selection.kind === "zone" ||
-          selection.kind === "background" ||
-          selection.kind === "strokes"
-            ? selection.layerId
-            : activeLayerId;
-        setActiveLayer(layerId);
+        // `layerOf` rather than a list of the kinds that have one: this was a
+        // list, and every kind added since has had to remember to join it.
+        setActiveLayer(layerOf(selection) || activeLayerId);
         handle?.scene.setSelection(selection);
       },
       // A fact about the file rather than about the document, so it is asked
@@ -585,17 +578,14 @@ export async function mountEditor(
       return;
     }
 
-    // Picking something on the canvas reveals it in the layer list too.
-    if (
-      selection.kind === "placement" ||
-      selection.kind === "placements" ||
-      selection.kind === "fill" ||
-      selection.kind === "point" ||
-      selection.kind === "zone" ||
-      selection.kind === "strokes"
-    ) {
-      setActiveLayer(selection.layerId);
-      layers.expand(selection.layerId);
+    // Picking something on the canvas reveals it in the layer list too. A
+    // backdrop is the one thing with a layer that this leaves alone: nothing
+    // on the canvas can select one — it is camera-locked and covers the whole
+    // view — so a selection of one came from that list in the first place.
+    const owner = selection.kind === "background" ? "" : layerOf(selection);
+    if (owner) {
+      setActiveLayer(owner);
+      layers.expand(owner);
     }
     layers.render();
   }
