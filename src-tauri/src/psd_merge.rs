@@ -298,10 +298,21 @@ fn leaves(doc: &Psd, item: Item) -> Vec<usize> {
 /// somewhere it cannot be told from the right artwork.
 fn pick(doc: &Psd, path: &str) -> Option<Item> {
     let want = path.trim();
-    let name = want.rsplit('/').next().unwrap_or(want);
-    if name.is_empty() {
+    if want.is_empty() {
         return None;
     }
+    // The whole string first, then its last segment. A placement's `layerPath`
+    // is a top-level name and so has no slash in it — but a Photoshop layer may
+    // itself be *called* something with a slash, and splitting that one first
+    // would look for half of its own name.
+    named(doc, want).or_else(|| {
+        let tail = want.rsplit('/').next().unwrap_or(want);
+        (tail != want).then(|| named(doc, tail)).flatten()
+    })
+}
+
+/// The top-level layer or group of this exact name.
+fn named(doc: &Psd, name: &str) -> Option<Item> {
     items(doc, None).into_iter().find(|item| match item {
         Item::Layer(index) => doc.layer_by_idx(*index).name() == name,
         Item::Group(id) => doc.groups().get(id).is_some_and(|g| g.name() == name),
