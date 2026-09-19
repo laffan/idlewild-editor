@@ -79,6 +79,15 @@ export interface PsdEditUiOptions {
   drawing: () => DrawingLayer | null;
   /** Entering hands the pointer to the pencil, which is what draws here. */
   usePencil: () => void;
+  /**
+   * Put the tool in hand down and pick it up again.
+   *
+   * A session changes which tools a tile layer offers — see `toolsFor` — and
+   * neither the rail nor the routing has any way to hear a canvas mode open
+   * or close. One call at each end rather than a subscription, because this
+   * is the only thing that knows.
+   */
+  reapplyTool: () => void;
   /** The document layer new ink lands on, which is where a session's is. */
   inkLayerId: () => string;
   /** The file was rewritten and re-parsed; take the result back. */
@@ -193,6 +202,9 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     );
   }
 
+  /** What `sync` last saw, so the toolbar is rebuilt on the change alone. */
+  let wasActive = false;
+
   function sync(): void {
     const scene = options.scene();
     const mode = scene?.modes.psdEdit;
@@ -211,6 +223,16 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     // mode and the other two canvas modes both do.
     const drawing = options.drawing();
     if (drawing) drawing.straightenHoldMs = active ? STRAIGHTEN_HOLD_MS : 0;
+    // Which tools exist at all moves with the mode on a tile layer — the ink
+    // comes back for the length of a session and the two tile tools step
+    // aside, because there is nowhere for a tile to go while the canvas
+    // belongs to a file. Re-applied from here rather than at the two ends for
+    // the reason everything else in this function is: however the session
+    // ended, and whatever ended it, the toolbar goes back to what it was.
+    if (active !== wasActive) {
+      wasActive = active;
+      options.reapplyTool();
+    }
     // And the artwork the surface has taken over, here for the same reason:
     // however the mode ends, and whatever ended it, the layer goes back to
     // the canvas and the ink stops being laid over a copy of it.
@@ -300,22 +322,34 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
       return;
     }
 
-    options.usePencil();
     const started = scene.modes.startPsdEdit(
       { key, index: layer.index, name: layer.name },
       frame,
       scale,
     );
     if (!started) return;
-    // A pattern layer draws its palette nowhere, and the frame is around the
-    // space that palette is anchored to — so a session on one is the single
-    // thing that has to put the file back on the canvas. Set once the mode
-    // has actually started, so a refusal above leaves the canvas alone;
-    // `sync` is what pushes it and what clears it.
-    revealing =
-      layerKind(options.store.layer(selection.layerId)) === "pattern"
-        ? unitOf(placement)
-        : null;
+    // **After** the mode has started, not before. On a tile layer the Pencil
+    // is not a tool the rail offers until a session is up — see `toolsFor` —
+    // so asking for it a moment earlier put Select in your hand and left the
+    // mode open with nothing to draw with.
+    options.usePencil();
+    // Two kinds of layer draw their placements nowhere — a pattern layer's
+    // are the palette a rule scatters, a tile layer's are a tileset — and on
+    // both the frame is around a space with nothing on it. So a session on
+    // either is the one thing that has to put the file back on the canvas
+    // for as long as it lasts. Set once the mode has actually started, so a
+    // refusal above leaves the canvas alone; `sync` is what pushes it and
+    // what clears it.
+    const kind = layerKind(options.store.layer(selection.layerId));
+    revealing = kind === "pattern" || kind === "tile" ? unitOf(placement) : null;
+    // And on a tile layer nothing has ever been drawn where the file sits,
+    // so there is nothing on screen to have brought the camera there. The
+    // session opens on the artwork rather than on wherever the canvas
+    // happened to be pointing, which is the whole of "a temporary canvas
+    // above the tile layer": it appears, it is drawn on, and it goes.
+    if (kind === "tile") {
+      scene.centreOn(frame.x + frame.width / 2, frame.y + frame.height / 2);
+    }
     // Null is not a failure worth refusing over: a layer with no texture is a
     // blank one somebody just added, and a session on it draws on nothing,
     // which is exactly what it did before any of this existed.

@@ -272,6 +272,7 @@ export async function mountEditor(
     drawing: () => drawing,
     useSelectTool: () => tools.apply("select", false),
     usePencil: () => tools.apply("pencil", false),
+    reapplyTool: () => tools.apply(rail.tool, false),
     inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
     onPsdWritten: async (key, manifest) => {

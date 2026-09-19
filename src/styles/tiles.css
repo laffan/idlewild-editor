@@ -39,28 +39,76 @@
 }
 .tile-palette-drop:hover { color: var(--color-accent); }
 
-/* The frame is the positioning context for the lattice and the highlight, and
-   it swallows touch gestures: the palette is inside a scrolling column, and a
-   drag across it that the column took for a scroll would be a run nobody
-   could pick on an iPad. */
+/* The box clips and scrolls; the sheet inside it is the picture at its real
+   size. A palette tile is a canvas tile — see `editor/tile-palette.ts` — so a
+   tileset wider than the sidebar overflows, which is the point rather than a
+   problem, and this is what makes it reachable.
+
+   It swallows touch gestures because one finger means *pick*: a drag across
+   the picture that the column took for a scroll would be a run nobody could
+   select on an iPad. The two ways round a palette bigger than its box are
+   therefore the scrollbar and a second finger. */
 .tile-palette {
   position: relative;
+  overflow: auto;
+  overscroll-behavior: contain;
   touch-action: none;
+  max-height: 320px;
   line-height: 0;
   background: var(--chrome-bg);
   border: 1px solid var(--chrome-rule);
   cursor: crosshair;
 }
+/* Width is written from code, once, at the current zoom; everything else in
+   the palette is a percentage of this, so nothing else is ever measured. */
+.tile-palette-sheet {
+  position: relative;
+  width: max-content;
+}
 .tile-palette-img {
   display: block;
   width: 100%;
   height: auto;
-  /* A tileset is usually pixel art and the palette is usually showing it
-     smaller than it was painted, which bilinear filtering turns to mush. */
+  /* A tileset is usually pixel art, and at anything but 1:1 bilinear
+     filtering turns it to mush — which matters more here than anywhere,
+     because the palette is how somebody decides what a tile *is*. */
   image-rendering: pixelated;
   user-select: none;
   -webkit-user-drag: none;
 }
+
+/* The palette's own zoom: two steps and a readout that is also the way back.
+   A control rather than a readout alone, because an iPad's pinch is awkward
+   on a strip a few hundred pixels wide and a trackpad's needs a modifier. */
+.tile-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.tile-zoom-step,
+.tile-zoom-now {
+  border: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+  cursor: pointer;
+  padding: 0;
+}
+.tile-zoom-step {
+  width: 16px;
+  height: 18px;
+  font: 500 13px/1 var(--font-mono);
+}
+/* Wide enough for "1000%" so the two steps either side do not shuffle as the
+   number changes — a control that moves under the finger pressing it is the
+   one thing a repeat-press affordance must not do. */
+.tile-zoom-now {
+  min-width: 38px;
+  text-align: center;
+  font-size: 10px;
+}
+.tile-zoom-step:hover,
+.tile-zoom-now:hover { color: var(--chrome-text); }
 /* Where the picture is cut, drawn as two repeating gradients rather than one
    element per space — a tileset is often hundreds of tiles, and hundreds of
    elements in a panel rebuilt on every document change is a panel that

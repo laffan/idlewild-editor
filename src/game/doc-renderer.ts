@@ -245,16 +245,17 @@ export class DocRenderer {
    * space, and a placement that never happens is a reveal with nothing to
    * reveal. That second one is what made PSD Edit mode open on an empty box.
    *
-   * **A tile layer never draws its placements**, and unlike a pattern layer
-   * there is no exception. A palette there is a picture to cut tiles out of
-   * rather than a prototype standing on a space — it has no anchor and
-   * nothing is copied from where it sits — so there is nothing PSD Edit mode
-   * could frame. The palette is looked at in the inspector, which is where it
-   * actually is.
+   * **A tile layer is the same answer for a different reason.** Its
+   * placements are a tileset rather than a prototype, and what stands on the
+   * ground is gids — so nothing there is drawn either. The exception matters
+   * more, not less: a palette is never on the canvas at all, so a PSD Edit
+   * session over one would otherwise open on a frame with nothing in it and
+   * nothing anywhere to draw into. Revealing it *is* the temporary canvas
+   * that mode puts over the tiles.
    */
   draws(layer: Layer, placement: Placement): boolean {
-    if (layerKind(layer) === "tile") return false;
-    if (layerKind(layer) !== "pattern") return true;
+    const kind = layerKind(layer);
+    if (kind !== "pattern" && kind !== "tile") return true;
     return unitOf(placement) === this.revealed;
   }
 
@@ -415,13 +416,12 @@ export class DocRenderer {
       // Unless one of them is being worked on. PSD Edit mode frames the space the
       // file is anchored to, so the prototype has to be there to draw over —
       // see `revealInstance` and `draws`.
-      if (layerKind(layer) === "pattern" && !this.revealed) return;
       // A tile layer's placements are its tilesets, and a tileset is never on
-      // the canvas at all — what stands on the ground is gids, drawn by
-      // `tile-render.ts`. `seen` leaves them out for the same reason it
-      // leaves a pattern layer's out: anything on the canvas from before the
-      // layer became one is destroyed on the next sweep.
-      if (layerKind(layer) === "tile") return;
+      // the canvas either — what stands on the ground is gids, drawn by
+      // `tile-render.ts`. Same exception, same reason: PSD Edit mode has to
+      // be able to put the file up for the length of a session.
+      const held = layerKind(layer);
+      if ((held === "pattern" || held === "tile") && !this.revealed) return;
 
       const base = (layers.length - index) * DEPTH_STRIDE;
       // Back to front, once for the whole layer: every placement then takes

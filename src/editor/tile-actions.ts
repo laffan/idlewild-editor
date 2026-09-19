@@ -113,6 +113,10 @@ export function tileDeps(
     focusLayer: base.focusLayer,
     onChanged,
     assetBase,
+    // What the camera is doing, which is where a palette's own zoom starts.
+    // A scene that is not up yet answers 1, which is what a palette built
+    // before the canvas has booted should show.
+    canvasZoom: () => base.scene()?.viewport().zoom ?? 1,
     tileSelection: () => selection,
     onImportTiled: (layerId) => void importTiledMap(deps, layerId),
     onClearTiles: (layerId) => clearTiles(deps, layerId),

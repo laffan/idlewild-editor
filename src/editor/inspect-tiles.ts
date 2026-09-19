@@ -32,12 +32,26 @@ import { tileId } from "../lib/tiled/gid";
 import { PSD_PROPERTY, type TiledTileset } from "../lib/tiled/types";
 import type { Layer, ToolId } from "../lib/types";
 import type { PanelSurface } from "./inspect-panels";
-import { describeStamp, tilePalette, type TileSelection } from "./tile-palette";
+import {
+  describeStamp,
+  tilePalette,
+  zoomControls,
+  type TileSelection,
+} from "./tile-palette";
 
 /** What the panel needs from the shell that the document cannot answer. */
 export interface TileActions {
   /** The asset server's base URL — where a palette's picture is read from. */
   assetBase: () => string;
+  /**
+   * The camera's zoom, which is where a palette's own starts.
+   *
+   * Read at the moment the panel is built rather than followed, and that is
+   * the trade: "the same size as a tile on the canvas" is answered every time
+   * you look at the sidebar, and a palette that resized itself while somebody
+   * pinched the canvas would be a column jumping under their other hand.
+   */
+  canvasZoom: () => number;
   /** What is in hand. Held by the shell, because the panel is rebuilt often. */
   tileSelection: () => TileSelection;
   /** Bring a Tiled map in. The same call the left sidebar's row makes. */
@@ -92,6 +106,21 @@ export function renderTileLayer(
     text: `In hand: ${describeStamp(selection.stamp)}`,
   });
 
+  /**
+   * Re-measure one palette after its zoom moved.
+   *
+   * The buttons over a palette are outside it, so they cannot reach into it —
+   * and re-rendering the whole panel would throw away the scroll position,
+   * which is exactly what somebody zooming a picture larger than its box is
+   * about to want. So the announcement the palettes already listen for is
+   * reused: each re-reads the zoom it is holding and resizes itself.
+   */
+  const resize = (_firstgid: number): void => {
+    for (const el of palettes.querySelectorAll(".tile-palette")) {
+      el.dispatchEvent(new CustomEvent("tiles-picked"));
+    }
+  };
+
   const palettes = h(
     "div",
     { class: "inspect-section tile-palettes" },
@@ -110,6 +139,9 @@ export function renderTileLayer(
           "div",
           { class: "tile-palette-head" },
           h("div", { class: "tile-palette-name m", text: tileset.name }),
+          zoomControls(tileset.firstgid, selection, actions.canvasZoom, () =>
+            resize(tileset.firstgid),
+          ),
           h("button", {
             class: "tile-palette-drop",
             title: `Take ${tileset.name} off this project`,
@@ -122,6 +154,8 @@ export function renderTileLayer(
           tileset,
           assetBase: actions.assetBase(),
           selection,
+          cell: grid.tileWidth,
+          canvasZoom: actions.canvasZoom(),
           onPick: (stamp) => {
             summary.textContent = `In hand: ${describeStamp(stamp)}`;
           },

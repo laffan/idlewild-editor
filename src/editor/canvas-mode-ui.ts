@@ -37,6 +37,8 @@ export interface CanvasModeUiOptions {
    */
   useSelectTool: () => void;
   usePencil: () => void;
+  /** Put the tool in hand down and pick it up again — see `psd-edit.ts`. */
+  reapplyTool: () => void;
   /** The document layer new ink lands on, which is where PSD Edit mode's is. */
   inkLayerId: () => string;
   /**
@@ -103,6 +105,7 @@ export function createCanvasModeUis(
     projectId: options.projectId,
     drawing: options.drawing,
     usePencil: options.usePencil,
+    reapplyTool: options.reapplyTool,
     inkLayerId: options.inkLayerId,
     onWritten: options.onPsdWritten,
   });
