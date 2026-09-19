@@ -36,6 +36,7 @@ mod search;
 mod server;
 mod sketching;
 mod stacking;
+mod tiles;
 
 use crate::project::{GameOptions, Genre, Projection};
 use crate::{psd_pipeline, psd_write, publish, store};

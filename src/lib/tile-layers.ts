@@ -263,18 +263,28 @@ export function removeTileset(store: DocStore, firstgid: number): void {
   }));
 }
 
-/** Put tiles down on a layer, or take them off. One write for one gesture. */
+/**
+ * Put tiles down on a layer, or take them off. One write for one gesture.
+ *
+ * **Nothing at all when nothing moved**, and the check is here rather than
+ * inside `editLayer`: `writeTiles` answers by identity when a write changed
+ * no space, and committing anyway would put a document on the undo stack
+ * that is indistinguishable from the one under it. A paint drag writes on
+ * every pointer move and crosses ground it has already covered on most of
+ * them, so this is the common case rather than the careful one.
+ */
 export function paintTiles(
   store: DocStore,
   layerId: string,
   writes: readonly TileWrite[],
 ): void {
   if (writes.length === 0) return;
-  store.editLayer(layerId, (layer) => {
-    const before = tileLayer(layer);
-    const after = writeTiles(before, writes);
-    return after === before && layer.tiles ? layer : { ...layer, tiles: after };
-  });
+  const layer = store.layer(layerId);
+  if (!layer) return;
+  const before = tileLayer(layer);
+  const after = writeTiles(before, writes);
+  if (after === before && layer.tiles) return;
+  store.editLayer(layerId, (held) => ({ ...held, tiles: after }));
 }
 
 /**

@@ -69,6 +69,7 @@ pub fn empty(meta: &ProjectMeta) -> Value {
         }]),
         json!("scene-main"),
         meta.options.character,
+        json!([]),
     )
 }
 
@@ -99,6 +100,10 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
     }
 
     let span = span_for(&scenes, meta.grid_size);
+    // The palettes every tile layer draws from, carried whole. Beside the
+    // layers rather than inside them, because that is where a Tiled map keeps
+    // them and because a gid is read against the whole list.
+    let tilesets = json!(doc.tilesets);
     let active = doc
         .active_scene_id
         .clone()
@@ -142,6 +147,7 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
             .collect::<Vec<_>>()),
         json!(active),
         meta.options.character,
+        tilesets,
     ))
 }
 
@@ -222,6 +228,8 @@ fn config(
     scenes: Value,
     active_scene: Value,
     character: bool,
+    // Every tile layer's palettes — see `Document::tilesets`.
+    tilesets: Value,
 ) -> Value {
     json!({
         "projection": meta.projection.as_str(),
@@ -253,6 +261,7 @@ fn config(
         "layers": layers,
         "scenes": scenes,
         "activeScene": active_scene,
+        "tilesets": tilesets,
         "psdPipeline": "psd-to-json@tauri"
     })
 }
@@ -323,6 +332,15 @@ struct Document {
     /// What each placed PSD blocks, by key — see `lib/collider.ts`.
     #[serde(default)]
     colliders: HashMap<String, Collider>,
+    /// Every tile layer's palettes, in Tiled's own shape and its own order.
+    ///
+    /// Document-level for the reason the colliders are and one more that is
+    /// stronger: a gid on a layer means *the nth tile across every tileset in
+    /// the map*, so the list and its `firstgid`s are what every one of those
+    /// numbers is read against. Opaque here — Rust has no opinion about what
+    /// a tileset is, and carrying it through is the whole job.
+    #[serde(default)]
+    tilesets: Vec<Value>,
 }
 
 impl Document {
@@ -427,6 +445,14 @@ struct Layer {
     /// A background layer's backdrops: colours and gradients, camera-locked.
     #[serde(default)]
     backgrounds: Vec<Value>,
+    /// A tile layer's tiles, as a Tiled tile layer.
+    ///
+    /// Opaque like the two above, and more strictly so: the point of this
+    /// record is that it is **Tiled's**, byte for byte, so anything here that
+    /// reshaped it on the way out would be the one thing the feature exists
+    /// to avoid. Read the gids against `tilesets` at the top of the config.
+    #[serde(default)]
+    tiles: Option<Value>,
 }
 
 impl Layer {
@@ -466,12 +492,14 @@ impl Layer {
             "placements": placements,
             "points": self.points.iter().map(MapPoint::to_config).collect::<Vec<_>>(),
             "zones": self.zones.iter().map(Zone::to_config).collect::<Vec<_>>(),
-            // Carried through as the editor wrote them. Both are opaque to
-            // Rust — a pattern is a rule the scene's own `pattern.js` runs,
-            // and a backdrop is two colours and an angle — so passing them
-            // through is the whole of what this file has to do with them.
+            // Carried through as the editor wrote them. All three are opaque
+            // to Rust — a pattern is a rule the scene's own `pattern.js`
+            // runs, a backdrop is two colours and an angle, and a tile layer
+            // is Tiled's own record — so passing them through is the whole of
+            // what this file has to do with them.
             "pattern": self.pattern,
             "backgrounds": self.backgrounds,
+            "tiles": self.tiles,
         })
     }
 }
