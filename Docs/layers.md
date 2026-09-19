@@ -1,15 +1,34 @@
 # Three kinds of layer
 
 Object, pattern and background — what each one holds, what the document stores
-for it, and what the exported game does with it.
+for it, and what the exported game does with it. The fourth, which arrived
+later and whose records are Tiled's rather than ours, is
+[Tile layers](tile-layers.md).
 
 Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 
 ---
 
 A layer says what it is *for*, and that decides what putting a PSD on it
-means. `LayerKind` is `"object" | "pattern" | "background"`, and everything
-that reads it goes through `layerKind()` in `lib/layer-kinds.ts`.
+means. `LayerKind` is `"object" | "pattern" | "background" | "tile"`, and
+everything that reads it goes through `layerKind()` in `lib/layer-kinds.ts`.
+
+**There is a fourth now, and it has a page of its own.** A tile layer is a
+Tiled map, and what makes it worth a page rather than a section here is that
+its records are not ours: `Layer.tiles` and `GameDoc.tilesets` are Tiled's, in
+Tiled's spelling, so that a `.tmj` and `doc.json` carry the same bytes for the
+same facts. Everything that follows from that — infinite chunks, global tile
+ids, a palette in the inspector, the drawing tools re-pointed — is
+[Tile layers](tile-layers.md). What it shares with the two kinds below is the
+one idea this file is really about: **the placements on a layer are not
+always things standing anywhere.** On a pattern layer they are a scatter's
+elements; on a tile layer they are a tileset; on neither can anything be
+picked on the canvas.
+
+It is also the one kind that is not offered on every project. A tileset is a
+picture cut into equal spaces and a blank project has none to cut on, so the
+row is absent from the `+` menu there rather than greyed out — see
+`tileLayersAllowed` and `layerKindsFor`.
 
 **Absent is object.** Every layer in every document written before there was
 more than one kind has no `kind` field, and every one of them is an object

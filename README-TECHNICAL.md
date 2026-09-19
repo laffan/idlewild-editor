@@ -136,6 +136,7 @@ a Mac, that is usually why. See [`Docs/ipad.md`](Docs/ipad.md),
 | [The PSD pipeline](Docs/psd-pipeline.md) | Write half, psd-to-json, the round trip out to Photoshop and home |
 | [A PSD's own layers](Docs/psd-layers.md) | The stack inside a file: the inspector's list, visibility, reordering, the empty layer, PSD Edit mode |
 | [Three kinds of layer](Docs/layers.md) | Object, pattern and background |
+| [Tile layers](Docs/tile-layers.md) | The fourth kind, and the one whose data is Tiled's rather than ours |
 | [The drawing layer](Docs/drawing.md) | The surface, the brushes, the tools, and how a colour carries its opacity |
 | [The colour picker](Docs/colour.md) | One control everywhere, the eyedropper, the palette, the browsed ones, and the strip a PSD carries out |
 | [Selection](Docs/selection.md) | Grid runs, bare rectangles, placed PSDs, several at once, lassoed ink |
@@ -203,6 +204,12 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | The tools, on two columns | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | Three exits | [`Docs/exports.md`](Docs/exports.md) |
 | Three kinds of layer | [`Docs/layers.md`](Docs/layers.md) |
+| Tile layers | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
+| The rule the rest of it hangs from | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
+| Infinite, because this canvas has no edge | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
+| A PSD on a tile layer is a palette | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
+| The tools are the drawing tools, re-pointed | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
+| Import Tiled | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
 | Three sections, not two modes | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | Three zones, not one heading | [`Docs/inspector.md`](Docs/inspector.md) |
 | Undo | [`Docs/data-model.md`](Docs/data-model.md) |

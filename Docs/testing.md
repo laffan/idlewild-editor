@@ -28,6 +28,15 @@ files, and that the three things which can happen to a scene each do the
 obvious thing to its file: scaffolded, renamed *carrying what was written in
 it*, deleted.
 
+`tests/tiles.rs` is one assertion made twice over: that a tile layer and its
+palettes cross the bridge **unchanged**. Every other record in the document is
+reshaped on its way into the config — a fill's cells are reduced to a unit, a
+placement picks up its collider — and this one must not be, because what makes
+it worth having is that it *is* a Tiled tile layer. So the chunks come out
+with the same gids in the same order, flags and all: a gid with `0x80000000`
+set says the tile is flipped, and a reader that treated it as a plain index
+would have turned it into something else entirely.
+
 **And one thing no Rust test can reach: whether the scaffold is a working
 game.** Every assertion above is about text. A scene that places nothing, or a
 second scene that waits fifteen seconds for assets the first one already
@@ -104,6 +113,20 @@ real — a body resting flush on its floor re-overlapped it by a rounding error
 on the next frame and was fired out of the side of the ground.
 
 The frontend's check is `tsc --noEmit` plus `vite build`.
+
+On the frontend, `lib/__tests__/tiled.test.ts` and
+`lib/__tests__/tile-layers.test.ts` pin the format and what the document does
+with it. Mostly round trips, because "indistinguishable from data Tiled wrote"
+is a claim about bytes rather than about behaviour: a map goes in, the same
+map comes out, and the two things that could silently ruin it are written out
+explicitly — the four flags packed into the top of a gid, and the order a
+`.tmj` writes its layers in. `0x80000000` does not fit in a signed 32-bit
+integer, so a flipped tile read without the unsigned shift is a large negative
+number matching no tileset, and the symptom is a map that draws perfectly
+until somebody mirrors one wall. The XML half of the reader is not exercised:
+it needs a `DOMParser` and this suite has no DOM to supply one, and the two
+halves meet at `assemble` and `chunked`, which the JSON cases do put through
+their paces.
 
 `npm run harness` serves the editor shell in a plain browser: `harness/` is
 the app's own entry with the Tauri modules aliased to stubs, so the layout,

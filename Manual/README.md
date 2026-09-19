@@ -12,8 +12,9 @@ meet the things they describe.
 | [The canvas](canvas.md) | The infinite grid, the camera, where the game's screen falls, the minimap, points and boundaries |
 | [Getting images in](images.md) | Add Image, paste, drop, and what happens to a picture on the way in |
 | [Placing, moving and grouping](placing.md) | Colliders, dragging, copying, and treating several placed files as one |
-| [Scenes and layers](scenes-and-layers.md) | What a scene is, the three kinds of layer, and the layer list |
+| [Scenes and layers](scenes-and-layers.md) | What a scene is, the four kinds of layer, and the layer list |
 | [Drawing](drawing.md) | The brushes, Fill, the Pattern and Shape brushes, erasing, Slice, Text |
+| [Tile layers](tile-layers.md) | A Tiled map: importing one, the palette, and painting with it |
 | [Colour](colour.md) | The picker, the eyedropper and its magnifier, your palette, the browsed ones, and the strip a PSD carries out |
 | [Patterns and shapes](patterns-and-shapes.md) | The two libraries and the two editors that fill them |
 | [Fills, generated PSDs and Extrude mode](fills-and-extrude.md) | Filling grid spaces, pulling a solid out of them, and turning either into a file |

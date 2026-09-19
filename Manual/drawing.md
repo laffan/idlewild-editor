@@ -19,6 +19,12 @@ Part of [the Idlewild manual](README.md).
   mode was up. Which end a column hangs from carries that now — and the ink is
   at the corner a hand resting on an iPad's glass is nearest, which is the
   right way round for the thing a hand is doing most often
+- **On a tile layer three of them step out of the way.** The Pattern and Shape
+  brushes and Text have nothing to do with a grid of tiles, so rather than
+  sitting there doing nothing they are not drawn — and the Pencil and Fill
+  mean something else there: they lay the run of tiles picked in the palette
+  and pour it, and either one turned round takes tiles off. See
+  [Tile layers](tile-layers.md)
 
 ## The brushes
 

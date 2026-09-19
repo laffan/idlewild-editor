@@ -78,8 +78,9 @@ One page per area, in roughly the order you meet them.
 | [The canvas](Manual/canvas.md) | The grid, the camera, where the game's screen falls, the minimap, points and boundaries |
 | [Getting images in](Manual/images.md) | Add Image, paste, drop, and what happens to a picture on the way in |
 | [Placing, moving and grouping](Manual/placing.md) | Colliders, dragging, copying, and treating several files as one |
-| [Scenes and layers](Manual/scenes-and-layers.md) | What a scene is, the three kinds of layer, and the layer list |
+| [Scenes and layers](Manual/scenes-and-layers.md) | What a scene is, the four kinds of layer, and the layer list |
 | [Drawing](Manual/drawing.md) | The brushes, Fill, the Pattern and Shape brushes, erasing, Slice, Text |
+| [Tile layers](Manual/tile-layers.md) | A Tiled map: importing one, the palette, and painting with it |
 | [Colour](Manual/colour.md) | The picker, the eyedropper and its magnifier, your palette, the browsed ones, and the strip a PSD carries out |
 | [Patterns and shapes](Manual/patterns-and-shapes.md) | The two libraries, and the two editors that fill them |
 | [Fills, generated PSDs and Extrude mode](Manual/fills-and-extrude.md) | Filling grid spaces, pulling a solid out of them, turning either into a file |
@@ -138,6 +139,7 @@ npm run vendor:p2p
 | [psd](https://github.com/laffan/psd) | Reading PSDs, and the write half that turns images and sketches into them |
 | [hush](https://github.com/laffan/hush) | The drawing layer: stroke engine, infinite canvas, Apple Pencil |
 | [simple-tileset-generator](https://github.com/laffan/simple-tileset-generator) | The pattern and shape libraries, both of their editors, and the palettes behind Browse Palettes |
+| [Tiled](https://www.mapeditor.org/) | The map format tile layers are saved in, read and written field for field |
 
 The reference in the code modal carries [MDN Web Docs](https://developer.mozilla.org)
 content, used under CC BY-SA 2.5, alongside Phaser's and psd-to-phaser's own

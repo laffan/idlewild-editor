@@ -8,14 +8,17 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 ---
 
 All pointer input over the canvas goes through one arbiter,
-`src/game/camera-rig.ts`, which hands out high-level events. The spec's
-contract:
+`src/game/camera-rig.ts`, which hands out high-level events. Who *gets* each
+of those events is `src/game/scene-gestures.ts` — the precedence table, split
+out of the scene when that file reached its seven hundred lines — and what the
+shortest of them means is `src/game/tapping.ts`. The spec's contract:
 
 | Input | Result |
 |---|---|
 | One finger down on the current selection | Drag it, snapped to the grid |
 | One finger, moved, under **Select** | Rubber-band a selection from where it went down |
 | One finger, moved, under **Pan** or **Point** | Pan |
+| One finger, down or moved, with a **tile** in hand | Lay the run picked in the palette, or pour it |
 | One finger, moved, under **Boundary** | Sweep an outline; on release it becomes a blocking zone |
 | Space held | Borrow Pan until it is released |
 | Two fingers | Zoom about the midpoint; the remaining finger keeps panning on release |

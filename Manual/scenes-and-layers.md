@@ -1,6 +1,6 @@
 # Scenes and layers
 
-A scene is a set of layers and a canvas of its own. A layer is one of three
+A scene is a set of layers and a canvas of its own. A layer is one of four
 things, and which one decides what it can hold.
 
 Part of [the Idlewild manual](README.md).
@@ -17,9 +17,11 @@ Part of [the Idlewild manual](README.md).
   were standing in it. A duplicate is a real copy, not a second name for the
   same thing
 
-## Three kinds of layer
+## Four kinds of layer
 
-- **Three kinds of layer**, from the dropdown under the `+`. An **object**
+- **Four kinds of layer**, from the dropdown under the `+` — three on a blank
+  project, where a tile layer is not offered because a palette is a picture
+  cut into equal spaces and a blank project's spaces are single pixels. An **object**
   layer is what a layer has always been, and it is what every layer in every
   project made until now is: things stand where you put them, and the canvas
   selects, drags and resizes them. It now has one rule — a placed PSD with no
@@ -71,6 +73,18 @@ Part of [the Idlewild manual](README.md).
   the pipeline is doing while it happens. That file is a placement like any
   other, so it drags, exports and stacks the way everything else does; what
   makes it a background is the layer it is on
+- A **tile layer** is a [Tiled](https://www.mapeditor.org/) map, and it is the
+  one kind not offered on a blank project. A PSD dropped on one is not placed
+  on the canvas: it is cut into a palette along the same boundaries as the
+  main grid and shown in the properties sidebar, where you drag across it to
+  take a run of tiles. **Import Tiled**, at the foot of the layer's list,
+  takes a `.tmx` or a `.tmj` and brings the map's tilesets and layers in with
+  it. The drawing tools are re-pointed there — the Pencil lays what is in hand
+  and Fill pours it, and either turned round takes tiles off — while the
+  Pattern and Shape brushes and Text step out of the way, having nothing to do
+  with a grid of tiles. Everything is saved in Tiled's own format, so a map
+  built here opens in Tiled and a map Tiled wrote opens here. See
+  [Tile layers](tile-layers.md)
 
 ## The layer list
 
@@ -88,8 +102,9 @@ Part of [the Idlewild manual](README.md).
   sorts what it draws on screen Y, so a thing standing nearer you draws in
   front of one behind it, and the list is sorted to match rather than showing
   an order the canvas would ignore. Pattern and background layers reorder by
-  hand on every projection: a palette all anchored on one space and a stack of
-  backdrops behind everything have no nearer and further for a sort to find.
+  hand on every projection: a palette all anchored on one space, a stack of
+  backdrops behind everything and a tile layer's palettes have no nearer and
+  further for a sort to find.
   The two senses of the word stay apart: a layer here is Phaser's — draw order
   over anything at all — so a placed PSD is **one row** however many layers are
   inside the file, and the stack inside it belongs to the inspector. Select a

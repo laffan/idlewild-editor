@@ -28,6 +28,10 @@ gets a directory and the document is written beside its assets.
 ### In memory
 
 `src/lib/types.ts` is the shared shape; `src-tauri/src/project.rs` mirrors it.
+What a *kind* of layer carries — a pattern's rule, a backdrop's two colours, a
+tile layer's Tiled record — is next door in `layer-types.ts`, split off for the
+line rule the way `project-types.ts` was and re-exported, so every existing
+import still works.
 `src/lib/doc-shape.ts` holds the parts of it that are functions rather than
 state — an empty layer, a copy of one, how a fill describes what it covers,
 and the migration a document goes through on the way in from disk. Split from
@@ -197,7 +201,26 @@ GameDoc
   scenes: [ { id, name, layers: [...], camera?, startPointId? }, ... ]
   activeSceneId
   extrusions        ← document-level: a PSD is the project's, not a scene's
+  tilesets          ← the same, and one reason stronger: see below
 ```
+
+**Three records hang off the document rather than off a scene**, and they are
+document-level for one reason and, in the third case, for two. `extrusions`
+and `colliders` are facts about a *file*, and `psd/` is one directory for the
+project — a tree that blocks the space it stands on blocks it wherever it is
+put. `tilesets` is that, plus the thing that makes it not a choice: a gid
+stored on a tile layer means *the nth tile across every tileset in the map*,
+so the list and its `firstgid`s are what every one of those numbers is read
+against. Per scene or per layer, adding a palette in one place would silently
+renumber the tiles standing in another. See
+[Tile layers](tile-layers.md#the-two-places-a-number-changes).
+
+**`DocStore.editDoc` is how the three of them are written**, and it is
+`editLayer`'s counterpart one level up: public for the same reason, because
+what a kind of thing the document holds *means* is somebody else's subject —
+`lib/extrusions.ts` for a solid, `lib/tile-layers.ts` for a palette — and this
+is the one thing those edits need from the store. A commit either way, so undo
+and autosave see them exactly as they see every other write.
 
 **`DocStore.layers` and `layer(id)` answer about the active scene, and their
 signatures did not change.** That is the whole design: the Phaser scene, the

@@ -7,6 +7,30 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 
 ---
 
+- **Nothing in a scaffolded project draws a tile layer yet.** The data reaches
+  the exported game — `game.config.json` carries `tiles` per layer and
+  `tilesets` beside them, in the shape every Phaser tilemap helper already
+  expects — and no template reads it, so a published project shows its object,
+  pattern and background layers and none of its tiles. The half that had to be
+  right first is the format, because that is the half a document is written in
+  and cannot be changed afterwards without rewriting everybody's projects; a
+  scene that reads a config is a scene. See [Tile layers](tile-layers.md).
+- **Tile layers are painted with two tools.** The Pencil and Fill, re-pointed,
+  because those are the two that already existed and the first version is a
+  re-pointing rather than a second toolbar. A rectangle, a tile picker and a
+  terrain brush are all things Tiled has that this does not, and each is a
+  tool rather than an argument — they were left out to keep the first version
+  about the *data*, not because they are hard.
+- **An external `.tsx` tileset is refused rather than resolved.** A map that
+  keeps its tilesets in separate files names them by a path relative to
+  itself, and following that would mean a second read, a second parse and a
+  second set of failure modes at a door that already has four encodings behind
+  it. The refusal names the remedy — save the map with its tilesets embedded —
+  which is one checkbox in Tiled's save dialog.
+- **zstd tile data is refused.** The webview's only decompressor is
+  `DecompressionStream`, which does gzip and deflate and not that. A wrong
+  answer would be a map full of plausible rubbish, so it is a sentence naming
+  the three encodings that do work.
 - **The server publish is SFTP, not rsync**, so a changed file is sent whole
   rather than as a diff against what is already there. The manifest recovers
   skipping unchanged files, which is most of the benefit, and not the rest. The

@@ -90,11 +90,24 @@ Nothing else changes: the object still belongs to its layer, that layer is
 still the one new ink lands on, and the left panel still expands to reveal the
 object in it. What went is the second subject, not the relationship.
 
+**Two kinds of layer answer the LAYER zone differently**, and both for the
+same reason: what is on them is not a set of things standing anywhere. A
+pattern layer shows its rule — `inspect-pattern.ts` — and a **tile** layer
+shows its palettes, which take the column outright. That is not this panel
+being generous with space: the palette *is* what a tile layer is for, and the
+relationship between it and the tools is the one Tiled has between its own
+palette and its own tools. Drag across it to take a run; the drawing tools put
+down whatever is in hand. See `inspect-tiles.ts` and
+[Tile layers](tile-layers.md).
+
 `inspect-zone.ts` is the zone, `inspect-brush.ts` the TOOL zone's contents,
 `inspect-wiring.ts` what every control in the panel actually does, and
 `inspect.css` the whole panel's stylesheet — split out of `panels.css`, which
 had reached the line limit, along the split the panels themselves make: left
-sidebar there, right sidebar here.
+sidebar there, right sidebar here. `tiles.css` came out of `inspect.css` the
+same way and along a real seam: that file is this panel's furniture, and the
+tile palette is one control — the only one in the app that is a *picture* you
+point at.
 
 ---
 

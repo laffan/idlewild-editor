@@ -12,6 +12,13 @@ Part of [the Idlewild manual](README.md).
 
 ---
 
+- A tile layer in the **exported game**. The map is saved, and it travels in
+  the config the project's own code reads, but nothing in a scaffolded project
+  draws it yet — so a published game shows everything except its tiles. The
+  editor draws them
+- More **tile tools**. The Pencil and Fill are re-pointed at tiles and the
+  rest are not: a rectangle, a tile picker and a terrain brush are all things
+  Tiled has and this does not. The first version is about the format
 - A note that wraps. Text is lines you typed rather than a box the words flow
   into, which is right for a label and wrong for a paragraph — and a wrap width
   is a fourth number on the record and a handle on the canvas to drag it by
