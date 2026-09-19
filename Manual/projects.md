@@ -52,8 +52,12 @@ Part of [the Idlewild manual](README.md).
   second page to use and the first to need *controls* rather than reports. Every
   explanation is still there, behind a **?** beside its row, which opens to a
   tap as well as to a hover, because an iPad has no pointer to rest on anything.
-  The one that changes with the template says the right thing either way. There
-  is no *New Project* heading across the top: the button that opened it says so
+  The one that changes with the template says the right thing either way, and
+  the one on **Scaffolding** — which is beside the heading rather than beside a
+  row, because that card is a single row of buttons with no label of its own —
+  says both what the choice is and what the answer you have picked writes.
+  There is no *New Project* heading across the top: the button that opened it
+  says so
 - And how it renders, on the same sheet. **Pixel perfect** is one box for the
   two settings that go together — nearest-neighbour textures, so a 16px sprite
   scaled up stays blocky, and whole-pixel drawing, so a camera at a fractional

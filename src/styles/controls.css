@@ -445,4 +445,12 @@
   font: 400 11.5px/1.5 var(--font-body);
   box-shadow: 0 6px 20px rgb(0 0 0 / 28%);
   pointer-events: none;
+  /* A blank line in a hint is a paragraph break. Every hint in the app is one
+     paragraph except the one on New Project's Scaffolding heading, which
+     answers two questions at once — what the choice is, and what the answer
+     you have picked writes. `pre-line` keeps the newlines and still collapses
+     runs of spaces, so a hint written as concatenated string literals reads
+     exactly as it did before. The text is set as `textContent`, so this is the
+     only way to get a break into one. */
+  white-space: pre-line;
 }

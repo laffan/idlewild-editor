@@ -7,10 +7,11 @@
  * one place rather than in every page that has one.
  *
  * **Nothing here knows about any feature.** A row has a title, a quiet second
- * line, something at each end and possibly a press. The Logins sheet is the
- * first page built on it and is meant not to be the last: Project Options and
- * the render settings are the obvious next ones, and they should not have to
- * invent a row again.
+ * line, something at each end and possibly a press — and a row may have no
+ * title at all, where the group's heading has already said it and the control
+ * should take the width instead. The Logins sheet is the first page built on
+ * it and is meant not to be the last: Project Options and the render settings
+ * are the obvious next ones, and they should not have to invent a row again.
  *
  * The deliberate omission is state. Every builder takes what to show and hands
  * back an element; nothing here re-renders, remembers or subscribes. A page
@@ -43,7 +44,17 @@ export interface OptionAction {
 export type OptionSub = string | { text: string; mono?: boolean };
 
 export interface OptionRow {
-  title: string;
+  /**
+   * The row's label, or nothing.
+   *
+   * Nothing is for a group whose heading has already said it — a card with one
+   * row in it, where a title inside would be the same word twice and would
+   * spend half the row saying it. The control then takes the whole width,
+   * which is what a segmented control with four long labels in it wants
+   * anyway. A row with no title carries no `?` either: its explanation belongs
+   * on the group's heading, which is where the question is now being asked.
+   */
+  title?: string;
   /**
    * What this row is *for*, or what it is set to. Several, where a row has
    * more than one thing to say quietly — which is why this is not one string:
@@ -95,18 +106,27 @@ export function optionRow(row: OptionRow): HTMLElement {
       : null;
 
   const subs = row.sub === undefined ? [] : Array.isArray(row.sub) ? row.sub : [row.sub];
-  const title = h("span", { class: "option-title", text: row.title });
-  const body = h(
-    "div",
-    { class: "option-body" },
-    row.hint
-      ? h("div", { class: "option-title-row" }, title, hintButton(row.hint, row.title))
-      : title,
-    ...subs.map((sub) => {
-      const { text, mono } = typeof sub === "string" ? { text: sub, mono: false } : sub;
-      return h("span", { class: `option-sub${mono ? " mono" : ""}`, text });
-    }),
-  );
+  const label = row.title;
+  const title =
+    label === undefined ? null : h("span", { class: "option-title", text: label });
+  // A row with neither a title nor a second line has no body at all, rather
+  // than an empty one: an empty `.option-body` is still `flex: 1` and would
+  // hold the control over at the right-hand edge of a row that has nothing on
+  // its left.
+  const body =
+    title || subs.length
+      ? h(
+          "div",
+          { class: "option-body" },
+          row.hint !== undefined && label !== undefined
+            ? h("div", { class: "option-title-row" }, title, hintButton(row.hint, label))
+            : title,
+          ...subs.map((sub) => {
+            const { text, mono } = typeof sub === "string" ? { text: sub, mono: false } : sub;
+            return h("span", { class: `option-sub${mono ? " mono" : ""}`, text });
+          }),
+        )
+      : null;
 
   const actions = row.actions ?? [];
   const trail =
@@ -141,6 +161,8 @@ export function optionRow(row: OptionRow): HTMLElement {
   if (lead) classes.push("has-lead");
   if (row.onSelect) classes.push("tappable");
   if (row.control) classes.push("has-control");
+  // The control is the row. See `title` above for when that happens.
+  if (!body) classes.push("bare");
 
   return h(
     row.onSelect ? "button" : "div",
@@ -174,6 +196,16 @@ export interface OptionGroup {
   title?: string;
   /** The sentence under it — the thing that would otherwise be a tooltip. */
   note?: string;
+  /**
+   * What this group is for, behind a `?` beside its heading.
+   *
+   * The alternative to `note`, and the same trade a row's `hint` makes against
+   * a row's `sub`: a paragraph under every card is a page of grey to read past
+   * before the one control you came to change. Use it where the group *is* one
+   * question — a card of one titleless row, where the heading is the label and
+   * the explanation has nowhere else to go.
+   */
+  hint?: HintText;
   rows: Array<HTMLElement | null>;
   /** Shown as a row of its own when `rows` is empty. */
   empty?: string;
@@ -182,10 +214,18 @@ export interface OptionGroup {
 /** A titled card of rows. */
 export function optionGroup(group: OptionGroup): HTMLElement {
   const rows = group.rows.filter((row): row is HTMLElement => row !== null);
+  const title = group.title;
   return h(
     "section",
     { class: "options-group" },
-    group.title ? h("div", { class: "options-group-title", text: group.title }) : null,
+    !title
+      ? null
+      : h(
+          "div",
+          { class: "options-group-title" },
+          h("span", { text: title }),
+          group.hint ? hintButton(group.hint, title) : null,
+        ),
     h(
       "div",
       { class: "options-rows" },

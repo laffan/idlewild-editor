@@ -81,8 +81,16 @@
 
 /* Above the group, quiet, in the body face. Not a `sheet-title`: a group
    heading is a label for what follows, and competing with the sheet's own
-   title is how a settings page stops having a hierarchy. */
+   title is how a settings page stops having a hierarchy.
+
+   A flex row, because it may carry a `?` of its own: a group that *is* one
+   question — a card of one titleless row — has nowhere else to put its
+   explanation, and a paragraph under every card is a page of grey to read past
+   before the one control you came to change. */
 .options-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font: 600 12px var(--font-body);
   letter-spacing: 0.02em;
   color: var(--opt-sub);
@@ -140,6 +148,22 @@
 /* A row with a lead pushes its own separator across by the lead's width. Set
    as a variable rather than a class so a page with wider leads says so once. */
 .option.has-lead { --opt-lead: calc(28px + var(--opt-gap)); }
+
+/* A row that is nothing but its control, because the group's heading is
+   already its label. The trail stops being `flex: none` and takes the width,
+   and a segmented control in one shares that width between its buttons rather
+   than sitting in a huddle at the right-hand edge — which is what four labels
+   as long as "Blank PSD to Phaser" want anyway.
+
+   `1 1 auto` rather than `flex: 1`, and that is the whole of it. The shorthand
+   is `1 1 0%`, which throws the labels away and gives every button an equal
+   quarter — and a quarter is not enough for "Blank PSD to Phaser", which is
+   `white-space: nowrap` and so spills over the divider into its neighbour.
+   With `auto` each button starts at its own text and the *leftover* is what is
+   shared, so the row fills and every label still fits. */
+.option.bare .option-trail { flex: 1; min-width: 0; }
+.option.bare .opt-seg { flex: 1; }
+.option.bare .opt-seg-btn { flex: 1 1 auto; }
 
 /* A row a page withholds — New Project's character controller, on the two
    scaffolds that write no character module. `display: flex` above is an author

@@ -77,6 +77,40 @@ describe("what a chosen answer is coloured with", () => {
   });
 });
 
+/**
+ * A card whose heading is the label, because its one row has none.
+ *
+ * New Project's Scaffolding group is the first: a row titled the same word as
+ * the heading above it would spend half the row repeating it, and four labels
+ * as long as "Blank PSD to Phaser" want the width. Two rules carry it, and
+ * both fail as a squashed huddle at the right-hand edge rather than as an
+ * error.
+ */
+describe("a row that is nothing but its control", () => {
+  it("lets the trail take the width the body is not using", () => {
+    expect(ruleIn(optionsCss, ".option.bare .option-trail").flex).toBe("1");
+    expect(ruleIn(optionsCss, ".option.bare .opt-seg").flex).toBe("1");
+  });
+
+  /**
+   * And the buttons share the *leftover* rather than the whole width. `flex:
+   * 1` is `1 1 0%`, which gives four buttons an equal quarter each and throws
+   * the labels away — "Blank PSD to Phaser" is `nowrap` and spills straight
+   * over the divider into Vanilla. `auto` starts each one at its own text.
+   */
+  it("sizes each segment from its label, not from an equal share", () => {
+    expect(ruleIn(optionsCss, ".option.bare .opt-seg-btn").flex).toBe("1 1 auto");
+  });
+
+  /**
+   * And the heading it borrows its label from can carry the `?` that would
+   * have been on the row, which takes a flex row rather than a bare `div`.
+   */
+  it("leaves room beside the group heading for the `?` it moved there", () => {
+    expect(ruleIn(optionsCss, ".options-group-title").display).toBe("flex");
+  });
+});
+
 describe("the hint bubble", () => {
   /**
    * The group it is opened from clips, and the body it is in scrolls. Fixed
@@ -105,5 +139,16 @@ describe("the hint bubble", () => {
    */
   it("never takes a press", () => {
     expect(ruleIn(controlsCss, ".tip")["pointer-events"]).toBe("none");
+  });
+
+  /**
+   * The text is set as `textContent`, so a blank line in a hint is only a
+   * paragraph break if the bubble says so. New Project's Scaffolding heading
+   * is the one hint that needs it — it answers what the choice is and what the
+   * answer you have picked writes — and without this the two run together into
+   * a wall at 34ch.
+   */
+  it("keeps a blank line in a hint as a paragraph break", () => {
+    expect(ruleIn(controlsCss, ".tip")["white-space"]).toBe("pre-line");
   });
 });

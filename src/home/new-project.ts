@@ -72,6 +72,12 @@
  * as to a hover, because an iPad has no pointer to rest on anything — see
  * `lib/tooltip.ts`.
  *
+ * Scaffolding's is on the **group's heading** rather than on a row, because
+ * its card is one row and that row has no title: a label inside saying the
+ * same word as the heading above it would spend half the row repeating it,
+ * and four labels as long as "Blank PSD to Phaser" want the width. So the
+ * heading is the label, and the `?` goes where the question is being asked.
+ *
  * **There is no title.** The sheet is opened by a button that says *New
  * Project* and nothing else on the screen opens it, so a 22px heading saying
  * the same word spends the best line on the one thing nobody needed telling.
@@ -154,9 +160,7 @@ export function openNewProject(
     projection,
     (value) => {
       projection = value as Projection;
-      // Gravity has no direction on a diamond grid seen from above. The other
-      // three scaffold no character, so nothing about them falls.
-      scaffoldSeg.setEnabled("platformer", projection !== "isometric");
+      setPlatformerOffered();
       if (projection === "isometric" && scaffold === "platformer") {
         scaffold = "topdown";
         scaffoldSeg.select("topdown");
@@ -164,6 +168,22 @@ export function openNewProject(
       }
     },
   );
+
+  /**
+   * Grey Platformer out under Isometric. Gravity has no direction on a
+   * diamond grid seen from above, and the other three scaffold nothing that
+   * falls, so they pair with any template.
+   *
+   * Called **now as well as on every change**, which it was not: the sheet
+   * opens on Isometric, and until something else was picked and put back the
+   * one combination `create_project` refuses was the one combination the sheet
+   * let you choose first. Greyed rather than gone, because greyed says "not
+   * with that" where gone says "never existed".
+   */
+  function setPlatformerOffered(): void {
+    scaffoldSeg.setEnabled("platformer", projection !== "isometric");
+  }
+  setPlatformerOffered();
 
   const scaleSeg = optionSegmented(
     SCALES.map((scale) => ({ value: String(scale), label: String(scale) })),
@@ -270,19 +290,16 @@ export function openNewProject(
         }),
         // And the program the drawing is handed to, which is a separate
         // question from the space it was drawn in.
+        //
+        // One group, one row, and the row has no title: the heading above it
+        // has already said the word, and a second copy inside would spend half
+        // the row repeating it. So the `?` is on the heading — where the
+        // question is being asked — and the four buttons take the width, which
+        // is what labels as long as "Blank PSD to Phaser" want anyway.
         optionGroup({
           title: "Scaffolding",
-          rows: [
-            optionRow({
-              title: "Scaffolding",
-              hint: () => scaffoldNote(scaffold),
-              control: scaffoldSeg.root,
-            }),
-          ],
-          note:
-            "How much of a project is written for you. Drawing is the same " +
-            "whichever you pick — this is the code the artwork is handed to, " +
-            "and it is yours to edit or delete from the moment it is written.",
+          hint: () => scaffoldNote(scaffold),
+          rows: [optionRow({ control: scaffoldSeg.root })],
         }),
         optionGroup({
           title: "Rendering",
@@ -346,15 +363,27 @@ function scaleNote(projection: Projection): string {
     : "The size of one space, in pixels.";
 }
 
+/** The half of the answer that is true whichever one is picked. */
+const SCAFFOLD_NOTE =
+  "How much of a project is written for you. Drawing is the same whichever " +
+  "you pick — this is the code your artwork is handed to, and it is yours to " +
+  "edit or delete from the moment it is written.\n\n";
+
 /**
- * What each scaffold writes, said in the one sentence the `?` has room for.
+ * What the picked scaffold writes, behind the `?` on the group's heading.
  *
- * Per-answer rather than one paragraph covering four, because the question a
- * hint is opened to settle is *this* one — and a hint that lists everything
- * makes you find your own answer inside it. The group's note carries the half
- * that is true of all four.
+ * The general sentence first and then *this* answer, rather than a list of
+ * four: the question a hint is opened to settle is the one in front of you,
+ * and a hint that describes everything makes you find your own answer inside
+ * it. Read at the moment it opens, so it follows the buttons under it — see
+ * `hintButton`, which takes a function for exactly this.
  */
 function scaffoldNote(scaffold: Scaffold): string {
+  return SCAFFOLD_NOTE + writes(scaffold);
+}
+
+/** The one sentence about the scaffold that is picked. */
+function writes(scaffold: Scaffold): string {
   switch (scaffold) {
     case "platformer":
       return (
