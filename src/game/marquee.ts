@@ -106,14 +106,30 @@ export class Marquee {
    * instead makes the gesture unusable exactly where it is most wanted.
    * There is already a way to pick things up, and it is the other gesture.
    */
-  end(layers: readonly Layer[]): Selection | null {
+  end(
+    layers: readonly Layer[],
+    /**
+     * What a box catches on a **tile layer**, where the things inside it are
+     * not placed images but spaces with something on them.
+     *
+     * Handed in rather than decided here, because which layer is active is
+     * the scene's to know and what a tile is belongs to `lib/tile-layers.ts`.
+     * Absent — or answering nothing — falls through to the ordinary catch, so
+     * a drag over a tile layer that touched no tiles is a selection of
+     * nothing, exactly as a drag over empty ground has always been.
+     */
+    tiles?: (box: Rect) => Selection | null,
+  ): Selection | null {
     if (!this.from) {
       this.cancel();
       return null;
     }
     const box = this.box;
     this.cancel();
-    const caught = box ? pickPlacementsIn(layers, rectPoints(box)) : null;
+    if (!box) return { kind: "none" };
+    const caughtTiles = tiles?.(box);
+    if (caughtTiles) return caughtTiles;
+    const caught = pickPlacementsIn(layers, rectPoints(box));
     return caught
       ? { kind: "placements", layerId: caught.layerId, ids: caught.ids }
       : { kind: "none" };

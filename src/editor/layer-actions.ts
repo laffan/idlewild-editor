@@ -19,6 +19,7 @@ import { confirmSheet } from "../lib/sheet";
 import type { DocStore } from "../lib/doc-store";
 import { removeBackground } from "../lib/layer-kinds";
 import { pruneLayerGroups } from "../lib/groups";
+import { eraseTiles } from "../lib/tile-layers";
 import { removeText, textsOf } from "../lib/text-items";
 import type { Layer, Selection } from "../lib/types";
 import { count } from "./layer-items";
@@ -70,6 +71,11 @@ export function deleteSelected(selection: Selection, deps: DeleteDeps): void {
     removeBackground(store, selection.layerId, selection.backgroundId);
   } else if (selection.kind === "strokes") {
     deps.removeStrokes(selection.ids);
+  } else if (selection.kind === "tiles") {
+    // Spaces rather than records, so there is nothing to remove from a list:
+    // clearing a tile is writing an empty gid over it, which is one step and
+    // drops any chunk it empties. See `lib/tile-layers.ts`.
+    eraseTiles(store, selection.layerId, selection.cells);
   } else {
     return;
   }

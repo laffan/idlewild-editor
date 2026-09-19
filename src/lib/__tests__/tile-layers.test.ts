@@ -21,9 +21,13 @@ import {
   nextFirstGid,
   paintTiles,
   propertyOf,
+  eraseTiles,
+  moveTiles,
   stampRange,
   stampWrites,
+  tiledCells,
   tileLayer,
+  tilesUnderBox,
   tileLayersAllowed,
   tilesetForPsd,
   tilesetsOf,
@@ -399,6 +403,100 @@ describe("a stamp", () => {
         { cx: 0, cy: 0 },
       ),
     ).toEqual([]);
+  });
+});
+
+describe("catching tiles in a box", () => {
+  it("catches only the spaces with something on them", () => {
+    // A tile layer's whole subject is what is standing on it, so catching
+    // the empty ground between two tiles would be a selection of nothing
+    // wearing an outline — and moving it would carry a hole across the map.
+    const held = store();
+    const set = palette(held);
+    paintTiles(held, "layer-1", [
+      { x: 0, y: 0, gid: set.firstgid },
+      { x: 2, y: 0, gid: set.firstgid },
+    ]);
+    const caught = tilesUnderBox(held.layer("layer-1"), GRID, {
+      x: 0,
+      y: 0,
+      width: 96,
+      height: 32,
+    });
+    expect(caught).toEqual([
+      { cx: 0, cy: 0 },
+      { cx: 2, cy: 0 },
+    ]);
+  });
+
+  it("catches nothing on a layer that has never been painted on", () => {
+    const held = store();
+    const box = { x: 0, y: 0, width: 320, height: 320 };
+    expect(tilesUnderBox(held.layer("layer-1"), GRID, box)).toEqual([]);
+    expect(tilesUnderBox(undefined, GRID, box)).toEqual([]);
+  });
+});
+
+describe("moving and erasing a run", () => {
+  it("lifts the gids before it clears, so an overlap survives", () => {
+    // Every drag of one space overlaps its own source. Clearing first would
+    // take a bite out of the run.
+    const held = store();
+    const set = palette(held);
+    paintTiles(held, "layer-1", [
+      { x: 0, y: 0, gid: set.firstgid },
+      { x: 1, y: 0, gid: set.firstgid + 1 },
+    ]);
+    const moved = moveTiles(
+      held,
+      "layer-1",
+      [
+        { cx: 0, cy: 0 },
+        { cx: 1, cy: 0 },
+      ],
+      { cx: 1, cy: 0 },
+    );
+    const tiles = tileLayer(held.layer("layer-1"));
+    expect(tileCount(held.layer("layer-1")?.tiles)).toBe(2);
+    expect(tileAt(tiles, 1, 0)).toBe(1);
+    expect(tileAt(tiles, 2, 0)).toBe(2);
+    expect(tileAt(tiles, 0, 0)).toBe(0);
+    // And it hands back where the run ended up, for the selection to follow.
+    expect(moved).toEqual([
+      { cx: 1, cy: 0 },
+      { cx: 2, cy: 0 },
+    ]);
+  });
+
+  it("writes nothing at all for a move of no distance", () => {
+    const held = store();
+    palette(held);
+    paintTiles(held, "layer-1", [{ x: 0, y: 0, gid: 1 }]);
+    const before = held.doc;
+    moveTiles(held, "layer-1", [{ cx: 0, cy: 0 }], { cx: 0, cy: 0 });
+    expect(held.doc).toBe(before);
+  });
+
+  it("erases a run and drops the chunk it emptied", () => {
+    const held = store();
+    palette(held);
+    paintTiles(held, "layer-1", [{ x: 0, y: 0, gid: 1 }]);
+    eraseTiles(held, "layer-1", [{ cx: 0, cy: 0 }]);
+    expect(tileCount(held.layer("layer-1")?.tiles)).toBe(0);
+    expect(held.layer("layer-1")?.tiles?.chunks).toHaveLength(0);
+  });
+
+  it("lists every space that has something on it", () => {
+    const held = store();
+    palette(held);
+    paintTiles(held, "layer-1", [
+      { x: 0, y: 0, gid: 1 },
+      { x: 4, y: 3, gid: 2 },
+    ]);
+    expect(tiledCells(held.layer("layer-1"))).toEqual([
+      { cx: 0, cy: 0 },
+      { cx: 4, cy: 3 },
+    ]);
   });
 });
 

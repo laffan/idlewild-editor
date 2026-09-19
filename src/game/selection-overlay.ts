@@ -160,6 +160,28 @@ export class SelectionOverlay {
         g.strokeRect(box.x, box.y, box.width, box.height);
         break;
       }
+      case "tiles": {
+        // The spaces themselves, outlined as the grid draws them — a diamond
+        // under an isometric template — because what was caught *is* ground
+        // rather than a box round some objects. The wash says which spaces
+        // and the outline says where each one ends, which is the pair mask
+        // mode and a pattern shape both draw for the same reason.
+        const scale = 1 / zoom;
+        g.fillStyle(ACCENT, 0.16);
+        g.lineStyle(1 * scale, ACCENT, 0.9);
+        for (const cell of selection.cells) {
+          const points = this.grid.cellPolygon(cell);
+          g.beginPath();
+          g.moveTo(points[0].x, points[0].y);
+          for (let i = 1; i < points.length; i++) {
+            g.lineTo(points[i].x, points[i].y);
+          }
+          g.closePath();
+          g.fillPath();
+          g.strokePath();
+        }
+        break;
+      }
       case "point": {
         const point = store
           .layer(selection.layerId)

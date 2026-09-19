@@ -52,7 +52,11 @@ import { renderText, type TextActions } from "./inspect-text";
 import { captureFocus, restoreFocus } from "./inspect-focus";
 import { nameRow } from "./inspect-head";
 import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
-import { renderTileLayer, type TileActions } from "./inspect-tiles";
+import {
+  renderTileLayer,
+  renderTileSelection,
+  type TileActions,
+} from "./inspect-tiles";
 import {
   isTileTool,
   tileToolPanel,
@@ -513,6 +517,14 @@ export class Inspector {
         break;
       case "strokes":
         renderStrokes(this.surface(), this.store, this.callbacks, selection);
+        break;
+      case "tiles":
+        renderTileSelection(
+          this.surface(),
+          this.store,
+          this.callbacks,
+          selection,
+        );
         break;
     }
     return this.zone.mount(this.body);

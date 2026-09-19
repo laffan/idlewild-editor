@@ -338,6 +338,50 @@ one that is merely over the canvas — which on a desktop is most of the time.
 `Tiling` binds it and unbinds it, since a listener holding a scene that has
 gone is a listener drawing ghosts into a destroyed renderer.
 
+### Selecting tiles, and carrying them
+
+Select works on a tile layer, and it is the third thing the Select tool does
+rather than a fourth tool: drag a box and it catches what is inside, which on
+every other kind of layer is placed images and here is tiles.
+
+`{ kind: "tiles"; layerId; cells }` is the record, and **cells rather than a
+rectangle** for the reason every geometry decision in this codebase comes back
+to: on an isometric project a box dragged on screen covers a diamond of the
+lattice, and a `from`/`to` range would name ground the gesture never went
+near. `cellsUnderBox` is the same function the marquee's own hit-testing uses,
+so what is caught is exactly what the box covered.
+
+**Only spaces that hold something.** A tile layer's whole subject is what is
+standing on it, so catching the empty ground between two tiles would be a
+selection of nothing wearing an outline — and carrying it would take a hole
+across the map with it. A box that touched no tiles is a selection of nothing,
+which is what a drag over empty ground has always meant.
+
+It is also the one selection whose members are **coordinates rather than
+records**, which is why `selectionAlive` can never fail it on its own: there
+is nothing in the document for it to name. A run whose tiles have since been
+rubbed out is still a run of spaces somebody chose, and an undo that puts them
+back should find it still there.
+
+**Dragging inside the run carries it.** `game/tile-move.ts` sits in the
+gesture chain beside `TilePaint` and refuses everything that is not a press
+*inside* a run it already holds — which is what leaves a press on the ground
+outside free to start a fresh marquee, and so is how a selection is replaced
+rather than dragged. Nothing reaches the document until the release: what
+moves is a ghost, the same faded tiles the Stamp tool previews with, because
+writing on every pointer step would be a hundred documents for one gesture.
+
+`moveTiles` **lifts the gids before it clears anything**, and that is not
+tidiness: every drag of one space overlaps its own source, so clearing first
+would take a bite out of the run as the write passed over ground it had
+already filled. The selection goes with the tiles, because a run left behind
+is an outline round the ground they used to be on and the next drag inside it
+would pick up whatever has since been put there.
+
+**Delete clears them**, which is one more arm on `deleteSelected` and one
+write: a gid of 0 is an empty space, so erasing is painting with nothing in
+hand, and the chunks it empties are dropped on the way out.
+
 ### Why a tile tool is not a canvas mode
 
 Extrude, collider, mask and PSD Edit take the canvas over: they dim what is

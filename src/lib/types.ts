@@ -561,6 +561,21 @@ export type Selection =
   | { kind: "background"; layerId: string; backgroundId: string }
   /** A word written on the canvas — see `TextItem`. */
   | { kind: "text"; layerId: string; textId: string }
+  /**
+   * A run of tiles on a tile layer, caught by dragging the Select tool.
+   *
+   * The **spaces** rather than a rectangle, because on an isometric project
+   * a box dragged on screen covers a diamond of the lattice and a `from`/`to`
+   * range would name ground the gesture never went near. Only spaces that
+   * actually hold a tile are caught: selecting empty ground on a layer whose
+   * whole subject is what is standing on it would be a selection of nothing
+   * wearing an outline.
+   *
+   * It is the one selection whose members are coordinates rather than
+   * records, which is why `selectionAlive` can never fail it on its own —
+   * see there.
+   */
+  | { kind: "tiles"; layerId: string; cells: Cell[] }
   | { kind: "strokes"; layerId: string; ids: string[] };
 
 /**

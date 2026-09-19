@@ -29,8 +29,8 @@ import {
 import { chunksOf, tileCount } from "../lib/tiled/chunks";
 import { tileId } from "../lib/tiled/gid";
 import { PSD_PROPERTY, type TiledTileset } from "../lib/tiled/types";
-import type { Layer, Selection, ToolId } from "../lib/types";
-import type { PanelSurface } from "./inspect-panels";
+import type { Cell, Layer, Selection, ToolId } from "../lib/types";
+import type { PanelActions, PanelSurface } from "./inspect-panels";
 import {
   describeStamp,
   tilePalette,
@@ -187,6 +187,53 @@ export function renderTileLayer(
       }),
     ),
   );
+}
+
+/**
+ * OBJECT, for a run of tiles caught with the Select tool.
+ *
+ * Short on purpose. A run of tiles has no name, no size to type and nothing
+ * to be made of — it is some ground with things standing on it — so the panel
+ * says how much was caught, where it is, and offers the one thing there is to
+ * do to it from here. The other thing, moving it, is a gesture rather than a
+ * control: drag the run.
+ */
+export function renderTileSelection(
+  panel: PanelSurface,
+  store: DocStore,
+  actions: PanelActions,
+  selection: Extract<Selection, { kind: "tiles" }>,
+): void {
+  const layer = store.layer(selection.layerId);
+  if (!layer) return panel.empty();
+  const n = selection.cells.length;
+
+  panel.head("Tiles", `${n} ${n === 1 ? "tile" : "tiles"}`);
+  panel.section("Info");
+  panel.row("Layer", layer.name);
+  panel.row("Spread", describeSpread(selection.cells));
+  panel.row("Move", "drag them");
+
+  panel.body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("button", {
+        class: "panel-btn",
+        text: n === 1 ? "Delete tile" : "Delete tiles",
+        onClick: () => actions.onDeleteSelection(),
+      }),
+    ),
+  );
+}
+
+/** The box a run of tiles sits in, in spaces. */
+function describeSpread(cells: readonly Cell[]): string {
+  const xs = cells.map((c) => c.cx);
+  const ys = cells.map((c) => c.cy);
+  const cols = Math.max(...xs) - Math.min(...xs) + 1;
+  const rows = Math.max(...ys) - Math.min(...ys) + 1;
+  return `${cols} × ${rows} spaces`;
 }
 
 /**

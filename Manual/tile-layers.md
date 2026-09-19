@@ -115,14 +115,20 @@ down the left edge.
 - **Either one, turned round**, takes tiles off instead. Hold the button for
   half a second, or use the switch at the top of the tool's own panel — the
   same erase flag every brush in the editor has. There is no separate rubber.
-- **Select, Pan, Point** and **Boundary** are unchanged. A named place or a
-  blocking boundary on a tile layer means what it means anywhere else.
+- **Select** catches tiles. Drag a box over some and they are outlined; drag
+  the outlined tiles themselves and they move, and they keep the ground they
+  land on. **Delete** clears them, as it clears anything else selected. Only
+  spaces with something on them are caught — there is no point selecting bare
+  ground on a layer that is about what is standing on it.
+- **Pan** is unchanged. Point and Boundary are not offered on a tile layer:
+  what they make belongs to the layer it is made on, and a tile layer is
+  ground rather than a place things stand.
 
 Each gesture is one press of undo, however many spaces it covered.
 
-Nothing on a tile layer is selected by tapping it. There is no one object
-under the pointer to name — the tiles are a map, not a pile of things — so the
-layer is reached from the sidebar, which is where its palettes are.
+A single tap selects nothing. The tiles are a map rather than a pile of
+things, so there is no one object under the pointer to name — a box is how you
+say which of them you mean, and the layer itself is reached from the sidebar.
 
 ## Editing a palette's artwork
 

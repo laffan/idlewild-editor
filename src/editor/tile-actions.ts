@@ -37,8 +37,9 @@ import * as log from "../lib/log";
 import { parseManifest, placeableLayers } from "../lib/manifest";
 import {
   addTilesets,
+  eraseTiles,
   nextFirstGid,
-  paintTiles,
+  tiledCells,
   tilesetsOf,
 } from "../lib/tile-layers";
 import { chunksOf } from "../lib/tiled/chunks";
@@ -375,24 +376,15 @@ function remap(layer: TiledTileLayer, shift: number): TiledTileLayer {
   };
 }
 
-/** Take every tile off a layer, leaving its palettes alone. */
+/**
+ * Take every tile off a layer, leaving its palettes alone.
+ *
+ * The panel's own button, and the same write Delete makes over a selected
+ * run — which is why it is one line here: what a layer's tiles *are* is
+ * `lib/tile-layers.ts`'s subject, and this only has to know which layer.
+ */
 export function clearTiles(deps: TileDeps, layerId: string): void {
-  const layer = deps.store.layer(layerId);
-  if (!layer?.tiles) return;
-  const doomed = chunksOf(layer.tiles).flatMap((chunk) =>
-    chunk.data.flatMap((gid, i) =>
-      gid === 0
-        ? []
-        : [
-            {
-              x: chunk.x + (i % chunk.width),
-              y: chunk.y + Math.floor(i / chunk.width),
-              gid: 0,
-            },
-          ],
-    ),
-  );
-  paintTiles(deps.store, layerId, doomed);
+  eraseTiles(deps.store, layerId, tiledCells(deps.store.layer(layerId)));
 }
 
 // ── paths ───────────────────────────────────────────────────────────────────

@@ -144,6 +144,8 @@ export class WorldScene extends Phaser.Scene {
       worldAt: (x, y) => this.worldAt(x, y),
       canvas: this.game.canvas,
       psdLayers: (key) => this.psds.layersOf(key),
+      selection: () => this.selection,
+      setSelection: (selection) => this.setSelection(selection),
     });
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
@@ -221,7 +223,7 @@ export class WorldScene extends Phaser.Scene {
         tap: (x, y, adding) => this.handleTap(x, y, adding),
         doubleTap: (x, y) => this.handleDoubleTap(x, y),
         modes: this.modes,
-        tiles: this.tiling.paint,
+        tiles: this.tiling,
         drag: this.drag,
         marquee: {
           begin: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
@@ -438,7 +440,12 @@ export class WorldScene extends Phaser.Scene {
   /** What the box caught — `game/marquee.ts` decides, this applies it. */
   private endMarquee(): void {
     if (this.modes.endSelect()) return;
-    const next = this.marquee.end(this.store.layers);
+    // On a tile layer a box catches tiles rather than placed images — see
+    // `Tiling.caughtIn`. Everywhere else it answers null and the ordinary
+    // catch runs.
+    const next = this.marquee.end(this.store.layers, (box) =>
+      this.tiling.caughtIn(box),
+    );
     if (next) this.setSelection(next);
   }
 

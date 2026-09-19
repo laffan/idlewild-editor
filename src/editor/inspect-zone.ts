@@ -79,6 +79,7 @@ export function layerOf(selection: Selection): string {
     case "text":
     case "background":
     case "strokes":
+    case "tiles":
       return selection.layerId;
     default:
       return "";

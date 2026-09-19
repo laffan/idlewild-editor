@@ -44,6 +44,13 @@ export function selectionAlive(store: DocStore, selection: Selection): boolean {
       return selection.ids.every((id) => has(layer.placements, id));
     case "strokes":
       return selection.ids.every((id) => has(layer.strokes, id));
+    // Spaces rather than records, so there is nothing in the document to go
+    // missing. What can go is the layer they are on, and that is the check
+    // above — a tiles selection whose tiles have since been rubbed out is
+    // still a run of spaces somebody chose, and an undo that put them back
+    // should find it still there.
+    case "tiles":
+      return true;
   }
 }
 

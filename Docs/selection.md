@@ -1,8 +1,8 @@
 # Selection
 
 What is selected, on a canvas where the answer can be a run of grid spaces, a
-rectangle of bare pixels, a placed PSD, several of them, or a lassoed patch of
-ink.
+rectangle of bare pixels, a placed PSD, several of them, a run of tiles, or a
+lassoed patch of ink.
 
 Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 
@@ -31,6 +31,20 @@ Resizing writes a displayed `width`/`height` against the `naturalWidth`/
 `naturalHeight` the manifest exported, and their ratio becomes a `setScale`.
 A sprite placed with `setOrigin(0, 0)` scales away from its top-left, which is
 the corner the placement's x/y describes, so box and image agree.
+
+## A drag catches what is on the layer under it
+
+`Marquee.end` asks two questions in order, and the first one is only ever
+answered on a **tile layer**: what tiles did the box cover? There are no
+placed images to catch there — a tile layer's placements are its palettes and
+are never on the canvas at all — so on every other kind of layer that question
+answers null and the ordinary catch runs.
+
+The scene hands the question in rather than the marquee deciding, because
+which layer is active is the scene's to know and what a tile is belongs to
+`lib/tile-layers.ts`. See [Tile layers](tile-layers.md#selecting-tiles-and-carrying-them)
+for what a tiles selection holds, why it is spaces rather than a rectangle,
+and how dragging one carries it.
 
 ## The floating action bar
 

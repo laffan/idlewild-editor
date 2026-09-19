@@ -14,10 +14,12 @@
  */
 
 import type { DocStore } from "./doc-store";
-import type { Grid } from "./grid";
+import { cellsUnderBox, type Grid } from "./grid";
 import * as log from "./log";
 import {
+  chunksOf,
   emptyTileLayer,
+  tileAt,
   tileCount,
   writeTiles,
   type TileWrite,
@@ -29,7 +31,7 @@ import {
   type TiledTileLayer,
   type TiledTileset,
 } from "./tiled/types";
-import type { Cell, Layer, Placement, Projection } from "./types";
+import type { Cell, Layer, Placement, Projection, Rect } from "./types";
 
 /**
  * Whether this project can have tile layers at all.
@@ -472,6 +474,103 @@ export function tiledGid(
   const dx = (((at.cx - origin.cx) % stamp.cols) + stamp.cols) % stamp.cols;
   const dy = (((at.cy - origin.cy) % stamp.rows) + stamp.rows) % stamp.rows;
   return gidAt(tileset, stamp.col + dx, stamp.row + dy);
+}
+
+/**
+ * The tiles a dragged box caught.
+ *
+ * `cellsUnderBox` is the same function the marquee's own hit-testing uses, so
+ * what is caught is exactly the ground the box covered — a diamond of the
+ * lattice on an isometric project rather than the rectangle that was dragged.
+ *
+ * **Only spaces that hold something.** A tile layer's whole subject is what
+ * is standing on it, so catching the empty ground between two tiles would be
+ * a selection of nothing wearing an outline — and moving it would carry a
+ * hole across the map.
+ */
+export function tilesUnderBox(
+  layer: Layer | undefined,
+  grid: Grid,
+  box: Rect,
+): Cell[] {
+  if (!layer?.tiles) return [];
+  const held = tileLayer(layer);
+  return cellsUnderBox(grid, box).filter(
+    (cell) => tileAt(held, cell.cx, cell.cy) !== 0,
+  );
+}
+
+/**
+ * Take a run of tiles off the layer — what Delete does to a selection.
+ *
+ * A gid of 0 is an empty space, so erasing is the same write as painting with
+ * nothing in hand: one call, one step, and the chunks that end up empty are
+ * dropped on the way out. See `writeTiles`.
+ */
+export function eraseTiles(
+  store: DocStore,
+  layerId: string,
+  cells: readonly Cell[],
+): void {
+  paintTiles(
+    store,
+    layerId,
+    cells.map((cell) => ({ x: cell.cx, y: cell.cy, gid: 0 })),
+  );
+}
+
+/**
+ * Carry a run of tiles to another patch of ground.
+ *
+ * **Read first, then clear, then write**, and the order is the whole of it: a
+ * move whose source and destination overlap — which every drag of one space
+ * is — would otherwise clear tiles it had already written. The gids are
+ * lifted into a list before anything is touched, so the three steps are one
+ * write and the overlap takes care of itself.
+ *
+ * One step of undo, because it is one thing somebody did.
+ */
+export function moveTiles(
+  store: DocStore,
+  layerId: string,
+  cells: readonly Cell[],
+  by: { cx: number; cy: number },
+): Cell[] {
+  if (by.cx === 0 && by.cy === 0) return [...cells];
+  const layer = store.layer(layerId);
+  if (!layer) return [...cells];
+  const held = tileLayer(layer);
+  const lifted = cells.map((cell) => ({
+    cell,
+    gid: tileAt(held, cell.cx, cell.cy),
+  }));
+
+  const writes: TileWrite[] = lifted.map(({ cell }) => ({
+    x: cell.cx,
+    y: cell.cy,
+    gid: 0,
+  }));
+  for (const { cell, gid } of lifted) {
+    writes.push({ x: cell.cx + by.cx, y: cell.cy + by.cy, gid });
+  }
+  paintTiles(store, layerId, writes);
+  return cells.map((cell) => ({ cx: cell.cx + by.cx, cy: cell.cy + by.cy }));
+}
+
+/** Every space on a layer that has something on it. */
+export function tiledCells(layer: Layer | undefined): Cell[] {
+  if (!layer?.tiles) return [];
+  const out: Cell[] = [];
+  for (const chunk of chunksOf(layer.tiles)) {
+    for (let i = 0; i < chunk.data.length; i++) {
+      if (chunk.data[i] === 0) continue;
+      out.push({
+        cx: chunk.x + (i % chunk.width),
+        cy: chunk.y + Math.floor(i / chunk.width),
+      });
+    }
+  }
+  return out;
 }
 
 /** What the layer row says under a tile layer's name. */

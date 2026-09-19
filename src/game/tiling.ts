@@ -16,10 +16,12 @@
 import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
-import { syncTilesets, tilesetArt } from "../lib/tile-layers";
+import { layerKind } from "../lib/layer-kinds";
+import { syncTilesets, tilesetArt, tilesUnderBox } from "../lib/tile-layers";
 import type { ManifestLayer } from "../lib/manifest";
 import type { CellRange } from "../lib/pattern";
-import type { Point } from "../lib/types";
+import type { Point, Rect, Selection } from "../lib/types";
+import { TileMove } from "./tile-move";
 import { TilePaint } from "./tile-paint";
 import { EMPTY_HAND } from "../lib/tile-tools";
 import { TileRender } from "./tile-render";
@@ -47,6 +49,9 @@ export interface TilingHost {
   worldAt: (screenX: number, screenY: number) => Point;
   /** A loaded PSD's own layers — `PsdPlacements.layersOf`. */
   psdLayers: (psdKey: string) => ManifestLayer[];
+  /** What is selected, and the way to say where a moved run ended up. */
+  selection: () => Selection;
+  setSelection: (selection: Selection) => void;
 }
 
 export class Tiling {
@@ -54,6 +59,8 @@ export class Tiling {
   readonly render: TileRender;
   /** Putting them there, which is a tool's gesture rather than a mode. */
   readonly paint: TilePaint;
+  /** Carrying a selected run somewhere else — `tile-move.ts`. */
+  readonly dragging: TileMove;
   private readonly host: TilingHost;
 
   constructor(host: TilingHost) {
@@ -73,8 +80,40 @@ export class Tiling {
       // until something else did.
       onChanged: () => this.render.invalidate(),
     });
+    this.dragging = new TileMove({
+      store: host.store,
+      grid: host.grid,
+      worldAt: host.worldAt,
+      selection: host.selection,
+      setSelection: host.setSelection,
+      onPreview: (tiles) => this.render.preview(tiles, []),
+      onChanged: () => this.render.invalidate(),
+    });
     host.canvas.addEventListener("pointermove", this.onHover);
     host.canvas.addEventListener("pointerleave", this.onLeave);
+  }
+
+  /**
+   * The two tile gestures, in the order a press is offered to them.
+   *
+   * **Painting first.** A tile tool in hand is unambiguous — a press means
+   * put a tile down, wherever it lands — while a move is only ever offered
+   * under Select, which is not a tool that paints. So the two never both
+   * want the same press, and the order is a formality rather than a rule
+   * somebody has to remember.
+   */
+  begin(screenX: number, screenY: number): boolean {
+    return (
+      this.paint.begin(screenX, screenY) || this.dragging.begin(screenX, screenY)
+    );
+  }
+
+  move(screenX: number, screenY: number): boolean {
+    return this.paint.move(screenX, screenY) || this.dragging.move(screenX, screenY);
+  }
+
+  end(): boolean {
+    return this.paint.end() || this.dragging.end();
   }
 
   /**
@@ -124,6 +163,25 @@ export class Tiling {
         tilesetArt(this.host.psdLayers(key), path),
       ),
     );
+  }
+
+  /**
+   * What a dragged box caught, when the box was dragged over a tile layer.
+   *
+   * Null on every other kind of layer, which is what lets the marquee ask
+   * unconditionally: there are no placed images to catch on a tile layer —
+   * its placements are its palettes and are never on the canvas at all — and
+   * everywhere else there are no tiles.
+   *
+   * Null too when the box touched no tiles. A drag over empty ground has
+   * always meant a selection of nothing, and a tile layer is no exception.
+   */
+  caughtIn(box: Rect): Selection | null {
+    const layerId = this.host.activeLayerId();
+    const layer = this.host.store.layer(layerId);
+    if (layerKind(layer) !== "tile") return null;
+    const cells = tilesUnderBox(layer, this.host.grid, box);
+    return cells.length > 0 ? { kind: "tiles", layerId, cells } : null;
   }
 
   /** Bring what is on screen in line with the document. Cheap per frame. */
