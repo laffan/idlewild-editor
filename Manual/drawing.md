@@ -21,8 +21,9 @@ Part of [the Idlewild manual](README.md).
   right way round for the thing a hand is doing most often
 - **On a tile layer the ink column is a different column.** All seven brushes
   step out of the way — none of them has anything to do with a grid of tiles —
-  and two tools take their place: **Stamp**, which puts the tiles picked in
-  the palette down, and **Sweep fill**, which fills the shape you draw round.
+  and three take their place: **Stamp**, which puts the tiles picked in the
+  palette down, **Sweep fill**, which fills a shape you draw freehand, and
+  **Shape fill**, which fills a rect or a circle you drag out.
   The rail above is unchanged, because Select, Pan, Point and Boundary are
   about the canvas rather than about what is drawn on it. The brushes come
   back while a PSD is open in PSD Edit mode, since a file you are drawing into

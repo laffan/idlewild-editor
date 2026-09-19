@@ -32,7 +32,17 @@ import type { Cell } from "./types";
  * Boundary all mean on a tile layer exactly what they mean anywhere else,
  * and so does every ink tool while PSD Edit mode is up over one.
  */
-export type TileVerb = "stamp" | "sweep" | null;
+export type TileVerb = "stamp" | "sweep" | "shapefill" | null;
+
+/**
+ * Which shape a Shape fill draws.
+ *
+ * A **rect** is the dragged box, spaces and all. A **circle** is the ellipse
+ * inscribed in that same box, which is a circle when the drag is square and
+ * an oval when it is not — the reading every drawing program takes of a
+ * dragged ellipse, and the one that needs no second gesture to say how wide.
+ */
+export type TileShape = "rect" | "circle";
 
 /**
  * Everything the canvas needs to know about the tile tool in hand.
@@ -51,8 +61,10 @@ export interface TileHand {
    * Sweep: scatter the run over the area rather than tiling it.
    */
   random: boolean;
-  /** Sweep, scattering only: how many of the covered spaces take a tile. */
+  /** Sweep and Shape fill, scattering only: how many spaces take a tile. */
   density: number;
+  /** Shape fill only: which shape the drag describes. */
+  shape: TileShape;
   /** Turned round: what the tool would lay, it takes off instead. */
   erasing: boolean;
 }
@@ -63,6 +75,7 @@ export const EMPTY_HAND: TileHand = {
   stamp: null,
   random: false,
   density: 100,
+  shape: "rect",
   erasing: false,
 };
 
@@ -145,6 +158,51 @@ function pick(gids: readonly number[]): number {
 
 function same(a: readonly number[], b: readonly number[]): boolean {
   return a.length === b.length && a.every((gid, i) => gid === b[i]);
+}
+
+/**
+ * The spaces a dragged shape covers.
+ *
+ * Both shapes are read off the **box between the two corners**, inclusive, so
+ * the rectangle is the drag and the ellipse is the one inscribed in it. A
+ * drag that never left its space is one space either way, which is what makes
+ * a tap on this tool put a tile down rather than nothing.
+ *
+ * The ellipse test is on each space's **centre** against the unit circle the
+ * box maps onto — the same test `cellsInPolygon` makes for a swept outline,
+ * for the same reason: a corner is shared with three neighbours, so testing
+ * one would take a space in or leave it out depending on which corner was
+ * asked about.
+ */
+export function shapeCells(
+  shape: TileShape,
+  from: Cell,
+  to: Cell,
+): Cell[] {
+  const left = Math.min(from.cx, to.cx);
+  const right = Math.max(from.cx, to.cx);
+  const top = Math.min(from.cy, to.cy);
+  const bottom = Math.max(from.cy, to.cy);
+
+  const out: Cell[] = [];
+  const midX = (left + right) / 2;
+  const midY = (top + bottom) / 2;
+  // Half-widths measured to the outside of the end spaces, so a three-space
+  // drag really is three spaces across rather than two and a bit.
+  const radiusX = (right - left + 1) / 2;
+  const radiusY = (bottom - top + 1) / 2;
+
+  for (let cy = top; cy <= bottom; cy++) {
+    for (let cx = left; cx <= right; cx++) {
+      if (shape === "circle") {
+        const dx = (cx - midX) / radiusX;
+        const dy = (cy - midY) / radiusY;
+        if (dx * dx + dy * dy > 1) continue;
+      }
+      out.push({ cx, cy });
+    }
+  }
+  return out;
 }
 
 /**

@@ -424,6 +424,8 @@ export class Inspector {
         onRandom: (on) => this.callbacks.onTileRandom(this.toolId, on),
         density: this.callbacks.tileDensity(),
         onDensity: (next) => this.callbacks.onTileDensity(next),
+        shape: this.callbacks.tileShape(),
+        onShape: (next) => this.callbacks.onTileShape(next),
         erasing: this.callbacks.erasing(this.toolId),
         onErasing: (on) => this.callbacks.onErasing(this.toolId, on),
         stamp: this.callbacks.tileSelection().stamp,

@@ -271,22 +271,35 @@ selected is a tool nobody can learn, every panel describing it has to
 describe two things, and the one line of prose under the heading has to be
 true of both. A tool is what it is called.
 
-So a tile layer swaps the **ink column** out. The seven brushes go and two
+So a tile layer swaps the **ink column** out. The seven brushes go and three
 arrive:
 
 **Stamp** puts the run picked in the palette down where you tap, and along a
-drag. **Sweep fill** is an outline — press, draw a shape, release — and every
-space inside it is filled.
+drag. **Sweep fill** is a freehand outline — press, draw a shape, release —
+and every space inside it is filled. **Shape fill** reaches the same end with
+a straight gesture: drag out a **rect** or a **circle** and it fills, with
+what would land shown as you drag, so the size is settled before anything is
+written.
 
-Each has the same second option said twice, because it is the same choice
-about the same run: **lay it out** in the shape it was picked, or **draw from
-it** at random. A sweep set to random gains a **density**, which is how many
-of the covered spaces take a tile — a roll per space rather than a count
-taken from the total, because a count would have to decide *which* spaces and
-every way of deciding that either clumps or makes a lattice. A hundred per
-cent is every space, and it is the only value that never leaves a gap; at
-that setting the difference between a scatter and a tiling is which tile
-lands, not how many.
+A circle is the ellipse inscribed in the box that was dragged — a circle when
+the drag is square and an oval when it is not, which is what every drawing
+program draws for a dragged ellipse and needs no second gesture to say how
+wide. Both shapes read their box the same from either corner, which is the
+least surprising thing a shape can do. And each space is tested on its
+**centre**, the same test `cellsInPolygon` makes for a swept outline and for
+the same reason: a corner is shared with three neighbours, so testing one
+would take a space in or leave it out depending which corner was asked.
+
+All three carry the same second option, because it is the same choice about
+the same run: **lay it out** in the shape it was picked, or **draw from it**
+at random. Either fill set to random gains a **density**, which is how many of
+the covered spaces take a tile — a roll per space rather than a count taken
+from the total, because a count would have to decide *which* spaces and every
+way of deciding that either clumps or makes a lattice. A hundred per cent is
+every space, and it is the only value that never leaves a gap; at that setting
+the difference between a scatter and a tiling is which tile lands, not how
+many. Density says nothing about a Stamp, which lands on the spaces the
+pointer named and has nothing to thin out.
 
 Both **turn round to erase**, like every other tool here that makes a mark:
 what Stamp would put down it takes off, what a sweep would fill it clears.
@@ -307,9 +320,25 @@ rule; `editor/psd-edit.ts` puts the tool in hand down and picks it up again
 at both ends, because neither the rail nor the routing has any way to hear a
 canvas mode open or close.
 
-Hidden rather than disabled, in both directions: the rule is about the
+Withheld rather than disabled, in both directions: the rule is about the
 *layer* rather than about the moment, and a disabled button is one somebody
 has to work out the reason for.
+
+**Withheld means taken out of the DOM**, which is not a style choice and was
+a bug. `ToolRail.setOffered` set the `hidden` attribute, whose `display: none`
+comes from the *browser's* stylesheet — and `.tool-btn` sets `display: flex`,
+which is an author rule and beats it whatever the specificity. So a tile layer
+went on showing the whole ink column beside its own tools, which is exactly
+what the swap exists to prevent. Detaching is also the only thing that keeps
+the rule drawn *between* buttons right: `:first-child` is the one with no top
+border, there is no "first visible" selector, and a sibling combinator matches
+straight across a hidden element. `editor.css` now carries a
+`.tool-btn[hidden]` rule as well, so a future caller that reaches for the
+attribute gets what it expected.
+
+The rail is also re-read **at start-up**, not only when somebody picks a layer:
+a project whose first layer is a tile layer opens on one with nobody having
+chosen it, and the toolbar has to be right on the first frame.
 
 `toolsFor` and `tileVerbOf` in `editor/tool-rail.ts` are the two tables, and
 `tool-routing.ts` reads both — a tile tool keeps the pointer with the canvas
@@ -403,11 +432,13 @@ sweep writes nothing at all until the release, because until the shape is
 closed there is no inside to fill — and a press that never travelled is a
 tap, which still puts one tile down rather than nothing.
 
-**A run lays itself out from where the gesture started**, not from each space
-it crosses, so dragging a 2 × 2 run across the ground makes a continuous
-pattern rather than a 2 × 2 block centred on every space the finger touched.
-That is what Tiled does and the only reading under which picking more than
-one tile is worth doing.
+**A stamp lays the whole run**, its corner on the space under the pointer,
+and along a drag the corner snaps to the run's own lattice from where the
+gesture began — so blocks meet exactly and crossing ground twice writes the
+same thing. A **fill** tiles the run one space at a time instead, repeating it
+from the filled area's own corner: it is covering an area, and a block laid on
+every space would write each of its tiles as many times as the block has
+spaces. The two are the same run read for two different jobs.
 
 **A sweep's outline closes itself.** `cellsInPolygon` is the same function a
 pattern shape drawn with the pencil is baked down through, and it tests each

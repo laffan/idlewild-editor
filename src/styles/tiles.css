@@ -21,25 +21,31 @@
 }
 .tile-palette-name {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
 }
-/* The way from a palette to the file it was cut from. Drawn as a link rather
-   than as a button because what it does is navigate: it changes what the
-   panel below is describing and nothing about the document. */
+/* A palette's name is the way to the file it was cut from. Drawn as a link
+   rather than as a button because what it does is navigate: it changes what
+   the panel below is describing and nothing about the document. The underline
+   only on hover, because a column of permanently underlined names would read
+   as a list of links rather than as a set of headings that happen to be
+   ones. */
 .tile-palette-open {
-  align-self: flex-start;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--chrome-dim);
-  font: 500 11px var(--font-mono);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
 }
-.tile-palette-open:hover { color: var(--chrome-text); }
+.tile-palette-open:hover {
+  color: var(--chrome-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* The box clips and scrolls; the sheet inside it is the picture at its real
    size. A palette tile is a canvas tile — see `editor/tile-palette.ts` — so a

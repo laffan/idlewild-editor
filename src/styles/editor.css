@@ -221,6 +221,13 @@
 .tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
 .tool-btn[disabled] { opacity: 0.45; }
+/* A withheld tool, belt and braces. The rail takes one out of the DOM rather
+   than hiding it — see `ToolRail.setOffered`, which explains why — but the
+   rule that made hiding *not work* is right above this one: `display: flex`
+   is an author style and the browser's own `[hidden] { display: none }` is
+   not, so the attribute lost every time. A tool the rail withheld went on
+   showing, and a tile layer offered the whole ink column beside its own. */
+.tool-btn[hidden] { display: none; }
 
 /* A tool turned round: it takes out what it would have drawn.
    The slash is one pseudo-element rather than a second icon per tool, so

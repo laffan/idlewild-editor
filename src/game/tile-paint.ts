@@ -2,11 +2,14 @@
  * The two tile tools, as gestures.
  *
  * **Stamp** puts the run picked in the palette down where the pointer is: a
- * tap lays one, a drag lays them along the path. **Sweep fill** is an outline
- * — press, draw a shape, release — and every space inside it is filled. Each
- * has two options and they are the same distinction twice: lay the run out in
- * its own shape, or draw from it at random. See `lib/tile-tools.ts`, which is
- * where the arithmetic behind both lives.
+ * tap lays one, a drag lays them along the path. **Sweep fill** is a freehand
+ * outline — press, draw a shape, release — and every space inside it is
+ * filled. **Shape fill** is the same end with a straight gesture: drag out a
+ * rectangle or a circle and it fills.
+ *
+ * Each has the same second option, and it is the same distinction three
+ * times: lay the run out in its own shape, or draw from it at random. See
+ * `lib/tile-tools.ts`, which is where the arithmetic behind all of it lives.
  *
  * Neither is a canvas *mode*. Extrude, collider, mask and PSD Edit take the
  * canvas over, dim what is not the subject and have two ways out; a tile tool
@@ -36,6 +39,7 @@ import {
   EMPTY_HAND,
   gidsInStamp,
   scattered,
+  shapeCells,
   TilePicks,
   type TileHand,
 } from "../lib/tile-tools";
@@ -81,6 +85,8 @@ export class TilePaint {
   private origin: Cell | null = null;
   /** The last space stamped, so a drag does not rewrite it every frame. */
   private last: Cell | null = null;
+  /** A Shape fill's second corner, which the drag is moving. */
+  private corner: Cell | null = null;
   /**
    * The outline a sweep has drawn so far, in world points.
    *
@@ -119,7 +125,10 @@ export class TilePaint {
    */
   hover(screenX: number, screenY: number): void {
     const hand = this.host.hand();
-    if (!this.ready() || hand.verb === "sweep") {
+    // Neither fill has anything to show before a drag has said how big: one
+    // is an outline that has not been drawn and the other a box with no
+    // second corner.
+    if (!this.ready() || hand.verb !== "stamp") {
       this.host.onPreview([], this.trace);
       return;
     }
@@ -160,7 +169,20 @@ export class TilePaint {
   move(screenX: number, screenY: number): boolean {
     if (!this.origin) return false;
     const world = this.host.worldAt(screenX, screenY);
-    if (this.host.hand().verb === "sweep") {
+    const hand = this.host.hand();
+    if (hand.verb === "shapefill") {
+      // The shape is known from two corners, so what would land can be shown
+      // as it is dragged — the ghost is the fill, faded, and the release
+      // writes exactly it.
+      this.corner = this.host.grid.worldToCell(world);
+      const shape = this.shapeRun(hand);
+      this.host.onPreview(
+        this.stampAt(hand, shape.from, shape.cells, SHOWING),
+        [],
+      );
+      return true;
+    }
+    if (hand.verb === "sweep") {
       // The outline grows; nothing reaches the document until the release,
       // because until the shape is closed there is no inside to fill.
       if (this.trace.length >= MAX_TRACE) this.trace[this.trace.length - 1] = world;
@@ -177,14 +199,37 @@ export class TilePaint {
 
   end(): boolean {
     if (!this.origin) return false;
-    if (this.host.hand().verb === "sweep") this.fillTrace();
+    const verb = this.host.hand().verb;
+    if (verb === "sweep") this.fillTrace();
+    if (verb === "shapefill") {
+      const shape = this.shapeRun(this.host.hand());
+      this.lay(shape.cells, shape.from, true);
+    }
     this.origin = null;
+    this.corner = null;
     this.last = null;
     this.trace = [];
     this.host.store.history.end();
     this.host.onPreview([], []);
     this.host.onChanged();
     return true;
+  }
+
+  /**
+   * The spaces a Shape fill covers, and the corner its run is laid out from.
+   *
+   * The run repeats from the shape's own top-left corner rather than from
+   * wherever the drag began, so dragging the same box from either corner
+   * comes out identical — which is the least surprising thing a shape can do
+   * and the same rule a sweep keeps.
+   */
+  private shapeRun(hand: TileHand): { cells: Cell[]; from: Cell } {
+    const at = this.origin ?? { cx: 0, cy: 0 };
+    const to = this.corner ?? at;
+    return {
+      cells: shapeCells(hand.shape, at, to),
+      from: { cx: Math.min(at.cx, to.cx), cy: Math.min(at.cy, to.cy) },
+    };
   }
 
   /**
@@ -270,21 +315,24 @@ export class TilePaint {
     const run = hand.stamp as TileStamp;
     if (!hand.random) {
       const tilesets = tilesetsOf(this.host.store);
-      // **The two tools lay the same run differently, and both are right.**
-      // A stamp puts the whole run down as a block — that is what the word
-      // means, and a tap with a 3 × 2 run in hand should land six tiles.
-      // A sweep is filling an *area*: what is wanted there is a field of the
-      // run, so it is tiled one space at a time, and a block per space would
-      // write each of them six times over.
-      return hand.verb === "sweep"
+      // **A stamp and a fill lay the same run differently, and both are
+      // right.** A stamp puts the whole run down as a block — that is what
+      // the word means, and a tap with a 3 × 2 run in hand should land six
+      // tiles. A fill is covering an *area*: what is wanted there is a field
+      // of the run, so it is tiled one space at a time, and a block per
+      // space would write each of them six times over.
+      return hand.verb !== "stamp"
         ? cells.flatMap((cell) => {
             const gid = tiledGid(tilesets, run, origin, cell);
             return gid === 0 ? [] : [{ x: cell.cx, y: cell.cy, gid }];
           })
         : cells.flatMap((cell) => stampWrites(tilesets, run, origin, cell));
     }
+    // Density is about covering an *area*, so it applies to the two fills
+    // and not to a stamp — which lands on the spaces the pointer named, and
+    // has nothing to thin out.
     const landing =
-      hand.verb === "sweep" && cells.length > 1
+      hand.verb !== "stamp" && cells.length > 1
         ? scattered(cells, hand.density)
         : cells;
     return landing.map((cell) => ({

@@ -492,7 +492,8 @@ export async function mountEditor(
     },
     render.options,
   );
-  handle.scene.activeLayerId = activeLayerId;
+  // Not an assignment: the toolbar follows the kind of layer work lands on.
+  setActiveLayer(activeLayerId);
   // And the lattice, which is the fourth thing Overlays switches. Told here
   // rather than through a closure for the reason `setGuide` gives: a grid
   // somebody switched off last week has to be off on the first frame.

@@ -16,8 +16,8 @@ Part of [the Idlewild manual](README.md).
   the config the project's own code reads, but nothing in a scaffolded project
   draws it yet — so a published game shows everything except its tiles. The
   editor draws them
-- More **tile tools**. Stamp and Sweep fill are the two, each with a direct
-  and a random half; a rectangle, a tile picker, a magic wand and a terrain
+- More **tile tools**. Stamp, Sweep fill and Shape fill are the three, each
+  with a direct and a random half; a tile picker, a magic wand and a terrain
   brush are all things Tiled has and this does not. The first version is about
   the format
 - A note that wraps. Text is lines you typed rather than a box the words flow

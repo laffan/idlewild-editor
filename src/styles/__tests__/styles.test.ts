@@ -40,6 +40,23 @@ function rule(selector: string): Record<string, string> {
   return ruleIn(css, selector);
 }
 
+/**
+ * A tool the rail is not offering.
+ *
+ * The rail takes a withheld tool out of the DOM, so this is the second line
+ * of defence rather than the mechanism — but it is the line that was missing
+ * when the bug happened, and the bug is worth a test even though the fix is
+ * elsewhere. `.tool-btn` sets `display: flex`, which is an author style; the
+ * browser's own `[hidden] { display: none }` is not, so the attribute lost
+ * whatever the specificity and a tile layer showed the whole ink column
+ * beside its own two tools.
+ */
+describe("a tool the rail is withholding", () => {
+  it("is not drawn, whatever `.tool-btn` says about display", () => {
+    expect(ruleIn(css, ".tool-btn[hidden]").display).toBe("none");
+  });
+});
+
 describe("the drawing layer's stylesheet", () => {
   it("takes the surface out of the flow and over the canvas", () => {
     const surface = rule(".draw-surface");

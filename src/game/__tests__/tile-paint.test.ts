@@ -281,6 +281,88 @@ describe("a sweep", () => {
   });
 });
 
+describe("a shape fill", () => {
+  it("fills the box that was dragged", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "shapefill";
+    const from = at(1, 1);
+    const to = at(3, 2);
+    paint.begin(from.x, from.y);
+    paint.move(to.x, to.y);
+    paint.end();
+    // Three across, two down, inclusive of both corners.
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(6);
+    expect(tileAt(tileLayer(store.layer("layer-1")), 3, 2)).toBe(1);
+  });
+
+  it("takes the corners off when it is set to a circle", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "shapefill";
+    state.shape = "circle";
+    const from = at(0, 0);
+    const to = at(4, 4);
+    paint.begin(from.x, from.y);
+    paint.move(to.x, to.y);
+    paint.end();
+    const tiles = tileLayer(store.layer("layer-1"));
+    expect(tileAt(tiles, 0, 0)).toBe(0);
+    expect(tileAt(tiles, 2, 2)).toBe(1);
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBeLessThan(25);
+  });
+
+  it("writes nothing until the release, and shows what would land", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "shapefill";
+    const from = at(0, 0);
+    const to = at(1, 1);
+    paint.begin(from.x, from.y);
+    paint.move(to.x, to.y);
+    // The size is settled before anything is written, which is the whole
+    // reason the ghost is worth drawing on this tool.
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(0);
+    expect(state.preview).toHaveLength(4);
+    paint.end();
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(4);
+  });
+
+  it("puts one tile down for a drag that never travelled", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "shapefill";
+    const only = at(2, 2);
+    paint.begin(only.x, only.y);
+    paint.end();
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(1);
+  });
+
+  it("is one step of undo, however big the shape", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "shapefill";
+    const from = at(0, 0);
+    const to = at(5, 5);
+    paint.begin(from.x, from.y);
+    paint.move(to.x, to.y);
+    paint.end();
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(36);
+    store.history.undo();
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(0);
+  });
+
+  it("thins out when it is scattering", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "shapefill";
+    state.random = true;
+    state.density = 50;
+    vi.spyOn(Math, "random").mockReturnValue(0.9);
+    const from = at(0, 0);
+    const to = at(3, 3);
+    paint.begin(from.x, from.y);
+    paint.move(to.x, to.y);
+    paint.end();
+    // Every roll comes back above the density, so no space takes a tile.
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(0);
+  });
+});
+
 describe("the ghost under the pointer", () => {
   it("shows exactly what a press would put down", () => {
     const { paint, state } = fixture();

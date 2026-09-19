@@ -27,6 +27,7 @@ import {
   tilesetsOf,
 } from "../lib/tile-layers";
 import { chunksOf, tileCount } from "../lib/tiled/chunks";
+import type { TileShape } from "../lib/tile-tools";
 import { tileId } from "../lib/tiled/gid";
 import { PSD_PROPERTY, type TiledTileset } from "../lib/tiled/types";
 import type { Cell, Layer, Selection, ToolId } from "../lib/types";
@@ -67,6 +68,8 @@ export interface TileActions {
   onTileRandom: (tool: ToolId, on: boolean) => void;
   tileDensity: () => number;
   onTileDensity: (density: number) => void;
+  tileShape: () => TileShape;
+  onTileShape: (shape: TileShape) => void;
   /** Put a palette's own file in the panel below — see `selectPsdRow`. */
   onSelectPsd: (selection: Selection) => void;
 }
@@ -139,7 +142,7 @@ export function renderTileLayer(
         h(
           "div",
           { class: "tile-palette-head" },
-          h("div", { class: "tile-palette-name m", text: tileset.name }),
+          paletteName(tileset, layer, actions),
           zoomControls(tileset.firstgid, selection, actions.canvasZoom, resize),
         ),
         tilePalette({
@@ -152,14 +155,6 @@ export function renderTileLayer(
             summary.textContent = `In hand: ${describeStamp(stamp)}`;
           },
         }),
-        // What was a tally — "20 tiles, 5 across" — and is now the way to
-        // the file itself. The count was true and no use: nobody looking at a
-        // palette needs to be told how many tiles are in the picture in front
-        // of them, and what they do want from a palette often enough is to go
-        // and change the artwork. Selecting the PSD is the first step of
-        // that: it puts the file in the OBJECT zone, where its layer list and
-        // Open PSD are.
-        selectPsdRow(tileset, layer, actions),
       ),
     ),
   );
@@ -237,16 +232,22 @@ function describeSpread(cells: readonly Cell[]): string {
 }
 
 /**
- * The way from a palette to the file it was cut from.
+ * A palette's name, which is the way to the file it was cut from.
  *
- * A link rather than a button, because what it does is *navigate* — it
- * changes what the panel below is describing and nothing about the document.
- * A palette whose PSD is not placed on this layer has none to select: that
+ * The name itself rather than a link beside it. It was a *Select PSD* row
+ * under each palette for a moment, and that was a second thing to read for
+ * something the first thing already identified: the name of a palette **is**
+ * the name of the PSD, so making it the control is one fewer word on screen
+ * and puts the affordance where the eye already is. The same reading the
+ * layer panel takes of a layer's name.
+ *
+ * What it does is *navigate* — it changes what the panel below is describing
+ * and nothing about the document — so it is drawn as a link rather than as a
+ * button. A palette whose PSD is not on this layer has none to select, which
  * happens when the file has been carried elsewhere and the tiles made of it
- * are still standing here, which the row says rather than offering a link
- * that would select nothing.
+ * are still standing here; there the name is a name and nothing more.
  */
-function selectPsdRow(
+function paletteName(
   tileset: TiledTileset,
   layer: Layer,
   actions: TileActions,
@@ -254,11 +255,15 @@ function selectPsdRow(
   const key = propertyOf(tileset, PSD_PROPERTY);
   const placement = layer.placements.find((p) => p.psdKey === key);
   if (!placement) {
-    return h("div", { class: "field-hint", text: "Its PSD is not on this layer." });
+    return h("div", {
+      class: "tile-palette-name m",
+      title: "Its PSD is on another layer",
+      text: tileset.name,
+    });
   }
   return h("button", {
-    class: "tile-palette-open",
-    text: "Select PSD",
+    class: "tile-palette-name tile-palette-open m",
+    text: tileset.name,
     title: `Show ${key}.psd in the panel below, where Open PSD is`,
     onClick: () =>
       actions.onSelectPsd({

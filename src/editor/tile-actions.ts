@@ -125,6 +125,8 @@ export function tileDeps(
     onTileRandom: (tool, on) => tools().onTileRandom(tool, on),
     tileDensity: () => tools().tileDensity(),
     onTileDensity: (density) => tools().onTileDensity(density),
+    tileShape: () => tools().tileShape(),
+    onTileShape: (shape) => tools().onTileShape(shape),
     onSelectPsd: (selection) => base.scene()?.setSelection(selection),
   };
   return deps;

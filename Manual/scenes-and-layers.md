@@ -81,8 +81,9 @@ Part of [the Idlewild manual](README.md).
   scrolls and zooms on its own. **Import Tiled**, at the foot of the layer's
   list, takes a `.tmx` or a `.tmj` and brings the map's tilesets and layers in
   with it. The ink column is a different column there: the seven brushes step
-  aside and **Stamp** and **Sweep fill** take their place, each with a direct
-  and a random setting, and either turned round takes tiles off. Everything is
+  aside and **Stamp**, **Sweep fill** and **Shape fill** take their place, each
+  with a direct and a random setting, and any of them turned round takes tiles
+  off. Everything is
   saved in Tiled's own format, so a map built here opens in Tiled and a map
   Tiled wrote opens here. See [Tile layers](tile-layers.md)
 

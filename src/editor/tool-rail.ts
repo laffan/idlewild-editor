@@ -137,14 +137,21 @@ export const TOOLS: ToolSpec[] = [
   {
     id: "sweep",
     name: "Sweep fill",
-    hint: "Draw a shape and every space inside it is filled",
+    hint: "Draw a shape freehand and every space inside it is filled",
     bar: "draw",
     path: ICONS.sweep,
   },
+  {
+    id: "shapefill",
+    name: "Shape fill",
+    hint: "Drag out a rectangle or a circle and fill it",
+    bar: "draw",
+    path: ICONS.shapefill,
+  },
 ];
 
-/** The two a tile layer offers, and the two nothing else does. */
-const TILE_TOOLS: readonly ToolId[] = ["stamp", "sweep"];
+/** The three a tile layer offers, and the three nothing else does. */
+const TILE_TOOLS: readonly ToolId[] = ["stamp", "sweep", "shapefill"];
 
 /**
  * What is left of the rail on a tile layer.
@@ -168,8 +175,8 @@ const TILE_RAIL: readonly ToolId[] = ["select", "pan"];
  * that was wrong in a way worth writing down: a tool whose meaning depends on
  * which layer is selected is a tool nobody can learn, and every panel
  * describing it has to describe two things. So the seven ink tools go and
- * Stamp and Sweep fill arrive — two tools that are exactly what they are
- * called, with their own options and their own panel.
+ * Stamp, Sweep fill and Shape fill arrive — three tools that are exactly what
+ * they are called, with their own options and their own panel.
  *
  * **And the rail is cut to the two that do something there** — see
  * `TILE_RAIL`. A toolbar is a list of what you can do; a button that cannot
@@ -183,8 +190,8 @@ const TILE_RAIL: readonly ToolId[] = ["select", "pan"];
  * for the length of the session and the two tile tools step aside, because
  * there is nowhere for a tile to go while the canvas belongs to a file.
  *
- * The lineup will grow — a rectangle, a tile picker and a terrain brush are
- * all things Tiled has and this does not. Two is where it starts.
+ * The lineup will grow — a tile picker and a terrain brush are both things
+ * Tiled has and this does not.
  */
 export function toolsFor(kind: LayerKind, psdEditing = false): ToolId[] {
   const tiling = kind === "tile" && !psdEditing;
@@ -203,6 +210,7 @@ export function toolsFor(kind: LayerKind, psdEditing = false): ToolId[] {
 export function tileVerbOf(tool: ToolId): TileVerb {
   if (tool === "stamp") return "stamp";
   if (tool === "sweep") return "sweep";
+  if (tool === "shapefill") return "shapefill";
   return null;
 }
 
@@ -227,12 +235,13 @@ export const ERASABLE: readonly ToolId[] = [
   "pattern",
   "shape",
   "fill",
-  // The two tile tools are erasers turned round like every other tool that
-  // makes a mark: what Stamp would put down it takes off, and what a sweep
-  // would fill it clears. That is the whole of how tiles are removed — there
-  // is no separate rubber, for the reason there is none anywhere else here.
+  // The three tile tools are erasers turned round like every other tool that
+  // makes a mark: what Stamp would put down it takes off, and what a fill
+  // would cover it clears. That is the whole of how tiles are removed —
+  // there is no separate rubber, for the reason there is none anywhere else.
   "stamp",
   "sweep",
+  "shapefill",
 ];
 
 /** Whether a tool can be used as an eraser at all. */
@@ -274,6 +283,10 @@ export class ToolRail {
   readonly drawBar: HTMLElement;
   readonly label: HTMLElement;
   private readonly buttons = new Map<ToolId, HTMLButtonElement>();
+  /** Which column each tool hangs in, so `setOffered` can put it back. */
+  private readonly hosts: Record<Bar, HTMLElement>;
+  /** What is currently in the DOM, so a re-offer of the same set is free. */
+  private offered = "";
   private current: ToolId = "select";
   /** Which tools are turned round, so the buttons can carry the slash. */
   private erasing: ReadonlySet<ToolId> = new Set();
@@ -297,6 +310,7 @@ export class ToolRail {
       rail: this.root,
       draw: this.drawBar,
     };
+    this.hosts = hosts;
 
     for (const tool of TOOLS) {
       // A press held on an erasable tool turns it round. The timer is armed
@@ -356,13 +370,37 @@ export class ToolRail {
   /**
    * Which tools this rail is offering.
    *
-   * Hidden rather than disabled: a disabled button is a button somebody has
-   * to work out the rule behind, and the rule here is about the layer rather
-   * than about the moment — see `toolsFor`. The rail is re-read whenever the
-   * active layer moves, because that is the only thing that changes it.
+   * Taken **out of the DOM** rather than hidden, which is not a style choice
+   * and was a bug. `hidden` sets an attribute the browser's own stylesheet
+   * turns into `display: none`, and `.tool-btn` sets `display: flex` — an
+   * author rule, which beats the browser's whatever the specificity. So the
+   * withheld tools went on showing, and a tile layer offered the whole ink
+   * column beside its own two.
+   *
+   * Detaching is also the only thing that keeps the rule drawn *between*
+   * buttons right: it is `:first-child` that has no top border, and with the
+   * withheld ones still in the list the first tool you could actually see
+   * would carry a line above it. There is no "first visible" selector, and a
+   * sibling combinator matches across a hidden element.
+   *
+   * Withheld rather than disabled, for the reason that has not changed: a
+   * disabled button is one somebody has to work out the rule behind, and the
+   * rule here is about the layer rather than about the moment.
    */
   setOffered(tools: readonly ToolId[]): void {
-    for (const [id, button] of this.buttons) button.hidden = !tools.includes(id);
+    const wanted = tools.join(",");
+    // Rebuilt only when the set really moved. `apply` runs on every tool
+    // pick, and replacing eleven elements each time would take the focus
+    // with it every time somebody tabbed to a tool and pressed it.
+    if (wanted === this.offered) return;
+    this.offered = wanted;
+    this.root.replaceChildren();
+    this.drawBar.replaceChildren();
+    for (const tool of TOOLS) {
+      if (!tools.includes(tool.id)) continue;
+      const button = this.buttons.get(tool.id);
+      if (button) this.hosts[tool.bar].appendChild(button);
+    }
   }
 
   setTool(tool: ToolId): void {

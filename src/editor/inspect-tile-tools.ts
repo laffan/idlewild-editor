@@ -1,11 +1,10 @@
 /**
- * The TOOL zone for Stamp and Sweep fill.
+ * The TOOL zone for the three tools a tile layer offers.
  *
- * Two tools, two options each, and the second option is the same distinction
- * both times: lay the run out in the shape it was picked, or draw from it at
- * random. Saying it the same way twice is deliberate — they are the same
- * choice about the same run, and a pair of controls that looked different
- * would imply they were not.
+ * Every one of them carries the same second option: lay the run out in the
+ * shape it was picked, or draw from it at random. Saying it the same way
+ * three times is deliberate — it is the same choice about the same run, and
+ * controls that looked different would imply it was not.
  *
  * Its own file rather than two more branches in `inspect-brush.ts`, which is
  * about a *stroke style*: a size, a tip, a colour, a library row. None of
@@ -17,7 +16,7 @@
 import { h } from "../lib/dom";
 import { sectionTitle } from "./inspect-collapse";
 import { optionSwitchRow } from "../lib/options-controls";
-import { DENSITY_RANGE } from "../lib/tile-tools";
+import { DENSITY_RANGE, type TileShape } from "../lib/tile-tools";
 import type { ToolId } from "../lib/types";
 import { describeStamp } from "./tile-palette";
 import type { TileStamp } from "../lib/tile-layers";
@@ -28,6 +27,9 @@ export interface TileToolActions {
   onRandom: (on: boolean) => void;
   density: number;
   onDensity: (density: number) => void;
+  /** Shape fill's own: which shape the drag describes. */
+  shape: TileShape;
+  onShape: (shape: TileShape) => void;
   erasing: boolean;
   onErasing: (on: boolean) => void;
   /** What is in hand, so the panel can say so where it is being aimed. */
@@ -38,6 +40,7 @@ export interface TileToolActions {
 export const TILE_TOOL_TITLES: Partial<Record<ToolId, string>> = {
   stamp: "Stamp",
   sweep: "Sweep fill",
+  shapefill: "Shape fill",
 };
 
 /** And what it says on hover: what the tool *does*, in one line. */
@@ -46,13 +49,16 @@ export const TILE_TOOL_HINTS: Partial<Record<ToolId, string>> = {
     "Puts the tiles picked in the palette down where you tap, and along a " +
     "drag. What is about to land is shown under the pointer.",
   sweep:
-    "Draw a shape and every space inside it is filled. The outline closes " +
-    "itself, so a loop fills the ring it drew rather than the box round it.",
+    "Draw a shape freehand and every space inside it is filled. The outline " +
+    "closes itself, so a loop fills the ring it drew rather than its box.",
+  shapefill:
+    "Drag out a rectangle or a circle and it fills. What would land is " +
+    "shown as you drag, so the size is settled before anything is written.",
 };
 
 /** Whether this tool's panel belongs to this file rather than to the brush's. */
 export function isTileTool(tool: ToolId): boolean {
-  return tool === "stamp" || tool === "sweep";
+  return tool === "stamp" || tool === "sweep" || tool === "shapefill";
 }
 
 export function tileToolPanel(
@@ -61,61 +67,70 @@ export function tileToolPanel(
 ): HTMLElement[] {
   const rows: HTMLElement[] = [eraserRow(tool, actions)];
 
-  // The two halves of each tool, as a segmented pair rather than a switch:
-  // both are things the tool *does* and both have names, which is the whole
-  // of when a pair beats a toggle. "Use as Eraser" above is the other case —
-  // one bit, one name, nothing to put opposite it.
+  // Shape fill's own, and first: which shape the drag makes is the bigger
+  // question than what fills it, and it is the only one of the three whose
+  // *gesture* changes with a setting.
+  if (tool === "shapefill") {
+    rows.push(
+      h(
+        "div",
+        { class: "inspect-section" },
+        sectionTitle("Shape", {
+          hint:
+            "Rect fills the box you dragged. Circle fills the ellipse " +
+            "inside that same box — a circle when the drag is square, and " +
+            "an oval when it is not.",
+        }),
+        segmented<TileShape>(
+          [
+            ["Rect", "rect"],
+            ["Circle", "circle"],
+          ],
+          actions.shape,
+          actions.onShape,
+        ),
+      ),
+    );
+  }
+
   rows.push(
     h(
       "div",
       { class: "inspect-section" },
-      sectionTitle(tool === "sweep" ? "Fill" : "Stamp", {
+      sectionTitle(tool === "stamp" ? "Stamp" : "Fill", {
         hint:
-          tool === "sweep"
-            ? "Solid tiles the area with the run, repeating it from the " +
-              "corner. Random gives every space one tile of the run, chosen " +
-              "as it lands."
-            : "Direct lays the run out in the shape it was picked. Random " +
+          tool === "stamp"
+            ? "Direct lays the run out in the shape it was picked. Random " +
               "gives each space one tile of it, and the ghost under the " +
-              "pointer is the one that is coming next.",
+              "pointer is the one that is coming next."
+            : "Solid tiles the area with the run, repeating it from the " +
+              "corner. Random gives every space one tile of the run, chosen " +
+              "as it lands.",
       }),
-      h(
-        "div",
-        { class: "seg" },
-        ...(tool === "sweep"
-          ? ([
-              ["Solid", false],
-              ["Random", true],
-            ] as const)
-          : ([
-              ["Direct", false],
-              ["Random", true],
-            ] as const)
-        ).map(([label, random]) =>
-          h("button", {
-            class: "seg-opt",
-            "aria-pressed": String(random === actions.random),
-            text: label,
-            onClick: () => actions.onRandom(random),
-          }),
-        ),
+      segmented<boolean>(
+        [
+          [tool === "stamp" ? "Direct" : "Solid", false],
+          ["Random", true],
+        ],
+        actions.random,
+        actions.onRandom,
       ),
       h("div", { class: "field-hint", text: `In hand: ${describeStamp(actions.stamp)}` }),
     ),
   );
 
-  // Only where it means something. Density is how much of a *swept area* a
+  // Only where it means something. Density is how much of a *filled area* a
   // scatter covers, so it has nothing to say about a stamp — which lands on
-  // the one space the pointer is on — and nothing to say about a solid fill,
+  // the spaces the pointer named — and nothing to say about a solid fill,
   // which covers every space by definition.
-  if (tool === "sweep" && actions.random) {
+  if (tool !== "stamp" && actions.random) {
     rows.push(
       h(
         "div",
         { class: "inspect-section" },
         sectionTitle("Density", {
           hint:
-            "How many of the swept spaces take a tile, as a percentage. A " +
+            "How many of the covered spaces take a tile, as a percentage. A " +
             "hundred is all of them, which is the only value that never " +
             "leaves a gap; below it the fill thins out.",
         }),
@@ -129,6 +144,33 @@ export function tileToolPanel(
     );
   }
   return rows;
+}
+
+/**
+ * One of a pair, both of which have names.
+ *
+ * A segmented pair rather than a switch wherever both halves are things the
+ * tool *does* — which is the whole of when a pair beats a toggle. "Use as
+ * Eraser" below is the other case: one bit, one name, nothing to put
+ * opposite it.
+ */
+function segmented<T>(
+  options: readonly (readonly [string, T])[],
+  value: T,
+  onPick: (value: T) => void,
+): HTMLElement {
+  return h(
+    "div",
+    { class: "seg" },
+    ...options.map(([label, held]) =>
+      h("button", {
+        class: "seg-opt",
+        "aria-pressed": String(held === value),
+        text: label,
+        onClick: () => onPick(held),
+      }),
+    ),
+  );
 }
 
 /**
@@ -147,7 +189,7 @@ function eraserRow(tool: ToolId, actions: TileToolActions): HTMLElement {
     onChange: (next) => actions.onErasing(next),
     title: on
       ? `Taking tiles off instead of putting them down. Hold ${
-          tool === "sweep" ? "Sweep fill" : "Stamp"
+          TILE_TOOL_TITLES[tool] ?? "the tool"
         } on the toolbar to turn it back.`
       : "Every space this tool would fill, it clears instead. A long press " +
         "on its button does the same.",

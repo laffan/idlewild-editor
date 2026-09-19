@@ -252,6 +252,9 @@ export const ICONS = {
     "M4 14h4v4H4z",
     "M20 5c0 4-3 6-7 6s-7 2-7 6",
   ],
+  /* Shape fill: a box and a circle sharing a corner, which is the choice the
+     tool's own panel offers said as a picture. */
+  shapefill: ["M3 4h10v10H3z", "M21 15a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z"],
   /* A tileset: the same ruled grid with one space picked out, which is what
      the palette is for and what the Import Tiled row carries. */
   tiles: ["M4 4h16v16H4z", "M4 12h16", "M12 4v12", "M12 12h8v8h-8z"],

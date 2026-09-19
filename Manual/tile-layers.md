@@ -79,6 +79,10 @@ pick up is what is going to land, at the size it is going to land. A picture
 wider than the column therefore runs off the edge of its box, and the box
 scrolls.
 
+**A palette's name is a link.** Pressing it puts that PSD in the panel below,
+where its layer list and **Open PSD** are — which is the way to go and change
+the artwork a palette is cut from.
+
 Each palette also zooms on its own, from the two steps over it. The **−** and
 **+** change it; the percentage between them is a button, and pressing it puts
 the palette back to whatever the canvas is doing. On a trackpad, ⌘ or Ctrl
@@ -94,24 +98,29 @@ to say why.
 ## Painting
 
 A tile layer has a toolbar of its own. The seven brushes step aside — none of
-them has anything to do with a grid of tiles — and two tools take their place
-down the left edge.
+them has anything to do with a grid of tiles — and three tools take their
+place down the left edge.
 
 - **Stamp** puts the run in hand down. Tap for one space, drag to lay a line
   of them. A run of more than one tile is laid out from where the drag
   started, so sweeping a 2 × 2 run across the ground makes a continuous
   pattern rather than the same block over and over. What is about to land is
   drawn under the pointer, faded, so you can see it before you commit to it.
-- **Sweep fill** is a shape. Press, draw round the ground you mean, and let
-  go: every space inside the outline is filled. The shape closes itself, so a
-  loop fills the ring it drew rather than the box around it.
-- **Both have two settings**, in the properties sidebar while the tool is in
-  hand. *Direct* — or *Solid*, on the Sweep — lays the run out in the shape
-  you picked it. *Random* gives every space one tile of the run instead,
-  chosen as it lands; with Stamp the ghost under the pointer is the one that
-  is coming next, so you can see what you are about to get. A random sweep
-  gains a **density**: how many of the spaces you swept take a tile, as a
-  percentage. A hundred is all of them.
+- **Sweep fill** is a freehand shape. Press, draw round the ground you mean,
+  and let go: every space inside the outline is filled. The shape closes
+  itself, so a loop fills the ring it drew rather than the box around it.
+- **Shape fill** is the same thing with a straight gesture: drag out a
+  **rect** or a **circle** — the setting is in the properties sidebar — and it
+  fills. What would land is drawn as you drag, so you settle the size before
+  anything is written. A circle is the one that fits the box you dragged, so a
+  square drag gives a circle and a wide one gives an oval.
+- **All three have the same second setting**, in the properties sidebar while
+  the tool is in hand. *Direct* — or *Solid*, on the two fills — lays the run
+  out in the shape you picked it. *Random* gives every space one tile of the
+  run instead, chosen as it lands; with Stamp the ghost under the pointer is
+  the one that is coming next, so you can see what you are about to get. A
+  random **fill** gains a **density**: how many of the covered spaces take a
+  tile, as a percentage. A hundred is all of them.
 - **Either one, turned round**, takes tiles off instead. Hold the button for
   half a second, or use the switch at the top of the tool's own panel — the
   same erase flag every brush in the editor has. There is no separate rubber.

@@ -58,11 +58,12 @@ describe("the two columns", () => {
       "lasso",
       "fill",
       "text",
-      // A tile layer's two, which stand with the ink for the same reason it
-      // does: they are what a hand is doing most of the time there. No
-      // column shows all nine at once — see `toolsFor`.
+      // A tile layer's three, which stand with the ink for the same reason
+      // it does: they are what a hand is doing most of the time there. No
+      // column shows all ten at once — see `toolsFor`.
       "stamp",
       "sweep",
+      "shapefill",
     ]);
   });
 
@@ -92,18 +93,19 @@ describe("the two columns", () => {
  * say — grows a switch that changes nothing.
  */
 describe("the brushes that can be turned round", () => {
-  it("is the six that lay a mark down", () => {
+  it("is the seven that lay a mark down", () => {
     expect([...ERASABLE]).toEqual([
       "pencil",
       "pattern",
       "shape",
       "fill",
-      // The two tile tools are the same idea on a grid of tiles: what Stamp
-      // would put down it takes off, and what a sweep would fill it clears.
-      // That is the whole of how a tile is removed, for the reason there is
-      // no separate rubber anywhere else in this editor.
+      // The three tile tools are the same idea on a grid of tiles: what
+      // Stamp would put down it takes off, and what a fill would cover it
+      // clears. That is the whole of how a tile is removed, for the reason
+      // there is no separate rubber anywhere else in this editor.
       "stamp",
       "sweep",
+      "shapefill",
     ]);
   });
 
@@ -179,12 +181,18 @@ describe("a shape stamp", () => {
  * drawing layer would draw ink over a grid of tiles.
  */
 describe("what a tile layer offers", () => {
-  it("offers only the four that do something there", () => {
+  it("offers only the ones that do something there", () => {
     // A toolbar is a list of what you can do. The first version kept the
     // Pencil and Fill and gave them a second meaning on a tile layer, which
     // is a tool nobody can learn; the second kept the whole rail, which is
     // two buttons whose result is invisible on the layer you used them on.
-    expect(toolsFor("tile")).toEqual(["select", "pan", "stamp", "sweep"]);
+    expect(toolsFor("tile")).toEqual([
+      "select",
+      "pan",
+      "stamp",
+      "sweep",
+      "shapefill",
+    ]);
   });
 
   it("keeps the two that are the canvas rather than the document", () => {
@@ -198,8 +206,9 @@ describe("what a tile layer offers", () => {
   });
 
   it("offers the ordinary set on the three kinds that are not tile layers", () => {
+    const tileOnly: readonly ToolId[] = ["stamp", "sweep", "shapefill"];
     const ink = TOOLS.map((tool) => tool.id).filter(
-      (id) => id !== "stamp" && id !== "sweep",
+      (id) => !tileOnly.includes(id),
     );
     expect(toolsFor("object")).toEqual(ink);
     expect(toolsFor("pattern")).toEqual(ink);
@@ -214,21 +223,43 @@ describe("what a tile layer offers", () => {
     expect(editing).toContain("pencil");
     expect(editing).not.toContain("stamp");
     expect(editing).not.toContain("sweep");
+    expect(editing).not.toContain("shapefill");
   });
 
-  it("names exactly two of the tools as tile tools", () => {
+  it("never shows the ink and the tile tools together", () => {
+    // The rule said out loud, because it is the one the first two versions
+    // both broke: a tile layer has its own toolbar or the ordinary one, and
+    // there is no state in which a hand can reach both.
+    const tileOnly: readonly ToolId[] = ["stamp", "sweep", "shapefill"];
+    const ink: readonly ToolId[] = ["pencil", "pattern", "shape", "fill", "text"];
+    for (const [kind, editing] of [
+      ["tile", false],
+      ["tile", true],
+      ["object", false],
+    ] as const) {
+      const offered = toolsFor(kind, editing);
+      const hasTile = offered.some((id) => tileOnly.includes(id));
+      const hasInk = offered.some((id) => ink.includes(id));
+      expect(hasTile && hasInk, `${kind}, editing: ${editing}`).toBe(false);
+    }
+  });
+
+  it("names exactly three of the tools as tile tools", () => {
     expect(tileVerbOf("stamp")).toBe("stamp");
     expect(tileVerbOf("sweep")).toBe("sweep");
+    expect(tileVerbOf("shapefill")).toBe("shapefill");
     // Everything else means nothing for tiles, which is what keeps a tile
-    // layer selectable, pannable and pointable.
+    // layer selectable and pannable.
+    const tileOnly: readonly ToolId[] = ["stamp", "sweep", "shapefill"];
     for (const tool of TOOLS.map((t) => t.id)) {
-      if (tool === "stamp" || tool === "sweep") continue;
+      if (tileOnly.includes(tool)) continue;
       expect(tileVerbOf(tool)).toBeNull();
     }
   });
 
-  it("lets both be turned round, which is how a tile is taken off", () => {
+  it("lets all three be turned round, which is how a tile is taken off", () => {
     expect(canErase("stamp")).toBe(true);
     expect(canErase("sweep")).toBe(true);
+    expect(canErase("shapefill")).toBe(true);
   });
 });

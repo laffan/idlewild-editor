@@ -19,6 +19,7 @@ import {
   EMPTY_HAND,
   gidsInStamp,
   scattered,
+  shapeCells,
   TilePicks,
 } from "../tile-tools";
 import type { TiledTileset } from "../tiled/types";
@@ -151,6 +152,59 @@ describe("how thick a scatter is", () => {
   });
 });
 
+describe("the shape a drag describes", () => {
+  const spread = (cells: { cx: number; cy: number }[]) =>
+    cells.map((c) => `${c.cx},${c.cy}`).sort();
+
+  it("fills the box that was dragged", () => {
+    expect(shapeCells("rect", { cx: 0, cy: 0 }, { cx: 2, cy: 1 })).toHaveLength(6);
+  });
+
+  it("reads the box the same from either corner", () => {
+    // The least surprising thing a shape can do: dragging a box from its
+    // bottom-right is the same box as dragging it from its top-left.
+    const one = shapeCells("rect", { cx: 3, cy: 3 }, { cx: 0, cy: 0 });
+    const other = shapeCells("rect", { cx: 0, cy: 0 }, { cx: 3, cy: 3 });
+    expect(spread(one)).toEqual(spread(other));
+  });
+
+  it("is one space for a drag that never left its own", () => {
+    // Which is what makes a tap on this tool put a tile down rather than
+    // nothing at all.
+    expect(shapeCells("rect", { cx: 4, cy: 4 }, { cx: 4, cy: 4 })).toEqual([
+      { cx: 4, cy: 4 },
+    ]);
+    expect(shapeCells("circle", { cx: 4, cy: 4 }, { cx: 4, cy: 4 })).toEqual([
+      { cx: 4, cy: 4 },
+    ]);
+  });
+
+  it("takes the corners off a circle and keeps its edges", () => {
+    // A 5 x 5 box: the four corners fall outside the inscribed ellipse and
+    // the four edge midpoints fall inside it, which is the whole of what
+    // makes a circle read as a circle at this size.
+    const round = spread(shapeCells("circle", { cx: 0, cy: 0 }, { cx: 4, cy: 4 }));
+    expect(round).not.toContain("0,0");
+    expect(round).not.toContain("4,4");
+    expect(round).toContain("2,0");
+    expect(round).toContain("0,2");
+    expect(round).toContain("2,2");
+    // And it is a subset of the box it was inscribed in.
+    expect(round.length).toBeLessThan(25);
+  });
+
+  it("is an oval when the drag is not square", () => {
+    // A circle inscribed in a box is what every drawing program draws for a
+    // dragged ellipse, and it needs no second gesture to say how wide.
+    const wide = shapeCells("circle", { cx: 0, cy: 0 }, { cx: 8, cy: 2 });
+    const xs = wide.map((c) => c.cx);
+    const ys = wide.map((c) => c.cy);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(
+      Math.max(...ys) - Math.min(...ys),
+    );
+  });
+});
+
 describe("a hand with nothing in it", () => {
   it("is a tool that refuses every gesture", () => {
     // What a scene built by a test gets, and what every layer that is not a
@@ -159,5 +213,6 @@ describe("a hand with nothing in it", () => {
     expect(EMPTY_HAND.stamp).toBeNull();
     expect(EMPTY_HAND.random).toBe(false);
     expect(EMPTY_HAND.density).toBe(DENSITY_RANGE.max);
+    expect(EMPTY_HAND.shape).toBe("rect");
   });
 });

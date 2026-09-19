@@ -32,6 +32,7 @@ import {
   DENSITY_DEFAULT,
   DENSITY_RANGE,
   type TileHand,
+  type TileShape,
 } from "../lib/tile-tools";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
@@ -121,6 +122,9 @@ export interface ToolRouting {
   /** How much of a swept area a scatter covers — Sweep's second option. */
   tileDensity: () => number;
   onTileDensity: (density: number) => void;
+  /** Which shape a Shape fill draws, and the way to change it. */
+  tileShape: () => TileShape;
+  onTileShape: (shape: TileShape) => void;
   /**
    * A tool held down rather than tapped: pick it up, and turn it round.
    *
@@ -179,6 +183,8 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
   /** Which tile tools are on their random half, and how thick a scatter is. */
   const random = new Set<ToolId>();
   let density = DENSITY_DEFAULT;
+  /** Which shape a Shape fill draws. One setting, because one tool has it. */
+  let shape: TileShape = "rect";
 
   /**
    * The stroke mode and the paint a tool draws with.
@@ -332,6 +338,7 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
       stamp: host.tileStamp(),
       random: random.has(tool),
       density,
+      shape,
       erasing: erasing.has(tool),
     };
   }
@@ -351,6 +358,11 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
           ? `${toolName(tool)} draws from the run at random`
           : `${toolName(tool)} lays the run out as it was picked`,
       );
+    },
+    tileShape: () => shape,
+    onTileShape: (next) => {
+      shape = next;
+      host.inspector.setTool(host.rail.tool, host.drawing()?.style ?? null);
     },
     tileDensity: () => density,
     onTileDensity: (next) => {
