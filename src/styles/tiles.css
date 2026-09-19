@@ -25,19 +25,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The one destructive control in this panel, so it is the smallest thing in
-   it: taking a palette off takes every tile made of it off with it. */
-.tile-palette-drop {
-  flex: none;
-  width: 18px;
-  height: 18px;
+/* The way from a palette to the file it was cut from. Drawn as a link rather
+   than as a button because what it does is navigate: it changes what the
+   panel below is describing and nothing about the document. */
+.tile-palette-open {
+  align-self: flex-start;
+  padding: 0;
   border: 0;
   background: transparent;
   color: var(--chrome-dim);
-  font: 500 14px/1 var(--font-mono);
+  font: 500 11px var(--font-mono);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
-.tile-palette-drop:hover { color: var(--color-accent); }
+.tile-palette-open:hover { color: var(--chrome-text); }
 
 /* The box clips and scrolls; the sheet inside it is the picture at its real
    size. A palette tile is a canvas tile — see `editor/tile-palette.ts` — so a

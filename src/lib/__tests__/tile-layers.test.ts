@@ -14,13 +14,13 @@ import { DocStore } from "../doc-store";
 import { Grid } from "../grid";
 import {
   addTileset,
+  blockCorner,
   cutIntoTileset,
   syncTilesets,
   tilesetArt,
   nextFirstGid,
   paintTiles,
   propertyOf,
-  removeTileset,
   stampRange,
   stampWrites,
   tileLayer,
@@ -305,31 +305,51 @@ describe("the sweep that cuts palettes", () => {
 });
 
 describe("a stamp", () => {
-  it("lays a run out from where the gesture began, not from each space", () => {
+  it("lays the whole run, not a tile of it", () => {
+    // What the word means: a 2 x 2 pick tapped once puts four tiles down,
+    // their top-left corner on the space under the pointer. The first
+    // version laid one tile and wrapped through the run as the pointer
+    // crossed the ground, so a tap put down a quarter of what was in hand.
     const held = store();
     const set = palette(held);
     const stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 2, rows: 2 };
-    const sets = tilesetsOf(held);
-    const origin = { cx: 0, cy: 0 };
-
-    // Dragging a 2 x 2 run across the ground makes a continuous pattern
-    // rather than a 2 x 2 block centred on every space the finger touched.
-    expect(stampWrites(sets, stamp, origin, { cx: 0, cy: 0 })[0].gid).toBe(1);
-    expect(stampWrites(sets, stamp, origin, { cx: 1, cy: 0 })[0].gid).toBe(2);
-    expect(stampWrites(sets, stamp, origin, { cx: 2, cy: 0 })[0].gid).toBe(1);
-    expect(stampWrites(sets, stamp, origin, { cx: 0, cy: 1 })[0].gid).toBe(4);
+    const at = { cx: 5, cy: 5 };
+    expect(stampWrites(tilesetsOf(held), stamp, at, at)).toEqual([
+      { x: 5, y: 5, gid: 1 },
+      { x: 6, y: 5, gid: 2 },
+      { x: 5, y: 6, gid: 4 },
+      { x: 6, y: 6, gid: 5 },
+    ]);
   });
 
-  it("wraps the same way left of and above where it began", () => {
+  it("snaps to the run's own lattice so a drag tiles seamlessly", () => {
     const held = store();
     const set = palette(held);
     const stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 2, rows: 2 };
-    // `%` is signed in JavaScript, so ground behind the origin needs the
-    // second modulo to come back positive — without it the index is -1 and
-    // nothing is put down at all. One space back and one up wraps to the
-    // run's bottom-right tile, which on this three-wide palette is gid 5.
-    const back = stampWrites(tilesetsOf(held), stamp, { cx: 0, cy: 0 }, { cx: -1, cy: -1 });
-    expect(back[0].gid).toBe(5);
+    const origin = { cx: 0, cy: 0 };
+    const corner = (cx: number, cy: number) =>
+      blockCorner(stamp, origin, { cx, cy });
+
+    // Every space inside a block lands the same block, so crossing ground
+    // twice writes the same thing; the next block over meets it exactly.
+    expect(corner(0, 0)).toEqual({ cx: 0, cy: 0 });
+    expect(corner(1, 1)).toEqual({ cx: 0, cy: 0 });
+    expect(corner(2, 0)).toEqual({ cx: 2, cy: 0 });
+    // And ground left of and above the origin snaps the same way. A
+    // truncating divide would put two blocks over each other there.
+    expect(corner(-1, -1)).toEqual({ cx: -2, cy: -2 });
+    expect(corner(-2, -2)).toEqual({ cx: -2, cy: -2 });
+  });
+
+  it("leaves the holes out rather than punching them", () => {
+    // A run dragged past the edge of a palette stamps the tiles it caught.
+    const held = store();
+    const set = palette(held);
+    const stamp = { firstgid: set.firstgid, col: 2, row: 0, cols: 2, rows: 1 };
+    const at = { cx: 0, cy: 0 };
+    expect(stampWrites(tilesetsOf(held), stamp, at, at)).toEqual([
+      { x: 0, y: 0, gid: 3 },
+    ]);
   });
 
   it("fills a rectangle from its own top-left corner", () => {
@@ -347,17 +367,38 @@ describe("a stamp", () => {
     ]);
   });
 
+  it("tiles rather than blocks when a sweep fills a rectangle", () => {
+    // A sweep is filling an *area*: what is wanted is a field of the run, so
+    // it repeats one space at a time. A block per space would write each of
+    // its tiles as many times as the block has spaces.
+    const held = store();
+    const set = palette(held);
+    const writes = stampRange(
+      tilesetsOf(held),
+      { firstgid: set.firstgid, col: 0, row: 0, cols: 2, rows: 1 },
+      { cx: 0, cy: 0 },
+      { cx: 3, cy: 0 },
+    );
+    expect(writes).toEqual([
+      { x: 0, y: 0, gid: 1 },
+      { x: 1, y: 0, gid: 2 },
+      { x: 2, y: 0, gid: 1 },
+      { x: 3, y: 0, gid: 2 },
+    ]);
+  });
+
   it("puts nothing down where the palette has nothing", () => {
     const held = store();
     const set = palette(held);
     // Past the end of a six-tile set.
-    const writes = stampWrites(
-      tilesetsOf(held),
-      { firstgid: set.firstgid, col: 2, row: 1, cols: 2, rows: 1 },
-      { cx: 0, cy: 0 },
-      { cx: 1, cy: 0 },
-    );
-    expect(writes).toEqual([]);
+    expect(
+      stampWrites(
+        tilesetsOf(held),
+        { firstgid: set.firstgid, col: 3, row: 2, cols: 2, rows: 1 },
+        { cx: 0, cy: 0 },
+        { cx: 0, cy: 0 },
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -373,29 +414,6 @@ describe("painting and taking away", () => {
     expect(tileCount(layer?.tiles)).toBe(2);
     expect(tileAt(tileLayer(layer), 1, 0)).toBe(2);
     expect(describeTiles(layer!)).toBe("2 tiles");
-  });
-
-  it("takes every tile made of a palette off with the palette", () => {
-    const held = store();
-    const first = palette(held);
-    const second = palette(held, "walls");
-    paintTiles(held, "layer-1", [
-      { x: 0, y: 0, gid: first.firstgid },
-      { x: 1, y: 0, gid: second.firstgid },
-    ]);
-
-    removeTileset(held, first.firstgid);
-
-    // A gid whose tileset has gone draws nothing and cannot be told from a
-    // tile whose artwork simply has not loaded yet, so leaving them would
-    // leave a layer that is half there with nothing on screen to say why.
-    const layer = held.layer("layer-1");
-    expect(tileAt(tileLayer(layer), 0, 0)).toBe(0);
-    expect(tileAt(tileLayer(layer), 1, 0)).toBe(second.firstgid);
-    // The set that is left keeps its own numbers: renumbering would move
-    // every tile in the project.
-    expect(tilesetsOf(held)).toHaveLength(1);
-    expect(tilesetsOf(held)[0].firstgid).toBe(second.firstgid);
   });
 
   it("is one step of undo per gesture, and none for a gesture that moved nothing", () => {

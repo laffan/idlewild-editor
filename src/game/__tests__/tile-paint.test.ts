@@ -358,7 +358,21 @@ describe("the ghost under the pointer", () => {
 });
 
 describe("what a run of more than one tile does", () => {
-  it("lays itself out from where the gesture started", () => {
+  it("lands whole on a single tap", () => {
+    // A stamp is the run, not a tile of it. Four tiles from one tap.
+    const { paint, store, set, state } = fixture();
+    state.stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 2, rows: 2 };
+    paint.tap(at(4, 4));
+
+    const tiles = tileLayer(store.layer("layer-1"));
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(4);
+    expect(tileAt(tiles, 4, 4)).toBe(1);
+    expect(tileAt(tiles, 5, 4)).toBe(2);
+    expect(tileAt(tiles, 4, 5)).toBe(4);
+    expect(tileAt(tiles, 5, 5)).toBe(5);
+  });
+
+  it("tiles seamlessly along a drag", () => {
     const { paint, store, set, state } = fixture();
     state.stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 2, rows: 1 };
 
@@ -370,9 +384,27 @@ describe("what a run of more than one tile does", () => {
     }
     paint.end();
 
-    // 1, 2, 1, 2 — a continuous pattern rather than the same pair over and
-    // over, which is what laying out from each space would have given.
+    // 1, 2, 1, 2 — the blocks meet exactly, because each press snaps the
+    // block's corner to the run's own lattice from where the drag began.
     const tiles = tileLayer(store.layer("layer-1"));
     expect([0, 1, 2, 3].map((cx) => tileAt(tiles, cx, 0))).toEqual([1, 2, 1, 2]);
+  });
+
+  it("shows the whole run under the pointer, not a tile of it", () => {
+    const { paint, state, set } = fixture();
+    state.stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 2, rows: 2 };
+    const over = at(1, 1);
+    paint.hover(over.x, over.y);
+    expect(state.preview).toEqual([1, 2, 4, 5]);
+  });
+
+  it("stays one sampled tile when the stamp is set to random", () => {
+    // "Randomly samples from the selection" is one tile, by definition —
+    // a block of four random tiles is a different tool.
+    const { paint, store, set, state } = fixture();
+    state.random = true;
+    state.stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 2, rows: 2 };
+    paint.tap(at(7, 7));
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(1);
   });
 });

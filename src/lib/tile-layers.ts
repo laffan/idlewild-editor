@@ -17,7 +17,6 @@ import type { DocStore } from "./doc-store";
 import type { Grid } from "./grid";
 import * as log from "./log";
 import {
-  chunksOf,
   emptyTileLayer,
   tileCount,
   writeTiles,
@@ -92,6 +91,13 @@ export function propertyOf(
  * map* — so the numbers a set has been given are permanent for as long as
  * anything is standing on them, and a set added later takes the next block
  * rather than being inserted into the sequence.
+ *
+ * That permanence is also why there is no way to take a palette out again.
+ * There was an `×` over each one for a while, and it was the wrong control in
+ * the wrong place: removing a tileset has to take every tile made of it off
+ * the map with it — a gid whose picture has gone draws nothing and cannot be
+ * told from a tile whose artwork simply has not loaded yet — and that is not
+ * a thing to offer as a glyph in a header. An unused palette costs a record.
  */
 export function nextFirstGid(tilesets: readonly TiledTileset[]): number {
   let next = 1;
@@ -319,49 +325,6 @@ export function addTilesets(
 }
 
 /**
- * Take a tileset out, and every tile standing on it with it.
- *
- * The second half is not tidiness. A gid whose tileset has gone draws
- * nothing and cannot be told from a tile whose artwork simply has not loaded
- * yet, so leaving them would leave a layer that is half there with nothing on
- * screen to say why. The remaining sets keep their `firstgid`s — renumbering
- * them would move every tile in the project.
- */
-export function removeTileset(store: DocStore, firstgid: number): void {
-  const gone = tilesetsOf(store).find((t) => t.firstgid === firstgid);
-  if (!gone) return;
-  const from = gone.firstgid;
-  const to = gone.firstgid + gone.tilecount;
-
-  store.editDoc((doc) => ({
-    ...doc,
-    tilesets: (doc.tilesets ?? []).filter((t) => t.firstgid !== firstgid),
-    scenes: doc.scenes.map((scene) => ({
-      ...scene,
-      layers: scene.layers.map((layer) => {
-        if (!layer.tiles) return layer;
-        const doomed: TileWrite[] = [];
-        for (const chunk of chunksOf(layer.tiles)) {
-          for (let i = 0; i < chunk.data.length; i++) {
-            const gid = chunk.data[i];
-            if (gid === 0) continue;
-            const id = (gid & 0x0fffffff) >>> 0;
-            if (id < from || id >= to) continue;
-            doomed.push({
-              x: chunk.x + (i % chunk.width),
-              y: chunk.y + Math.floor(i / chunk.width),
-              gid: 0,
-            });
-          }
-        }
-        if (doomed.length === 0) return layer;
-        return { ...layer, tiles: writeTiles(layer.tiles, doomed) };
-      }),
-    })),
-  }));
-}
-
-/**
  * Put tiles down on a layer, or take them off. One write for one gesture.
  *
  * **Nothing at all when nothing moved**, and the check is here rather than
@@ -408,13 +371,25 @@ export function stampIsEmpty(stamp: TileStamp | null): boolean {
 }
 
 /**
- * The writes that put a stamp down with its top-left corner on a space.
+ * The whole run, laid down as one stamp.
  *
- * The stamp tiles **from where the gesture started**, not from each space it
- * crosses: dragging a 2 × 2 stamp across the ground lays a continuous 2 × 2
- * pattern rather than a 2 × 2 block centred on every space the finger
- * touched, which is what Tiled does and the only reading under which a
- * multi-tile selection is worth having.
+ * **A stamp is the run, not a tile of it.** Picking a 3 × 2 patch of palette
+ * and tapping once puts all six tiles down, their top-left corner on the
+ * space under the pointer — which is what the word means, what Tiled does,
+ * and the only reading under which picking a corner piece and its two
+ * neighbours is a useful thing to do. The first version laid one tile per
+ * space and wrapped through the run as the pointer crossed the ground, so a
+ * tap put down a sixth of what was in hand.
+ *
+ * **Along a drag it tiles seamlessly**, and that falls out of the same rule
+ * rather than being a second one: the block's corner is snapped to a lattice
+ * of the run's own size, anchored at the space the gesture began on. Every
+ * press lands a whole block, neighbouring blocks meet exactly, and crossing
+ * the same ground twice writes the same thing.
+ *
+ * Empty spaces in the run are left out rather than written as zeroes: a run
+ * dragged past the edge of a palette should stamp the tiles it caught, not
+ * punch holes with the rest.
  */
 export function stampWrites(
   tilesets: readonly TiledTileset[],
@@ -424,16 +399,40 @@ export function stampWrites(
 ): TileWrite[] {
   const tileset = tilesets.find((t) => t.firstgid === stamp.firstgid);
   if (!tileset || stampIsEmpty(stamp)) return [];
-  // Which tile of the stamp this space is, counted from the origin and
-  // wrapped — `%` is signed in JavaScript, so ground left of or above the
-  // origin needs the second modulo to come back positive.
-  const dx = (((at.cx - origin.cx) % stamp.cols) + stamp.cols) % stamp.cols;
-  const dy = (((at.cy - origin.cy) % stamp.rows) + stamp.rows) % stamp.rows;
-  const gid = gidAt(tileset, stamp.col + dx, stamp.row + dy);
-  return gid === 0 ? [] : [{ x: at.cx, y: at.cy, gid }];
+  const corner = blockCorner(stamp, origin, at);
+  const out: TileWrite[] = [];
+  for (let row = 0; row < stamp.rows; row++) {
+    for (let col = 0; col < stamp.cols; col++) {
+      const gid = gidAt(tileset, stamp.col + col, stamp.row + row);
+      if (gid !== 0) out.push({ x: corner.cx + col, y: corner.cy + row, gid });
+    }
+  }
+  return out;
 }
 
-/** The same, over a whole rectangle of ground — what a box drag lays down. */
+/**
+ * Where the block's top-left corner goes for a press on this space.
+ *
+ * `Math.floor` rather than a truncation, so ground left of or above the space
+ * the gesture began on snaps the same way as ground right of and below it —
+ * a truncating divide would put two blocks over each other at the origin.
+ */
+export function blockCorner(stamp: TileStamp, origin: Cell, at: Cell): Cell {
+  return {
+    cx: origin.cx + Math.floor((at.cx - origin.cx) / stamp.cols) * stamp.cols,
+    cy: origin.cy + Math.floor((at.cy - origin.cy) / stamp.rows) * stamp.rows,
+  };
+}
+
+/**
+ * The run tiled over a rectangle of ground — what a solid sweep fills with.
+ *
+ * Repeated from the rectangle's own top-left corner, so two sweeps over the
+ * same ground come out aligned the same way. One tile per space here rather
+ * than a block per space: what is being asked for is a *field* of the run,
+ * and a block laid on every space would write each of them `cols × rows`
+ * times over.
+ */
 export function stampRange(
   tilesets: readonly TiledTileset[],
   stamp: TileStamp,
@@ -444,14 +443,35 @@ export function stampRange(
   const right = Math.max(from.cx, to.cx);
   const top = Math.min(from.cy, to.cy);
   const bottom = Math.max(from.cy, to.cy);
-  const origin: Cell = { cx: left, cy: top };
   const out: TileWrite[] = [];
   for (let cy = top; cy <= bottom; cy++) {
     for (let cx = left; cx <= right; cx++) {
-      out.push(...stampWrites(tilesets, stamp, origin, { cx, cy }));
+      const gid = tiledGid(tilesets, stamp, { cx: left, cy: top }, { cx, cy });
+      if (gid !== 0) out.push({ x: cx, y: cy, gid });
     }
   }
   return out;
+}
+
+/**
+ * Which tile of the run belongs on a space, when the run is being *tiled*
+ * rather than stamped.
+ *
+ * `%` is signed in JavaScript, so ground left of or above the origin needs
+ * the second modulo to come back positive — without it the index is negative
+ * and the space gets nothing at all.
+ */
+export function tiledGid(
+  tilesets: readonly TiledTileset[],
+  stamp: TileStamp,
+  origin: Cell,
+  at: Cell,
+): number {
+  const tileset = tilesets.find((t) => t.firstgid === stamp.firstgid);
+  if (!tileset || stampIsEmpty(stamp)) return 0;
+  const dx = (((at.cx - origin.cx) % stamp.cols) + stamp.cols) % stamp.cols;
+  const dy = (((at.cy - origin.cy) % stamp.rows) + stamp.rows) % stamp.rows;
+  return gidAt(tileset, stamp.col + dx, stamp.row + dy);
 }
 
 /** What the layer row says under a tile layer's name. */

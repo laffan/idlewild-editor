@@ -23,14 +23,13 @@ import type { Grid } from "../lib/grid";
 import {
   describeTiles,
   propertyOf,
-  removeTileset,
   tileLayer,
   tilesetsOf,
 } from "../lib/tile-layers";
 import { chunksOf, tileCount } from "../lib/tiled/chunks";
 import { tileId } from "../lib/tiled/gid";
 import { PSD_PROPERTY, type TiledTileset } from "../lib/tiled/types";
-import type { Layer, ToolId } from "../lib/types";
+import type { Layer, Selection, ToolId } from "../lib/types";
 import type { PanelSurface } from "./inspect-panels";
 import {
   describeStamp,
@@ -68,6 +67,8 @@ export interface TileActions {
   onTileRandom: (tool: ToolId, on: boolean) => void;
   tileDensity: () => number;
   onTileDensity: (density: number) => void;
+  /** Put a palette's own file in the panel below — see `selectPsdRow`. */
+  onSelectPsd: (selection: Selection) => void;
 }
 
 /**
@@ -126,9 +127,9 @@ export function renderTileLayer(
     { class: "inspect-section tile-palettes" },
     sectionTitle("Palette", {
       hint:
-        "Drag across a palette to take a run of tiles; the drawing tools put " +
-        "down whatever is in hand. The lines are where the picture is cut, " +
-        "which is the size of a space on this project's grid.",
+        "Drag across a palette to take a run of tiles; Stamp and Sweep fill " +
+        "put down whatever is in hand. The lines are where the picture is " +
+        "cut, which is the size of a space on this project's grid.",
     }),
     summary,
     ...tilesets.map((tileset) =>
@@ -140,13 +141,6 @@ export function renderTileLayer(
           { class: "tile-palette-head" },
           h("div", { class: "tile-palette-name m", text: tileset.name }),
           zoomControls(tileset.firstgid, selection, actions.canvasZoom, resize),
-          h("button", {
-            class: "tile-palette-drop",
-            title: `Take ${tileset.name} off this project`,
-            "aria-label": `Remove ${tileset.name}`,
-            text: "×",
-            onClick: () => removeTileset(store, tileset.firstgid),
-          }),
         ),
         tilePalette({
           tileset,
@@ -158,10 +152,14 @@ export function renderTileLayer(
             summary.textContent = `In hand: ${describeStamp(stamp)}`;
           },
         }),
-        h("div", {
-          class: "field-hint",
-          text: `${tileset.tilecount} tiles, ${tileset.columns} across`,
-        }),
+        // What was a tally — "20 tiles, 5 across" — and is now the way to
+        // the file itself. The count was true and no use: nobody looking at a
+        // palette needs to be told how many tiles are in the picture in front
+        // of them, and what they do want from a palette often enough is to go
+        // and change the artwork. Selecting the PSD is the first step of
+        // that: it puts the file in the OBJECT zone, where its layer list and
+        // Open PSD are.
+        selectPsdRow(tileset, layer, actions),
       ),
     ),
   );
@@ -189,6 +187,39 @@ export function renderTileLayer(
       }),
     ),
   );
+}
+
+/**
+ * The way from a palette to the file it was cut from.
+ *
+ * A link rather than a button, because what it does is *navigate* — it
+ * changes what the panel below is describing and nothing about the document.
+ * A palette whose PSD is not placed on this layer has none to select: that
+ * happens when the file has been carried elsewhere and the tiles made of it
+ * are still standing here, which the row says rather than offering a link
+ * that would select nothing.
+ */
+function selectPsdRow(
+  tileset: TiledTileset,
+  layer: Layer,
+  actions: TileActions,
+): HTMLElement {
+  const key = propertyOf(tileset, PSD_PROPERTY);
+  const placement = layer.placements.find((p) => p.psdKey === key);
+  if (!placement) {
+    return h("div", { class: "field-hint", text: "Its PSD is not on this layer." });
+  }
+  return h("button", {
+    class: "tile-palette-open",
+    text: "Select PSD",
+    title: `Show ${key}.psd in the panel below, where Open PSD is`,
+    onClick: () =>
+      actions.onSelectPsd({
+        kind: "placement",
+        layerId: layer.id,
+        placementId: placement.id,
+      }),
+  });
 }
 
 /**

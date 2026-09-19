@@ -147,6 +147,20 @@ export const TOOLS: ToolSpec[] = [
 const TILE_TOOLS: readonly ToolId[] = ["stamp", "sweep"];
 
 /**
+ * What is left of the rail on a tile layer.
+ *
+ * **Select and Pan, and not Point or Boundary.** The first two are what the
+ * canvas does when nothing else is chosen — Pan is the camera, and Select
+ * catches a run of tiles there the way it catches placed images elsewhere,
+ * so both do something. The other two make a *document object* on the layer
+ * they are used on, and a tile layer is ground rather than a place things
+ * stand: a named place belongs on the layer the thing it names is on, and a
+ * boundary belongs with the objects it blocks. Showing them would be showing
+ * two buttons whose result is invisible on the layer you used them on.
+ */
+const TILE_RAIL: readonly ToolId[] = ["select", "pan"];
+
+/**
  * Which tools a layer of this kind offers.
  *
  * **A tile layer swaps the ink out rather than re-pointing it.** The first
@@ -157,10 +171,10 @@ const TILE_TOOLS: readonly ToolId[] = ["stamp", "sweep"];
  * Stamp and Sweep fill arrive — two tools that are exactly what they are
  * called, with their own options and their own panel.
  *
- * Everything on the rail proper stays. Select, Pan, Point and Boundary are
- * about the canvas rather than about what is drawn on it, and a named place
- * or a blocking boundary on a tile layer means exactly what it means
- * anywhere else.
+ * **And the rail is cut to the two that do something there** — see
+ * `TILE_RAIL`. A toolbar is a list of what you can do; a button that cannot
+ * act on the layer you are looking at is a question the user has to answer by
+ * pressing it.
  *
  * **`psdEditing` is the one exception, and it is not one really.** A PSD
  * opened in PSD Edit mode over a tile layer is ordinary artwork being drawn
@@ -175,10 +189,7 @@ const TILE_TOOLS: readonly ToolId[] = ["stamp", "sweep"];
 export function toolsFor(kind: LayerKind, psdEditing = false): ToolId[] {
   const tiling = kind === "tile" && !psdEditing;
   return TOOLS.filter((tool) => {
-    // The swap is the **ink column's** alone. The rail proper is about the
-    // canvas rather than about what is drawn on it, so it is the same four
-    // on every kind of layer.
-    if (tool.bar === "rail") return true;
+    if (tool.bar === "rail") return !tiling || TILE_RAIL.includes(tool.id);
     return TILE_TOOLS.includes(tool.id) === tiling;
   }).map((tool) => tool.id);
 }

@@ -28,6 +28,7 @@ import {
   paintTiles,
   stampWrites,
   stampIsEmpty,
+  tiledGid,
   tilesetsOf,
   type TileStamp,
 } from "../lib/tile-layers";
@@ -266,11 +267,21 @@ export class TilePaint {
       return [];
     }
     this.aim(hand);
+    const run = hand.stamp as TileStamp;
     if (!hand.random) {
       const tilesets = tilesetsOf(this.host.store);
-      return cells.flatMap((cell) =>
-        stampWrites(tilesets, hand.stamp as TileStamp, origin, cell),
-      );
+      // **The two tools lay the same run differently, and both are right.**
+      // A stamp puts the whole run down as a block — that is what the word
+      // means, and a tap with a 3 × 2 run in hand should land six tiles.
+      // A sweep is filling an *area*: what is wanted there is a field of the
+      // run, so it is tiled one space at a time, and a block per space would
+      // write each of them six times over.
+      return hand.verb === "sweep"
+        ? cells.flatMap((cell) => {
+            const gid = tiledGid(tilesets, run, origin, cell);
+            return gid === 0 ? [] : [{ x: cell.cx, y: cell.cy, gid }];
+          })
+        : cells.flatMap((cell) => stampWrites(tilesets, run, origin, cell));
     }
     const landing =
       hand.verb === "sweep" && cells.length > 1

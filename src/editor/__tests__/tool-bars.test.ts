@@ -179,27 +179,22 @@ describe("a shape stamp", () => {
  * drawing layer would draw ink over a grid of tiles.
  */
 describe("what a tile layer offers", () => {
-  it("swaps the ink out for the two tile tools", () => {
-    // The first version kept the Pencil and Fill and gave them a second
-    // meaning on a tile layer, which is a tool nobody can learn. A tool is
-    // what it is called, so the seven ink tools go and two arrive.
-    expect(toolsFor("tile")).toEqual([
-      "select",
-      "pan",
-      "point",
-      "zone",
-      "stamp",
-      "sweep",
-    ]);
+  it("offers only the four that do something there", () => {
+    // A toolbar is a list of what you can do. The first version kept the
+    // Pencil and Fill and gave them a second meaning on a tile layer, which
+    // is a tool nobody can learn; the second kept the whole rail, which is
+    // two buttons whose result is invisible on the layer you used them on.
+    expect(toolsFor("tile")).toEqual(["select", "pan", "stamp", "sweep"]);
   });
 
-  it("leaves the rail proper alone, because it is about the canvas", () => {
-    // Select, Pan, Point and Boundary mean on a tile layer exactly what they
-    // mean anywhere else: a named place and a blocking boundary are not made
-    // of ink and not made of tiles.
-    for (const id of ["select", "pan", "point", "zone"] as const) {
-      expect(toolsFor("tile")).toContain(id);
-    }
+  it("keeps the two that are the canvas rather than the document", () => {
+    // Pan is the camera; Select catches a run of tiles there the way it
+    // catches placed images elsewhere. Point and Boundary make a document
+    // object on the layer they are used on, and a tile layer is ground.
+    expect(toolsFor("tile")).toContain("select");
+    expect(toolsFor("tile")).toContain("pan");
+    expect(toolsFor("tile")).not.toContain("point");
+    expect(toolsFor("tile")).not.toContain("zone");
   });
 
   it("offers the ordinary set on the three kinds that are not tile layers", () => {
