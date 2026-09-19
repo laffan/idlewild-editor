@@ -28,11 +28,15 @@ either end.
 
 Two ways, and they are the same door from opposite sides.
 
-**Drop a PSD on the layer.** It is not placed on the canvas. It is cut into a
-palette along the same boundaries as the main grid — a space in the palette is
-a space on the ground, so what you pick up is what you put down — and it
-appears in the properties sidebar on the right. The console says how many
-tiles it came to.
+**Drop a PSD on the layer**, or drag one there from another layer in the list.
+Either way it is not placed on the canvas. It is cut into a palette along the
+same boundaries as the main grid — a space in the palette is a space on the
+ground, so what you pick up is what you put down — and it appears in the
+properties sidebar on the right. The console says how many tiles it came to.
+
+That works whichever way the PSD got there and whatever made it: a file you
+dropped in, a patch of grid you filled and converted, or a tileset a Tiled map
+brought with it.
 
 **Import Tiled**, the row at the foot of the layer's own list in the left
 sidebar. It takes a `.tmx` or a `.tmj`, brings in every tileset picture the

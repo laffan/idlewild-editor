@@ -21,8 +21,7 @@ import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { BackgroundRender } from "./background-render";
 import { PatternRender } from "./pattern-render";
-import { TileRender } from "./tile-render";
-import { TilePaint } from "./tile-paint";
+import { Tiling } from "./tiling";
 import { SelectionOverlay } from "./selection-overlay";
 import { DropTargets, type PlacedTarget } from "./drop-target";
 import { Marquee } from "./marquee";
@@ -62,10 +61,9 @@ export class WorldScene extends Phaser.Scene {
   private backgrounds!: BackgroundRender;
   /** A pattern layer, worked out from the camera — `pattern-render.ts`. */
   private patterns!: PatternRender;
-  /** A tile layer, the same way — `tile-render.ts`. */
-  private tiles!: TileRender;
-  /** Putting tiles down, which is a tool's gesture rather than a mode. */
-  private tilePaint!: TilePaint;
+  /** Tile layers: what is drawn, what a gesture does, where palettes come
+   *  from — `tiling.ts`. */
+  private tiling!: Tiling;
   private docRenderer!: DocRenderer;
   private overlay!: SelectionOverlay;
   private drops!: DropTargets;
@@ -137,19 +135,15 @@ export class WorldScene extends Phaser.Scene {
       // one being edited is by then the version before the edit.
       () => (this.modes.mask.active ? null : selectionLayer(this.selection)),
     );
-    this.tiles = new TileRender(this, this.store, this.grid);
-    this.tilePaint = new TilePaint({
+    this.tiling = new Tiling({
+      scene: this,
       store: this.store,
       grid: this.grid,
+      config: this.config,
       activeLayerId: () => this.activeLayerId,
       worldAt: (x, y) => this.worldAt(x, y),
-      verb: () => this.config.tileVerb?.() ?? null,
-      erasing: () => this.config.tileErasing?.() ?? false,
-      stamp: () => this.config.tileStamp?.() ?? null,
       visible: () => this.gridRenderer.visibleRange(this.cameras.main),
-      // A tile put down does not move the camera, so the renderer would not
-      // notice until something else did.
-      onChanged: () => this.tiles.invalidate(),
+      psdLayers: (key) => this.psds.layersOf(key),
     });
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
@@ -227,7 +221,7 @@ export class WorldScene extends Phaser.Scene {
         tap: (x, y, adding) => this.handleTap(x, y, adding),
         doubleTap: (x, y) => this.handleDoubleTap(x, y),
         modes: this.modes,
-        tiles: this.tilePaint,
+        tiles: this.tiling.paint,
         drag: this.drag,
         marquee: {
           begin: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
@@ -260,20 +254,23 @@ export class WorldScene extends Phaser.Scene {
       // textures go and told again when they are back.
       releaseKey: (key) => {
         sceneRef.patterns.dropKey(key);
-        sceneRef.tiles.dropKey(key);
+        sceneRef.tiling.dropKey(key);
       },
       restoreKey: (key) => {
         sceneRef.patterns.restoreKey(key);
-        sceneRef.tiles.restoreKey(key);
+        sceneRef.tiling.restoreKey(key);
       },
     });
 
     this.store.addEventListener("change", () => {
       // A pattern's rule and a backdrop's colours live in the document, and
       // both are drawn from the camera rather than from a record — so neither
-      // has anything to notice a change on its own.
+      // has anything to notice a change on its own. A tile layer is the same:
+      // a tile put down moves no camera.
       this.patterns.invalidate();
+      this.tiling.invalidate();
       this.backgrounds.invalidate();
+      this.tiling.cutPalettes();
       this.refresh();
     });
     // A different scene is not a changed document, it is a different canvas.
@@ -281,7 +278,8 @@ export class WorldScene extends Phaser.Scene {
     // A placement the document draws and the canvas has none of — see there.
     this.docRenderer.setPlacer((id, p) => this.psds.placeOne(id, p));
     this.psds.migrate();
-    void this.psds.loadAll();
+    this.tiling.cutPalettes();
+    void this.psds.loadAll().then(() => this.tiling.cutPalettes());
     this.refresh();
   }
 
@@ -306,7 +304,7 @@ export class WorldScene extends Phaser.Scene {
     // Every copy and every backdrop on screen belongs to the scene that has
     // just been left.
     this.patterns.clear();
-    this.tiles.clear();
+    this.tiling.clear();
     this.backgrounds.clear();
 
     this.docRenderer.render();
@@ -329,7 +327,7 @@ export class WorldScene extends Phaser.Scene {
     this.gridRenderer.setBackdropDepth(this.backgrounds.frontDepth());
     const view = this.gridRenderer.visibleRange(this.cameras.main);
     this.patterns.sync(view);
-    this.tiles.sync(view);
+    this.tiling.sync(view);
     // PSD Edit mode's dim is cut out of what the camera can see, so it follows the
     // camera the way the lattice does — a pan moves it as surely as a zoom.
     // A no-op while the mode is down.
@@ -408,7 +406,7 @@ export class WorldScene extends Phaser.Scene {
       textStyle: () => this.textStyle,
       modeTap: (x, y) => this.modes.tap(x, y),
       colliderActive: () => this.modes.collider.active,
-      tileTap: (world) => this.tilePaint.tap(world),
+      tileTap: (world) => this.tiling.paint.tap(world),
       pickAt: (world, layerId) => this.docRenderer.pickAt(world, layerId),
       pick: (x, y) => this.docRenderer.pick(x, y),
       adjusting: () => this.adjusting,

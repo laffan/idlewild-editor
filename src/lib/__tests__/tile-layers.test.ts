@@ -16,6 +16,8 @@ import {
   addTileset,
   bucketFill,
   cutIntoTileset,
+  syncTilesets,
+  tilesetArt,
   MAX_FILL_SPACES,
   nextFirstGid,
   paintTiles,
@@ -153,11 +155,154 @@ describe("cutting a PSD into a palette", () => {
     expect(nextFirstGid(tilesetsOf(held))).toBe(13);
   });
 
-  it("says nothing about a layer with no artwork to cut", () => {
+  it("says nothing about a placement with no artwork to cut", () => {
     const held = store();
     const layer = held.layer("layer-1");
-    expect(cutIntoTileset(held, GRID, layer!, "ground", undefined)).toBeNull();
+    const placement = { psdKey: "ground", width: 96, naturalWidth: 96 };
+    expect(cutIntoTileset(held, GRID, layer!, placement, undefined)).toBeNull();
     expect(tilesetsOf(held)).toHaveLength(0);
+  });
+});
+
+describe("cutting at the pitch the artwork is shown at", () => {
+  it("gives a retina PSD one tile per grid space, not four", () => {
+    // Everything this editor writes is painted at twice the size it is shown
+    // at, so a PSD covering three spaces by two is 192 x 128 pixels. Cutting
+    // that at the grid's own 32px pitch would divide each space into four —
+    // which is what the first version did, and the reason a palette came out
+    // with four times as many tiles as anybody could see.
+    const held = store();
+    const made = addTileset(held, GRID, {
+      psdKey: "fill",
+      layerPath: "S | fill",
+      name: "fill",
+      image: "assets/fill/sprites/fill.png",
+      imagewidth: 192,
+      imageheight: 128,
+      scale: 0.5,
+    });
+    expect(made.tilewidth).toBe(64);
+    expect(made.tileheight).toBe(64);
+    expect(made.columns).toBe(3);
+    expect(made.tilecount).toBe(6);
+  });
+
+  it("reads the scale off the placement, which is where the answer is", () => {
+    const held = store();
+    const layer = held.layer("layer-1")!;
+    const made = cutIntoTileset(
+      held,
+      GRID,
+      layer,
+      // The ratio a placement already carries: shown at half its own pixels.
+      { psdKey: "fill", width: 96, naturalWidth: 192 },
+      { path: "S | fill", filePath: "sprites/fill.png", width: 192, height: 128 },
+    );
+    expect(made?.tilewidth).toBe(64);
+    expect(made?.columns).toBe(3);
+    // And the image names the artwork psd-to-json exported, so a .tmj written
+    // beside the project points at a real picture.
+    expect(made?.image).toBe("assets/fill/sprites/fill.png");
+  });
+
+  it("leaves a 1:1 palette alone, which is what a Tiled map brings", () => {
+    const held = store();
+    const made = addTileset(held, GRID, {
+      psdKey: "ground",
+      layerPath: "S | ground",
+      name: "ground",
+      image: "assets/ground/sprites/ground.png",
+      imagewidth: 96,
+      imageheight: 64,
+    });
+    expect(made.tilewidth).toBe(32);
+    expect(made.columns).toBe(3);
+  });
+});
+
+describe("the sweep that cuts palettes", () => {
+  /** A placement of `key` on the one layer, as a carry would leave it. */
+  function carry(held: DocStore, key: string, layerPath = "S | art") {
+    held.editLayer("layer-1", (layer) => ({
+      ...layer,
+      placements: [
+        ...layer.placements,
+        {
+          id: `p-${key}`,
+          psdKey: key,
+          layerPath,
+          x: 0,
+          y: 0,
+          width: 96,
+          height: 64,
+          naturalWidth: 192,
+          naturalHeight: 128,
+          anchor: { cx: 0, cy: 0 },
+        },
+      ],
+    }));
+  }
+
+  const art = (path: string) => [
+    {
+      path,
+      filePath: "sprites/art.png",
+      width: 192,
+      height: 128,
+      category: "sprite",
+    },
+  ];
+
+  it("cuts a palette for a PSD that arrived by a route place never sees", () => {
+    // The bug this exists for: carrying a file onto a tile layer from the
+    // layer panel goes through `movePlacements` and never near `place`, so
+    // the PSD vanished — the canvas refuses to draw a tile layer's
+    // placements and there was no palette to show instead.
+    const held = store();
+    carry(held, "art");
+    expect(tilesetsOf(held)).toHaveLength(0);
+
+    expect(syncTilesets(held, GRID, (_key, path) => tilesetArt(art(path), path))).toBe(
+      true,
+    );
+    expect(tilesetsOf(held)).toHaveLength(1);
+    expect(tilesetsOf(held)[0].columns).toBe(3);
+  });
+
+  it("does nothing the second time, so a change handler can call it freely", () => {
+    const held = store();
+    carry(held, "art");
+    const find = (_key: string, path: string) => tilesetArt(art(path), path);
+    syncTilesets(held, GRID, find);
+    const after = held.doc;
+    expect(syncTilesets(held, GRID, find)).toBe(false);
+    expect(held.doc).toBe(after);
+  });
+
+  it("waits rather than guessing when the file has not loaded", () => {
+    // A key nobody has loaded answers with an empty list, and a palette cut
+    // from a guess would be a palette with the wrong number of tiles in it.
+    const held = store();
+    carry(held, "art");
+    expect(syncTilesets(held, GRID, () => undefined)).toBe(false);
+    expect(tilesetsOf(held)).toHaveLength(0);
+  });
+
+  it("leaves the other three kinds of layer alone", () => {
+    const held = store();
+    held.editLayer("layer-1", (layer) => ({ ...layer, kind: "object" }));
+    carry(held, "art");
+    expect(syncTilesets(held, GRID, (_k, p) => tilesetArt(art(p), p))).toBe(false);
+    expect(tilesetsOf(held)).toHaveLength(0);
+  });
+
+  it("falls back to the file's first picture when the path has moved", () => {
+    // A placement made on an object layer names the one layer of the file it
+    // stood for, and a file re-parsed since may not have that path any more.
+    const layers = art("S | art");
+    expect(tilesetArt(layers, "S | art")?.path).toBe("S | art");
+    expect(tilesetArt(layers, "gone")?.path).toBe("S | art");
+    expect(tilesetArt([], "S | art")).toBeUndefined();
   });
 });
 

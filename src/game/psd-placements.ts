@@ -13,7 +13,6 @@ import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
 import { copyExtrusion, extrusionOf } from "../lib/extrusions";
 import { layerKind } from "../lib/layer-kinds";
-import { cutIntoTileset } from "../lib/tile-layers";
 import type { Grid } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
 import { defaultCollider, placementsBox, unitOfKey } from "../lib/collider";
@@ -282,23 +281,18 @@ export class PsdPlacements {
         last = placement;
       }
 
-      // On a **tile** layer the file is a palette rather than a thing on the
-      // ground, so what it needs is not a collider but a cut: the artwork
-      // divided on the project's own grid boundaries, as a Tiled tileset. A
-      // collider would be worse than useless there — nothing on a tile layer
-      // stands anywhere, and the exported game reads a collider off the first
-      // placement of each unit, so one would put a solid rectangle in the
-      // world where a picture of a palette is not.
-      if (layerKind(layer) === "tile") {
-        cutIntoTileset(this.host.store, this.host.grid, layer, key, layers[0]);
-      } else {
-        // What the file blocks, before anyone has said otherwise. Written
-        // here rather than left to be derived on demand so that everything
-        // reading the document downstream — play mode, the export, the
-        // inspector — reads one answer rather than three implementations of
-        // the same guess.
-        this.syncCollider(key);
-      }
+      // What the file blocks, before anyone has said otherwise. Written here
+      // rather than left to be derived on demand so that everything reading
+      // the document downstream — play mode, the export, the inspector —
+      // reads one answer rather than three implementations of the same guess.
+      //
+      // Not on a **tile** layer, where the file is a palette rather than a
+      // thing on the ground: nothing there stands anywhere, and the exported
+      // game reads a collider off the first placement of each unit, so one
+      // would put a solid rectangle in the world where a picture of a palette
+      // is not. What that file gets instead is a cut, and that is a sweep
+      // rather than a line here — see `syncTilesets`.
+      if (layerKind(layer) !== "tile") this.syncCollider(key);
 
       if (last) {
         this.host.setSelection({
@@ -649,6 +643,7 @@ export class PsdPlacements {
       repairDocument(this.host.store, (key) => this.syncCollider(key)),
     );
   }
+
 
   /** On open, bring back every placement the document already holds. */
   async loadAll(): Promise<void> {

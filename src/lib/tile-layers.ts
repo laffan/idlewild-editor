@@ -31,7 +31,7 @@ import {
   type TiledTileLayer,
   type TiledTileset,
 } from "./tiled/types";
-import type { Cell, Layer, Projection } from "./types";
+import type { Cell, Layer, Placement, Projection } from "./types";
 
 /**
  * Whether this project can have tile layers at all.
@@ -114,17 +114,38 @@ export interface TilesetSource {
   image: string;
   imagewidth: number;
   imageheight: number;
+  /**
+   * How big the artwork is *shown* against its own pixels — the ratio a
+   * placement already carries between `width` and `naturalWidth`.
+   *
+   * This is the difference between a palette that comes out right and one cut
+   * into four times as many tiles as anybody can see. Everything this editor
+   * writes is painted at **twice** the size it is shown at — see
+   * `IMPORT_SCALE` — so a PSD covering three grid spaces is six grid-widths
+   * of pixels, and cutting it at the grid's own pitch would divide each space
+   * into four. A file that came in from a Tiled map is 1:1 and passes 1.
+   */
+  scale?: number;
 }
 
 /**
  * Cut a PSD into a tileset on the project's own grid boundaries.
  *
- * The tile size is the grid's, which is the whole of what "divided along the
- * same boundaries as the main canvas" means: a space in the palette is a
- * space on the ground, so what is picked up is what is put down. On an
- * isometric project that is the diamond's **bounding box** — `tileWidth` by
- * `tileHeight`, 2:1 — because a picture is cut into rectangles whatever shape
- * is drawn inside them, and Tiled cuts an isometric tileset the same way.
+ * "Divided along the same boundaries as the main canvas" is a statement about
+ * the artwork **as it is shown**, which is why `source.scale` is here: a
+ * space in the palette has to be a space on the ground, so what is picked up
+ * is what is put down. A PSD covering three grid spaces is cut into three
+ * tiles whether its pixels are at 1:1 or at retina.
+ *
+ * On an isometric project the pitch is the diamond's **bounding box** —
+ * `tileWidth` by `tileHeight`, 2:1 — because a picture is cut into rectangles
+ * whatever shape is drawn inside them, and Tiled cuts an isometric tileset
+ * the same way.
+ *
+ * What goes into the record is the pitch in the file's **own pixels**, which
+ * is what `tilewidth` means in a Tiled tileset. A map whose tileset pitch
+ * differs from its own is an ordinary thing in Tiled and `tile-render.ts`
+ * knows what to do with one.
  *
  * Returns the set already in the document. A second call for a PSD that is
  * already a tileset hands back the one that is there rather than making a
@@ -138,8 +159,9 @@ export function addTileset(
   const held = tilesetForPsd(store, source.psdKey, source.layerPath);
   if (held) return held;
 
-  const tilewidth = Math.max(1, Math.round(grid.tileWidth));
-  const tileheight = Math.max(1, Math.round(grid.tileHeight));
+  const scale = source.scale && source.scale > 0 ? source.scale : 1;
+  const tilewidth = Math.max(1, Math.round(grid.tileWidth / scale));
+  const tileheight = Math.max(1, Math.round(grid.tileHeight / scale));
   const { columns, rows } = tileGrid(
     source.imagewidth,
     source.imageheight,
@@ -167,41 +189,118 @@ export function addTileset(
   return made;
 }
 
+/** One layer of a placed PSD, as much of it as cutting a palette needs. */
+export interface TilesetArt {
+  path: string;
+  filePath?: string;
+  width: number;
+  height: number;
+  /** psd-to-json's own word for what the layer is. Only "sprite" is a
+   *  picture, which is what `tilesetArt` falls back to. */
+  category?: string;
+}
+
 /**
- * A PSD just placed on a tile layer, cut into a palette.
+ * Which layer of a loaded PSD a palette is cut from.
  *
- * What *placing* a file means depends on the kind of layer it lands on, and
- * on a tile layer it means this: the artwork divided on the project's own
- * grid boundaries, as a Tiled tileset. Every route in — a drop, a paste,
- * Import Assets, Add Image — goes through one `place`, so this is called
- * from there and nowhere else.
+ * The placement's own layer where the file still has one, and the first
+ * picture in the file otherwise. The fallback is what makes carrying a file
+ * onto a tile layer work: a placement made on an object layer names the one
+ * layer of the file it stood for, and a PSD with several has one placement
+ * each — so the first sprite is the palette, and the others are the same file
+ * arriving again and finding it already cut.
+ */
+export function tilesetArt(
+  layers: readonly TilesetArt[],
+  layerPath: string,
+): TilesetArt | undefined {
+  return (
+    layers.find((held) => held.path === layerPath) ??
+    layers.find((held) => held.category === "sprite")
+  );
+}
+
+/**
+ * Every PSD on a tile layer has a palette, and this is what makes it true.
+ *
+ * A **sweep** rather than a hook on placing, and that is the whole lesson of
+ * the first version: `PsdPlacements.place` is only one of the ways a file
+ * arrives on a layer. Carrying one there from the layer panel goes through
+ * `DocStore.movePlacements` and never touches it, so a PSD dragged onto a
+ * tile layer vanished — the renderer refuses to draw a tile layer's
+ * placements, and there was no palette to show instead. Any *future* route
+ * onto a layer would have had the same hole.
+ *
+ * So nothing hooks placing. This asks the document what is true — which
+ * placements are on tile layers, and which of them have no palette yet — and
+ * is called wherever the answer can have changed: after a document change,
+ * and when the manifests arrive. Both are cheap, because a file that already
+ * has one is a map lookup.
+ *
+ * `art` is asked rather than passed, because a palette needs the *file's*
+ * facts — its exported artwork and its size — and those come from the parsed
+ * manifest rather than from the document. It answers undefined for a key that
+ * has not loaded yet, which is not a failure: the load fires
+ * `onPsdsLoaded`, and that is one of the two moments this runs.
+ *
+ * Answers whether anything was cut, so a caller inside a change handler can
+ * tell a repair from a no-op.
+ */
+export function syncTilesets(
+  store: DocStore,
+  grid: Grid,
+  art: (psdKey: string, layerPath: string) => TilesetArt | undefined,
+): boolean {
+  let cut = false;
+  for (const layer of store.layers) {
+    if (layer.kind !== "tile") continue;
+    for (const placement of layer.placements) {
+      if (tilesetForPsd(store, placement.psdKey, placement.layerPath)) continue;
+      const found = art(placement.psdKey, placement.layerPath);
+      if (!found) continue;
+      cut = cutIntoTileset(store, grid, layer, placement, found) !== null || cut;
+    }
+  }
+  return cut;
+}
+
+/**
+ * One PSD on a tile layer, cut into a palette.
+ *
+ * The scale is read off the **placement** rather than assumed, because that
+ * is the one place the answer is: `width` against `naturalWidth` is how much
+ * of a grid space one of the file's pixels covers, and it is what makes a
+ * palette come out with as many tiles as the artwork has spaces. See
+ * `TilesetSource.scale`.
  *
  * `addTileset` hands back the set that is already there for a file that has
- * been cut before, so dropping the same PSD twice does not make a second
- * palette and leave every gid standing on the first one wrong.
+ * been cut before, so a second call is free and leaves every gid standing on
+ * the first one pointing where it did.
  */
 export function cutIntoTileset(
   store: DocStore,
   grid: Grid,
   layer: Layer,
-  psdKey: string,
-  art: { path: string; filePath?: string; width: number; height: number } | undefined,
+  placement: Pick<Placement, "psdKey" | "width" | "naturalWidth">,
+  art: TilesetArt | undefined,
 ): TiledTileset | null {
   if (!art) return null;
+  const natural = placement.naturalWidth || placement.width || 0;
   const made = addTileset(store, grid, {
-    psdKey,
+    psdKey: placement.psdKey,
     layerPath: art.path,
-    name: psdKey,
+    name: placement.psdKey,
     // Where psd-to-json put the artwork, relative to the project — what a
     // `.tmj` written beside it has to name to point at a real picture.
-    image: `assets/${psdKey}/${art.filePath ?? ""}`,
+    image: `assets/${placement.psdKey}/${art.filePath ?? ""}`,
     imagewidth: art.width,
     imageheight: art.height,
+    scale: natural > 0 ? placement.width / natural : 1,
   });
   const rows = made.columns > 0 ? Math.round(made.tilecount / made.columns) : 0;
   log.info(
-    `${psdKey}.psd is a palette on ${layer.name} — ${made.columns} × ${rows} ` +
-      `tiles of ${made.tilewidth} × ${made.tileheight}`,
+    `${placement.psdKey}.psd is a palette on ${layer.name} — ${made.columns} × ` +
+      `${rows} tiles of ${made.tilewidth} × ${made.tileheight}`,
   );
   return made;
 }

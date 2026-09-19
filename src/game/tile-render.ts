@@ -21,6 +21,20 @@
  * tileset in the world is drawn, and how the map looked in Tiled before it
  * was brought here. Getting it wrong is not a small error: it is every wall
  * in the map sunk into the floor.
+ *
+ * **A tile's width is one space, and its height follows.** A tileset records
+ * its pitch in its image's own pixels, and that is not always the map's: a
+ * palette cut from a PSD this editor wrote is at retina, twice the size it is
+ * shown at, so its pitch is two grid widths of pixels for one grid width of
+ * ground — see `TilesetSource.scale`. So a tile is scaled by
+ * `grid.tileWidth / tileset.tilewidth`, on **both** axes, which is the one
+ * rule that is right in both cases at once. A tileset that came in from Tiled
+ * has a pitch equal to the map's, so the scale is 1 and nothing moves; a
+ * retina palette comes out one tile to one space; and a tile taller than it
+ * is wide still overhangs upward in proportion, because the scale is uniform
+ * and the anchor is the bottom-left. Scaling to *fit* both axes would be the
+ * tempting alternative and it would squash every isometric tileset in the
+ * world flat.
  */
 
 import type Phaser from "phaser";
@@ -183,7 +197,13 @@ export class TileRender {
     const rank = Math.max(-reach, Math.min(reach, cell.cx + cell.cy));
     const stand = this.standing(cell);
     const flags = tileFlags(gid);
-    const signature = `${gid}:${base + rank}:${stand.x},${stand.y}`;
+    // One space wide, whatever the palette's own pixels are. See the note at
+    // the top: uniform, so a tall tile still overhangs rather than squashing.
+    const scale =
+      held.tileset.tilewidth > 0
+        ? this.grid.tileWidth / held.tileset.tilewidth
+        : 1;
+    const signature = `${gid}:${base + rank}:${stand.x},${stand.y}:${scale}`;
 
     const live = this.live.get(key);
     if (live && live.signature === signature) return "drawn";
@@ -193,6 +213,7 @@ export class TileRender {
     // Bottom-left, which is what makes Tiled's placement rule one assignment
     // rather than an offset worked out per tileset.
     image.setOrigin(0, 1);
+    image.setScale(scale);
     image.setDepth(base + rank);
     image.setFlip(
       (flags & FLIPPED_HORIZONTALLY) !== 0,

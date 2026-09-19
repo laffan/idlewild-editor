@@ -133,9 +133,28 @@ tile layer are not things standing anywhere.**
 
 A PSD dropped on one is placed — that is what loads its artwork and lists it
 under the layer — and then cut into a tileset on the project's own grid
-boundaries. `PsdPlacements.place` decides which of the two it is doing from
-the kind of layer the file lands on, so every route in goes through one
-decision: a drop, a paste, Import Assets, Add Image.
+boundaries.
+
+**The cut is a sweep, not a hook**, and that is the one thing in this feature
+that was got wrong first and is worth writing down. The obvious place to cut
+a palette is where a file is placed, so that is where it went:
+`PsdPlacements.place` decided what it was doing from the kind of layer the
+file landed on. It covers a drop, a paste, Import Assets and Add Image — and
+none of the routes that move a file that is *already* in the project.
+Carrying one onto a tile layer from the layer panel goes through
+`DocStore.movePlacements` and never goes near `place`, so the PSD simply
+vanished: this canvas refuses to draw a tile layer's placements, and there was
+no palette to show instead. Any future route onto a layer would have had the
+same hole.
+
+So `Tiling.cutPalettes` asks the document what is true — which placements are
+on tile layers, and which of them have no palette yet — on every document
+change and again once the manifests arrive. Those are the two moments the
+answer can move: one puts the file on the layer, the other is when anything is
+known about it. It is idempotent, so a change handler can call it freely, and
+silent on the undo stack for the reason `migrate` is — what it writes belongs
+to whatever edit brought the file onto the layer rather than being a step
+somebody took.
 
 **A tile layer gets no collider**, where a pattern layer does. Nothing on one
 stands anywhere, and the exported game reads a collider off the first
@@ -148,6 +167,19 @@ space on the ground, so what is picked up is what is put down. On an isometric
 project that is the diamond's **bounding box** — `tileWidth` by `tileHeight`,
 2:1 — because a picture is cut into rectangles whatever shape is drawn inside
 them, and Tiled cuts an isometric tileset the same way.
+
+**As it is shown, not as it is stored.** Everything this editor writes is
+painted at twice the size it is shown at — see `IMPORT_SCALE` — so a PSD
+covering three grid spaces is six grid-widths of pixels, and cutting it at the
+grid's own pitch divides each space into four. That was the second half of the
+same bug: a palette made from a filled patch came out with four times as many
+tiles as there was artwork to see. The scale is read off the **placement**,
+where the answer already is: `width` against `naturalWidth` is how much of a
+space one of the file's pixels covers. What goes into the record is the pitch
+in the file's own pixels, which is what `tilewidth` means in a Tiled tileset —
+64 on a 32px grid at retina — and a tileset whose pitch differs from its map's
+is an ordinary thing in Tiled. A file that came in from a Tiled map is 1:1 and
+is cut at the grid exactly.
 
 **Which PSD a tileset is cannot be recovered from a path**, so it rides in a
 custom property — `idlewild:psd`, with `idlewild:layer` for the layer inside
@@ -286,6 +318,17 @@ the floor. It is also why an imported map whose tile size differs from this
 project's grid is a **warning rather than a refusal**: the tiles still draw,
 and they overhang exactly as they did where they were made.
 
+**A tile's width is one space, and its height follows.** A tileset records its
+pitch in its own image's pixels, and that is not always the map's — a retina
+palette's is twice it. So a tile is scaled by
+`grid.tileWidth / tileset.tilewidth` on **both** axes, which is the one rule
+that is right in both cases at once: a Tiled tileset's pitch equals the map's,
+so the scale is 1 and nothing moves; a retina palette comes out one tile to
+one space; and a tile taller than it is wide still overhangs upward in
+proportion, because the scale is uniform and the anchor is the bottom-left.
+Scaling to *fit* both axes is the tempting alternative and it would squash
+every isometric tileset in the world flat.
+
 **Depth within a layer is the diagonal.** Two cells on the same isometric
 diagonal are at the same screen height and never overlap, so they share a
 depth; one further down the screen draws in front. On an orthogonal grid tiles
@@ -377,5 +420,6 @@ first.
 | `editor/tile-actions.ts` | Import Tiled, and the shell's side of a palette |
 | `editor/tile-palette.ts` | The control, and the run in hand |
 | `editor/inspect-tiles.ts` | The panel it sits in |
+| `game/tiling.ts` | The three above, held together, and the palette sweep |
 | `game/tile-render.ts` | The tiles on the canvas |
 | `game/tile-paint.ts` | The gesture that puts them there |
