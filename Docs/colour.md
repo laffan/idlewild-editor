@@ -77,11 +77,13 @@ text on the sidebar's ground.
 **Attach palette to PSDs** does nothing when pressed and everything the next
 time a PSD leaves. That is a setting, and a setting that takes effect as it is
 changed is a switch — the argument `options-controls.ts` already makes for the
-ones in Project Options. So it is `optionSwitch`, unchanged: its tokens sit on
-`:root` rather than on the sheet, so the same control works in a sidebar. Only
-the row around it is local, because `.option` is a 58px row inside a card and
-this column is thirty pixels tall. The words are a hit target as well as the
-switch, since 44 pixels is a small thing to aim a finger at.
+ones in Project Options. So it is that same switch, through `optionSwitchRow`:
+the words on the left, the switch on the right, and the whole row a hit target,
+since 44 pixels is a small thing to aim a finger at. The row exists because
+`.option` — the settings sheet's own — is 58px inside a bordered card, and a
+column where everything else is thirty pixels tall is not that page. `Use as
+Eraser`, at the top of every brush's panel, is the other one: it was a button
+carrying `aria-pressed`, which is the same bit said in the shape of an action.
 
 ### The one button that changes its mind
 

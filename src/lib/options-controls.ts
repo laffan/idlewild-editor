@@ -127,6 +127,54 @@ export function optionSwitch(
   };
 }
 
+export interface SwitchRow {
+  root: HTMLElement;
+  /** Move the switch without firing `onChange` — see the note at the top. */
+  set: (on: boolean) => void;
+}
+
+export interface SwitchRowOptions {
+  label: string;
+  value: boolean;
+  onChange: (on: boolean) => void;
+  /** The sentence the row carries. It may say something different when on. */
+  title?: string;
+}
+
+/**
+ * A switch with its label, for a **panel** rather than for a settings sheet.
+ *
+ * `optionRow` is the sheet's version and it is a 58px row inside a bordered
+ * card, which is the right shape for a page of settings and the wrong one for
+ * a 300px sidebar where everything else is thirty pixels tall. This is the
+ * same switch at the column's scale: the words on the left, the switch on the
+ * right, and nothing drawn around them.
+ *
+ * **The whole row is the hit target**, not just the switch. Forty-four pixels
+ * is a small thing to aim a finger at when there are words beside it doing
+ * nothing, and `optionSwitch` already stops its own click from propagating —
+ * which is what lets a sheet's row be a button around one, and what keeps a
+ * press here from arriving twice.
+ */
+export function optionSwitchRow(options: SwitchRowOptions): SwitchRow {
+  const control = optionSwitch(options.value, options.onChange, options.label);
+  const root = h(
+    "div",
+    {
+      class: "opt-switch-row",
+      ...(options.title ? { title: options.title } : {}),
+      onClick: () => {
+        const next = !control.get();
+        control.set(next);
+        options.onChange(next);
+      },
+    },
+    h("span", { class: "opt-switch-label", text: options.label }),
+    control.root,
+  );
+  return { root, set: (on) => control.set(on) };
+}
+
 export interface NumberControl {
   root: HTMLElement;
   input: HTMLInputElement;

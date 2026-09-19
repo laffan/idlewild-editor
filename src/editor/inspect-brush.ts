@@ -21,6 +21,7 @@
  */
 
 import { h } from "../lib/dom";
+import { optionSwitchRow } from "../lib/options-controls";
 import { sectionTitle } from "./inspect-collapse";
 import { BRUSHES, brushStampUrl, type FillMode, type StrokeStyle } from "../drawing";
 import { createPaintPicker } from "./paint-picker";
@@ -120,32 +121,33 @@ export function toolPanel(
  *
  * A switch rather than a segmented pair, because there is no second thing to
  * name — a brush either draws or it rubs out, and "Draw / Erase" would be two
- * words for one bit. The hint changes with the state so that the row says what
- * is happening now rather than only what the control does.
+ * words for one bit. It was a button that reported its own state through
+ * `aria-pressed`, which is the same bit said in a shape that looks like an
+ * action; `optionSwitchRow` is the shape the sentence above was already
+ * describing, and the one Project Options and the colour picker's own setting
+ * both use.
+ *
+ * The hint changes with the state so that the row says what is happening now
+ * rather than only what the control does — on the row rather than under it,
+ * because "here is what is happening" is a thing to ask for rather than a
+ * thing to read every time.
  */
 function eraserRow(actions: ToolPanelActions): HTMLElement {
   const on = actions.erasing;
-  return h(
-    "div",
-    { class: "inspect-section" },
-    h(
-      "button",
-      {
-        class: "panel-btn erase-toggle",
-        "aria-pressed": String(on),
-        // On the control rather than under it: the hint changes with the
-        // state, so what it says is "here is what is happening now", which
-        // is a thing to ask for rather than a thing to read every time.
-        title: on
-          ? "Taking out what it would have drawn. Hold the tool's button on " +
-            "the toolbar to turn it back."
-          : "Everything this tool would draw, it removes instead. A long " +
-            "press on its button does the same.",
-        onClick: () => actions.onErasing(!on),
-      },
-      h("span", { text: "Use as Eraser" }),
-    ),
-  );
+  const row = optionSwitchRow({
+    label: "Use as Eraser",
+    value: on,
+    onChange: (next) => actions.onErasing(next),
+    title: on
+      ? "Taking out what it would have drawn. Hold the tool's button on " +
+        "the toolbar to turn it back."
+      : "Everything this tool would draw, it removes instead. A long " +
+        "press on its button does the same.",
+  });
+  // No `set` from here: the panel is rebuilt whole whenever the tool or its
+  // state changes, so the row is made afresh from `actions.erasing` each
+  // time. See `Inspector.render`.
+  return h("div", { class: "inspect-section" }, row.root);
 }
 
 /**

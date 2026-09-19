@@ -360,6 +360,28 @@
 }
 .opt-switch:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
+/* The same switch with its label, for a panel rather than for a settings
+   sheet: `.option` is a 58px row inside a card, and a sidebar column where
+   everything else is thirty pixels tall is not that page. Nothing is drawn
+   around it — the sections either side of it are the structure. */
+.opt-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  cursor: pointer;
+}
+.opt-switch-label {
+  font: 500 11px var(--font-body);
+  color: var(--chrome-text);
+}
+/* A row that is on but has nothing to act on yet — the palette switch over an
+   empty palette. Quiet rather than disabled: the setting is real and it is
+   saved, it just has nothing to do until the row above it has a colour in it,
+   and greying it out would say it could not be pressed. */
+.opt-switch-row.dim { opacity: 0.55; }
+
 /* ── Number ──────────────────────────────────────────────────────────────── */
 
 .opt-number-wrap {

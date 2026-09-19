@@ -113,8 +113,8 @@ Part of [the Idlewild manual](README.md).
   Shape and Fill: what the tool *would have drawn* is what it takes out
   instead, so a Pattern brush set to erase removes exactly the lattice cells it
   would have revealed and a Shape brush takes back the tiles it would have
-  stamped. Two ways in — **Use as Eraser** at the top of the tool's own panel,
-  and a **long press** on its button in the toolbar — and a turned-round tool
+  stamped. Two ways in — the **Use as Eraser** switch at the top of the tool's
+  own panel, and a **long press** on its button in the toolbar — and a turned-round tool
   carries a slash across its icon, in the accent when it is not in hand and in
   white when it is. Erasing is one composite over the *finished* mark rather
   than one per stamp, which is the whole of why a donut's hole is not taken out

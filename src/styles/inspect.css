@@ -346,9 +346,11 @@
   color: #fff;
 }
 .panel-btn.pressed:hover { background: var(--color-accent-600); }
-/* The same switch said the other way. `Use as Eraser` is a button that
-   reports its own state, so it carries `aria-pressed` rather than a class
-   someone has to remember to keep in step with it. */
+/* The same switch said the other way, for a panel button that reports its own
+   state rather than being told about it by a class someone has to remember to
+   keep in step. `Upright`, in the text panel, is the one left using it: `Use
+   as Eraser` was the other, and it is an `opt-switch-row` now — a setting that
+   takes effect as it is changed is a switch, not a button that looks pressed. */
 .panel-btn[aria-pressed="true"] {
   background: var(--color-accent);
   border-color: var(--color-accent);

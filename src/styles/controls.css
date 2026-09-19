@@ -344,31 +344,11 @@
 }
 .cp-palette-add:disabled { opacity: 0.4; }
 
-/* Browse Palettes is `lib-row-buttons` — the library's own, which the pattern
-   and shape palettes directly above this already use, and which carries the
-   panel's ink. Nothing here restyles it.
-
-   Attach is a settings row: the words on the left, `opt-switch` on the right.
-   That is the switch Project Options uses, unchanged — its tokens are on
-   `:root` rather than on the sheet, so it is the same control here — and all
-   this rule does is lay it out at the sidebar's scale instead of the settings
-   page's 58px card row. */
-.cp-attach {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 34px;
-  cursor: pointer;
-}
-.cp-attach-label {
-  font: 500 11px var(--font-body);
-  color: var(--chrome-text);
-}
-/* On, with nothing to attach: the switch is telling the truth about itself and
-   the row above it is telling the truth about the palette, and this is the one
-   saying the two do not add up to anything yet. */
-.cp-attach.empty { opacity: 0.55; }
+/* The two controls under the row are the design system's own and neither is
+   restyled here. Browse Palettes is `lib-row-buttons`, which the pattern and
+   shape palettes directly above this already use and which carries the panel's
+   ink; Attach is `opt-switch-row`, the switch from Project Options with its
+   label — see `options.css`. */
 
 /* ── the indeterminate progress bar ──────────────────────────────────────── */
 
