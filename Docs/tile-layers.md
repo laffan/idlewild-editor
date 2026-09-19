@@ -207,17 +207,41 @@ somewhere.** Nothing else passes between them.
 
 The picture is an `<img>` read over the asset server rather than a texture out
 of Phaser — it is a control in a panel, not an object in a scene, and the
-server is already how psd-to-phaser reads the same file. Everything is laid
-out as a percentage of the image rather than in pixels, so a resized sidebar
-needs nothing measured again; the one place a real measurement happens is a
-pointer event, where the box the browser laid out is exactly what has to be
-divided.
+server is already how psd-to-phaser reads the same file.
 
-The lattice over it is two repeating gradients rather than one element per
-space. A tileset is often hundreds of tiles, and hundreds of elements in a
-panel that is rebuilt on every document change is a panel that stutters. The
-lines are **rectangles even on an isometric project**, because rectangles are
-how the image is actually cut: a diamond is what the *ground* looks like, and
+**A palette tile is a canvas tile.** The first version stretched the picture
+to the sidebar's width, and the result was a palette whose tiles were some
+arbitrary size that matched nothing: picking up a 16px tile and seeing it
+three times life-size tells you nothing about what is going to land, which is
+the one job a palette has. So a tile is drawn at `cell × zoom` — exactly the
+number of screen pixels the same tile occupies on the canvas — and a tileset
+wider than the column **overflows**, which is correct and is why the box
+scrolls.
+
+**It zooms on its own.** A palette starts at the camera's zoom, because that
+is what "the same size as a normal tile" means at the moment you look at it,
+and from then on it is yours: a pinch, a ⌘-wheel, or the two steps over it,
+with the readout as the way back. The same distinction a collider draws
+between a guess and an answer — the guess holds only until somebody gives
+one, and it is kept **per tileset**, because two pictures in one sidebar have
+no reason to want the same size. Read when the panel is built rather than
+followed: a palette that resized itself while somebody pinched the canvas
+would be a column jumping under their other hand.
+
+**One finger means pick**, so the second finger means move and scale, exactly
+as on the canvas. That is also why the box carries `touch-action: none` — the
+two ways round a palette bigger than its box are its scrollbar and a second
+finger, and a one-finger drag the column took for a scroll would be a run
+nobody could select on an iPad.
+
+Only one number is ever written in pixels: the sheet's width. The picture
+fills it, and the lattice and the highlight are percentages of it, so a zoom
+changes that number and everything follows without anything being measured
+again. The lattice itself is two repeating gradients rather than one element
+per space — a tileset is often hundreds of tiles, and hundreds of elements in
+a panel rebuilt on every document change is a panel that stutters. The lines
+are **rectangles even on an isometric project**, because rectangles are how
+the image is actually cut: a diamond is what the *ground* looks like, and
 drawing one here would say the artwork outside it is not part of the tile.
 
 **The selection is a rectangle**, for the reason a stamp has to have a shape:
@@ -237,29 +261,117 @@ is deliberate: a listener on the frame dies when the panel holding it is
 thrown away, and a subscription to the selection would need taking off again.
 The render that forgot would leak one per rebuild for the life of the session.
 
-## The tools are the drawing tools, re-pointed
+## A toolbar of its own: Stamp and Sweep fill
 
-A tile tool is not a new toolbar. On a tile layer the **Pencil** lays the run
-picked in the palette along a drag and **Fill** pours it into a region; turned
-round — the same erase flag every brush already has — either takes tiles off
-instead. Everything on the rail proper is untouched: Select, Pan, Point and
-Boundary are about the canvas rather than about what is drawn on it, and a
-named place or a blocking boundary on a tile layer means what it means
-anywhere else.
+**The first version re-pointed the ink tools and that was wrong.** The Pencil
+laid tiles on a tile layer and ink everywhere else, and Fill poured tiles
+there and colour elsewhere. It is the kind of economy that reads well in a
+diff and badly in a hand: a tool whose meaning depends on which layer is
+selected is a tool nobody can learn, every panel describing it has to
+describe two things, and the one line of prose under the heading has to be
+true of both. A tool is what it is called.
 
-**Three are withdrawn.** The Pattern and Shape brushes reveal a library row
-and stamp a library shape, and the Text tool writes words that become pixels;
-none of the three has anything to do with a grid of tiles, and a button that
-silently does nothing is worse than a button that is not there. Hidden rather
-than disabled, because the rule is about the *layer* rather than about the
-moment — a disabled button is one somebody has to work out the reason for.
+So a tile layer swaps the **ink column** out. The seven brushes go and two
+arrive:
+
+**Stamp** puts the run picked in the palette down where you tap, and along a
+drag. **Sweep fill** is an outline — press, draw a shape, release — and every
+space inside it is filled.
+
+Each has the same second option said twice, because it is the same choice
+about the same run: **lay it out** in the shape it was picked, or **draw from
+it** at random. A sweep set to random gains a **density**, which is how many
+of the covered spaces take a tile — a roll per space rather than a count
+taken from the total, because a count would have to decide *which* spaces and
+every way of deciding that either clumps or makes a lattice. A hundred per
+cent is every space, and it is the only value that never leaves a gap; at
+that setting the difference between a scatter and a tiling is which tile
+lands, not how many.
+
+Both **turn round to erase**, like every other tool here that makes a mark:
+what Stamp would put down it takes off, what a sweep would fill it clears.
+That is the whole of how a tile is removed, for the reason there is no
+separate rubber anywhere else in this editor.
+
+The swap is the ink column's alone. Select, Pan, Point and Boundary are about
+the canvas rather than about what is drawn on it, and a named place or a
+blocking boundary on a tile layer means what it means anywhere else.
+
+**PSD Edit mode is the one exception, and it is not one really.** A PSD
+opened for drawing over a tile layer is ordinary artwork being drawn on — the
+layer underneath it happening to hold tiles has nothing to do with what the
+pointer is for — so the ink comes back for the length of the session and the
+two tile tools step aside, because there is nowhere for a tile to go while
+the canvas belongs to a file. `toolsFor(kind, psdEditing)` is that whole
+rule; `editor/psd-edit.ts` puts the tool in hand down and picks it up again
+at both ends, because neither the rail nor the routing has any way to hear a
+canvas mode open or close.
+
+Hidden rather than disabled, in both directions: the rule is about the
+*layer* rather than about the moment, and a disabled button is one somebody
+has to work out the reason for.
 
 `toolsFor` and `tileVerbOf` in `editor/tool-rail.ts` are the two tables, and
-`tool-routing.ts` reads both: a tile tool keeps the pointer with the canvas
+`tool-routing.ts` reads both — a tile tool keeps the pointer with the canvas
 and hands the drawing layer nothing, because what it makes is a gesture over
-the grid rather than ink on the drawing surface. The tool in hand is put down
-and picked up again whenever the active layer moves, because that is the only
-thing that changes what it means.
+the grid rather than ink on the drawing surface. The tool is re-applied
+whenever the active layer moves, because that is the other thing that changes
+what is on the toolbar.
+
+### The ghost under the pointer
+
+What is about to land is drawn where it would land, faded, and it is **the
+real write**: `TilePaint.stampAt` builds the list the document would get and
+the preview draws that same list, so the ghost cannot drift from the mark.
+The drawing layer's own tool cursor makes exactly this bargain for exactly
+this reason — see `drawing/cursor.ts`.
+
+The random stamp is where it earns its keep. A scatter that re-rolled every
+time anything asked what it would do would show one tile and lay another, so
+a pick is drawn from a sequence that only advances when a tile actually
+lands: the ghost **peeks**, the placement **takes**. `TilePicks` is those two
+methods and nothing else.
+
+The hover comes straight off the canvas element rather than from Phaser,
+because Phaser reports a pointer that is *down* and a preview has to follow
+one that is merely over the canvas — which on a desktop is most of the time.
+`Tiling` binds it and unbinds it, since a listener holding a scene that has
+gone is a listener drawing ghosts into a destroyed renderer.
+
+### Why a tile tool is not a canvas mode
+
+Extrude, collider, mask and PSD Edit take the canvas over: they dim what is
+not the subject, say what the pointer does, and have one way in and two ways
+out. A tile tool is none of that. It is simply what the pointer does while it
+is in your hand, the way the Pencil is — so `game/tile-paint.ts` sits
+*between* the modes and the drag controller in the gesture chain and refuses
+every gesture unless a tile tool is held over an unlocked, visible tile
+layer.
+
+`RigMode` grows a `"tile"` value all the same, and what it is really saying
+is *no marquee and no hold*: a box dragged round ground that has nothing on
+it to select would be a gesture with no meaning, and a hold would open one
+half a second into every sweep.
+
+**A gesture is one step.** The group opens at pointer-down and closes at the
+release, the same bracket `game/drag.ts` keeps and for the same reason. A
+sweep writes nothing at all until the release, because until the shape is
+closed there is no inside to fill — and a press that never travelled is a
+tap, which still puts one tile down rather than nothing.
+
+**A run lays itself out from where the gesture started**, not from each space
+it crosses, so dragging a 2 × 2 run across the ground makes a continuous
+pattern rather than a 2 × 2 block centred on every space the finger touched.
+That is what Tiled does and the only reading under which picking more than
+one tile is worth doing.
+
+**A sweep's outline closes itself.** `cellsInPolygon` is the same function a
+pattern shape drawn with the pencil is baked down through, and it tests each
+space's *centre* — which is why a sweep that comes back on itself fills the
+ring it drew rather than the box around it. The trace is capped at a couple
+of thousand points: a 120 Hz pointer over a long drag is far more than that,
+and what is wanted from them is a shape, so past the cap the newest point
+replaces the last rather than growing the list.
 
 ### Why it is not a canvas mode
 
@@ -335,6 +447,26 @@ depth; one further down the screen draws in front. On an orthogonal grid tiles
 do not overlap at all and the rule costs nothing, so there is one rule rather
 than two. It is clamped so a tile a long way from the origin cannot climb out
 of its layer's own slot.
+
+### PSD Edit mode over a tile layer
+
+Nothing on a tile layer is ever on the canvas, which is a problem for the one
+mode whose whole job is to frame a file and draw into it. A session there
+would otherwise open on a rectangle with nothing in it and nothing anywhere
+to draw over.
+
+So `DocRenderer.draws` treats a tile layer exactly as it treats a pattern
+layer, **exception and all**: neither draws its placements, and both make one
+for the unit a session has revealed. That reveal *is* the temporary canvas the
+mode needs — the file appears over the tiles, is drawn on, and goes when the
+session ends, however it ended. And because nothing has ever been drawn where
+the file sits, the camera is brought to it on the way in; on a pattern layer
+the palette is anchored to a space somebody chose, and here it is wherever the
+placement happened to land.
+
+The Pencil is asked for **after** the mode starts rather than before. A
+moment earlier it is not a tool the rail offers, so asking for it put Select
+in your hand and left the mode open with nothing to draw with.
 
 **A tile must be let go of before its textures are**, which is the hazard
 `PatternRender.dropKey` exists for and the same answer. A re-import, a rename
@@ -420,6 +552,8 @@ first.
 | `editor/tile-actions.ts` | Import Tiled, and the shell's side of a palette |
 | `editor/tile-palette.ts` | The control, and the run in hand |
 | `editor/inspect-tiles.ts` | The panel it sits in |
-| `game/tiling.ts` | The three above, held together, and the palette sweep |
-| `game/tile-render.ts` | The tiles on the canvas |
-| `game/tile-paint.ts` | The gesture that puts them there |
+| `lib/tile-tools.ts` | The two tools' arithmetic: runs, picks, scatters |
+| `editor/inspect-tile-tools.ts` | Their panel in the TOOL zone |
+| `game/tiling.ts` | The renderer, the gesture and the palette sweep, together |
+| `game/tile-render.ts` | The tiles on the canvas, and the ghost over them |
+| `game/tile-paint.ts` | The two gestures |

@@ -664,6 +664,11 @@ export class WorldScene extends Phaser.Scene {
   /** Let a tool take raw pointer input — the drawing layer's entry point. */
   /** What a drag on empty space does: rubber-band, or move the camera. */
   setGestureMode(mode: RigMode): void {
+    // Putting a tile tool down has to take its ghost with it. The preview
+    // follows the pointer, so without this it would sit where the pointer
+    // last was until somebody moved it — a tile about to land from a tool
+    // nobody is holding.
+    if (mode !== "tile") this.tiling.paint.clearHover();
     // Kept as well as handed on, because a tap means something different
     // under the Point tool and the rig reports every tap the same way.
     this.gestureMode = mode;

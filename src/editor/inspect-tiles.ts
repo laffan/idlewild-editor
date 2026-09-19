@@ -115,7 +115,7 @@ export function renderTileLayer(
    * about to want. So the announcement the palettes already listen for is
    * reused: each re-reads the zoom it is holding and resizes itself.
    */
-  const resize = (_firstgid: number): void => {
+  const resize = (): void => {
     for (const el of palettes.querySelectorAll(".tile-palette")) {
       el.dispatchEvent(new CustomEvent("tiles-picked"));
     }
@@ -139,9 +139,7 @@ export function renderTileLayer(
           "div",
           { class: "tile-palette-head" },
           h("div", { class: "tile-palette-name m", text: tileset.name }),
-          zoomControls(tileset.firstgid, selection, actions.canvasZoom, () =>
-            resize(tileset.firstgid),
-          ),
+          zoomControls(tileset.firstgid, selection, actions.canvasZoom, resize),
           h("button", {
             class: "tile-palette-drop",
             title: `Take ${tileset.name} off this project`,

@@ -114,9 +114,20 @@ on the next frame and was fired out of the side of the ground.
 
 The frontend's check is `tsc --noEmit` plus `vite build`.
 
-On the frontend, `lib/__tests__/tiled.test.ts` and
-`lib/__tests__/tile-layers.test.ts` pin the format and what the document does
-with it. Mostly round trips, because "indistinguishable from data Tiled wrote"
+On the frontend, `lib/__tests__/tile-tools.test.ts` and
+`game/__tests__/tile-paint.test.ts` are the two tile tools: the first is the
+arithmetic — which gids a run holds, what the next random pick is, how thin a
+scatter comes out — and the second is the gestures that use it, driven
+through the host rather than a scene, because nothing in them needs Phaser, a
+camera or a texture. The claim worth pinning twice is that **the ghost is the
+mark**: a random stamp peeks at its sequence and the placement takes from it,
+so the tile you were shown is the tile you get, and a test that stubs
+`Math.random` is the only way to say that out loud. Randomness is stubbed
+rather than sampled a thousand times, because what matters about a scatter is
+not that it is well distributed but that it asks once per space.
+
+`lib/__tests__/tiled.test.ts` and `lib/__tests__/tile-layers.test.ts` pin the
+format and what the document does with it. Mostly round trips, because "indistinguishable from data Tiled wrote"
 is a claim about bytes rather than about behaviour: a map goes in, the same
 map comes out, and the two things that could silently ruin it are written out
 explicitly — the four flags packed into the top of a gid, and the order a

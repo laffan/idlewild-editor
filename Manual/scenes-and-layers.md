@@ -77,14 +77,14 @@ Part of [the Idlewild manual](README.md).
   one kind not offered on a blank project. A PSD dropped on one is not placed
   on the canvas: it is cut into a palette along the same boundaries as the
   main grid and shown in the properties sidebar, where you drag across it to
-  take a run of tiles. **Import Tiled**, at the foot of the layer's list,
-  takes a `.tmx` or a `.tmj` and brings the map's tilesets and layers in with
-  it. The drawing tools are re-pointed there — the Pencil lays what is in hand
-  and Fill pours it, and either turned round takes tiles off — while the
-  Pattern and Shape brushes and Text step out of the way, having nothing to do
-  with a grid of tiles. Everything is saved in Tiled's own format, so a map
-  built here opens in Tiled and a map Tiled wrote opens here. See
-  [Tile layers](tile-layers.md)
+  take a run of tiles — at the size that tile is on the canvas, in a box that
+  scrolls and zooms on its own. **Import Tiled**, at the foot of the layer's
+  list, takes a `.tmx` or a `.tmj` and brings the map's tilesets and layers in
+  with it. The ink column is a different column there: the seven brushes step
+  aside and **Stamp** and **Sweep fill** take their place, each with a direct
+  and a random setting, and either turned round takes tiles off. Everything is
+  saved in Tiled's own format, so a map built here opens in Tiled and a map
+  Tiled wrote opens here. See [Tile layers](tile-layers.md)
 
 ## The layer list
 

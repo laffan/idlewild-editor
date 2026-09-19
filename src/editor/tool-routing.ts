@@ -285,6 +285,10 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     // cursor: what they say is "this is a place", and which of the two lands
     // is the button that is lit.
     host.canvas.classList.toggle("placing", tool === "point" || tool === "text");
+    // And a crosshair for the two tile tools, which aim at a space the way
+    // the drawing layer's own tools aim at a point. The class carries it for
+    // the reason the two above do: a mode's own cursor still has to win.
+    host.canvas.classList.toggle("tiling", tiling);
     // What the rail offers follows the layer, not the tool — a tile layer
     // withholds three of the eleven. Set here because this is the one place
     // that already runs on both of the things that can change it.

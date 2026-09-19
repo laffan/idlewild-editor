@@ -57,6 +57,12 @@
    lands somewhere exact, which is the one thing worth knowing about it. */
 .editor-canvas-wrap.placing canvas { cursor: crosshair; }
 
+/* And the two tile tools, which aim at a space. The same crosshair as Point
+   rather than a cursor of their own: what is going to land is already drawn
+   under the pointer as a ghost tile — see `game/tile-render.ts` — so the
+   cursor's whole job here is to be small enough not to cover it. */
+.editor-canvas-wrap.tiling canvas { cursor: crosshair; }
+
 /* The header. A row of the shell rather than a floating toolbar, spanning
    the window and standing the same height as the console bar at the bottom,
    so the canvas sits between two rules instead of under a hovering bar. */

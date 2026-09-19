@@ -73,6 +73,19 @@ A run stays in hand until you pick another one, whichever layer you move to —
 the palettes belong to the project rather than to one layer, so a run picked
 while one layer was open is still meaningful on the next.
 
+**A tile in the palette is the size it is on the canvas**, at the zoom the
+canvas is at when you look at the sidebar. That is the point of it: what you
+pick up is what is going to land, at the size it is going to land. A picture
+wider than the column therefore runs off the edge of its box, and the box
+scrolls.
+
+Each palette also zooms on its own, from the two steps over it. The **−** and
+**+** change it; the percentage between them is a button, and pressing it puts
+the palette back to whatever the canvas is doing. On a trackpad, ⌘ or Ctrl
+with the wheel does the same; on glass, two fingers pinch and move it. One
+finger always means *pick*, which is why moving a large palette around takes
+the second one.
+
 The **×** beside a palette's name takes it off the project. It takes every
 tile made of it off with it, which is why it is the smallest control in the
 panel: a tile whose picture has gone would draw nothing with nothing on screen
@@ -80,31 +93,53 @@ to say why.
 
 ## Painting
 
-The tools down the left edge are the ones you already know, pointed at tiles.
+A tile layer has a toolbar of its own. The seven brushes step aside — none of
+them has anything to do with a grid of tiles — and two tools take their place
+down the left edge.
 
-- **Pencil** lays the run in hand. Tap for one space, drag for a line of them.
-  A run of more than one tile is laid out from where the drag started, so
-  sweeping a 2 × 2 run across the ground makes a continuous pattern rather
-  than the same block over and over.
-- **Fill** pours the run into the ground under it — every space holding what
-  the space you tapped holds, out to the edge of what you can see. There is no
-  edge to this canvas, so what is in view is the edge; zoom out to fill more,
-  and close the shape if you meant the room rather than the world.
+- **Stamp** puts the run in hand down. Tap for one space, drag to lay a line
+  of them. A run of more than one tile is laid out from where the drag
+  started, so sweeping a 2 × 2 run across the ground makes a continuous
+  pattern rather than the same block over and over. What is about to land is
+  drawn under the pointer, faded, so you can see it before you commit to it.
+- **Sweep fill** is a shape. Press, draw round the ground you mean, and let
+  go: every space inside the outline is filled. The shape closes itself, so a
+  loop fills the ring it drew rather than the box around it.
+- **Both have two settings**, in the properties sidebar while the tool is in
+  hand. *Direct* — or *Solid*, on the Sweep — lays the run out in the shape
+  you picked it. *Random* gives every space one tile of the run instead,
+  chosen as it lands; with Stamp the ghost under the pointer is the one that
+  is coming next, so you can see what you are about to get. A random sweep
+  gains a **density**: how many of the spaces you swept take a tile, as a
+  percentage. A hundred is all of them.
 - **Either one, turned round**, takes tiles off instead. Hold the button for
-  half a second, or use the switch at the top of the tool's own panel in the
-  properties sidebar — the same erase flag every brush in the editor has.
+  half a second, or use the switch at the top of the tool's own panel — the
+  same erase flag every brush in the editor has. There is no separate rubber.
 - **Select, Pan, Point** and **Boundary** are unchanged. A named place or a
   blocking boundary on a tile layer means what it means anywhere else.
 
-Three tools step out of the way on a tile layer: the **Pattern** and **Shape**
-brushes and **Text**. None of them has anything to do with a grid of tiles, so
-rather than sitting there doing nothing they are not there.
-
-Each sweep is one press of undo, however many spaces it covered.
+Each gesture is one press of undo, however many spaces it covered.
 
 Nothing on a tile layer is selected by tapping it. There is no one object
 under the pointer to name — the tiles are a map, not a pile of things — so the
 layer is reached from the sidebar, which is where its palettes are.
+
+## Editing a palette's artwork
+
+Select a palette's PSD in the left sidebar, open its layer list in the
+properties sidebar and press **Open PSD**, exactly as you would for a picture
+standing on the canvas. Two things are different on a tile layer, both because
+nothing there is ever drawn on the canvas.
+
+The file **appears over the tiles** for the length of the session, and the
+canvas moves to it — there is nothing else to have brought you there. It goes
+again when you Apply or Cancel.
+
+And the **ordinary brushes come back** while it is open. A file you are
+drawing into is artwork like any other; the layer underneath it holding tiles
+has nothing to do with what the pencil is for. Stamp and Sweep step aside
+until the session ends, since there is nowhere for a tile to go while the
+canvas belongs to a file.
 
 ## What is saved
 
