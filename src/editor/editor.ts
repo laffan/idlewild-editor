@@ -27,8 +27,9 @@ import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
 import { createShell } from "./shell";
 import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
-import { openNewBackground, type BackgroundDeps } from "./background-actions";
-import { importTiledMap, type TileDeps } from "./tile-actions";
+import { type BackgroundDeps } from "./background-actions";
+import { tileDeps, type TileDeps } from "./tile-actions";
+import { layersPanelCallbacks } from "./layers-wiring";
 import { createPatternShapes } from "./pattern-actions";
 import { layerKind } from "../lib/layer-kinds";
 import { layerOf } from "./inspect-zone";
@@ -120,32 +121,16 @@ export async function mountEditor(
   // project's cells are single pixels and no lattice is ever stroked over them.
   const overlays = new OverlaysPanel(minimap, grid.snaps);
 
-  const layers = new LayersPanel(
+  const layers: LayersPanel = new LayersPanel(
     store,
-    {
-      getActiveLayerId: () => activeLayerId,
-      getSelection: () => handle?.scene.getSelection() ?? { kind: "none" },
-      onSelectLayer: (layerId) => {
-        setActiveLayer(layerId);
-        layers.render();
-        handle?.scene.setSelection({ kind: "layer", layerId });
-      },
-      onSelectItem: (selection) => {
-        // Selecting something inside a layer makes that layer the active one,
-        // so the next Fill or Add Image lands where the user is looking.
-        // `layerOf` rather than a list of the kinds that have one: this was a
-        // list, and every kind added since has had to remember to join it.
-        setActiveLayer(layerOf(selection) || activeLayerId);
-        handle?.scene.setSelection(selection);
-      },
-      // A fact about the file rather than about the document, so it is asked
-      // of the scene — see `PsdPlacements.anchored`.
-      isAnchored: (key) => handle?.scene.psdAnchored(key) ?? true,
-      psdLayers: (key) => handle?.scene.psdLayers(key) ?? [],
-      onNewBackground: (layerId, anchor) =>
-        openNewBackground(anchor, layerId, backgrounds),
-      onImportTiled: (layerId) => void importTiledMap(tiles, layerId),
-    },
+    layersPanelCallbacks({
+      scene: () => handle?.scene ?? null,
+      panel: () => layers,
+      activeLayerId: () => activeLayerId,
+      setActiveLayer,
+      backgrounds: () => backgrounds,
+      tiles: () => tiles,
+    }),
     overlays.root,
   );
 
@@ -173,10 +158,10 @@ export async function mountEditor(
     onPsdCreated: () => inspector.revealPsdLayers(),
   };
 
-  // Import Tiled wants the same answers New Background does — both are ways
-  // onto a layer with no canvas gesture of its own — so it borrows them
-  // rather than keeping a second copy that has to be kept in step.
-  const tiles: TileDeps = { ...backgrounds, onChanged: refreshPanels };
+  // Import Tiled and the tile palette want the same answers New Background
+  // does — all of them are ways onto a layer with no canvas gesture of its
+  // own — so they borrow them rather than keeping a second copy.
+  const tiles: TileDeps = tileDeps(backgrounds, refreshPanels, () => base);
 
   // Every control in the properties sidebar, wired in `inspect-wiring.ts`.
   // Almost everything it reaches is built after it — the scene, the drawing
@@ -208,6 +193,7 @@ export async function mountEditor(
         merge: () => void mergeSelection(merging),
       }),
       tools: () => tools,
+      tiles: () => tiles,
     }),
   );
 

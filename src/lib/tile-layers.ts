@@ -15,6 +15,7 @@
 
 import type { DocStore } from "./doc-store";
 import type { Grid } from "./grid";
+import * as log from "./log";
 import {
   chunksOf,
   emptyTileLayer,
@@ -163,6 +164,45 @@ export function addTileset(
     ],
   };
   addTilesets(store, [made]);
+  return made;
+}
+
+/**
+ * A PSD just placed on a tile layer, cut into a palette.
+ *
+ * What *placing* a file means depends on the kind of layer it lands on, and
+ * on a tile layer it means this: the artwork divided on the project's own
+ * grid boundaries, as a Tiled tileset. Every route in — a drop, a paste,
+ * Import Assets, Add Image — goes through one `place`, so this is called
+ * from there and nowhere else.
+ *
+ * `addTileset` hands back the set that is already there for a file that has
+ * been cut before, so dropping the same PSD twice does not make a second
+ * palette and leave every gid standing on the first one wrong.
+ */
+export function cutIntoTileset(
+  store: DocStore,
+  grid: Grid,
+  layer: Layer,
+  psdKey: string,
+  art: { path: string; filePath?: string; width: number; height: number } | undefined,
+): TiledTileset | null {
+  if (!art) return null;
+  const made = addTileset(store, grid, {
+    psdKey,
+    layerPath: art.path,
+    name: psdKey,
+    // Where psd-to-json put the artwork, relative to the project — what a
+    // `.tmj` written beside it has to name to point at a real picture.
+    image: `assets/${psdKey}/${art.filePath ?? ""}`,
+    imagewidth: art.width,
+    imageheight: art.height,
+  });
+  const rows = made.columns > 0 ? Math.round(made.tilecount / made.columns) : 0;
+  log.info(
+    `${psdKey}.psd is a palette on ${layer.name} — ${made.columns} × ${rows} ` +
+      `tiles of ${made.tilewidth} × ${made.tileheight}`,
+  );
   return made;
 }
 

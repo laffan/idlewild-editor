@@ -36,12 +36,10 @@ import { droppedFile, fromBase64, psd } from "../lib/ipc";
 import * as log from "../lib/log";
 import { parseManifest, placeableLayers } from "../lib/manifest";
 import {
-  addTileset,
   addTilesets,
   nextFirstGid,
   paintTiles,
   tilesetsOf,
-  type TilesetSource,
 } from "../lib/tile-layers";
 import { chunksOf } from "../lib/tiled/chunks";
 import { tileFlags, tileId } from "../lib/tiled/gid";
@@ -54,11 +52,20 @@ import {
   type TiledTileset,
 } from "../lib/tiled/types";
 import type { Layer } from "../lib/types";
+import type { TileActions } from "./inspect-tiles";
+import { TileSelection } from "./tile-palette";
 import { openPsdProgress } from "./psd-progress";
 import type { WorldScene } from "../game/world-scene";
 
-/** What both routes need from the shell. */
-export interface TileDeps {
+/**
+ * What every route onto a tile layer needs from the shell.
+ *
+ * It extends what the *panel* needs rather than sitting beside it, because
+ * the two are one subject: Import Tiled is a row in the left sidebar and a
+ * button in the right one, and a second object holding the same four answers
+ * would be a second object to keep in step.
+ */
+export interface TileDeps extends TileActions {
   projectId: string;
   store: DocStore;
   grid: Grid;
@@ -67,6 +74,44 @@ export interface TileDeps {
   focusLayer: (layerId: string) => void;
   /** Re-read the panels once the document and the palettes have moved. */
   onChanged?: () => void;
+}
+
+/**
+ * The whole of it, from what New Background already answers.
+ *
+ * Both are ways onto a layer that has no canvas gesture of its own, and they
+ * want the same four things — the project, the grid, the scene and a way to
+ * make a layer the active one. So the shell hands over the set it already
+ * built rather than assembling a second one, and this adds what is a tile
+ * layer's alone: where a palette's picture is served from, and what is in
+ * hand. The run in hand is owned here, which is what makes it survive the
+ * inspector being rebuilt on every document change.
+ */
+export function tileDeps(
+  base: {
+    projectId: string;
+    store: DocStore;
+    grid: Grid;
+    scene: () => WorldScene | null;
+    focusLayer: (layerId: string) => void;
+  },
+  onChanged: () => void,
+  assetBase: () => string,
+): TileDeps {
+  const selection = new TileSelection();
+  const deps: TileDeps = {
+    projectId: base.projectId,
+    store: base.store,
+    grid: base.grid,
+    scene: base.scene,
+    focusLayer: base.focusLayer,
+    onChanged,
+    assetBase,
+    tileSelection: () => selection,
+    onImportTiled: (layerId) => void importTiledMap(deps, layerId),
+    onClearTiles: (layerId) => clearTiles(deps, layerId),
+  };
+  return deps;
 }
 
 /**
@@ -307,45 +352,6 @@ function remap(layer: TiledTileLayer, shift: number): TiledTileLayer {
       ),
     })),
   };
-}
-
-/**
- * Cut a PSD already on a tile layer into a palette.
- *
- * What a drop onto a tile layer ends at. The file is placed like any other —
- * that is what loads its artwork and lists it under the layer — and then this
- * says what it *is*: a tileset, divided on the project's own grid boundaries.
- * A file that is already one is handed back unchanged, because the gids
- * standing on it would all be wrong if it were cut again.
- */
-export function cutPsdIntoTileset(
-  deps: TileDeps,
-  layerId: string,
-  psdKey: string,
-): TiledTileset | null {
-  const scene = deps.scene();
-  const layer = deps.store.layer(layerId);
-  const placement = layer?.placements.find((p) => p.psdKey === psdKey);
-  if (!scene || !placement) return null;
-
-  const art = scene
-    .psdLayers(psdKey)
-    .find((held) => held.path === placement.layerPath);
-  const source: TilesetSource = {
-    psdKey,
-    layerPath: placement.layerPath,
-    name: psdKey,
-    image: artworkPath(psdKey, art?.filePath),
-    imagewidth: art?.width || placement.naturalWidth || placement.width,
-    imageheight: art?.height || placement.naturalHeight || placement.height,
-  };
-  const made = addTileset(deps.store, deps.grid, source);
-  log.info(
-    `${psdKey}.psd is a palette — ${made.columns} × ` +
-      `${made.columns > 0 ? Math.round(made.tilecount / made.columns) : 0} tiles`,
-  );
-  deps.onChanged?.();
-  return made;
 }
 
 /** Take every tile off a layer, leaving its palettes alone. */

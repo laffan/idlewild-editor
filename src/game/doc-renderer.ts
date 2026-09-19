@@ -244,8 +244,16 @@ export class DocRenderer {
    * what a placement just made is a flash of a heap of elements on the anchor
    * space, and a placement that never happens is a reveal with nothing to
    * reveal. That second one is what made PSD Edit mode open on an empty box.
+   *
+   * **A tile layer never draws its placements**, and unlike a pattern layer
+   * there is no exception. A palette there is a picture to cut tiles out of
+   * rather than a prototype standing on a space — it has no anchor and
+   * nothing is copied from where it sits — so there is nothing PSD Edit mode
+   * could frame. The palette is looked at in the inspector, which is where it
+   * actually is.
    */
   draws(layer: Layer, placement: Placement): boolean {
+    if (layerKind(layer) === "tile") return false;
     if (layerKind(layer) !== "pattern") return true;
     return unitOf(placement) === this.revealed;
   }
@@ -408,6 +416,12 @@ export class DocRenderer {
       // file is anchored to, so the prototype has to be there to draw over —
       // see `revealInstance` and `draws`.
       if (layerKind(layer) === "pattern" && !this.revealed) return;
+      // A tile layer's placements are its tilesets, and a tileset is never on
+      // the canvas at all — what stands on the ground is gids, drawn by
+      // `tile-render.ts`. `seen` leaves them out for the same reason it
+      // leaves a pattern layer's out: anything on the canvas from before the
+      // layer became one is destroyed on the next sweep.
+      if (layerKind(layer) === "tile") return;
 
       const base = (layers.length - index) * DEPTH_STRIDE;
       // Back to front, once for the whole layer: every placement then takes

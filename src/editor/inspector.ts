@@ -51,6 +51,7 @@ import { renderBackground } from "./inspect-background";
 import { renderText, type TextActions } from "./inspect-text";
 import { captureFocus, restoreFocus } from "./inspect-focus";
 import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
+import { renderTileLayer, type TileActions } from "./inspect-tiles";
 import { layerKind } from "../lib/layer-kinds";
 import {
   renderPlacement,
@@ -80,7 +81,8 @@ export interface InspectorCallbacks
   extends PatternActions,
     PanelActions,
     PlacementActions,
-    TextActions {
+    TextActions,
+    TileActions {
   /**
    * The paint control settled on something — a colour, a pattern or a shape.
    *
@@ -401,6 +403,10 @@ export class Inspector {
    * nothing selected, or a region — ground, which is what the next Fill would
    * land on. Something standing *on* a layer takes the panel for itself; see
    * `layerZoneApplies`.
+   *
+   * Two kinds answer differently, and both for the same reason: what is on
+   * them is not a set of things standing anywhere. A pattern layer shows its
+   * rule, and a **tile** layer shows its palette — see `inspect-tiles.ts`.
    */
   private renderLayerZone(): void {
     if (!layerZoneApplies(this.selection)) return;
@@ -408,8 +414,20 @@ export class Inspector {
     const layer = this.store.layer(layerId);
     if (!layer) return;
     this.open("LAYER", { subject: layer.name });
-    if (layerKind(layer) === "pattern") {
+    const kind = layerKind(layer);
+    if (kind === "pattern") {
       renderPatternLayer(this.surface(), this.store, this.callbacks, layer);
+    } else if (kind === "tile") {
+      // The palette takes the whole column while a tile layer is the
+      // subject, which is the arrangement Tiled has between its palette and
+      // its tools and the one this feature is modelled on.
+      renderTileLayer(
+        this.surface(),
+        this.store,
+        this.grid,
+        this.callbacks,
+        layer,
+      );
     } else {
       renderLayer(this.surface(), this.store, this.callbacks, {
         kind: "layer",

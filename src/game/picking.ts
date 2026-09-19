@@ -34,15 +34,21 @@ import type {
  * Whether the pointer can mean anything on this layer.
  *
  * Locked and hidden layers are inert, the rule Hush applies to its own pick
- * paths — and so is a **pattern** layer, for a different reason. Its
- * placements are the palette the pattern is made of rather than things
- * standing anywhere, so there is no one object under the pointer for a tap to
- * name: the copies on screen are worked out from the camera and belong to no
- * record. A pattern layer is reached from the sidebar, which is where the
- * thing it holds — a rule — actually is.
+ * paths — and so are a **pattern** layer and a **tile** layer, for a
+ * different reason they happen to share. The placements on either are a
+ * palette rather than things standing anywhere, so there is no one object
+ * under the pointer for a tap to name: a pattern's copies are worked out from
+ * the camera and belong to no record, and a tileset is never on the canvas at
+ * all. Both are reached from a sidebar, which is where the thing each one
+ * holds — a rule, a palette — actually is.
+ *
+ * What a tap on a tile layer *does* mean is putting a tile down, and that
+ * never comes through here: it is a tool's gesture over the grid, the way
+ * Fill is, rather than a question about what is underneath.
  */
 function pickable(layer: Layer): boolean {
-  return !layer.locked && layer.visible && layerKind(layer) !== "pattern";
+  const kind = layerKind(layer);
+  return !layer.locked && layer.visible && kind !== "pattern" && kind !== "tile";
 }
 
 /** What a hit-test returns: the document record, not the rendered object. */

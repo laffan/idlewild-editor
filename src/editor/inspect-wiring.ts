@@ -30,6 +30,7 @@ import type { PatternShapes } from "./pattern-actions";
 import type { PsdFileActions } from "./psd-actions";
 import type { PsdLayerEditor } from "./psd-layers";
 import type { Inspector, InspectorCallbacks } from "./inspector";
+import type { TileActions } from "./inspect-tiles";
 import type { ToolRouting } from "./tool-routing";
 
 export interface InspectWiringDeps {
@@ -67,12 +68,26 @@ export interface InspectWiringDeps {
    * to erase — see `tool-routing.ts`.
    */
   tools: () => ToolRouting;
+  /**
+   * What a tile layer's panel needs: where a palette's picture is served
+   * from, what is in hand, and the two things the panel can do to a map.
+   *
+   * The asset base is asked for rather than captured because it is resolved
+   * once at start-up and the panel is built before that has landed; the
+   * selection is the shell's for the reason every tool's state is — see
+   * `tile-palette.ts`.
+   */
+  tiles: () => TileActions;
 }
 
 export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks {
   const { store, grid } = deps;
 
   return {
+    // Spread rather than listed, because none of the four has anything to add
+    // here: the panel's tile rows are wired where the palette is, and passing
+    // them through one at a time would be four lines saying so twice.
+    ...deps.tiles(),
     onFillPaint: (paint) => applyFillPaint(store, deps.scene(), paint),
     onToggleWalkable: (walkable) => {
       const selection = deps.scene()?.getSelection();
