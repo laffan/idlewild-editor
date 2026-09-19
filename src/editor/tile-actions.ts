@@ -257,7 +257,13 @@ async function importTilesetImage(
   const scene = deps.scene();
   if (!scene) return null;
   const source = siblingOf(mapPath, tileset.image);
-  const result = await psd.importPath(deps.projectId, source, tileset.name);
+  // Tiled allows a tileset with no name at all, and a key has to be
+  // something — `free_key` sanitises it, but it cannot invent one.
+  const result = await psd.importPath(
+    deps.projectId,
+    source,
+    tileset.name || "tileset",
+  );
   const manifest = parseManifest(result.manifest);
   const art = placeableLayers(manifest)[0];
   if (!art) {

@@ -14,7 +14,14 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { canErase, ERASABLE, TOOLS, toolName } from "../tool-rail";
+import {
+  canErase,
+  ERASABLE,
+  tileVerbOf,
+  TOOLS,
+  toolName,
+  toolsFor,
+} from "../tool-rail";
 import { defaultPatternScale, stampBoxAt, stampSize } from "../stamp-box";
 import { Grid } from "../../lib/grid";
 import { TOOL_IDS, type ToolId } from "../../lib/types";
@@ -142,5 +149,58 @@ describe("a shape stamp", () => {
     expect(defaultPatternScale(new Grid("orthogonal", 64))).toBe(4);
     // Never below one: on an 8px grid a pattern tile *is* the tile.
     expect(defaultPatternScale(new Grid("orthogonal", 8))).toBe(1);
+  });
+});
+
+/**
+ * Which tools a layer offers, and what two of them mean there.
+ *
+ * A tile layer withdraws three and re-points two, and both halves are tables
+ * rather than behaviour — so both are asserted here, where the rest of the
+ * rail's tables are. What would otherwise go wrong is silent in the way this
+ * file exists to catch: a Text tool on a tile layer writes a word nothing on
+ * that layer can hold, and a Pencil that still handed its strokes to the
+ * drawing layer would draw ink over a grid of tiles.
+ */
+describe("what a tile layer offers", () => {
+  it("withholds the three that have nothing to do with tiles", () => {
+    const offered = toolsFor("tile");
+    expect(offered).not.toContain("pattern");
+    expect(offered).not.toContain("shape");
+    expect(offered).not.toContain("text");
+    // And withholds nothing else: the rail proper is about the canvas rather
+    // than about what is drawn on it, and Slice and the Lasso still reach ink
+    // that is there, because a tile layer can carry strokes like any other.
+    expect(offered).toEqual(
+      TOOLS.map((tool) => tool.id).filter(
+        (id) => id !== "pattern" && id !== "shape" && id !== "text",
+      ),
+    );
+  });
+
+  it("offers every tool on the three kinds that are not tile layers", () => {
+    const all = TOOLS.map((tool) => tool.id);
+    expect(toolsFor("object")).toEqual(all);
+    expect(toolsFor("pattern")).toEqual(all);
+    expect(toolsFor("background")).toEqual(all);
+  });
+
+  it("points exactly two of them at tiles", () => {
+    expect(tileVerbOf("pencil")).toBe("stamp");
+    expect(tileVerbOf("fill")).toBe("fill");
+    // Everything else means nothing for tiles, which is what keeps a tile
+    // layer selectable, pannable and pointable.
+    for (const tool of TOOLS.map((t) => t.id)) {
+      if (tool === "pencil" || tool === "fill") continue;
+      expect(tileVerbOf(tool)).toBeNull();
+    }
+  });
+
+  it("re-points only the tools that can be turned round", () => {
+    // What makes "erase tiles" free rather than a fifth verb: the two tools a
+    // tile layer paints with are both already erasers when they are turned
+    // round, so the flag the rest of the editor uses is the one used here.
+    expect(canErase("pencil")).toBe(true);
+    expect(canErase("fill")).toBe(true);
   });
 });

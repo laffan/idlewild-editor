@@ -110,7 +110,6 @@ export function renderTileLayer(
         ),
         tilePalette({
           tileset,
-          grid,
           assetBase: actions.assetBase(),
           selection,
           onPick: (stamp) => {

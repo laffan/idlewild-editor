@@ -27,7 +27,6 @@
  */
 
 import { h } from "../lib/dom";
-import type { Grid } from "../lib/grid";
 import { tileGrid } from "../lib/tiled/gid";
 import type { TiledTileset } from "../lib/tiled/types";
 import type { TileStamp } from "../lib/tile-layers";
@@ -58,15 +57,10 @@ export class TileSelection extends EventTarget {
     this.dispatchEvent(new CustomEvent("change"));
   }
 
-  /** Whether a run of a given tileset is the one in hand. */
-  holds(firstgid: number): boolean {
-    return this.held?.firstgid === firstgid;
-  }
 }
 
 export interface PaletteOptions {
   tileset: TiledTileset;
-  grid: Grid;
   /** The asset server's base URL for this project — see `lib/ipc.ts`. */
   assetBase: string;
   selection: TileSelection;

@@ -186,7 +186,14 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     return null;
   }
 
-  function apply(tool: ToolId, announce = true): void {
+  function apply(wanted: ToolId, announce = true): void {
+    // A tool this layer does not offer cannot stay in hand. Its button has
+    // just gone, so nothing on screen would say what the pointer is doing —
+    // and two of the three a tile layer withholds would go on handing the
+    // drawing layer strokes onto a layer whose subject is a grid of tiles.
+    // Select is what the canvas does when nothing else is chosen.
+    const offered = toolsFor(host.layerKind());
+    const tool = offered.includes(wanted) ? wanted : "select";
     const drawing = host.drawing();
     // Read before the rail is told, because it is what the rail is showing
     // now that says which tool is being put down.
@@ -244,7 +251,7 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     // What the rail offers follows the layer, not the tool — a tile layer
     // withholds three of the eleven. Set here because this is the one place
     // that already runs on both of the things that can change it.
-    host.rail.setOffered(toolsFor(host.layerKind()));
+    host.rail.setOffered(offered);
     drawing?.setTool(drawingTool);
     host.inspector.setTool(tool, drawing?.style ?? null);
     if (!announce) return;
