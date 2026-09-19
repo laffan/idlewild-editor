@@ -31,6 +31,7 @@ import { displacedMembers } from "../game/layer-home";
 import { layerName } from "../lib/manifest";
 import { unitMembers, unitOf } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
+import { extrusionOf } from "../lib/extrusions";
 import { layerKind } from "../lib/layer-kinds";
 import type { Grid } from "../lib/grid";
 
@@ -221,7 +222,7 @@ export function renderPlacement(
         store.allLayers,
         store.colliders,
         placement.psdKey,
-        store.extrusion(placement.psdKey),
+        extrusionOf(store, placement.psdKey),
       ),
       onToggle: (key, blocking) => actions.onToggleCollider(key, blocking),
       onEdit: () => actions.onEditCollider(),

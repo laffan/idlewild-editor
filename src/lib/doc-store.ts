@@ -25,7 +25,6 @@
 import type {
   Cell,
   Collider,
-  Extrusion,
   FillPatch,
   GameDoc,
   Genre,
@@ -279,6 +278,20 @@ export class DocStore extends EventTarget {
   }
 
   /**
+   * Rewrite the document itself.
+   *
+   * `editLayer`'s counterpart one level up, and public for the same reason:
+   * what a *kind* of thing the document holds means is somebody else's
+   * subject — an extrusion's solid in `lib/extrusions.ts`, a tile layer's
+   * tilesets in `lib/tile-layers.ts` — and this is the one thing those edits
+   * need from the store. A commit either way, so undo and autosave see it
+   * exactly as they see every other write.
+   */
+  editDoc(update: (doc: GameDoc) => GameDoc): void {
+    this.commit(update(this.state));
+  }
+
+  /**
    * A new layer on top of the stack.
    *
    * `kind` is what the dropdown under the `+` chooses, and it is written out
@@ -484,43 +497,6 @@ export class DocStore extends EventTarget {
       ...l,
       placements: l.placements.filter((p) => p.id !== placementId),
     }));
-  }
-
-  // ── extrusions ────────────────────────────────────────────────────────────
-
-  /** The solid an extruded PSD was rasterised from, if it still has one. */
-  extrusion(key: string): Extrusion | undefined {
-    return this.state.extrusions?.[key];
-  }
-
-  setExtrusion(key: string, extrusion: Extrusion): void {
-    this.commit({
-      ...this.state,
-      extrusions: { ...this.state.extrusions, [key]: extrusion },
-    });
-  }
-
-  /**
-   * Forget the solid behind a key.
-   *
-   * Called when the file stops being the editor's own output — a re-import,
-   * or a rewrite of its layer stack — because from then on the shape no
-   * longer describes what is in the file, and re-applying it would throw
-   * away whatever was put there instead.
-   */
-  removeExtrusion(key: string): void {
-    if (!this.state.extrusions?.[key]) return;
-    const { [key]: _gone, ...rest } = this.state.extrusions;
-    this.commit({ ...this.state, extrusions: rest });
-  }
-
-  /** Carry the record with the file, when the file is renamed or copied. */
-  copyExtrusion(from: string, to: string, keepOriginal = true): void {
-    const held = this.state.extrusions?.[from];
-    if (!held) return;
-    const next = { ...this.state.extrusions, [to]: held };
-    if (!keepOriginal) delete next[from];
-    this.commit({ ...this.state, extrusions: next });
   }
 
   // ── colliders ─────────────────────────────────────────────────────────────

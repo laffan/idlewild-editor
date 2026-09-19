@@ -9,8 +9,16 @@
  */
 
 export * from "./project-types";
+export * from "./layer-types";
 
 import type { Genre, Projection } from "./project-types";
+import type {
+  Background,
+  LayerKind,
+  PatternSpec,
+  TileLayerData,
+} from "./layer-types";
+import type { TiledTileset } from "./tiled/types";
 import type { PaintSpec } from "./paint";
 import type { TextItem } from "./text-items";
 
@@ -266,111 +274,6 @@ export interface Stroke {
 }
 
 /**
- * What a layer is *for*, which decides what putting a PSD on it means.
- *
- * An **object** layer is what a layer has always been: things stand where
- * they were put, one placement per top-level layer of the file, and the
- * canvas selects, drags and resizes them. Everything else in this editor was
- * written against that reading, so it is the default and the absent value.
- *
- * A **pattern** layer holds a *palette* rather than a scene. The placements
- * on it are the elements the pattern is made of; where they are drawn is
- * worked out from `pattern` for as far as the camera can see, which is why
- * nothing on one can be picked on the canvas — there is no one object under
- * the pointer to name.
- *
- * A **background** layer is the backdrop: colours and gradients that follow
- * the camera rather than sitting anywhere, and PSDs painted as scenery. Both
- * are reached from the sidebars, for the same reason — a backdrop is
- * everywhere the camera is, so there is nothing on it to aim at.
- *
- * See `lib/layer-kinds.ts` for everything that reads this.
- */
-export type LayerKind = "object" | "pattern" | "background";
-
-/**
- * How a pattern layer scatters its elements.
- *
- * Random is the default and the interesting one: grass, rocks, trees — things
- * whose arrangement should read as unconsidered. Grid is the same machinery
- * with the randomness taken out of the position, for a tiled floor or a
- * regular field of columns.
- */
-export type PatternType = "random" | "grid";
-
-/**
- * An area a pattern is confined to.
- *
- * Two shapes because there are two ways to say "here": a run of grid spaces,
- * from the long-press selection every other part of this editor asks space
- * with, and a polygon, from the pencil. Both answer the same question —
- * *is this space inside?* — so they are one record with two fields rather
- * than two kinds a reader has to switch on.
- */
-export interface PatternShape {
-  id: string;
-  name: string;
-  /** Grid spaces, from the selection tool. */
-  cells?: Cell[];
-  /** A world-pixel polygon, closed implicitly, from the pencil. */
-  points?: Point[];
-}
-
-/**
- * What a pattern layer does with what is placed on it.
- *
- * The pattern is **infinite and deterministic**: there is no world bound in
- * this editor to fill, so what is stored is a rule and the canvas works out
- * what falls inside it. `repeat` is what makes that possible — the rule is
- * evaluated one repeat tile at a time and seeded by the tile's own
- * coordinates, so the same space answers the same way whatever route the
- * camera took to get there, and the exported game can regenerate it without
- * being shipped a list.
- *
- * `shapes` is the exception to infinite. An empty list means everywhere,
- * which is the default; a shape in it confines the pattern to the spaces
- * that shape covers.
- */
-export interface PatternSpec {
-  type: PatternType;
-  /** How many elements land in each repeat tile. */
-  density: number;
-  /** The repeat tile, in grid spaces. */
-  repeat: { cols: number; rows: number };
-  /**
-   * What the arrangement is generated from.
-   *
-   * Kept in the document rather than derived from the layer id, so that
-   * duplicating a scene gives the copy the pattern it was showing rather
-   * than a different one — and so that a pattern somebody likes survives a
-   * rename.
-   */
-  seed: number;
-  shapes: PatternShape[];
-}
-
-/**
- * A backdrop on a background layer: a colour or a gradient.
- *
- * Both are camera-locked and have no extent — a backdrop is wherever the
- * camera is, so there is nothing to position and nothing to size. That is
- * also why an **image** background is not one of these: a picture painted in
- * Photoshop is a thing of a certain size standing in a certain place, which
- * is what a `Placement` already is, and the exported game already loads,
- * places, scales and stacks one. Adding an image background makes a PSD and
- * places it on this layer; what makes it a background is the layer it is on.
- */
-export interface Background {
-  id: string;
-  name: string;
-  kind: "color" | "gradient";
-  /** Set when kind is "color". */
-  color?: string;
-  /** Set when kind is "gradient": two stops and the direction between them. */
-  gradient?: { from: string; to: string; angle: number };
-}
-
-/**
  * Placed PSDs tied together by hand — a group, in the sense every drawing
  * program means it.
  *
@@ -442,6 +345,16 @@ export interface Layer {
    * meaningful on a background layer, and absent until one is added.
    */
   backgrounds?: Background[];
+  /**
+   * The tiles on this layer, as a Tiled tile layer.
+   *
+   * Only meaningful on a tile layer, and absent until one is made. Held in
+   * Tiled's own shape rather than in one of ours — see `TileLayerData` — so
+   * that what `doc.json` carries and what a `.tmj` carries are the same
+   * record. Read through `tileLayer` in `lib/tile-layers.ts`, which fills in
+   * the empty one a layer that has never been painted on has none of.
+   */
+  tiles?: TileLayerData;
 }
 
 /**
@@ -578,6 +491,22 @@ export interface GameDoc {
    * the same defaults a fresh import gets.
    */
   colliders?: Record<string, Collider>;
+  /**
+   * The tilesets every tile layer in the project draws from, in Tiled's own
+   * shape and its own order.
+   *
+   * Document-level for the reason the extrusions and the colliders are, and
+   * for one more that is stronger. `psd/` is one directory for the project,
+   * so the file a tileset is made of is the project's; and a gid stored on a
+   * layer means *the nth tile across every tileset in the map*, so the list
+   * and its `firstgid`s are what every one of those numbers is read against.
+   * Per scene or per layer, adding a palette in one place would silently
+   * renumber the tiles standing in another.
+   *
+   * Absent on every document written before tile layers existed, and on every
+   * project that has never made one.
+   */
+  tilesets?: TiledTileset[];
   /**
    * Where layers lived before scenes existed, and where the camera did.
    *

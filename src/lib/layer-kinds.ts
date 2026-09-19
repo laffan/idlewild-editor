@@ -1,5 +1,5 @@
 /**
- * The three kinds of layer, and what each one holds.
+ * The four kinds of layer, and what each one holds.
  *
  * `types.ts` says what the records are; this says what they mean and what
  * the editor does to them. It is a file of functions over a `Layer` and a
@@ -21,6 +21,7 @@
 import type { DocStore } from "./doc-store";
 import { makeId } from "./doc-shape";
 import { cellsInPolygon, type Grid } from "./grid";
+import { tileLayersAllowed } from "./tile-layers";
 import type {
   Background,
   Cell,
@@ -30,6 +31,7 @@ import type {
   PatternSpec,
   PatternType,
   Point,
+  Projection,
 } from "./types";
 
 /** What a layer is for. Absent means object — see the note above. */
@@ -37,12 +39,22 @@ export function layerKind(layer: Layer | undefined): LayerKind {
   return layer?.kind ?? "object";
 }
 
-/** What the dropdown under the `+` offers, in the order it offers it. */
+/**
+ * What the dropdown under the `+` offers, in the order it offers it.
+ *
+ * Tile is last and it is the one that is not always there: `available` is
+ * read by the panel against the project's own projection, because a tileset
+ * is a picture cut into equal spaces and a blank project has none to cut on.
+ * A predicate on the row rather than a second list, so a kind that is
+ * withheld somewhere is still described in the one place the kinds are.
+ */
 export const LAYER_KINDS: readonly {
   kind: LayerKind;
   label: string;
   /** The one line under the row that says what it is for. */
   hint: string;
+  /** Which projections offer this kind. Absent means all of them. */
+  available?: (projection: Projection) => boolean;
 }[] = [
   {
     kind: "object",
@@ -59,13 +71,27 @@ export const LAYER_KINDS: readonly {
     label: "Background layer",
     hint: "Colour, a gradient, or painted scenery behind everything.",
   },
+  {
+    kind: "tile",
+    label: "Tile layer",
+    hint: "A Tiled map. A PSD on one is a tileset, not a thing on the grid.",
+    available: tileLayersAllowed,
+  },
 ];
+
+/** The kinds this project can actually have — what the `+` menu lists. */
+export function layerKindsFor(
+  projection: Projection,
+): typeof LAYER_KINDS {
+  return LAYER_KINDS.filter((kind) => kind.available?.(projection) ?? true);
+}
 
 /** The name a new layer of each kind gets, before it is counted. */
 const KIND_NAMES: Record<LayerKind, string> = {
   object: "Layer",
   pattern: "Pattern",
   background: "Background",
+  tile: "Tiles",
 };
 
 /**

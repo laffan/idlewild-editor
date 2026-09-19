@@ -24,6 +24,7 @@ import {
   resolveCollider,
 } from "../lib/collider";
 import type { DocStore } from "../lib/doc-store";
+import { extrusionOf } from "../lib/extrusions";
 import type { Grid } from "../lib/grid";
 import * as log from "../lib/log";
 import type { Cell, Collider } from "../lib/types";
@@ -109,7 +110,7 @@ export function createColliderUi(options: ColliderUiOptions): ColliderUi {
       options.grid,
       anchor,
       placementsBox(members),
-      options.store.extrusion(placement.psdKey),
+      extrusionOf(options.store, placement.psdKey),
     );
     const held = options.store.collider(placement.psdKey) ?? fallback;
 
@@ -136,7 +137,7 @@ export function createColliderUi(options: ColliderUiOptions): ColliderUi {
       options.store.allLayers,
       options.store.colliders,
       key,
-      options.store.extrusion(key),
+      extrusionOf(options.store, key),
     );
     if (held.blocking === blocking) return;
     options.store.setCollider(key, { ...held, blocking });

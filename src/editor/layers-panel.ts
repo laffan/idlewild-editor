@@ -30,7 +30,7 @@
 
 import { clear, h, ICONS, icon } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
-import { LAYER_KINDS, layerKind } from "../lib/layer-kinds";
+import { LAYER_KINDS, layerKind, layerKindsFor } from "../lib/layer-kinds";
 import { ordersByHand } from "../lib/units";
 import { LayerDrags } from "./layer-drag";
 import { openMenu } from "../lib/menu";
@@ -77,6 +77,12 @@ export interface LayersPanelCallbacks {
    * button itself, which the menu hangs under.
    */
   onNewBackground: (layerId: string, anchor: HTMLElement) => void;
+  /**
+   * Bring a Tiled map in, onto a tile layer. The background layer's button
+   * and this one are the same idea for the same reason — see the note beside
+   * where they are drawn.
+   */
+  onImportTiled: (layerId: string) => void;
 }
 
 /**
@@ -155,9 +161,10 @@ export class LayersPanel {
     });
     this.scenes = new ScenesBar(store);
     this.title = h("div", { class: "panel-title m", text: "Layers" });
-    // Three kinds of layer, so the `+` asks which. A menu rather than
-    // three buttons: object is the one anybody wants nine times in ten,
-    // and a row of equals would say otherwise.
+    // Four kinds of layer, so the `+` asks which — and on a blank project
+    // three, because a tileset needs a lattice to be cut on. A menu rather
+    // than a row of buttons: object is the one anybody wants nine times in
+    // ten, and a row of equals would say otherwise.
     this.add = h(
       "button",
       {
@@ -390,6 +397,25 @@ export class LayersPanel {
       // one can be put down by aiming at the canvas — a backdrop is wherever
       // the camera is — so the button lives at the foot of the list it adds
       // to, which is the one place a backdrop is a thing you can see.
+      // A tile layer's own way in, for the reason the background layer's
+      // button is where it is: nothing on one is put down by aiming at the
+      // canvas until there is a palette to aim with, and a map somebody
+      // already made in Tiled is not a gesture at all. One row rather than a
+      // menu, because there is exactly one answer.
+      if (layerKind(layer) === "tile") {
+        group.appendChild(
+          h("button", {
+            class: "layer-item add",
+            text: "Import Tiled",
+            title: "Bring in a .tmx or .tmj map",
+            onClick: (event: Event) => {
+              event.stopPropagation();
+              this.callbacks.onImportTiled(layer.id);
+            },
+          }),
+        );
+      }
+
       if (layerKind(layer) === "background") {
         group.appendChild(
           h("button", {
@@ -450,7 +476,14 @@ export class LayersPanel {
   }
 
   /**
-   * The dropdown the `+` opens: one row per kind of layer.
+   * The dropdown the `+` opens: one row per kind of layer this project can
+   * have.
+   *
+   * Can have rather than one row per kind. A tile layer is a picture cut into
+   * equal spaces and a blank project has none to cut on, so the row is not
+   * offered there at all — a greyed row saying so would be a fifth of the
+   * menu spent explaining a projection somebody chose on the way in. See
+   * `layerKindsFor`.
    *
    * The new layer is selected on the way out, as it always was — a layer you
    * asked for and then have to find is a layer you asked for twice — and a
@@ -460,7 +493,7 @@ export class LayersPanel {
   private openKindMenu(anchor: HTMLElement): void {
     openMenu(
       anchor,
-      LAYER_KINDS.map(({ kind, label }) => ({
+      layerKindsFor(this.store.projection).map(({ kind, label }) => ({
         label,
         glyph: KIND_ICONS[kind],
         onSelect: () => {

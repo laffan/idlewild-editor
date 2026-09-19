@@ -21,6 +21,7 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
+import { copyExtrusion, extrusionOf } from "../lib/extrusions";
 import type { Grid } from "../lib/grid";
 import { psd, publish } from "../lib/ipc";
 import * as log from "../lib/log";
@@ -358,7 +359,7 @@ export function createPsdFileActions(
       const copy = await psd.duplicate(projectId, key);
       // A copy of an extruded PSD is an extrusion of its own, and carrying
       // one on must rewrite the file this placement actually draws.
-      store.copyExtrusion(key, copy.key);
+      copyExtrusion(store, key, copy.key);
       // The copy blocks what the original blocked: it is the same artwork
       // standing on the same spaces until someone changes one of them.
       store.copyCollider(key, copy.key);
@@ -412,7 +413,7 @@ export function createPsdLayersFactory(
       // The marks and an extrusion's artwork are the app's to name, and the
       // extrusion's row is the way back into the mode that built it.
       ownerOf: (layer) =>
-        psdLayerOwner(layer, key, !!store.extrusion(key), options.onExtrude),
+        psdLayerOwner(layer, key, !!extrusionOf(store, key), options.onExtrude),
       onOpen: () => void file.open(key),
       onRefresh: () => void file.refresh(key),
       // The eye column, before Apply has written anything: the canvas shows

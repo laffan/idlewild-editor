@@ -11,6 +11,7 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
+import { extrusionOf } from "../lib/extrusions";
 import { translateShape } from "../lib/extrude";
 import type { Grid } from "../lib/grid";
 import * as log from "../lib/log";
@@ -147,7 +148,7 @@ export function createExtrudeUi(options: ExtrudeUiOptions): ExtrudeUi {
       ?.placements.find((p) => p.id === selection.placementId);
     if (!placement) return;
 
-    const held = options.store.extrusion(placement.psdKey);
+    const held = extrusionOf(options.store, placement.psdKey);
     if (!held) {
       log.warn(`${placement.psdKey}.psd is not an extrusion this editor made`);
       return;

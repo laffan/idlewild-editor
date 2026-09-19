@@ -21,6 +21,8 @@ import { textsOf } from "../lib/text-items";
 import { plainText } from "../lib/text-markdown";
 import { unitKey, unitsInDrawOrder } from "../lib/units";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
+import { describeTiles } from "../lib/tile-layers";
+import { tileCount } from "../lib/tiled/chunks";
 import type { LayerKind } from "../lib/types";
 import type { Layer, Placement, Selection } from "../lib/types";
 import { describeFill } from "../lib/doc-shape";
@@ -420,14 +422,17 @@ export const KIND_ICONS: Record<LayerKind, readonly string[]> = {
   object: ICONS.layerObject,
   pattern: ICONS.layerPattern,
   background: ICONS.layerBackground,
+  tile: ICONS.layerTile,
 };
 
 /**
  * What an expanded layer with nothing on it says.
  *
- * Three kinds, three different next steps — and "Nothing on this layer" on a
+ * Four kinds, four different next steps — and "Nothing on this layer" on a
  * background layer is true and useless, because the thing to do about it is
- * the button directly underneath.
+ * the button directly underneath. The same goes for a tile layer, where the
+ * two next steps are the two rows under it: bring a map in, or drop a PSD on
+ * it and cut it into a palette.
  */
 export function emptyText(layer: Layer): string {
   switch (layerKind(layer)) {
@@ -435,6 +440,8 @@ export function emptyText(layer: Layer): string {
       return "Drop a PSD here to scatter it";
     case "background":
       return "Nothing behind this scene yet";
+    case "tile":
+      return "Drop a PSD here to cut it into a palette";
     default:
       return "Nothing on this layer";
   }
@@ -449,6 +456,13 @@ export function describe(layer: Layer): string {
   if (kind === "pattern" && layer.placements.length) {
     const spec = layer.pattern;
     parts.push(`${spec?.type ?? "random"} pattern`);
+  } else if (kind === "tile") {
+    // A tile layer's placements are its tilesets rather than things standing
+    // anywhere, so what is worth counting is the ground they cover.
+    if (layer.placements.length) {
+      parts.push(count(layer.placements.length, "tileset"));
+    }
+    if (tileCount(layer.tiles)) parts.push(describeTiles(layer));
   } else if (layer.placements.length) {
     parts.push(`${layer.placements.length} psd`);
   }

@@ -222,11 +222,11 @@ export const ICONS = {
   search: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z", "m16.2 16.2 4.3 4.3"],
   /* Sliders — Project Options, which is settings rather than navigation. */
   sliders: ["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 5v4", "M9 15v4"],
-  /* The three kinds of layer, as the dropdown under the `+` offers them and
+  /* The four kinds of layer, as the dropdown under the `+` offers them and
      as each row carries afterwards. A stack of sheets for the ordinary one,
-     a scatter for the pattern, and a framed field for the backdrop — three
-     silhouettes rather than three variations, because the point of the chip
-     is to be read without being looked at. */
+     a scatter for the pattern, a framed field for the backdrop and a ruled
+     grid for the tiles — four silhouettes rather than four variations,
+     because the point of the chip is to be read without being looked at. */
   layerObject: ["m12 3 9 5-9 5-9-5 9-5Z", "m3 13 9 5 9-5"],
   layerPattern: [
     "M6 6h.01",
@@ -239,6 +239,10 @@ export const ICONS = {
     "M19 17h.01",
   ],
   layerBackground: ["M3 5h18v14H3z", "m3 16 5-5 4 4 3-3 6 5"],
+  layerTile: ["M4 4h16v16H4z", "M4 9.33h16", "M4 14.67h16", "M9.33 4v16", "M14.67 4v16"],
+  /* A tileset: the same ruled grid with one space picked out, which is what
+     the palette is for and what the Import Tiled row carries. */
+  tiles: ["M4 4h16v16H4z", "M4 12h16", "M12 4v12", "M12 12h8v8h-8z"],
   /* Two stops fading into each other: a gradient backdrop's own row. */
   gradient: ["M4 4h16v16H4z", "M4 12h16", "M4 8h16", "M4 16h16"],
   /* A triangle with a bar in it — the one glyph here that means something is

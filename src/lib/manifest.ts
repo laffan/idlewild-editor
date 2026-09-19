@@ -93,6 +93,16 @@ export interface ManifestLayer {
    * in the game, so a project's own code can turn it on.
    */
   visible: boolean;
+  /**
+   * The artwork psd-to-json exported for this layer, relative to the PSD's
+   * own `assets/<key>/` directory — `sprites/roof.png`.
+   *
+   * Only on a sprite; a group and a zone have no picture of their own.
+   * Carried because a tile layer's tileset has to name the image a Tiled map
+   * draws from, and the path is the one fact about a layer that is about the
+   * file on disk rather than about the picture. See `lib/tile-layers.ts`.
+   */
+  filePath?: string;
   /** Position within the PSD canvas, top-left origin — sprites are placed
    *  with `setOrigin(0, 0)`. */
   x: number;
@@ -358,6 +368,7 @@ function walk(
     // Absent means visible, which is what every manifest written before
     // psd-to-json read the flag says about every layer in it.
     visible: shown && node.visible !== false,
+    filePath: typeof node.filePath === "string" ? node.filePath : undefined,
     x: Number(node.x ?? 0),
     y: Number(node.y ?? 0),
     width: Number(node.width ?? 0),

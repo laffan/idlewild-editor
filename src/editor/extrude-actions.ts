@@ -29,6 +29,7 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
+import { setExtrusion } from "../lib/extrusions";
 import type { Grid } from "../lib/grid";
 import { cellsBounds } from "../lib/grid";
 import { psd, toBase64, type PsdPart } from "../lib/ipc";
@@ -193,7 +194,7 @@ async function applyPlacement(
   // PSD, and the inspector builds its layer list from that selection — so a
   // record written afterwards would arrive too late for the row that offers
   // the way back in.
-  store.setExtrusion(result.key, { voxels: [...shape], anchor });
+  setExtrusion(store, result.key, { voxels: [...shape], anchor });
 
   if (target && result.key === target.key) {
     // The footprint may have grown past where it started, which moves the

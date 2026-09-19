@@ -147,6 +147,12 @@ export function copyLayer(layer: Layer, points = new Map<string, string>()): Lay
           backgrounds: layer.backgrounds.map((bg) => ({ ...bg, id: makeId("bg") })),
         }
       : {}),
+    // A tile layer's tiles are carried by the spread above and deliberately
+    // not rebuilt. There is nothing in them with an id to collide — a chunk
+    // is addressed by where it is — and every write replaces rather than
+    // writing through, so the copy and the original part company the first
+    // time either is painted on. The tilesets they name stay the document's,
+    // which is right: a duplicated scene draws from the same palettes.
     fills: layer.fills.map((fill) => ({ ...fill, id: makeId("fill") })),
     placements: copyPlacements(layer.placements),
     // The map is what lets the duplicate scene keep its own start point: the

@@ -11,6 +11,7 @@
 import type Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
 import type { DocStore } from "../lib/doc-store";
+import { copyExtrusion, extrusionOf } from "../lib/extrusions";
 import type { Grid } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
 import { defaultCollider, placementsBox, unitOfKey } from "../lib/collider";
@@ -316,7 +317,7 @@ export class PsdPlacements {
         this.host.grid,
         unit.anchor,
         placementsBox(unit.placements),
-        this.host.store.extrusion(key),
+        extrusionOf(this.host.store, key),
       ),
     );
   }
@@ -416,7 +417,7 @@ export class PsdPlacements {
       // The solid an extrusion was rasterised from is keyed by the file, so
       // it moves with the file rather than being left pointing at a name that
       // has gone.
-      this.host.store.copyExtrusion(from, to, false);
+      copyExtrusion(this.host.store, from, to, false);
       // And what it blocks, which is keyed by the file for the same reason.
       this.host.store.copyCollider(from, to, false);
 

@@ -10,10 +10,7 @@ import { assetBase, checkAssetServer, platform } from "../lib/ipc";
 import type { ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
-import { enginePixelSampler } from "../game/sample-pixel";
-import { setEngineSampler } from "../lib/eyedropper";
-import { setPaletteBrowser } from "../lib/palette";
-import { createPaletteBrowser } from "./palette-browser";
+import { lendToPicker } from "./lends";
 import { saveThumbnail } from "./thumbnail";
 import { DrawingLayer } from "../drawing";
 import { CodePanel } from "./code-panel";
@@ -31,6 +28,7 @@ import { ToolRail } from "./tool-rail";
 import { createShell } from "./shell";
 import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { openNewBackground, type BackgroundDeps } from "./background-actions";
+import { importTiledMap, type TileDeps } from "./tile-actions";
 import { createPatternShapes } from "./pattern-actions";
 import { layerKind } from "../lib/layer-kinds";
 import { layerOf } from "./inspect-zone";
@@ -146,6 +144,7 @@ export async function mountEditor(
       psdLayers: (key) => handle?.scene.psdLayers(key) ?? [],
       onNewBackground: (layerId, anchor) =>
         openNewBackground(anchor, layerId, backgrounds),
+      onImportTiled: (layerId) => void importTiledMap(tiles, layerId),
     },
     overlays.root,
   );
@@ -173,6 +172,11 @@ export async function mountEditor(
     },
     onPsdCreated: () => inspector.revealPsdLayers(),
   };
+
+  // Import Tiled wants the same answers New Background does — both are ways
+  // onto a layer with no canvas gesture of its own — so it borrows them
+  // rather than keeping a second copy that has to be kept in step.
+  const tiles: TileDeps = { ...backgrounds, onChanged: refreshPanels };
 
   // Every control in the properties sidebar, wired in `inspect-wiring.ts`.
   // Almost everything it reaches is built after it — the scene, the drawing
@@ -482,10 +486,7 @@ export async function mountEditor(
       // the answer changes the moment the manifest arrives. Nothing about the
       // document moves when it does, so without this every row would keep
       // showing what was true before anything had been read.
-      onPsdsLoaded: () => {
-        layers.render();
-        inspector.render();
-      },
+      onPsdsLoaded: refreshPanels,
       onExtrudeChange: () => extrude.sync(),
       onColliderChange: () => collider.sync(),
       onPsdEditChange: () => psdEdit.sync(),
@@ -499,22 +500,13 @@ export async function mountEditor(
   // somebody switched off last week has to be off on the first frame.
   overlays.setLattice(handle.scene);
 
-  // How the eyedropper reads the engine's canvas. Registered here rather than
-  // inside `bootGame` because the tool is the picker's and the picker is in
-  // `lib/`: what the game owes it is one function, and what it owes the game
-  // is to stop calling it the moment the renderer goes — see `sample-pixel.ts`.
-  const unregisterSampler = setEngineSampler(enginePixelSampler(handle.game));
-
-  // And **Browse Palettes**, which is the same arrangement for the same
-  // reason: the button is drawn by the colour picker in `lib/`, and what it
-  // opens is a panel that only exists while a project is open.
-  const palettes = createPaletteBrowser({
+  // The eyedropper's reading of the engine's canvas, and Browse Palettes:
+  // two things the colour picker in `lib/` can only do while a project is
+  // open, lent to it here and taken back in `teardown` — see `lends.ts`.
+  const lends = lendToPicker({
+    game: handle.game,
     main: layout.main,
     sidebar: inspector.root,
-  });
-  const unregisterBrowser = setPaletteBrowser({
-    toggle: () => palettes.toggle(),
-    isOpen: () => palettes.isOpen(),
   });
 
   // Undo and redo: the two header buttons, and which history a press means —
@@ -577,6 +569,19 @@ export async function mountEditor(
   });
 
   /** New strokes land on the layer the rest of the editor is working on. */
+  /**
+   * Both sidebars re-read.
+   *
+   * Neither is told by the document, so the moments that need it have to say
+   * so: a manifest arriving, which changes what a row says about a file
+   * without changing the file, and a Tiled map coming in, which changes the
+   * layer list and the palette at once.
+   */
+  function refreshPanels(): void {
+    layers.render();
+    inspector.render();
+  }
+
   function setActiveLayer(layerId: string): void {
     activeLayerId = layerId;
     if (handle) handle.scene.activeLayerId = layerId;
@@ -660,9 +665,7 @@ export async function mountEditor(
 
   async function teardown(): Promise<void> {
     stopShortcuts();
-    unregisterSampler();
-    unregisterBrowser();
-    palettes.destroy();
+    lends.destroy();
     history?.destroy();
     history = null;
     intake.stop();
