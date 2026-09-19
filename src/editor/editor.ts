@@ -297,6 +297,7 @@ export async function mountEditor(
     scene: () => handle?.scene ?? null,
     drawing: () => drawing,
     inspector,
+    layerKind: () => layerKind(store.layer(activeLayerId)),
   });
 
   // Undo, the three sections, and the six things behind the menu — wired in
@@ -473,6 +474,12 @@ export async function mountEditor(
       // document moves when it does, so without this every row would keep
       // showing what was true before anything had been read.
       onPsdsLoaded: refreshPanels,
+      // What a tile tool means, and what it puts down. Read through, because
+      // both are the shell's: which tool is in hand is the rail's, and the run
+      // picked in the palette is the sidebar's — see `game/tile-paint.ts`.
+      tileVerb: () => tools.tileVerb(),
+      tileErasing: () => tools.isErasing(rail.tool),
+      tileStamp: () => tiles.tileSelection().stamp,
       onExtrudeChange: () => extrude.sync(),
       onColliderChange: () => collider.sync(),
       onPsdEditChange: () => psdEdit.sync(),
@@ -572,6 +579,11 @@ export async function mountEditor(
     activeLayerId = layerId;
     if (handle) handle.scene.activeLayerId = layerId;
     drawing?.setLayer(layerId);
+    // What a tool *means* depends on the kind of layer it lands on — a tile
+    // layer withholds three of them and points two others at the grid — so
+    // the tool in hand is put down and picked up again. Quietly: moving to
+    // another layer is not a reason to say what the Pencil is for.
+    tools.apply(rail.tool, false);
   }
 
   function onSelection(selection: Selection): void {

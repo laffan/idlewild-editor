@@ -14,13 +14,15 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import type { Cell, EditorMode, Selection } from "../lib/types";
 import type { ManifestLayer } from "../lib/manifest";
-import * as log from "../lib/log";
 import { CameraRig, type RigMode } from "./camera-rig";
+import { sceneGestures } from "./scene-gestures";
 import { SceneCamera } from "./scene-camera";
 import { DocRenderer } from "./doc-renderer";
 import { GridRenderer } from "./grid-renderer";
 import { BackgroundRender } from "./background-render";
 import { PatternRender } from "./pattern-render";
+import { TileRender } from "./tile-render";
+import { TilePaint } from "./tile-paint";
 import { SelectionOverlay } from "./selection-overlay";
 import { DropTargets, type PlacedTarget } from "./drop-target";
 import { Marquee } from "./marquee";
@@ -28,7 +30,7 @@ import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
 import { layerImage, type LayerImage } from "./psd-loader";
-import { addPointAt, addTextAt, type TapHost } from "./tap-makes";
+import { handleDoubleTap, handleTap, type TappingHost } from "./tapping";
 import { DEFAULT_TEXT_STYLE, type TextStyle } from "./text-style";
 import { pruneLayerGroups } from "../lib/groups";
 import { fillRegion } from "./fill-region";
@@ -37,12 +39,9 @@ import { selectionLayer } from "../lib/selection";
 import { patternSpec } from "../lib/layer-kinds";
 import { unitOf } from "./unit";
 import {
-  addToSelection,
   doomedPlacements,
   inAdjustedInstance,
   selectedPlacement,
-  toggleUnit,
-  widenToGroup,
 } from "./adjusting";
 import type { Viewport } from "../drawing";
 import type { WorldSceneConfig } from "./world-scene-config";
@@ -63,6 +62,10 @@ export class WorldScene extends Phaser.Scene {
   private backgrounds!: BackgroundRender;
   /** A pattern layer, worked out from the camera — `pattern-render.ts`. */
   private patterns!: PatternRender;
+  /** A tile layer, the same way — `tile-render.ts`. */
+  private tiles!: TileRender;
+  /** Putting tiles down, which is a tool's gesture rather than a mode. */
+  private tilePaint!: TilePaint;
   private docRenderer!: DocRenderer;
   private overlay!: SelectionOverlay;
   private drops!: DropTargets;
@@ -134,6 +137,20 @@ export class WorldScene extends Phaser.Scene {
       // one being edited is by then the version before the edit.
       () => (this.modes.mask.active ? null : selectionLayer(this.selection)),
     );
+    this.tiles = new TileRender(this, this.store, this.grid);
+    this.tilePaint = new TilePaint({
+      store: this.store,
+      grid: this.grid,
+      activeLayerId: () => this.activeLayerId,
+      worldAt: (x, y) => this.worldAt(x, y),
+      verb: () => this.config.tileVerb?.() ?? null,
+      erasing: () => this.config.tileErasing?.() ?? false,
+      stamp: () => this.config.tileStamp?.() ?? null,
+      visible: () => this.gridRenderer.visibleRange(this.cameras.main),
+      // A tile put down does not move the camera, so the renderer would not
+      // notice until something else did.
+      onChanged: () => this.tiles.invalidate(),
+    });
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
     this.overlay = new SelectionOverlay(this.add.graphics(), this.grid);
     this.drops = new DropTargets(this.add.graphics(), this.store);
@@ -201,29 +218,25 @@ export class WorldScene extends Phaser.Scene {
       onViewport: this.config.onViewport,
     });
 
-    this.rig = new CameraRig(this.game.canvas, {
-      onTap: (x, y, modifiers) =>
-        this.handleTap(x, y, modifiers.meta || modifiers.shift),
-      onDoubleTap: (x, y) => this.handleDoubleTap(x, y),
-      // The two canvas modes are asked before anything else at every stage:
-      // whichever is up owns the pointer, and what it does with a drag — paint
-      // a space, pull the face it is already holding — is the mode itself.
-      onDragStart: (x, y, modifiers) =>
-        this.editing &&
-        (this.modes.beginDrag(x, y) || this.drag.begin(x, y, modifiers)),
-      onDragMove: (x, y) => {
-        if (!this.modes.moveDrag(x, y)) this.drag.move(x, y);
-      },
-      onDragEnd: () => {
-        if (!this.modes.endDrag()) this.drag.end();
-      },
-      onMarqueeStart: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
-      onMarqueeMove: (x, y) => this.extendMarquee(x, y),
-      onMarqueeEnd: () => this.endMarquee(),
-      onPan: (dx, dy) => this.cam.pan(dx, dy),
-      onZoom: (factor, cx, cy) => this.cam.zoomBy(factor, cx, cy),
-      onChange: () => this.cam.persist(),
-    });
+    // Who gets a touch, and in what order — `scene-gestures.ts` is the
+    // table and `Docs/gestures.md` is the reasoning behind it.
+    this.rig = new CameraRig(
+      this.game.canvas,
+      sceneGestures({
+        editing: () => this.editing,
+        tap: (x, y, adding) => this.handleTap(x, y, adding),
+        doubleTap: (x, y) => this.handleDoubleTap(x, y),
+        modes: this.modes,
+        tiles: this.tilePaint,
+        drag: this.drag,
+        marquee: {
+          begin: (x, y, fromHold) => this.beginMarquee(x, y, fromHold),
+          extend: (x, y) => this.extendMarquee(x, y),
+          end: () => this.endMarquee(),
+        },
+        camera: this.cam,
+      }),
+    );
 
     this.psds = new PsdPlacements({
       scene: this,
@@ -240,8 +253,19 @@ export class WorldScene extends Phaser.Scene {
       reselect: () => this.setSelection(this.selection),
       refresh: () => this.refresh(),
       onPsdsLoaded: () => this.config.onPsdsLoaded?.(),
-      releaseKey: (key) => sceneRef.patterns.dropKey(key),
-      restoreKey: (key) => sceneRef.patterns.restoreKey(key),
+      // Both renderers that make objects the *document* has no record of —
+      // a pattern's copies and a tile layer's tiles. A sprite still drawing
+      // against a frame whose source has been destroyed is a throw inside
+      // Phaser on every frame from then on, so each one is told before the
+      // textures go and told again when they are back.
+      releaseKey: (key) => {
+        sceneRef.patterns.dropKey(key);
+        sceneRef.tiles.dropKey(key);
+      },
+      restoreKey: (key) => {
+        sceneRef.patterns.restoreKey(key);
+        sceneRef.tiles.restoreKey(key);
+      },
     });
 
     this.store.addEventListener("change", () => {
@@ -282,6 +306,7 @@ export class WorldScene extends Phaser.Scene {
     // Every copy and every backdrop on screen belongs to the scene that has
     // just been left.
     this.patterns.clear();
+    this.tiles.clear();
     this.backgrounds.clear();
 
     this.docRenderer.render();
@@ -302,7 +327,9 @@ export class WorldScene extends Phaser.Scene {
     // colour across the whole view is the one thing on this canvas that can
     // leave the editor with no ground to build on. See `setBackdropDepth`.
     this.gridRenderer.setBackdropDepth(this.backgrounds.frontDepth());
-    this.patterns.sync(this.gridRenderer.visibleRange(this.cameras.main));
+    const view = this.gridRenderer.visibleRange(this.cameras.main);
+    this.patterns.sync(view);
+    this.tiles.sync(view);
     // PSD Edit mode's dim is cut out of what the camera can see, so it follows the
     // camera the way the lattice does — a pan moves it as surely as a zoom.
     // A no-op while the mode is down.
@@ -319,16 +346,6 @@ export class WorldScene extends Phaser.Scene {
    */
   setGridVisible(on: boolean): void {
     this.gridRenderer.setVisible(on);
-  }
-
-  /** What the two tap tools need from this scene — see `tap-makes.ts`. */
-  private tapHost(): TapHost {
-    return {
-      store: this.store,
-      grid: this.grid,
-      activeLayerId: this.activeLayerId,
-      setSelection: (selection) => this.setSelection(selection),
-    };
   }
 
   /** How the world maps onto the screen right now. */
@@ -374,46 +391,31 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private handleTap(screenX: number, screenY: number, adding = false): void {
-    // The running game is a frame over this canvas and takes its own input;
-    // nothing down here is meant for it.
-    if (!this.editing) return;
-    const world = this.worldAt(screenX, screenY);
+    handleTap(this.tapping(), screenX, screenY, adding);
+  }
 
-    // While a collider is being drawn, a tap paints the space under the
-    // finger; while a shape is being extruded, it takes hold of one of the
-    // shape's faces. Either way it never reaches the document underneath.
-    if (this.modes.tap(screenX, screenY)) return;
-
-    // Under the Point and Text tools a tap puts one down rather than picking
-    // up what is already there — the two tools for which a tap on empty space
-    // makes something. Both still fall through when the layer will not take
-    // one, so the tap clears the selection rather than doing nothing at all.
-    // Both are `tap-makes.ts`: same gesture, same three things that have to
-    // be true about it, and the difference between a space and a position is
-    // the only thing in either of them.
-    if (this.gestureMode === "point" && addPointAt(this.tapHost(), world)) return;
-    if (
-      this.gestureMode === "text" &&
-      addTextAt(this.tapHost(), world, this.textStyle)
-    ) {
-      return;
-    }
-
-    // A tap on a grouped file means the group — the same rule a placed PSD
-    // keeps, one level out. See `widenToGroup`.
-    const hit = widenToGroup(
-      this.store,
-      this.docRenderer.pickAt(world, this.activeLayerId),
-      this.adjusting,
-    );
-    // ⌘ or ⇧ means *and this one as well*, which is the same gesture as
-    // ⌘-clicking a row in the layer panel and goes through the same
-    // arithmetic — see `addToSelection`.
-    this.setSelection(
-      adding
-        ? addToSelection(this.store, this.selection, hit)
-        : hit,
-    );
+  /** What a tap reads about this canvas — see `tapping.ts`. */
+  private tapping(): TappingHost {
+    return {
+      store: this.store,
+      grid: this.grid,
+      editing: () => this.editing,
+      mode: () => this.gestureMode,
+      activeLayerId: () => this.activeLayerId,
+      selection: () => this.selection,
+      setSelection: (selection) => this.setSelection(selection),
+      worldAt: (x, y) => this.worldAt(x, y),
+      textStyle: () => this.textStyle,
+      modeTap: (x, y) => this.modes.tap(x, y),
+      colliderActive: () => this.modes.collider.active,
+      tileTap: (world) => this.tilePaint.tap(world),
+      pickAt: (world, layerId) => this.docRenderer.pickAt(world, layerId),
+      pick: (x, y) => this.docRenderer.pick(x, y),
+      adjusting: () => this.adjusting,
+      setAdjusting: (unit) => {
+        this.adjusting = unit;
+      },
+    };
   }
 
   private beginMarquee(
@@ -469,19 +471,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** Open the placed PSD under the finger up into its layers, or close it. */
   private handleDoubleTap(screenX: number, screenY: number): void {
-    if (!this.editing) return;
-    // Two taps under the Point tool are two points, not a request to open
-    // whatever the second one happened to land on. A second tap inside
-    // collider mode is a second space painted, for the same reason.
-    if (this.gestureMode === "point" || this.modes.collider.active) return;
-    const world = this.worldAt(screenX, screenY);
-    const hit = this.docRenderer.pick(world.x, world.y);
-    if (!hit) return;
-
-    const next = toggleUnit(hit, this.adjusting);
-    this.adjusting = next.adjusting;
-    log.info(next.message);
-    this.setSelection(next.selection);
+    handleDoubleTap(this.tapping(), screenX, screenY);
   }
 
   /** Open the selected PSD up into its layers, from outside the canvas. */

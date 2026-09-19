@@ -26,13 +26,29 @@
 import type { DrawingLayer, DrawingTool, StrokeStyle } from "../drawing";
 import { patternLibrary, shapeLibrary } from "../lib/library";
 import * as log from "../lib/log";
-import type { ToolId } from "../lib/types";
+import type { LayerKind, ToolId } from "../lib/types";
+import type { TileVerb } from "../game/tile-paint";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
-import { canErase, toolName, type ToolRail } from "./tool-rail";
+import {
+  canErase,
+  tileVerbOf,
+  toolName,
+  toolsFor,
+  type ToolRail,
+} from "./tool-rail";
 
 export interface ToolRoutingHost {
   rail: ToolRail;
+  /**
+   * What kind of layer the work is landing on.
+   *
+   * Read through rather than pushed, because it changes for reasons this file
+   * has no way to hear about — a row picked in the left sidebar, a selection
+   * on the canvas, a scene switch. The shell re-applies the tool whenever it
+   * moves; see `editor.ts`.
+   */
+  layerKind: () => LayerKind;
   /** The canvas wrapper, which carries the cursor for whatever is in hand. */
   canvas: HTMLElement;
   /** Read through, not captured: neither is up when this is built. */
@@ -64,6 +80,14 @@ export interface ToolRouting {
   setErasing: (tool: ToolId, on: boolean) => void;
   /** Whether a tool is currently turned round. */
   isErasing: (tool: ToolId) => boolean;
+  /**
+   * What the tool in hand means for tiles, and which way round it is.
+   *
+   * What the canvas reads to decide whether a sweep puts tiles down — see
+   * `game/tile-paint.ts`. `null` whenever the work is not landing on a tile
+   * layer, which is what keeps every other layer's gestures untouched.
+   */
+  tileVerb: () => TileVerb;
   /**
    * A tool held down rather than tapped: pick it up, and turn it round.
    *
@@ -187,17 +211,27 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
       };
     }
 
-    const drawingTool = DRAWN[tool] ?? null;
+    // **On a tile layer two of the drawing tools mean something else.** The
+    // Pencil lays the run picked in the palette and Fill pours it, which are
+    // gestures over the *grid* rather than ink on the drawing surface — so
+    // the pointer stays with the canvas and the drawing layer is given
+    // nothing. Every other tool is what it always was: Select still selects,
+    // Pan still pans, and Slice and the Lasso still reach the ink that is
+    // there, because a tile layer can carry strokes like any other.
+    const tiling = host.layerKind() === "tile" && tileVerbOf(tool) !== null;
+    const drawingTool = tiling ? null : DRAWN[tool] ?? null;
     const scene = host.scene();
     scene?.suspendGestures(drawingTool !== null);
     scene?.setGestureMode(
-      tool === "pan"
-        ? "pan"
-        : tool === "point"
-          ? "point"
-          : tool === "text"
-            ? "text"
-            : "select",
+      tiling
+        ? "tile"
+        : tool === "pan"
+          ? "pan"
+          : tool === "point"
+            ? "point"
+            : tool === "text"
+              ? "text"
+              : "select",
     );
     // A hand over the canvas, whether Pan was picked from the rail or
     // borrowed with the space bar. The class carries it rather than an inline
@@ -207,6 +241,10 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     // cursor: what they say is "this is a place", and which of the two lands
     // is the button that is lit.
     host.canvas.classList.toggle("placing", tool === "point" || tool === "text");
+    // What the rail offers follows the layer, not the tool — a tile layer
+    // withholds three of the eleven. Set here because this is the one place
+    // that already runs on both of the things that can change it.
+    host.rail.setOffered(toolsFor(host.layerKind()));
     drawing?.setTool(drawingTool);
     host.inspector.setTool(tool, drawing?.style ?? null);
     if (!announce) return;
@@ -238,6 +276,8 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     apply,
     setErasing,
     isErasing: (tool) => erasing.has(tool),
+    tileVerb: () =>
+      host.layerKind() === "tile" ? tileVerbOf(host.rail.tool) : null,
     hold: (tool) => {
       apply(tool, false);
       setErasing(tool, !erasing.has(tool));

@@ -11,6 +11,8 @@
 import type { DocStore } from "../lib/doc-store";
 import type { Selection } from "../lib/types";
 import type { Viewport } from "../drawing";
+import type { TileStamp } from "../lib/tile-layers";
+import type { TileVerb } from "./tile-paint";
 
 export interface WorldSceneConfig {
   store: DocStore;
@@ -50,6 +52,18 @@ export interface WorldSceneConfig {
   onPsdEditChange?: () => void;
   /** Mask mode has started, finished, or changed the spaces it holds. */
   onMaskChange?: () => void;
+  /**
+   * What the tool in hand means for tiles, and which way round it is.
+   *
+   * Resolved by the shell, because which tool is held and whether it is
+   * turned round to erase are the rail's business — see
+   * `editor/tool-routing.ts`. Absent means no tile tool is ever in hand,
+   * which is what a scene built by a test gets.
+   */
+  tileVerb?: () => TileVerb;
+  tileErasing?: () => boolean;
+  /** The run picked in the palette — see `editor/tile-palette.ts`. */
+  tileStamp?: () => TileStamp | null;
   /**
    * Every PSD the open scene places has loaded.
    *

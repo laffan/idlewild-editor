@@ -23,8 +23,15 @@ export type RigPhase = "idle" | "pan" | "pinch" | "marquee" | "drag";
  * gesture is the tap should leave the other hand free, so a drag under it
  * moves the camera exactly as Pan does — and what the tap then means is the
  * scene's to decide, not this one's.
+ *
+ * **Tile** is here for the second half of that and not the first. A tile tool
+ * claims the drag outright — the scene's `onDragStart` takes it before
+ * anything else below a canvas mode — so what this mode is really saying is
+ * *no marquee and no hold*: a box dragged round ground that has nothing on it
+ * to select would be a gesture with no meaning, and a hold would open one
+ * half a second into every sweep. See `game/tile-paint.ts`.
  */
-export type RigMode = "select" | "pan" | "point" | "text";
+export type RigMode = "select" | "pan" | "point" | "text" | "tile";
 
 /**
  * What was held when the gesture began.

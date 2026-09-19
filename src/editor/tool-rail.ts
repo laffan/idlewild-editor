@@ -47,7 +47,7 @@
  */
 
 import { h, ICONS, icon } from "../lib/dom";
-import type { ToolId } from "../lib/types";
+import type { LayerKind, ToolId } from "../lib/types";
 
 /** Which column a tool sits in. */
 export type Bar = "rail" | "draw";
@@ -124,6 +124,49 @@ export const TOOLS: ToolSpec[] = [
     path: ICONS.text,
   },
 ];
+
+/**
+ * Which tools a layer of this kind offers.
+ *
+ * **A tile layer withdraws three.** The Pattern and Shape brushes reveal a
+ * library row and stamp a library shape, and the Text tool writes words that
+ * become pixels; none of the three has anything to do with a grid of tiles,
+ * and a button that silently does nothing is worse than a button that is not
+ * there. What is left is what a tile tool *is*: the same drawing tools with
+ * something else on the end of them — the Pencil lays the run picked in the
+ * palette, and Fill pours it — which is the relationship Tiled has between
+ * its palette and its tools and the one this is modelled on.
+ *
+ * Everything on the rail proper stays. Select, Pan, Point and Boundary are
+ * about the canvas rather than about what is drawn on it, and a named place
+ * or a blocking boundary on a tile layer means exactly what it means
+ * anywhere else.
+ *
+ * The lineup will grow — a rectangle, a picker, a magic wand are all tools
+ * Tiled has and this does not. Starting with what is already here is what
+ * keeps the first version a re-pointing rather than a second toolbar.
+ */
+const WITHHELD: Partial<Record<LayerKind, readonly ToolId[]>> = {
+  tile: ["pattern", "shape", "text"],
+};
+
+export function toolsFor(kind: LayerKind): ToolId[] {
+  const gone = WITHHELD[kind] ?? [];
+  return TOOLS.map((tool) => tool.id).filter((id) => !gone.includes(id));
+}
+
+/**
+ * What the tool in hand means for tiles, if anything.
+ *
+ * The two tools that draw and the one flag that turns them round. `null` is
+ * every other tool, and it is what makes a tile layer still selectable,
+ * pannable and pointable — see `toolsFor`.
+ */
+export function tileVerbOf(tool: ToolId): "stamp" | "fill" | null {
+  if (tool === "pencil") return "stamp";
+  if (tool === "fill") return "fill";
+  return null;
+}
 
 /**
  * The tools that can be turned round and used as erasers.
@@ -259,6 +302,18 @@ export class ToolRail {
       this.buttons.set(tool.id, button);
       hosts[tool.bar].appendChild(button);
     }
+  }
+
+  /**
+   * Which tools this rail is offering.
+   *
+   * Hidden rather than disabled: a disabled button is a button somebody has
+   * to work out the rule behind, and the rule here is about the layer rather
+   * than about the moment — see `toolsFor`. The rail is re-read whenever the
+   * active layer moves, because that is the only thing that changes it.
+   */
+  setOffered(tools: readonly ToolId[]): void {
+    for (const [id, button] of this.buttons) button.hidden = !tools.includes(id);
   }
 
   setTool(tool: ToolId): void {
