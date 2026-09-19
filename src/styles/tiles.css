@@ -1,0 +1,86 @@
+/* The tile palette: a PSD on a tile layer, cut into spaces you pick from.
+
+   Its own stylesheet rather than another section of `inspect.css`, which had
+   reached the seven hundred lines the rest of this codebase keeps to — and
+   the split is a real one. That file is the properties sidebar's furniture:
+   zones, sections, rows, fields, the fold. This is one control, and the only
+   one in the app that is a *picture* you point at.
+
+   Everything here is laid out against the picture rather than in pixels. The
+   image is whatever width the sidebar is, and the lattice and the highlight
+   are percentages of it, so a resized column needs nothing measured again;
+   the one place a real measurement happens is a pointer event, in
+   `editor/tile-palette.ts`. */
+
+.tile-palettes { display: flex; flex-direction: column; gap: 14px; }
+.tile-palette-row { display: flex; flex-direction: column; gap: 4px; }
+.tile-palette-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tile-palette-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The one destructive control in this panel, so it is the smallest thing in
+   it: taking a palette off takes every tile made of it off with it. */
+.tile-palette-drop {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+  font: 500 14px/1 var(--font-mono);
+  cursor: pointer;
+}
+.tile-palette-drop:hover { color: var(--color-accent); }
+
+/* The frame is the positioning context for the lattice and the highlight, and
+   it swallows touch gestures: the palette is inside a scrolling column, and a
+   drag across it that the column took for a scroll would be a run nobody
+   could pick on an iPad. */
+.tile-palette {
+  position: relative;
+  touch-action: none;
+  line-height: 0;
+  background: var(--chrome-bg);
+  border: 1px solid var(--chrome-rule);
+  cursor: crosshair;
+}
+.tile-palette-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  /* A tileset is usually pixel art and the palette is usually showing it
+     smaller than it was painted, which bilinear filtering turns to mush. */
+  image-rendering: pixelated;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* Where the picture is cut, drawn as two repeating gradients rather than one
+   element per space — a tileset is often hundreds of tiles, and hundreds of
+   elements in a panel rebuilt on every document change is a panel that
+   stutters. `background-size` is written from the tile count in code. */
+.tile-palette-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(to right, var(--chrome-text) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--chrome-text) 1px, transparent 1px);
+}
+/* The run in hand: the accent, which is what the editor draws a selection in
+   everywhere else. Outside the box rather than over it, so the artwork the
+   run is made of is not tinted by the thing saying it is chosen. */
+.tile-palette-pick {
+  position: absolute;
+  pointer-events: none;
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 1px var(--chrome-bg) inset;
+}
