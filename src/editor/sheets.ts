@@ -9,7 +9,9 @@ import { openSheet } from "../lib/sheet";
 import { psd, publish, toBase64 } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import {
+  hasCharacter,
   projectOptions,
+  scaffoldLabel,
   ZOOM_RANGE,
   type GameOptions,
   type ProjectMeta,
@@ -387,32 +389,39 @@ export function openExport(projectId: string, projectName: string): void {
   );
 }
 
-/** The three options Project Options can change, as it hands them back. */
 /**
- * What this sheet can change, which is now all of `GameOptions`.
+ * What this sheet can change, which is all of `GameOptions`.
  *
  * It was three of the four — the character controller was resolved when the
  * scaffold was written and could only be reported here. The alias is kept
- * because it names the sheet's subject rather than the project's.
+ * because it names the sheet's subject rather than the project's. The fourth
+ * is still only offered where there is a character module to read it; see
+ * `hasCharacter`.
  */
 export type RenderOptions = GameOptions;
 
 /**
- * Project Options: what the project is, and the four things about it that can
- * still be changed.
+ * Project Options: what the project is, and the things about it that can still
+ * be changed.
  *
- * The template, the style and the grid scale are facts — the document is
- * addressed in them and the scaffold was written for them — so they are read
- * out rather than offered. The rest are not: pixel art, whole-pixel
- * drawing, the zoom a scene opens at and whether anything walks reach the canvas and the game through
- * values either of them reads at the time, so they are controls, and each one
- * takes effect as it is changed rather than on the way out. There is no Cancel
- * because there is no pending state to abandon.
+ * The template, the scaffolding and the grid scale are facts — the document is
+ * addressed in the first, the third measures it, and the second was written
+ * into `game/` once and became the project's own copy the moment it was — so
+ * they are read out rather than offered. The rest are not: pixel art,
+ * whole-pixel drawing, the zoom a scene opens at and whether anything walks
+ * reach the canvas and the game through values either of them reads at the
+ * time, so they are controls, and each one takes effect as it is changed
+ * rather than on the way out. There is no Cancel because there is no pending
+ * state to abandon.
  *
- * The character controller is in between, and is listed as a fact: it was lines
- * in a file, and the file became the project's own the moment it was written.
- * Unticking a box now would not take a character out of code that has one, so
- * the row says what happened instead of pretending to undo it.
+ * **The character controller is a control on two scaffolds and absent on the
+ * other two.** It used to be a fact everywhere: it was resolved when the files
+ * were written, so this sheet could only say which way it had gone.
+ * `js/shared/character.js` reads `config.character` now, so where that file
+ * exists the row is a switch. Where it does not — Blank PSD to Phaser and
+ * Vanilla scaffold no character module and no prefab — there is nothing for a
+ * switch to reach, and a row that changed a value no code reads would be the
+ * one thing a settings page must not be.
  */
 export function openProjectOptions(
   meta: ProjectMeta,
@@ -428,7 +437,7 @@ export function openProjectOptions(
   const live: RenderOptions = { ...projectOptions(meta) };
   const apply = () => onApply({ ...live });
 
-  // The four that can change, first: they are the reason to open this sheet,
+  // The ones that can change, first: they are the reason to open this sheet,
   // and the facts under them are a reference rather than a form.
   sheet.body.append(
     toggleRow(
@@ -453,25 +462,32 @@ export function openProjectOptions(
       live.defaultZoom = zoom;
       apply();
     }),
-    // The fourth, and the one that used to be a fact rather than a setting:
-    // it was resolved when the scaffold was written, so this sheet could only
-    // say which way it had gone. `js/shared/character.js` is written either
-    // way now and reads the answer out of the generated config, so turning it
-    // on is a save rather than a file appearing in somebody's project.
-    toggleRow(
-      "Character controller",
-      "Spawn the prefab in js/prefabs/character.js, and follow it with the camera",
-      live.character,
-      (on) => {
-        live.character = on;
-        apply();
-      },
-    ),
   );
+
+  // The fourth, and the one that used to be a fact rather than a setting: it
+  // was resolved when the scaffold was written, so this sheet could only say
+  // which way it had gone. `js/shared/character.js` is written either way now
+  // and reads the answer out of the generated config, so turning it on is a
+  // save rather than a file appearing in somebody's project — on the two
+  // scaffolds that have that file. The other two have no character module to
+  // answer the switch, so it is left out rather than shown doing nothing.
+  if (hasCharacter(meta.genre)) {
+    sheet.body.appendChild(
+      toggleRow(
+        "Character controller",
+        "Spawn the prefab in js/prefabs/character.js, and follow it with the camera",
+        live.character,
+        (on) => {
+          live.character = on;
+          apply();
+        },
+      ),
+    );
+  }
 
   const rows: Array<[string, string]> = [
     ["Template", meta.projection],
-    ["Style", meta.genre === "platformer" ? "Platformer" : "Top Down"],
+    ["Scaffolding", scaffoldLabel(meta.genre)],
     [
       "Grid scale",
       meta.projection === "blank"

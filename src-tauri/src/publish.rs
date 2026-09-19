@@ -114,7 +114,7 @@ pub fn site_entries(project_id: &str) -> Result<(String, Vec<SiteEntry>), String
 
     // The editable project source, minus the generated config.
     let game = store::game_dir(project_id)?;
-    let generated = crate::game_config::CONFIG_REL;
+    let generated = crate::game_config::config_rel(meta.genre);
     collect(&game, "", &mut entries, &[generated])?;
 
     // The document, in the shape `shared/canvas.js` reads. A project whose
@@ -145,20 +145,26 @@ pub fn site_entries(project_id: &str) -> Result<(String, Vec<SiteEntry>), String
     // Runtime libraries. Both are vendored into the binary, so a publish
     // ships the exact builds the project was made against. They go where this
     // project's own page asks for them — see `runtime_dir`.
-    let runtime = runtime_dir(&game);
-    for (name, source) in [
-        ("psd-to-phaser.umd.js", crate::templates::P2P_UMD),
-        ("phaser.min.js", crate::templates::PHASER),
-    ] {
-        entries.push(SiteEntry {
-            rel: format!("{runtime}{name}"),
-            source: SiteSource::Generated(source.as_bytes().to_vec()),
-        });
+    //
+    // A vanilla project asks for neither: its `index.html` loads no Phaser and
+    // no psd-to-phaser, and 1.5 MB of JavaScript nothing on the page includes
+    // is 1.5 MB somebody has to work out they can delete.
+    if meta.genre.is_phaser() {
+        let runtime = runtime_dir(&game);
+        for (name, source) in [
+            ("psd-to-phaser.umd.js", crate::templates::P2P_UMD),
+            ("phaser.min.js", crate::templates::PHASER),
+        ] {
+            entries.push(SiteEntry {
+                rel: format!("{runtime}{name}"),
+                source: SiteSource::Generated(source.as_bytes().to_vec()),
+            });
+        }
     }
 
     entries.push(SiteEntry {
         rel: "README.txt".to_string(),
-        source: SiteSource::Generated(readme(&meta.name).into_bytes()),
+        source: SiteSource::Generated(readme(&meta.name, meta.genre).into_bytes()),
     });
 
     // Sorted so a site is the same list in the same order every time: a zip
@@ -223,21 +229,33 @@ fn collect(
     Ok(())
 }
 
-fn readme(name: &str) -> String {
+/// The note beside a published site.
+///
+/// The half about serving it is true of every scaffold and for the same
+/// reason: all four are ES modules that read `game.config.json`, and a module
+/// opened over `file://` cannot fetch or import anything. What a vanilla site
+/// does not carry is Phaser, so the WebGL paragraph is left off it rather than
+/// being a requirement nothing in the directory has.
+fn readme(name: &str, scaffold: crate::project::Scaffold) -> String {
+    let webgl = if scaffold.is_phaser() {
+        "\n\
+         Requires a WebGL context: psd-to-phaser builds layer masks on\n\
+         Phaser 4's Filter system. Under Canvas, masked layers still place and\n\
+         render, just unmasked.\n"
+    } else {
+        ""
+    };
     format!(
         "{name}\n\
          \n\
          Exported from Idlewild.\n\
          \n\
-         Serve this directory over HTTP and open index.html — the scene uses\n\
-         ES modules and a JSON import, so opening the file directly from disk\n\
-         will not work.\n\
+         Serve this directory over HTTP and open index.html — the page uses\n\
+         ES modules and reads game.config.json, so opening the file directly\n\
+         from disk will not work.\n\
          \n\
              npx serve .\n\
-         \n\
-         Requires a WebGL context: psd-to-phaser builds layer masks on\n\
-         Phaser 4's Filter system. Under Canvas, masked layers still place and\n\
-         render, just unmasked.\n"
+         {webgl}"
     )
 }
 

@@ -1,6 +1,13 @@
 //! Tauri command surface. Every frontend call lands here; the modules below
 //! hold the actual work.
 
+// For the test modules, which build documents with `serde_json::json!`. A
+// document is six levels deep before it reaches a fill, and that macro expands
+// once per level per key — past rustc's default of 128 on a fixture with a
+// couple of layers in it. It costs nothing at the crate root and it is the
+// difference between `cargo test --lib` running and not compiling.
+#![recursion_limit = "256"]
+
 mod archive;
 mod clipboard;
 mod compare;
@@ -28,6 +35,7 @@ mod psd_write;
 mod publish;
 mod publish_targets;
 mod save_staging;
+mod scene_names;
 mod site_files;
 mod ssh_keys;
 mod store;

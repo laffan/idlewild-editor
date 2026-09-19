@@ -9,7 +9,8 @@
 //! create projects in and `swatch`. `marks` is the orienting marks an import
 //! writes; `rewrite` is what a *second* write to the same file has to keep;
 //! `painting` is the two writes PSD Edit mode makes. `scaffolds` is what a
-//! *project* is made of and `exports` is what leaving with one takes.
+//! *project* is made of, `scaffold_code` is what the JavaScript it writes
+//! does, and `exports` is what leaving with one takes.
 //! `palette` is the swatch strip a PSD carries out to another app.
 //! `options` is the per-project settings; `scenes` is the file each scene is
 //! written in. `search` is ⇧⌘F over the game tree. `deploying` is what a bad
@@ -30,6 +31,7 @@ mod palette;
 mod presentation;
 mod publishing;
 mod rewrite;
+mod scaffold_code;
 mod scaffolds;
 mod scenes;
 mod search;
@@ -38,7 +40,7 @@ mod sketching;
 mod stacking;
 mod tiles;
 
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{psd_pipeline, psd_write, publish, store};
 
 /// Solid-colour RGBA, so a round trip can be checked pixel by pixel.
@@ -187,7 +189,7 @@ fn a_project_round_trips_an_image_through_psd_to_json() {
     let meta = store::create_project(
         "Pipeline test",
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         64,
         GameOptions::default(),
     )
@@ -249,7 +251,7 @@ fn a_converted_image_names_its_layer_after_the_key() {
     let meta = store::create_project(
         "Naming",
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         64,
         GameOptions::default(),
     )
@@ -308,7 +310,7 @@ fn renaming_a_psd_renames_the_layer_it_named_after_itself() {
     let meta = store::create_project(
         "Layer names",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -383,7 +385,7 @@ fn reimporting_replaces_the_file_behind_a_key() {
     let meta = store::create_project(
         "Re-import",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -446,7 +448,7 @@ fn renaming_a_psd_moves_its_file_and_its_assets() {
     let meta = store::create_project(
         "Rename",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -539,7 +541,7 @@ fn every_sprite_layer_exports_a_png_named_after_the_layer() {
     let meta = store::create_project(
         "Layer names",
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         64,
         GameOptions::default(),
     )

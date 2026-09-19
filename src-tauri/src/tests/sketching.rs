@@ -14,7 +14,7 @@
 //! and the canvas shows nothing.
 
 use super::swatch;
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::psd_write::{self, AnchorMarks, MarkLine, MarkPoint};
 use crate::{psd_pipeline, store};
 
@@ -39,7 +39,7 @@ fn sketched(name: &str, marks: AnchorMarks, size: (u32, u32), check: impl Fn(&st
     let meta = store::create_project(
         "Sketch",
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         64,
         GameOptions::default(),
     )
@@ -320,7 +320,7 @@ fn rewritten(name: &str, marks: AnchorMarks, expected: (f64, f64)) {
     let meta = store::create_project(
         "Rewritten sketch",
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         64,
         GameOptions::default(),
     )

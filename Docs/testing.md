@@ -150,7 +150,9 @@ puts other projects in the store, which is what Import Assets' second route
 needs to have anywhere to go, and `window.__movedRoof` stands the fixture's roof
 two spaces off its walls — the one state in which **Reset Layer Position** is
 drawn, and not one a harness with no asset server can reach by dragging. Its query string picks the fixture's template and
-style — `?template=blank&style=platformer&grid=32` — and `?safe=44` writes
+scaffolding — `?template=blank&scaffold=platformer&grid=32`, and `style=` is
+still taken for the scripts written before the sheet was renamed — and
+`?safe=44` writes
 stand-in values over the safe-area tokens, which is the only way to look at
 the iPad's insets from a desktop browser. Drawing is drivable there too: CDP's
 `Input.dispatchMouseEvent` takes a `pointerType: "pen"` and a `force`, which

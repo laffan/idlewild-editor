@@ -14,11 +14,13 @@ import { mountEditor } from "../src/editor/editor";
   return JSON.parse(w.args.doc).layers[0];
 };
 
-// The fixture's template and style, so a blank canvas or a platformer can be
-// opened here without a second harness. The stub document reads the same
-// globals, and both have to be set before the editor mounts.
+// The fixture's template and scaffolding, so a blank canvas, a platformer or
+// a vanilla project can be opened here without a second harness. The stub
+// document reads the same globals, and both have to be set before the editor
+// mounts. `__genre` keeps the field's name rather than the sheet's, because
+// what it sets is the `genre` field — see `Scaffold`.
 const projection = (window as any).__projection ?? "isometric";
-const genre = (window as any).__genre ?? "topdown";
+const scaffold = (window as any).__genre ?? "topdown";
 // And its rendering options, so pixel art and a default zoom can be opened
 // here the way a project that was created with them would be.
 const options = (window as any).__options ?? {
@@ -34,7 +36,7 @@ void mountEditor(
     id: "demo",
     name: "Marsh Kingdom",
     projection,
-    genre,
+    genre: scaffold,
     gridSize: (window as any).__gridSize ?? 64,
     createdAt: Date.now(),
     updatedAt: Date.now(),

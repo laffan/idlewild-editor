@@ -11,7 +11,7 @@
 //! both create projects in, and `swatch`.
 
 use super::swatch;
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{psd_pipeline, psd_write, store};
 
 /// A paste, end to end.
@@ -29,7 +29,7 @@ fn a_pasted_image_carries_its_anchor_and_footprint() {
     let meta = store::create_project(
         "Pasted",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -132,7 +132,7 @@ fn an_import_marks_its_anchor_and_grid_footprint() {
     let meta = store::create_project(
         "Marks",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

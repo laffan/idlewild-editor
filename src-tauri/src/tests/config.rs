@@ -10,7 +10,7 @@
 //! Split from `scaffolds` for the 700-line rule; it shares the store the rest
 //! of the suite creates projects in.
 
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{store, templates};
 
 /// The config the project's own code reads follows the document.
@@ -24,7 +24,7 @@ fn saving_the_document_rewrites_the_config_the_game_reads() {
     let meta = store::create_project(
         "Synced",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -114,7 +114,7 @@ fn the_config_carries_every_scene_and_places_the_open_one() {
     let meta = store::create_project(
         "Scened",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -214,7 +214,7 @@ fn a_document_written_before_scenes_still_reaches_the_config() {
     let meta = store::create_project(
         "Legacy doc",
         Projection::Blank,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -277,7 +277,7 @@ fn the_config_spawns_on_the_scenes_start_point() {
     let meta = store::create_project(
         "Spawned",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -357,7 +357,7 @@ fn the_span_reaches_a_point_put_down_a_long_way_out() {
     let meta = store::create_project(
         "Distant",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -417,7 +417,7 @@ fn every_kind_of_layer_reaches_the_config() {
     let meta = store::create_project(
         "Kinds",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -529,7 +529,7 @@ fn a_note_on_the_canvas_never_reaches_the_config() {
     let meta = store::create_project(
         "Noted",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -609,7 +609,7 @@ fn a_group_never_reaches_the_config() {
     let meta = store::create_project(
         "Grouped",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

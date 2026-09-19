@@ -25,11 +25,28 @@ js/lib/                  Phaser and psd-to-phaser, written in by the exporter
 js/scenes/index.js       generated — the scene list `main.js` reads
 js/scenes/<Scene>.js     one per scene in the editor, and the author's
 js/shared/canvas.js      the document, drawn: loading, camera, fills, placements, patterns
-js/shared/character.js   the genre's wiring between the document and what moves in it
+js/shared/character.js   the wiring between the document and what moves in it
 js/shared/grid.js        the projection, and the document's geometry
-js/shared/…              the genre's own module: navigation.js or physics.js
+js/shared/…              the character's own module: navigation.js or physics.js
 js/prefabs/character.js  the body, the walk and the artwork — the author's
 ```
+
+**That is the whole tree, and two of the four scaffolds write less of it.**
+A **Blank PSD to Phaser** project stops at `js/shared/grid.js`: the plugin is
+registered, every PSD is loaded and the document is placed, and the three
+files under `character.js` are not written at all — so a project that wants
+something to move in it has nothing to read past first. A **Vanilla** project
+is not in this table at all. It is `index.html`, `style.css`, `script.js` and
+`game.config.json` at the root of `game/`, with no `js/` for the config to sit
+under and no Phaser on the page; `publish` ships it neither runtime, because
+1.5 MB of JavaScript nothing includes is 1.5 MB somebody has to work out they
+can delete.
+
+**Every scaffold gets the same `assets/`.** The PSD pipeline writes its output
+beside `game/` rather than inside it, so what a scaffold decides is the code
+around the artwork and never the artwork — which is what makes the leaner two
+worth having rather than a reduced version of the same thing. See
+`Scaffold` in `project.rs` and `template_files` in `templates.rs`.
 
 **`js/lib/` is the one directory with nothing behind it in the store.** The two
 runtimes are 1.5 MB that would be identical in every project and are already
@@ -52,7 +69,9 @@ replaced it is a short one with no blocks in it at all, so answering with that
 would not put anything back — a project holding the old thousand-line scene
 keeps it, keeps running it, and owns every line of it from now on. Nothing in
 `sync_scene_files` touches such a project either: the test there is whether
-`js/shared/canvas.js` exists, which only the new scaffold writes.
+`js/shared/canvas.js` exists, which only the new scaffold writes — and that
+same test is what keeps a vanilla project out of it, correctly, since a tree
+with no `canvas.js` is a tree with no scene for a scene file to be.
 
 That file is the document, in the shape `shared/canvas.js` reads it. Everything
 else in `game/` is the user's source — the code modal edits it, and an export
@@ -329,7 +348,8 @@ the prefab gave it and draws in front of everything; sorting a flat top-down
 game on Y is a real thing to want, and it is a change to `drawOrder` as much as
 to this.
 
-`walkDepth` is a marked block and the only one the two genres do not share: a
+`walkDepth` is a marked block and the only one the two whole-game scaffolds do
+not share: a
 platformer is seen from the side, where nothing sorts on Y at all. Its test
 pulls the block out of the template and runs it, the way the `drawOrder` test
 does — and it is the test that caught the half step.
@@ -449,6 +469,17 @@ than inside it, because the two are about different things: Project Options is
 how the *canvas* renders and reaches the editor's own view; this only ever shows
 up in Play and in an export. Six settings — fixed size with a width and a
 height, centred or top left, a margin, a corner radius, and the page colour.
+
+**It is not on the menu at all for a vanilla project.** All six ride in the
+generated config for `js/main.js` to write onto the document as the custom
+properties `styles.css` reads with a fallback — and a vanilla scaffold writes
+neither file. Its `index.html` and `style.css` are the author's outright from
+the moment they are scaffolded, so a sheet that wrote six values nothing reads
+would be the editor claiming a page it does not own. `header-wiring.ts` leaves
+`onPageSetup` undefined for one, and `header.ts` takes the item off the menu
+rather than showing it doing nothing. The three Phaser scaffolds keep it,
+Blank PSD to Phaser included: that one writes the same `main.js` and the same
+`styles.css` as a whole game does.
 
 ### Why it is not `GameOptions`
 
@@ -608,7 +639,7 @@ back the way the scaffold wrote it, dropping whatever was added inside it. It
 saves as it goes: the reason to press Reset is that the running game is broken,
 and a repair you then have to remember to save is half a repair. `templates.rs`
 answers for the pristine text (`read_game_template`), so the blocks a project
-can reset are the blocks its own genre scaffolds.
+can reset are the blocks its own scaffold wrote.
 
 **A block the template gains later** is the case Reset cannot serve: a
 project's `game/` tree is its own copy, so there is nothing in the file to put
@@ -642,8 +673,9 @@ Today `canvas.js` marks sixteen — `sceneOf`, `loadDocument`, `updateCanvas`,
 `applyCamera`, `placeDocument`, `paintBackgrounds`, `placePatterns`,
 `paintFill`, `nearPoints`, `drawOrder`, `applyDepth`, `applyScale`,
 `applyHidden`, `pointsToVectors`, `gradientCorners` and `patternRule` — and
-it is one file for both genres, so there is no longer a pair that can drift.
-`character.js` marks its own, and the two genres' differ: a top-down character
+it is one file for every Phaser scaffold, so there is no longer a pair that
+can drift. `character.js` marks its own, and the two that write one differ: a
+top-down character
 sorts itself into an isometric ordering and a platformer does not, so
 `sortCharacter`, `readColliders` and `walkDepth` are the first's and
 `readSolids` is the second's. `main.js` marks `pixelPerfect` and

@@ -31,7 +31,7 @@
 //! second source of truth for where a project lives. The fields worth keeping
 //! are in the manifest, and an import writes a fresh `meta.json` around them.
 
-use crate::project::{now_ms, GameOptions, Genre, Presentation, ProjectMeta, Projection};
+use crate::project::{now_ms, GameOptions, Presentation, ProjectMeta, Projection, Scaffold};
 use crate::store;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
@@ -80,7 +80,7 @@ pub struct ArchivedProject {
     pub name: String,
     pub projection: Projection,
     #[serde(default)]
-    pub genre: Genre,
+    pub genre: Scaffold,
     #[serde(rename = "gridSize")]
     pub grid_size: u32,
     #[serde(rename = "createdAt")]

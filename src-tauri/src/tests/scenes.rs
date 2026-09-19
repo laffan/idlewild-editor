@@ -12,8 +12,8 @@
 //! name and the Phaser key all at once, and only the first of those will take
 //! "Title Screen".
 
-use crate::game_config::{scene_file_name, scene_file_names};
-use crate::project::{GameOptions, Genre, Projection};
+use crate::scene_names::{scene_file_name, scene_file_names};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::store;
 
 /// A document with the given scenes, in order, each with one empty layer.
@@ -49,7 +49,7 @@ fn project() -> crate::project::ProjectMeta {
     store::create_project(
         "Scenes",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -252,9 +252,9 @@ fn dump_a_runnable_tree() {
         "Dump".into(),
         Projection::Isometric,
         if std::env::var("IDLEWILD_SIDE").is_ok() {
-            Genre::Platformer
+            Scaffold::Platformer
         } else {
-            Genre::Topdown
+            Scaffold::Topdown
         },
         64,
         GameOptions::default(),
@@ -269,7 +269,7 @@ fn dump_a_runnable_tree() {
     for (_, file) in &scenes {
         std::fs::write(
             dir.join(format!("js/scenes/{file}.js")),
-            crate::templates::scene_file(file),
+            crate::templates::scene_file(file, meta.genre),
         )
         .expect("scene should write");
     }

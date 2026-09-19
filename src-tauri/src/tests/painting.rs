@@ -11,7 +11,7 @@
 
 use super::swatch;
 use crate::psd_paint::{self, Paint, Patch};
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{psd_layers, psd_write, store};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
@@ -194,7 +194,7 @@ fn a_layer_can_be_added_and_then_drawn_into() {
     let meta = store::create_project(
         "Pen",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -303,7 +303,7 @@ fn rubbing_in_psd_edit_mode_thins_the_layer_that_was_there() {
     let meta = store::create_project(
         "Rub",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -366,7 +366,7 @@ fn a_rub_outside_a_layer_leaves_its_rectangle_alone() {
     let meta = store::create_project(
         "Reach",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -431,14 +431,14 @@ fn a_rub_outside_a_layer_leaves_its_rectangle_alone() {
 /// than only the file.
 #[test]
 fn applying_ink_re_parses_and_writes_the_sprite() {
-    use crate::project::{GameOptions, Genre, Projection};
+    use crate::project::{GameOptions, Projection, Scaffold};
     use crate::psd_layers;
     use crate::store;
 
     let meta = store::create_project(
         "Painting",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

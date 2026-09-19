@@ -128,7 +128,7 @@ symptom was a pattern layer that never appeared in the exported game while the
 editor drew it perfectly, which is about as far from its cause as a bug gets.
 Both templates now read `psdsReady` at the top of `syncPatterns`, and
 `both_scenes_hold_their_patterns_until_the_psds_are_in` pins the guard ahead of
-the place on both genres.
+the place on both.
 
 The editor's own renderer was never exposed to this: `canPlace` asks
 `PsdPlacements` whether the *texture* is in, not just the manifest, and a range

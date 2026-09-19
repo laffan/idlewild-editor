@@ -8,8 +8,8 @@
 //! a test of its own for the thing that changed: the same tree lands either
 //! way, and the switch is in the config.
 
-use crate::project::{GameOptions, Genre, ProjectMeta, Projection};
-use crate::{publish, store, templates};
+use crate::project::{GameOptions, Projection, Scaffold};
+use crate::{publish, store};
 
 fn without_character() -> GameOptions {
     GameOptions {
@@ -26,7 +26,7 @@ fn without_character() -> GameOptions {
 /// scaffold does not differ and the config does.
 #[test]
 fn the_character_is_a_setting_rather_than_a_scaffold() {
-    for genre in [Genre::Topdown, Genre::Platformer] {
+    for genre in [Scaffold::Topdown, Scaffold::Platformer] {
         let bare = store::create_project(
             "Bare",
             Projection::Orthogonal,
@@ -91,7 +91,7 @@ fn the_character_can_be_turned_off_after_the_fact() {
     let meta = store::create_project(
         "Switch",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -132,7 +132,7 @@ fn the_rendering_options_reach_the_config_and_can_be_changed() {
     let meta = store::create_project(
         "Crisp",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         16,
         GameOptions {
             pixel_art: true,
@@ -189,7 +189,7 @@ fn an_export_puts_the_runtimes_where_the_page_asks_for_them() {
     let meta = store::create_project(
         "Runtimes",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

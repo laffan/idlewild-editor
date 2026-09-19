@@ -17,7 +17,7 @@
  */
 
 import type { Grid } from "../lib/grid";
-import type { EditorMode, ProjectMeta } from "../lib/types";
+import { isPhaserScaffold, type EditorMode, type ProjectMeta } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import type { HeaderCallbacks } from "./header";
 import type { HistoryUi } from "./history";
@@ -78,6 +78,16 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
     onOptions: () => deps.openOptions(),
     // The HTML and CSS around the game rather than the game: its size, where
     // it sits on the page, the space and the colour around it.
-    onPageSetup: () => openPageSetup(meta, deps.reloadGame),
+    //
+    // Only where there is a scaffolded page to describe. Those six settings
+    // reach the browser through `js/main.js`, which reads them out of the
+    // generated config and writes them onto the document as the custom
+    // properties `styles.css` consumes — and a vanilla project has neither
+    // file. Its `index.html` and `style.css` are the author's outright, so a
+    // sheet that wrote values nothing reads would be the editor claiming a
+    // page it does not own. `undefined` takes the item off the menu.
+    ...(isPhaserScaffold(meta.genre)
+      ? { onPageSetup: () => openPageSetup(meta, deps.reloadGame) }
+      : {}),
   };
 }

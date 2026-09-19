@@ -41,7 +41,14 @@
  * rather than naming them, and adding or renaming one never asks anybody to
  * edit an import.
  */
-const GENERATED = new Set(["js/game.config.json", "js/scenes/index.js"]);
+const GENERATED = new Set([
+  "js/game.config.json",
+  // The same file in a vanilla project, which has no `js/` for it to sit in.
+  // Listed rather than matched on the basename: a file somebody puts at
+  // `js/vendor/game.config.json` is theirs, and the editor is not in it.
+  "game.config.json",
+  "js/scenes/index.js",
+]);
 
 const MARKER = /^\s*\/\/\s*idlewild:(begin|end)\s+([A-Za-z0-9_-]+)\s*$/;
 

@@ -11,7 +11,7 @@
 export * from "./project-types";
 export * from "./layer-types";
 
-import type { Genre, Projection } from "./project-types";
+import type { Projection, Scaffold } from "./project-types";
 import type {
   Background,
   LayerKind,
@@ -433,7 +433,8 @@ export interface CameraState {
  * A scene: a set of layers and a canvas of its own.
  *
  * The same idea Phaser has. A project is several places — a title screen, a
- * cave, the overworld — and they share a grid, a genre and a pile of PSDs but
+ * cave, the overworld — and they share a grid, a scaffold and a pile of PSDs
+ * but
  * not a single thing standing on them. So layers hang off a scene rather than
  * off the document, and switching scenes is a clean canvas rather than a
  * filter over one.
@@ -466,8 +467,12 @@ export interface Scene {
 export interface GameDoc {
   version: 1 | 2;
   projection: Projection;
-  /** Absent on documents written before the choice existed: top down. */
-  genre?: Genre;
+  /**
+   * What the project scaffolds — see `Scaffold`, and the note there on why the
+   * field is still called this. Absent on documents written before the choice
+   * existed: top down.
+   */
+  genre?: Scaffold;
   gridSize: number;
   scenes: Scene[];
   activeSceneId: string;

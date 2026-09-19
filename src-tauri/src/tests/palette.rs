@@ -16,7 +16,7 @@
 //! of the suite creates projects in, and `swatch`.
 
 use super::swatch;
-use crate::project::{GameOptions, Genre, ProjectMeta, Projection};
+use crate::project::{GameOptions, ProjectMeta, Projection, Scaffold};
 use crate::psd_palette::{self, PaletteStrip, LAYER_NAME};
 use crate::{psd_layers, psd_pipeline, store};
 use psd::{LayerBuilder, PsdBuilder};
@@ -26,7 +26,7 @@ fn project(name: &str) -> ProjectMeta {
     let meta = store::create_project(
         name,
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

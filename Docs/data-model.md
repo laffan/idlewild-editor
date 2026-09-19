@@ -70,8 +70,9 @@ machine does not have draws instead.
   over an 8px tile on exactly the projects that are most likely to be zoomed
   in. See the section below.
 - **A project has two axes**, and they answer different questions.
-  `projection` is the shape of the space; `genre` is the program that comes
-  out of it. See the two sections below.
+  `projection` is the shape of the space; the scaffold — the field is still
+  called `genre` — is the program that comes out of it. See the two sections
+  below.
 
 ### The three templates, and why blank is not a fourth code path
 
@@ -107,23 +108,54 @@ shared with three neighbours, so navigation was blocking a cell either side of
 every wall until this existed. `grid.js` in the templates carries the same
 distinction, for the same reason.
 
-### Two genres, one document
+### Four scaffolds, one document
 
-`genre` decides the scene a project scaffolds, and so — since Play runs that
-scene — the game the editor plays. Nothing else. Both read the same document:
-a fill marked not-walkable, a boundary marked blocking and a placed PSD's
+The second axis decides what a project writes into `game/`, and so — since
+Play runs that tree — the game the editor plays. Nothing else. It used to be
+two answers and it is four:
+
+| value | what lands in `game/` |
+| --- | --- |
+| `topdown` | a whole game: the document placed, and a character that walks the grid over A\* |
+| `platformer` | a whole game seen from the side: gravity, ground, a jump |
+| `p2p` | the wiring and nothing above it — Phaser 4 with psd-to-phaser registered, every PSD loaded and the document placed |
+| `vanilla` | no Phaser at all: `index.html`, `style.css`, `script.js`, and the config beside them |
+
+All four read the same document, and **all four are drawn the same way**. A
+fill marked not-walkable, a boundary marked blocking and a placed PSD's
 collider are what a top-down character routes *around* and what a side-on
 character stands *on* — a floor plan or a cross-section, the same geometry
-either way.
+either way — and they are inert data in the two that scaffold no character.
+Nothing in the canvas, the tools or the selection reads this field. It is the
+only choice on the New Project sheet that the editor itself does not use,
+which is the point of the last two: what you drew stops deciding how you
+implement it.
 
 Isometric and platformer is the one pair not offered. Gravity has no
 direction on a diamond grid seen from above, so the New Project sheet greys the
 option out and `create_project` refuses it rather than scaffolding something
-that cannot work.
+that cannot work. The two that scaffold no character have nothing to fall, so
+they pair with any template.
 
-Both fields are optional on disk (`#[serde(default)]` on the Rust side,
-`genre?:` on the TypeScript one) so every project written before the choice
-existed still loads, as top down — which is what it has always been.
+**The type is `Scaffold` and the field is `genre`.** Two more answers made the
+old name wrong — vanilla is not a genre — but the key is in every `meta.json`,
+every `doc.json`, every generated config and every `.idlewild` manifest ever
+written, and the scaffold's own `canvas.js` reads it. Renaming a key on disk
+to say the same thing a better way is not a trade worth making; see
+`Placement.instance` in `types.ts` for the same argument. Both fields are
+optional on disk (`#[serde(default)]` on the Rust side, `genre?:` on the
+TypeScript one) so every project written before the choice existed still
+loads, as top down — which is what it has always been.
+
+Two things in the editor do read it, and both are a row they withhold rather
+than a behaviour they change. **Page Setup** is not on the menu for a vanilla
+project: its six settings ride in the generated config for `js/main.js` to
+write onto the document as the custom properties `styles.css` consumes, and a
+vanilla project has neither file. The **character controller** is not on
+either sheet for `p2p` or `vanilla`: the switch is read by
+`js/shared/character.js`, which those two do not write, so `store` clamps the
+stored value to `false` and `game_config` writes `false` whatever a
+hand-edited `meta.json` says.
 
 ### Options, and which of them can change
 
@@ -194,7 +226,8 @@ because the scaffold always wrote one. On the TypeScript side that is
 
 A scene is what Phaser means by one: a set of layers and a canvas of its own.
 A project is several places — a title screen, a cave, the overworld — sharing
-a grid, a genre and a pile of PSDs, but not a single thing standing on them.
+a grid, a scaffold and a pile of PSDs, but not a single thing standing on
+them.
 
 ```text
 GameDoc

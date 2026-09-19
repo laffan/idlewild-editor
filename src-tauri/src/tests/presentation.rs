@@ -22,7 +22,7 @@
 //! `DEFAULT_BACKGROUND`.
 
 use crate::game_config;
-use crate::project::{GameOptions, Genre, Presentation, Projection, DEFAULT_BACKGROUND};
+use crate::project::{GameOptions, Presentation, Projection, Scaffold, DEFAULT_BACKGROUND};
 use crate::store;
 
 /// A page with something other than the default in every field, so a test that
@@ -43,7 +43,7 @@ fn seeded(name: &str) -> String {
     store::create_project(
         name,
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

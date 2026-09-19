@@ -1,6 +1,6 @@
 /**
- * The New Project sheet: pick a template, a style, a grid scale and how the
- * project renders, then name it.
+ * The New Project sheet: pick a template and a grid scale, pick how much
+ * scaffold you want, say how the project renders, then name it.
  *
  * It was **New Game**, and the name was a claim the sheet does not make. What
  * comes out of it is a project — a grid, a pile of PSDs and a `game/` tree —
@@ -8,23 +8,48 @@
  * somewhere else, which is the whole reason Export Assets exists. The button on
  * the home screen says *New Project* and so does this.
  *
- * Two axes decide the program. The *template* is the shape of the space you
- * build in — diamonds, squares, or nothing at all. The *style* is the game that
- * comes out of it: a character that walks the grid, or one that runs and jumps
- * along it. Both are codebase selections: each combination scaffolds a real
- * runnable Phaser 4 project into `game/` — see src-tauri/templates/.
+ * ## Two axes, and they stopped being the same kind of question
+ *
+ * The *template* is the shape of the space you build in — diamonds, squares,
+ * or nothing at all. It is the one choice the editor itself reads: the document
+ * is addressed in it, a selection snaps to it or does not, and the grid scale
+ * under it is what a space measures. So Template and Grid scale are one group,
+ * in that order, because the second is a number about the first and reads as
+ * nonsense on its own.
+ *
+ * The *scaffolding* is the program on the other side. It used to be called
+ * Style and it used to have two answers, both of them whole games, and that
+ * made every project a commitment to one: you drew a room and the only thing
+ * to do with the room was the character the sheet had already written for you.
+ * Two more answers sit beside them now and neither is a style —
+ *
+ * - **Top Down** and **Platformer** are those whole games, unchanged.
+ * - **Blank PSD to Phaser** is the wiring and nothing above it: a Phaser 4
+ *   project with psd-to-phaser registered, every PSD loaded and the document
+ *   placed, and no character, no pathfinder and no physics.
+ * - **Vanilla** is not a Phaser project at all — an `index.html`, a
+ *   `style.css` and a `script.js` beside the exported `assets/`.
+ *
+ * **Nothing here changes what drawing is like.** All four get the same canvas,
+ * the same tools, the same selection and the same PSD pipeline; what a project
+ * gives up by scaffolding less is code it would have had to read past, not
+ * anything on the screen it is drawn on. That distance is the point of the two
+ * new answers.
  *
  * The one combination that is not offered is an isometric platformer. A
  * platformer is a side-on view of a plane with gravity pulling down it, and
  * an isometric projection is a view of the ground from above; there is no
  * scaffold that could honestly be written for the pair, so picking Isometric
- * puts the style back to Top Down and takes Platformer away rather than
- * generating something that does not work.
+ * puts the scaffolding back to Top Down and takes Platformer away rather than
+ * generating something that does not work. The two that scaffold no character
+ * have nothing to fall, so they pair with any template.
  *
- * Everything under Rendering is a `GameOptions`, and all of it but the
- * character controller can be changed later in Project Options. The character
- * cannot: it is lines in a file, and the file becomes the project's own the
- * moment it is written.
+ * Everything under Rendering is a `GameOptions`, and all of it can be changed
+ * later in Project Options. **Character controller is the row that comes and
+ * goes**: on the two scaffolds with no `js/shared/character.js` in them there
+ * is nothing for the switch to reach, so it is not offered rather than offered
+ * and ignored. Default zoom and Pixel perfect stay for all four, because both
+ * of them are the *editor's* canvas as well as the game's.
  *
  * ## Why it is drawn in the settings vocabulary
  *
@@ -61,7 +86,14 @@ import {
   optionSwitch,
   optionText,
 } from "../lib/options-controls";
-import { DEFAULT_OPTIONS, type GameOptions, type Genre, type Projection } from "../lib/types";
+import {
+  DEFAULT_OPTIONS,
+  hasCharacter,
+  SCAFFOLDS,
+  type GameOptions,
+  type Projection,
+  type Scaffold,
+} from "../lib/types";
 
 /**
  * The grid scales offered.
@@ -78,7 +110,7 @@ const ZOOMS = [1, 2, 3, 4];
 export interface NewProjectChoice {
   name: string;
   projection: Projection;
-  genre: Genre;
+  scaffold: Scaffold;
   gridSize: number;
   options: GameOptions;
 }
@@ -87,7 +119,7 @@ export function openNewProject(
   onCreate: (choice: NewProjectChoice) => void,
 ): void {
   let projection: Projection = "isometric";
-  let genre: Genre = "topdown";
+  let scaffold: Scaffold = "topdown";
   let gridSize = 64;
   let name = "";
   const options: GameOptions = { ...DEFAULT_OPTIONS };
@@ -104,13 +136,13 @@ export function openNewProject(
     label: "Project name",
   });
 
-  const styleSeg = optionSegmented(
-    [
-      { value: "topdown", label: "Top Down" },
-      { value: "platformer", label: "Platformer" },
-    ],
-    genre,
-    (value) => (genre = value as Genre),
+  const scaffoldSeg = optionSegmented(
+    SCAFFOLDS.map((row) => ({ value: row.value, label: row.label })),
+    scaffold,
+    (value) => {
+      scaffold = value as Scaffold;
+      setCharacterOffered();
+    },
   );
 
   const templateSeg = optionSegmented(
@@ -122,11 +154,13 @@ export function openNewProject(
     projection,
     (value) => {
       projection = value as Projection;
-      // Gravity has no direction on a diamond grid seen from above.
-      styleSeg.setEnabled("platformer", projection !== "isometric");
-      if (projection === "isometric" && genre === "platformer") {
-        genre = "topdown";
-        styleSeg.select("topdown");
+      // Gravity has no direction on a diamond grid seen from above. The other
+      // three scaffold no character, so nothing about them falls.
+      scaffoldSeg.setEnabled("platformer", projection !== "isometric");
+      if (projection === "isometric" && scaffold === "platformer") {
+        scaffold = "topdown";
+        scaffoldSeg.select("topdown");
+        setCharacterOffered();
       }
     },
   );
@@ -156,11 +190,47 @@ export function openNewProject(
     "Pixel perfect",
   );
 
+  // Kept beside `options.character` rather than read back off it, so that
+  // switching from Top Down to Blank PSD to Phaser and back does not silently
+  // re-tick a box somebody deliberately cleared.
+  let wantsCharacter = options.character;
+
   const character = optionSwitch(
     options.character,
-    (on) => (options.character = on),
+    (on) => {
+      wantsCharacter = on;
+      options.character = on;
+    },
     "Character controller",
   );
+
+  const characterRow = optionRow({
+    title: "Character controller",
+    hint:
+      "A prefab that walks the grid, or runs and jumps along it, and " +
+      "the line in the scene that puts it down. Off, the project places " +
+      "the document and nothing moves.",
+    control: character.root,
+  });
+
+  /**
+   * Take the character row away on the scaffolds that have no character.
+   *
+   * Removed rather than greyed, which is the opposite of what Page Setup's
+   * size rows do and is right for the opposite reason: those are a setting the
+   * switch above them will come back to, so keeping them visible keeps the
+   * number you typed. This one has nothing to come back to — Blank PSD to
+   * Phaser and Vanilla write no `js/shared/character.js` at all — so a greyed
+   * row would be a promise the scaffold cannot keep. The stored value goes to
+   * `false` with it, and Rust clamps it again on the way in.
+   */
+  function setCharacterOffered(): void {
+    const offered = hasCharacter(scaffold);
+    characterRow.hidden = !offered;
+    options.character = offered && wantsCharacter;
+    character.set(options.character);
+  }
+  setCharacterOffered();
 
   sheet.body.appendChild(
     optionsPage(
@@ -176,6 +246,8 @@ export function openNewProject(
             }),
           ],
         }),
+        // The template and the scale it is measured in. One group, in that
+        // order, because the number means nothing without the shape above it.
         optionGroup({
           title: "Template",
           rows: [
@@ -186,17 +258,8 @@ export function openNewProject(
                 "lattice, Orthogonal a square one, and Blank has no lattice at " +
                 "all — nothing snaps, and a selection is the exact rectangle you " +
                 "dragged. This is a fact about the project afterwards: the " +
-                "document is addressed in it and the scaffold is written for it.",
+                "document is addressed in it.",
               control: templateSeg.root,
-            }),
-            optionRow({
-              title: "Style",
-              hint:
-                "The game that comes out of it. Top Down walks the grid; " +
-                "Platformer runs and jumps along it under gravity. Not offered " +
-                "with Isometric, because gravity has no direction on a diamond " +
-                "grid seen from above.",
-              control: styleSeg.root,
             }),
             optionRow({
               title: "Grid scale",
@@ -204,6 +267,22 @@ export function openNewProject(
               control: scaleSeg.root,
             }),
           ],
+        }),
+        // And the program the drawing is handed to, which is a separate
+        // question from the space it was drawn in.
+        optionGroup({
+          title: "Scaffolding",
+          rows: [
+            optionRow({
+              title: "Scaffolding",
+              hint: () => scaffoldNote(scaffold),
+              control: scaffoldSeg.root,
+            }),
+          ],
+          note:
+            "How much of a project is written for you. Drawing is the same " +
+            "whichever you pick — this is the code the artwork is handed to, " +
+            "and it is yours to edit or delete from the moment it is written.",
         }),
         optionGroup({
           title: "Rendering",
@@ -222,14 +301,7 @@ export function openNewProject(
                 "toggled separately later, in Project Options.",
               control: pixelPerfect.root,
             }),
-            optionRow({
-              title: "Character controller",
-              hint:
-                "A prefab that walks the grid, or runs and jumps along it, and " +
-                "the line in the scene that puts it down. Off, the project places " +
-                "the document and nothing moves.",
-              control: character.root,
-            }),
+            characterRow,
           ],
         }),
       ],
@@ -242,7 +314,7 @@ export function openNewProject(
     onCreate({
       name: name.trim() || "Untitled",
       projection,
-      genre,
+      scaffold,
       gridSize,
       options: { ...options },
     });
@@ -272,4 +344,47 @@ function scaleNote(projection: Projection): string {
         "will see. It is still the project's unit: how big the character is, and " +
         "how coarse the lattice play mode walks."
     : "The size of one space, in pixels.";
+}
+
+/**
+ * What each scaffold writes, said in the one sentence the `?` has room for.
+ *
+ * Per-answer rather than one paragraph covering four, because the question a
+ * hint is opened to settle is *this* one — and a hint that lists everything
+ * makes you find your own answer inside it. The group's note carries the half
+ * that is true of all four.
+ */
+function scaffoldNote(scaffold: Scaffold): string {
+  switch (scaffold) {
+    case "platformer":
+      return (
+        "A whole game, seen from the side: gravity, ground and a jump. It " +
+        "reads the same document a top-down project does, taking every " +
+        "non-walkable fill and blocking boundary as the ground it stands on " +
+        "rather than as something to route around. Not offered with " +
+        "Isometric, because gravity has no direction on a diamond grid seen " +
+        "from above."
+      );
+    case "p2p":
+      return (
+        "A Phaser 4 project with psd-to-phaser wired up: every PSD loaded and " +
+        "the document placed, and nothing above that. No character, no " +
+        "pathfinder, no physics — what you drew, on screen, waiting for a " +
+        "program. Page Setup still applies."
+      );
+    case "vanilla":
+      return (
+        "No Phaser at all: an index.html, a style.css and a script.js beside " +
+        "the exported assets, and the document as data in game.config.json. " +
+        "Nothing is wired up, because the point of it is that nothing is — " +
+        "which is also why Page Setup, being about the page the scaffold " +
+        "builds, is not offered on one."
+      );
+    default:
+      return (
+        "A whole game, seen from above: a character that walks the grid over " +
+        "A*, with the camera following it. The prefab it spawns is yours from " +
+        "the moment the project is made."
+      );
+  }
 }

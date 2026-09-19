@@ -1,13 +1,14 @@
 //! What a project is made of, and what creating one writes to disk.
 //!
-//! The starter document, the runnable game each template selection scaffolds
-//! into `game/`, the tree the code modal edits, and the guards that keep a
-//! path from climbing out of the store. What leaving with a project *takes*
-//! is next door in `exports`, split off along that seam for the 700-line
-//! rule. The PSD pipeline is next door again in `tests.rs`; all three share
-//! only the store they create projects in.
+//! The starter document, the runnable project each scaffold writes into
+//! `game/`, the tree the code modal edits, and the guards that keep a path
+//! from climbing out of the store. What the JavaScript in those files *does*
+//! is next door in `scaffold_code`, and what leaving with a project *takes*
+//! is next door again in `exports` — both split off for the 700-line rule.
+//! The PSD pipeline is in `tests.rs`; all of them share only the store they
+//! create projects in.
 
-use crate::project::{GameOptions, Genre, ProjectMeta, Projection};
+use crate::project::{GameOptions, ProjectMeta, Projection, Scaffold};
 use crate::{publish, store, templates};
 
 /// A meta to ask the templates a question about, without a project on disk.
@@ -15,7 +16,7 @@ use crate::{publish, store, templates};
 /// `template_files` and `starter_doc` answer for a project rather than for a
 /// list of fields, which is what lets the options reach both — so a test that
 /// only wants the text still has to say which project it means.
-fn seed(projection: Projection, genre: Genre, grid_size: u32, options: GameOptions) -> ProjectMeta {
+fn seed(projection: Projection, genre: Scaffold, grid_size: u32, options: GameOptions) -> ProjectMeta {
     ProjectMeta::new(
         "seed".into(),
         "Seed".into(),
@@ -51,7 +52,7 @@ fn publish_names_survive_awkward_project_titles() {
 fn starter_documents_carry_the_chosen_template_and_grid() {
     let doc = templates::starter_doc(&seed(
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         128,
         GameOptions::default(),
     ));
@@ -72,7 +73,7 @@ fn starter_documents_carry_the_chosen_template_and_grid() {
     // out of it rather than out of the project's meta.
     let blank = templates::starter_doc(&seed(
         Projection::Blank,
-        Genre::Platformer,
+        Scaffold::Platformer,
         32,
         GameOptions::default(),
     ));
@@ -81,14 +82,15 @@ fn starter_documents_carry_the_chosen_template_and_grid() {
     assert_eq!(value["genre"], "platformer");
 }
 
-/// Each genre scaffolds its own scene and only the module that scene uses,
-/// and both axes reach the config the scene reads at runtime.
+/// Each of the two whole-game scaffolds writes its own character module and
+/// only the helper that module uses, and both axes reach the config the scene
+/// reads at runtime.
 #[test]
 fn each_style_scaffolds_the_program_it_runs() {
     let top = store::create_project(
         "Top",
         Projection::Blank,
-        Genre::Topdown,
+        Scaffold::Topdown,
         48,
         GameOptions::default(),
     )
@@ -96,7 +98,7 @@ fn each_style_scaffolds_the_program_it_runs() {
     let side = store::create_project(
         "Side",
         Projection::Orthogonal,
-        Genre::Platformer,
+        Scaffold::Platformer,
         48,
         GameOptions::default(),
     )
@@ -171,14 +173,245 @@ fn each_style_scaffolds_the_program_it_runs() {
     }
 }
 
-/// A project's meta survives a round trip through disk, genre included — and
-/// one written before the choice existed still reads, as top down.
+/// Blank PSD to Phaser: the plugin wired up, the document placed, and nothing
+/// above it.
+///
+/// What it is *not* carrying is the point of it. There is no
+/// `shared/character.js`, no prefab and neither helper, so a project that
+/// wants something to move in it has nothing to read past first — and the
+/// scene file has to match, because a scene importing a module the scaffold
+/// did not write is a scene that will not load.
+#[test]
+fn the_p2p_scaffold_wires_the_plugin_and_nothing_above_it() {
+    let bare = store::create_project(
+        "Bare",
+        Projection::Isometric,
+        Scaffold::P2p,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+    let top = store::create_project(
+        "Whole",
+        Projection::Isometric,
+        Scaffold::Topdown,
+        64,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let paths: Vec<String> = store::list_game_files(&bare.id)
+            .expect("files should list")
+            .into_iter()
+            .map(|f| f.path)
+            .collect();
+
+        for expected in [
+            "index.html",
+            "styles.css",
+            "js/main.js",
+            "js/scenes/Scene1.js",
+            "js/scenes/index.js",
+            "js/shared/canvas.js",
+            "js/shared/grid.js",
+            "js/game.config.json",
+        ] {
+            assert!(
+                paths.iter().any(|p| p == expected),
+                "{expected} missing from {paths:?}"
+            );
+        }
+        for absent in [
+            "js/shared/character.js",
+            "js/shared/navigation.js",
+            "js/shared/physics.js",
+            "js/prefabs/character.js",
+        ] {
+            assert!(
+                !paths.iter().any(|p| p == absent),
+                "a P2P project should not ship {absent}: {paths:?}"
+            );
+        }
+
+        // The machinery is the same file. What a P2P project gives up is the
+        // character, not the way a document is drawn.
+        assert_eq!(
+            store::read_game_file(&bare.id, "js/shared/canvas.js").ok(),
+            store::read_game_file(&top.id, "js/shared/canvas.js").ok(),
+            "every Phaser scaffold draws a document the same way",
+        );
+
+        let scene =
+            store::read_game_file(&bare.id, "js/scenes/Scene1.js").expect("scene should read");
+        assert!(scene.contains("placeDocument"), "the document is still placed");
+        assert!(
+            !scene.contains("character.js") && !scene.contains("spawnCharacter"),
+            "a P2P scene imports nothing the scaffold did not write: {scene}"
+        );
+        assert!(
+            !scene.contains("// idlewild:"),
+            "a scene file is the author's, end to end",
+        );
+
+        // And the config agrees with the tree: `character` is off because
+        // there is no `shared/character.js` for the switch to reach.
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&bare.id, "js/game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+        assert_eq!(config["genre"], "p2p");
+        assert_eq!(config["character"], false);
+        assert_eq!(
+            store::read_meta(&bare.id)
+                .expect("meta should read")
+                .options
+                .character,
+            false,
+            "a scaffold with no character module records no character",
+        );
+
+        // And it cannot be turned on afterwards either. Project Options hides
+        // the row, so nothing in the app sends this — but the store is what
+        // the config is generated from, and a `true` reaching it would put a
+        // character in a config whose project has no module to read it.
+        let forced = store::set_project_options(&bare.id, false, false, 1.0, true)
+            .expect("options should save");
+        assert_eq!(forced.options.character, false);
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&bare.id, "js/game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+        assert_eq!(config["character"], false);
+    });
+
+    store::delete_project(&bare.id).ok();
+    store::delete_project(&top.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// Vanilla: a page, a stylesheet, a script and the document as data.
+///
+/// Four files, none of which mentions Phaser, and no `js/` at all — which is
+/// why the generated config sits at the root here and under `js/` everywhere
+/// else. The artwork is not in this list because it never was: the pipeline
+/// writes `assets/` beside `game/`, so what the scaffold decides is the code
+/// around the artwork and never the artwork.
+#[test]
+fn a_vanilla_project_is_a_page_and_its_assets() {
+    let meta = store::create_project(
+        "Plain",
+        Projection::Blank,
+        Scaffold::Vanilla,
+        16,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let mut paths: Vec<String> = store::list_game_files(&meta.id)
+            .expect("files should list")
+            .into_iter()
+            .filter(|f| !f.is_dir)
+            .map(|f| f.path)
+            .collect();
+        paths.sort();
+        assert_eq!(
+            paths,
+            vec![
+                "game.config.json".to_string(),
+                "index.html".to_string(),
+                "script.js".to_string(),
+                "style.css".to_string(),
+            ],
+            "a vanilla project is these four files and nothing else",
+        );
+
+        let index = store::read_game_file(&meta.id, "index.html").expect("index should read");
+        assert!(index.contains("Plain"), "the name should reach the title");
+        assert!(!index.contains("__PROJECT_NAME__"));
+        // By what it loads rather than by what it mentions: the comment in
+        // the page says which runtimes are *not* there, which is the useful
+        // thing to say on a page whose whole point is that nothing is wired up.
+        assert!(
+            !index.contains("<script src=") && !index.contains("js/lib/"),
+            "a vanilla page loads no runtime: {index}"
+        );
+        assert!(index.contains("style.css") && index.contains("script.js"));
+
+        // The config is the same file by another name, and the save that
+        // rewrites it finds it where the scaffold put it.
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&meta.id, "game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+        assert_eq!(config["genre"], "vanilla");
+        assert_eq!(config["projection"], "blank");
+        assert_eq!(config["grid"], 16);
+        assert_eq!(config["character"], false);
+
+        // The save path writes the config where the scaffold put it, rather
+        // than creating a `js/` for the sake of one constant — and it does
+        // not scaffold a scene file on the way past, because there is no
+        // `shared/canvas.js` and so nothing for a scene to be.
+        store::write_doc(
+            &meta.id,
+            &serde_json::json!({
+                "version": 2,
+                "projection": "blank",
+                "genre": "vanilla",
+                "gridSize": 16,
+                "activeSceneId": "s1",
+                "scenes": [{ "id": "s1", "name": "Only", "layers": [] }]
+            })
+            .to_string(),
+        )
+        .expect("document should save");
+        let saved: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&meta.id, "game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+        assert_eq!(saved["scenes"][0]["name"], "Only");
+        assert!(
+            store::read_game_file(&meta.id, "js/game.config.json").is_err(),
+            "a vanilla project grows no js/ directory on save"
+        );
+
+        // A published vanilla site carries neither runtime: 1.5 MB of
+        // JavaScript nothing on the page includes is 1.5 MB to work out you
+        // can delete.
+        let (_, entries) = publish::site_entries(&meta.id).expect("a site should list");
+        let rels: Vec<&str> = entries.iter().map(|e| e.rel.as_str()).collect();
+        assert!(rels.contains(&"index.html"));
+        assert!(rels.contains(&"game.config.json"));
+        assert!(
+            !rels.iter().any(|rel| rel.starts_with("js/lib/")),
+            "a vanilla site ships no Phaser: {rels:?}"
+        );
+        // Exactly one config: the generated one replaces the scaffold's copy
+        // rather than sitting beside it, wherever that copy lives.
+        assert_eq!(
+            rels.iter().filter(|rel| **rel == "game.config.json").count(),
+            1
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
+/// A project's meta survives a round trip through disk, scaffold included —
+/// and one written before the choice existed still reads, as top down.
 #[test]
 fn project_meta_defaults_a_missing_genre_to_top_down() {
     let meta = store::create_project(
         "Legacy",
         Projection::Orthogonal,
-        Genre::Platformer,
+        Scaffold::Platformer,
         32,
         GameOptions::default(),
     )
@@ -187,7 +420,7 @@ fn project_meta_defaults_a_missing_genre_to_top_down() {
     let result = std::panic::catch_unwind(|| {
         assert_eq!(
             store::read_meta(&meta.id).expect("meta should read").genre,
-            Genre::Platformer,
+            Scaffold::Platformer,
         );
 
         // What every meta.json on disk looked like before the field existed.
@@ -201,7 +434,7 @@ fn project_meta_defaults_a_missing_genre_to_top_down() {
         });
         let parsed: crate::project::ProjectMeta =
             serde_json::from_value(json).expect("an older meta should still read");
-        assert_eq!(parsed.genre, Genre::Topdown);
+        assert_eq!(parsed.genre, Scaffold::Topdown);
     });
 
     store::delete_project(&meta.id).ok();
@@ -215,7 +448,7 @@ fn a_new_project_scaffolds_a_runnable_game() {
     let meta = store::create_project(
         "Scaffold test",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -279,7 +512,7 @@ fn the_game_tree_can_be_managed_without_losing_files() {
     let meta = store::create_project(
         "Files",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -364,7 +597,7 @@ fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
     let meta = store::create_project(
         "Pristine",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -424,233 +657,3 @@ fn a_scaffolded_file_can_be_asked_for_its_pristine_form() {
     }
 }
 
-/// The scaffold loads its PSDs through the plugin's multi-file path, and does
-/// not place the document before that has finished.
-///
-/// `load` keys a texture on the layer's own name, so two PSDs each holding a
-/// `S | layer 1` — which is what New layer names its rows — share one:
-/// Phaser declines a key it already holds without saying so, and one file's
-/// artwork is drawn for the other's. `loadMultiple` keys it
-/// `<psdKey>_<layerName>`, and `place` reads back the flag it sets.
-///
-/// The second half is the cost of the first. `loadMultiple` queues its images
-/// from a promise callback, one microtask after Phaser has run `create`, so a
-/// `placeDocument` that did not wait would place against textures that had not
-/// arrived. The two halves are asserted together because either alone is a
-/// broken game.
-///
-/// One assertion where there were two: both genres share `shared/canvas.js`
-/// now, so there is one loader rather than a pair that could drift.
-#[test]
-fn the_canvas_loads_psds_namespaced_and_waits_for_them() {
-    let canvas = templates::template_file(
-        "js/shared/canvas.js",
-        &seed(
-            Projection::Orthogonal,
-            Genre::Topdown,
-            32,
-            GameOptions::default(),
-        ),
-    )
-    .expect("the canvas module has a scaffold");
-
-    assert!(
-        canvas.contains("scene.P2P.load.loadMultiple(scene, psds)"),
-        "the scaffold does not load its PSDs namespaced"
-    );
-    assert!(
-        !canvas.contains("scene.P2P.load.load(scene,"),
-        "the scaffold still loads a PSD on the path that collides"
-    );
-    assert!(
-        canvas.contains("if (!scene.psdsReady) return;"),
-        "the scaffold places its document before its textures are in"
-    );
-}
-
-/// A pattern layer waits for the same load `placeDocument` waits for.
-///
-/// It is the sharper half of the same rule. `placeDocument` runs once and
-/// would simply place nothing; `syncPatterns` runs every frame and **keeps
-/// what it makes**, so a single call against a file whose `data.json` has
-/// parsed and whose images have not caches a group with no sprites in it,
-/// against the tile it belongs to, for as long as the camera stays there. And
-/// `create` is exactly that moment. The symptom is a pattern layer that never
-/// appears in the exported game while the editor draws it correctly, which is
-/// as far from the cause as a bug gets.
-#[test]
-fn patterns_are_held_until_the_psds_are_in() {
-    let canvas = templates::template_file(
-        "js/shared/canvas.js",
-        &seed(
-            Projection::Orthogonal,
-            Genre::Topdown,
-            32,
-            GameOptions::default(),
-        ),
-    )
-    .expect("the canvas module has a scaffold");
-
-    let body = canvas
-        .split_once("export function syncPatterns(scene) {")
-        .expect("the scaffold generates its patterns")
-        .1;
-    let guard = body
-        .find("if (!scene.psdsReady) return;")
-        .expect("syncPatterns does not wait for the PSDs");
-    let place = body
-        .find("scene.P2P.place(")
-        .expect("syncPatterns places nothing");
-    assert!(
-        guard < place,
-        "a pattern element is placed before its textures are in"
-    );
-}
-
-/// Whatever is waiting on the document is woken however the load ends.
-///
-/// `whenPsdsReady` is the scaffold's answer to the one thing `create` cannot
-/// do: the textures are queued from a promise callback that lands after Phaser
-/// has called it, so anything reading one has to wait. What it waits on is
-/// `psdsReady` rather than the plugin's own `psdLoadComplete`, and the
-/// difference is the file that never arrives — `ready` runs on the timeout
-/// too, so a waiter listening to the plugin would sit there for ever on
-/// exactly the load that went wrong. The signal also goes out *after*
-/// `placeDocument`, so what a waiter makes stands on a document that is
-/// already there rather than racing it.
-#[test]
-fn a_waiter_is_woken_however_the_load_ends() {
-    let canvas = templates::template_file(
-        "js/shared/canvas.js",
-        &seed(
-            Projection::Orthogonal,
-            Genre::Topdown,
-            32,
-            GameOptions::default(),
-        ),
-    )
-    .expect("the canvas module has a scaffold");
-
-    let ready = canvas
-        .split_once("const ready = () => {")
-        .expect("loadDocument settles the load")
-        .1
-        .split_once("};")
-        .expect("the settle closes")
-        .0;
-
-    let emit = ready
-        .find(r#"scene.events.emit("psdsReady")"#)
-        .expect("the load settles without waking anything that waited");
-    let place = ready
-        .find("placeDocument(scene)")
-        .expect("the load settles without placing the document");
-    assert!(
-        place < emit,
-        "a waiter is woken before the document it stands on is placed"
-    );
-
-    // The timeout runs the same settle, which is what covers a file that
-    // never arrives.
-    assert!(
-        canvas.contains("setTimeout(ready, 15000)"),
-        "a load that never finishes never wakes what is waiting on it"
-    );
-
-    let waiter = canvas
-        .split_once("export function whenPsdsReady(scene, fn) {")
-        .expect("the scaffold offers no way to wait for the document")
-        .1
-        .split_once('}')
-        .expect("the waiter closes")
-        .0;
-    assert!(
-        waiter.contains(r#"scene.events.once("psdsReady", fn)"#),
-        "the waiter listens for the plugin rather than for the settle, so a \
-         timed-out load would never run it"
-    );
-    assert!(
-        waiter.contains("if (scene.psdsReady) fn();"),
-        "the waiter never runs for a document that is already in"
-    );
-}
-
-/// Every marked block in the scaffold closes, and each file carries the set it
-/// is meant to — the code modal finds a block by id, so a template that
-/// renamed one would silently stop offering its Reset.
-///
-/// The lists are written out rather than derived, because what the assertion
-/// is for is drift: a rename, a block left open, a block quietly dropped.
-/// `canvas.js` is one file for both genres and `character.js` is one per
-/// genre, and the two genres' differ — a top-down character sorts itself into
-/// an isometric ordering, and a platformer is seen from the side, where
-/// nothing sorts on Y at all.
-///
-/// A **scene** file is not here on purpose: it has no blocks, because every
-/// line of it is the author's.
-#[test]
-fn the_scaffold_marks_the_blocks_it_should_and_closes_every_one() {
-    let canvas = [
-        "sceneOf",
-        "loadDocument",
-        "whenPsdsReady",
-        "updateCanvas",
-        "applyCamera",
-        "placeDocument",
-        "paintBackgrounds",
-        "placePatterns",
-        "paintFill",
-        "nearPoints",
-        "drawOrder",
-        "applyDepth",
-        "applyScale",
-        "applyHidden",
-        "pointsToVectors",
-        "gradientCorners",
-        "patternRule",
-    ];
-    let topdown = [
-        "spawnCharacter",
-        "updateCharacter",
-        "sortCharacter",
-        "readColliders",
-        "walkDepth",
-    ];
-    let platformer = ["spawnCharacter", "updateCharacter", "readSolids"];
-    // `main.js` is the same file for both genres. Both of its blocks read a
-    // setting out of the generated config and hand it to Phaser, which is why
-    // they are marked at all: they are the editor's answer arriving in the
-    // author's file, and Reset has to be able to put either back.
-    let main = ["pixelPerfect", "presentation"];
-
-    for (genre, file, expected) in [
-        (Genre::Topdown, "js/shared/canvas.js", &canvas[..]),
-        (Genre::Topdown, "js/shared/character.js", &topdown[..]),
-        (Genre::Platformer, "js/shared/character.js", &platformer[..]),
-        (Genre::Topdown, "js/main.js", &main[..]),
-    ] {
-        let text = templates::template_file(
-            file,
-            &seed(Projection::Orthogonal, genre, 32, GameOptions::default()),
-        )
-        .expect("the file has a scaffold");
-
-        let mut open: Vec<&str> = Vec::new();
-        let mut closed: Vec<&str> = Vec::new();
-        for line in text.lines().map(str::trim) {
-            if let Some(id) = line.strip_prefix("// idlewild:begin ") {
-                open.push(id);
-            } else if let Some(id) = line.strip_prefix("// idlewild:end ") {
-                closed.push(id);
-            }
-        }
-        assert_eq!(open, closed, "{file} has a marker without its pair");
-        assert_eq!(open, expected, "{file} marks a different set of blocks");
-    }
-
-    let scene = templates::scene_file("Scene1");
-    assert!(
-        !scene.contains("// idlewild:"),
-        "a scene file is the author's, end to end",
-    );
-}

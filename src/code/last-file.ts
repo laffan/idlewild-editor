@@ -63,10 +63,16 @@ export function forgetFile(projectId: string): void {
  *
  * In order: the remembered one, if the listing still has it as a file; the
  * project's first scene, because a scene is what the canvas beside this panel
- * is showing; `js/main.js`, which is the one file every project has and the
- * one that starts the game; then whatever is first. A project with no files at
- * all answers null, and the panel opens with no file — which is the honest
- * thing to show rather than an error about a file nobody asked for.
+ * is showing; `js/main.js`, which starts the game on every scaffold that has
+ * scenes; `script.js`, which is the vanilla scaffold's answer to the same
+ * question; then whatever is first. A project with no files at all answers
+ * null, and the panel opens with no file — which is the honest thing to show
+ * rather than an error about a file nobody asked for.
+ *
+ * The last two are one idea asked twice: the file that *runs*. A vanilla
+ * project has no scene and no `js/` at all, so without its own line the panel
+ * would land on whichever file the listing happened to put first — usually
+ * `game.config.json`, which is the one file in there nobody can edit.
  */
 export function opening(files: readonly GameFile[], remembered: string | null): string | null {
   const isFile = (path: string | null): path is string =>
@@ -86,7 +92,9 @@ export function opening(files: readonly GameFile[], remembered: string | null): 
   );
   if (scene) return scene.path;
 
-  if (isFile("js/main.js")) return "js/main.js";
+  for (const entry of ["js/main.js", "script.js"]) {
+    if (isFile(entry)) return entry;
+  }
   return files.find((f) => !f.isDir)?.path ?? null;
 }
 

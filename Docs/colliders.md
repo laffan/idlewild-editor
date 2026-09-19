@@ -121,11 +121,13 @@ but not taps.
 `game.config.json`, which is regenerated on every save, so there is one
 implementation of what a collider means rather than one in the editor and
 another in the export. `grid.js` turns a collider into spaces or boxes —
-`colliderCells` and `colliderBoxes` — and the two genres read it the way each
-needs to: a top-down `shared/character.js` builds the blocked set once when it
+`colliderCells` and `colliderBoxes` — and the two scaffolds that write a
+character read it the way each needs to: a top-down `shared/character.js` builds the blocked set once when it
 spawns, because `isWalkable` runs per node of every search and the document
 does not change under a running game, and `physics.js` adds the boxes to the
-ground the character stands on.
+ground the character stands on. A Blank PSD to Phaser or a Vanilla project
+carries the same colliders in its config and reads none of them, because what
+would read them is the part it does not scaffold.
 
 Spaces are taken as spaces wherever the document has them. Reducing an
 isometric diamond to its bounding box first would block the neighbours its

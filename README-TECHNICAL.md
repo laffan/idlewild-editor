@@ -50,9 +50,10 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  psd_palette.rs  the palette, into a PSD leaving for Photoshop │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
-│  templates.rs    per-genre scaffolds, per-projection grid      │
+│  templates.rs    the four scaffolds, per-projection grid       │
 │  game_files.rs   the editable game/ tree, as the code modal    │
 │                  sees it                                       │
+│  scene_names.rs  what a scene's file is called                 │
 │  game_search.rs  ⇧⌘F, over that same tree                      │
 │  publish.rs      what a published site is made of, and the zip │
 │  deploy.rs       that site, staged and pushed somewhere real   │
@@ -130,7 +131,7 @@ a Mac, that is usually why. See [`Docs/ipad.md`](Docs/ipad.md),
 | Page | What is in it |
 |---|---|
 | [The shell and the runtime](Docs/shell-and-runtime.md) | Where Phaser runs and why there are two answers; one game at a time; the local HTTP server; the IPC surface |
-| [The data model](Docs/data-model.md) | `GameDoc` and the store on disk; undo; one file per scene |
+| [The data model](Docs/data-model.md) | `GameDoc` and the store on disk; the four scaffolds; undo; one file per scene |
 | [The canvas, the camera and the gestures](Docs/canvas-and-camera.md) | The one-screen-pixel rule, the minimap, where a project opens, the three sections, the two columns of tools |
 | [Gesture routing](Docs/gestures.md) | One surface, several things that want a touch, and who gets it |
 | [The PSD pipeline](Docs/psd-pipeline.md) | Write half, psd-to-json, the round trip out to Photoshop and home |
@@ -180,6 +181,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Leaving with a file, and the order iOS needs | [`Docs/exports.md`](Docs/exports.md) |
 | Lines the editor owns | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | One file per scene, named after it | [`Docs/data-model.md`](Docs/data-model.md) |
+| Four scaffolds, one document | [`Docs/data-model.md`](Docs/data-model.md) |
 | One picker, five places | [`Docs/colour.md`](Docs/colour.md) |
 | One game at a time, and why that is load-bearing | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
 | One screen pixel, whatever the camera is doing | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |

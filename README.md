@@ -11,11 +11,17 @@ Tauri 2 (Rust) + Phaser 4 + TypeScript, no frontend framework.
 ## What it is
 
 Idlewild is a prototyping environment. You pick a template — isometric,
-orthogonal or blank — and a style — top down or platformer — and get a light
-blue, effectively infinite grid you build on with your fingers: hold to select
-a run of spaces, fill them, drop images into them, export a patch as a
-transparent PNG. On a blank canvas nothing snaps and a selection is exactly
-the rectangle you dragged.
+orthogonal or blank — and get a light blue, effectively infinite grid you build
+on with your fingers: hold to select a run of spaces, fill them, drop images
+into them, export a patch as a transparent PNG. On a blank canvas nothing snaps
+and a selection is exactly the rectangle you dragged.
+
+Then you pick how much code you want written for you, which is a separate
+question: **Top Down** and **Platformer** are whole games, **Blank PSD to
+Phaser** is the plugin wired up and your artwork on screen with nothing moving
+over it, and **Vanilla** is a page, a stylesheet and a script beside the
+exported assets. Drawing is identical on all four — what the choice decides is
+the program on the other side of the export, not the canvas in front of you.
 
 Three ideas carry most of it.
 
@@ -27,11 +33,14 @@ Photoshop file and a screenshot arrive at the runtime the same way. The
 practical upshot is that anything on the canvas can be opened in Photoshop and
 brought home again.
 
-**The project's code is real, and Play runs it.** A new project scaffolds a
-game the way you would lay one out yourself — a `game/` tree of JavaScript you
-edit in the app, with one file per scene. Play loads that tree. A `console.log`
-you save into it appears in the console drawer, and what the editor shows is
-what an export runs.
+**The project's code is real, and Play runs it.** A new project scaffolds the
+way you would lay one out yourself — a `game/` tree you edit in the app, with
+one file per scene where there are scenes. Play loads that tree. A
+`console.log` you save into it appears in the console drawer, and what the
+editor shows is what an export runs. How much of that tree is written for you
+is the scaffolding you picked; the artwork under it is the same either way,
+because the PSD pipeline writes `assets/` beside `game/` rather than inside
+it.
 
 **Publishing and exporting are two different verbs.** Publish sends the site
 somewhere — a directory on a server over SSH, or a branch of a GitHub
@@ -50,9 +59,9 @@ npm run dev
 
 Then, in the app:
 
-1. **New Project** on the home screen. Pick a template and a style; the grid
-   scale is 8–256 px, and 8 and 16 are there for pixel art. See
-   [Projects](Manual/projects.md).
+1. **New Project** on the home screen. Pick a template and a grid scale — 8–256
+   px, and 8 and 16 are there for pixel art — then how much scaffolding you
+   want. See [Projects](Manual/projects.md).
 2. **Press and hold** on the grid to select a patch of it, and take Fill or Add
    Image from the menu that opens. See [The canvas](Manual/canvas.md).
 3. **Draw on it** with the tools down the left edge — five brushes, pressure

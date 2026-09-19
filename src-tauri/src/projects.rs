@@ -11,7 +11,7 @@
 //! were already a section of their own there, and every one of them is a thin
 //! wrapper over `store` — which is where the rules actually live.
 
-use crate::project::{GameOptions, Genre, Presentation, ProjectMeta, Projection};
+use crate::project::{GameOptions, Presentation, ProjectMeta, Projection, Scaffold};
 use crate::store;
 
 #[tauri::command]
@@ -38,20 +38,25 @@ pub fn create_project(
         "blank" => Projection::Blank,
         other => return Err(format!("Unknown template: {other}")),
     };
-    let genre = match genre.as_deref() {
-        None | Some("topdown") => Genre::Topdown,
-        Some("platformer") => Genre::Platformer,
-        Some(other) => return Err(format!("Unknown style: {other}")),
+    // The parameter is still called `genre` because the field on disk is —
+    // see `Scaffold`. `None` is every project made before the choice existed.
+    let scaffold = match genre.as_deref() {
+        None | Some("topdown") => Scaffold::Topdown,
+        Some("platformer") => Scaffold::Platformer,
+        Some("p2p") => Scaffold::P2p,
+        Some("vanilla") => Scaffold::Vanilla,
+        Some(other) => return Err(format!("Unknown scaffold: {other}")),
     };
     // Gravity has no direction on a diamond grid seen from above, and there
-    // is no scaffold that could honestly be written for the pair.
-    if projection == Projection::Isometric && genre == Genre::Platformer {
+    // is no scaffold that could honestly be written for the pair. The two that
+    // scaffold no character have nothing to fall, so they pair with anything.
+    if projection == Projection::Isometric && scaffold == Scaffold::Platformer {
         return Err("An isometric project cannot be a platformer".into());
     }
     store::create_project(
         &name,
         projection,
-        genre,
+        scaffold,
         grid_size,
         options.unwrap_or_default(),
     )

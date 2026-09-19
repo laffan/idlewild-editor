@@ -11,7 +11,7 @@
 //! of the suite creates projects in.
 
 use crate::file_server;
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::store;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -74,7 +74,7 @@ fn the_asset_server_serves_a_project_and_nothing_above_it() {
     let meta = store::create_project(
         "Server",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -153,7 +153,7 @@ fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
     let meta = store::create_project(
         "Played",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

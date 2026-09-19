@@ -5,8 +5,9 @@
 
 const DOC = {
   version: 2,
-  // Overridable so the harness can be pointed at a blank or platformer
-  // project without a second fixture — see harness/main.ts.
+  // Overridable so the harness can be pointed at a blank template, a
+  // platformer or a vanilla scaffold without a second fixture — see
+  // harness/main.ts.
   projection: (window as any).__projection ?? "isometric",
   genre: (window as any).__genre ?? "topdown",
   gridSize: (window as any).__gridSize ?? 64,

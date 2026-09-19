@@ -366,14 +366,14 @@ fn the_layer_list_reads_a_grouped_file_as_a_tree() {
 /// back rather than flattening it.
 #[test]
 fn a_grouped_file_round_trips_through_the_layer_list() {
-    use crate::project::{GameOptions, Genre, Projection};
+    use crate::project::{GameOptions, Projection, Scaffold};
     use crate::psd_layers::{self, LayerEdit};
     use crate::store;
 
     let meta = store::create_project(
         "Groups",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -447,14 +447,14 @@ fn a_grouped_file_round_trips_through_the_layer_list() {
 /// or renaming a layer would quietly switch hidden work back on.
 #[test]
 fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
-    use crate::project::{GameOptions, Genre, Projection};
+    use crate::project::{GameOptions, Projection, Scaffold};
     use crate::psd_layers::{self, LayerEdit};
     use crate::store;
 
     let meta = store::create_project(
         "Hiding",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

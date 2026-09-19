@@ -1,0 +1,24 @@
+/* The page. Entirely yours — nothing in the editor writes a line of this file
+ * after it is scaffolded, and there are no custom properties to work around.
+ *
+ * The one thing worth keeping is `box-sizing`, and only because everyone
+ * eventually wants it. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: #2d2b2b;
+  color: #f4f2ef;
+  font: 16px/1.5 system-ui, sans-serif;
+}
+
+#app {
+  padding: 24px;
+}

@@ -7,14 +7,14 @@
 //! which is most comment lines in a project scaffolded by this editor.
 
 use crate::game_search;
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::store;
 
 fn project(name: &str) -> crate::project::ProjectMeta {
     store::create_project(
         name,
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

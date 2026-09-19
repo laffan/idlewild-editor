@@ -20,18 +20,37 @@
 //! — a document written by a build that did not have zones, or instances, or
 //! rectangle fills still exports.
 
-use crate::project::ProjectMeta;
+use crate::project::{ProjectMeta, Scaffold};
+use crate::scene_names::scene_file_names;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
 /// Where the generated config lives inside `game/`, and inside a zip.
 ///
-/// One constant because three places need the same path: the scaffold that
-/// writes the first one, the save that keeps it in step with the document,
-/// and the export that leaves the on-disk copy out of the archive and writes
-/// its own.
+/// One constant because four places need the same path: the scaffold that
+/// writes the first one, the save that keeps it in step with the document, the
+/// export that leaves the on-disk copy out of the archive and writes its own,
+/// and the code modal, which shows a generated file read-only.
 pub const CONFIG_REL: &str = "js/game.config.json";
+
+/// Where it lives in a `Vanilla` project, which has no `js/`.
+///
+/// A vanilla tree is `index.html`, `style.css` and `script.js` at the root of
+/// `game/`, and a `js/` directory holding one JSON file and nothing else would
+/// be a directory that exists to satisfy a constant. The file is the same file
+/// — the same generator, the same shape, rewritten on the same saves — so the
+/// only thing that differs is where `script.js` fetches it from.
+pub const VANILLA_CONFIG_REL: &str = "game.config.json";
+
+/// Where this project's generated config goes.
+pub fn config_rel(scaffold: Scaffold) -> &'static str {
+    if scaffold.is_phaser() {
+        CONFIG_REL
+    } else {
+        VANILLA_CONFIG_REL
+    }
+}
 
 /// How far the character may walk, in cells.
 ///
@@ -51,6 +70,19 @@ const MAX_SPAN: i64 = 128;
 /// Cells of clear space left around the content.
 const SPAN_MARGIN: i64 = 4;
 
+/// Whether the config should claim a character controller.
+///
+/// The option alone is not the answer. `character` defaults to on and Project
+/// Options can leave it on, but a `P2p` or a `Vanilla` project has no
+/// `shared/character.js` to read it and no prefab for one to spawn — so the
+/// switch would be a config field describing a file that is not there. The two
+/// sheets hide the row for those scaffolds; this is the same answer given once,
+/// where the file is written, so a hand-edited `meta.json` cannot disagree with
+/// the tree beside it.
+fn wants_character(meta: &ProjectMeta) -> bool {
+    meta.genre.has_character() && meta.options.character
+}
+
 /// The config a fresh project scaffolds with: the shape of the space, and
 /// nothing in it.
 pub fn empty(meta: &ProjectMeta) -> Value {
@@ -68,7 +100,7 @@ pub fn empty(meta: &ProjectMeta) -> Value {
             "layers": []
         }]),
         json!("scene-main"),
-        meta.options.character,
+        wants_character(meta),
         json!([]),
     )
 }
@@ -146,68 +178,9 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
             .map(|(scene, file)| scene.to_config(&file, colliders))
             .collect::<Vec<_>>()),
         json!(active),
-        meta.options.character,
+        wants_character(meta),
         tilesets,
     ))
-}
-
-/// What each scene's file is called, in document order.
-///
-/// A name in the sidebar is free text — "Title Screen", "cave 2", "" — and a
-/// file name, a class name and a Phaser key are none of those things. So the
-/// name is reduced to letters and digits with each word capitalised, which is
-/// what a Phaser scene class is normally called anyway.
-///
-/// Two scenes may share a name; two files may not. A collision takes a
-/// counter, and the scene earlier in the document keeps the bare name — so
-/// renaming the *second* of two Caves is the only thing that moves.
-///
-/// `Index` is reserved because `js/scenes/index.js` is the generated list
-/// beside them, and a scene called Index would be written over it.
-pub fn scene_file_names(scenes: &[Scene]) -> Vec<String> {
-    let mut taken: HashSet<String> = HashSet::new();
-    taken.insert("Index".into());
-    let mut out = Vec::with_capacity(scenes.len());
-    for scene in scenes {
-        let base = scene_file_name(&scene.name);
-        let mut name = base.clone();
-        let mut n = 2;
-        while !taken.insert(name.clone()) {
-            name = format!("{base}{n}");
-            n += 1;
-        }
-        out.push(name);
-    }
-    out
-}
-
-/// One scene name, as a class name.
-///
-/// Anything that is not a letter or a digit is a word break. A name that
-/// reduces to nothing is `Scene`, and one that would start with a digit is
-/// prefixed, because neither is a legal identifier.
-pub fn scene_file_name(name: &str) -> String {
-    let mut out = String::new();
-    let mut upper = true;
-    for ch in name.chars() {
-        if ch.is_ascii_alphanumeric() {
-            if upper {
-                out.extend(ch.to_uppercase());
-            } else {
-                out.push(ch);
-            }
-            upper = false;
-        } else {
-            upper = true;
-        }
-    }
-    if out.is_empty() {
-        return "Scene".into();
-    }
-    if out.starts_with(|c: char| c.is_ascii_digit()) {
-        return format!("Scene{out}");
-    }
-    out
 }
 
 /// The file, in the order it reads.
@@ -365,8 +338,10 @@ impl Document {
 pub struct Scene {
     #[serde(default)]
     id: Option<String>,
+    /// Free text, as the sidebar took it. `scene_names` is what turns one
+    /// into a filename, and is the only reader outside this module.
     #[serde(default = "unnamed")]
-    name: String,
+    pub(crate) name: String,
     #[serde(default)]
     layers: Vec<Layer>,
     /// The point play begins on, by id. One per scene, which is why it is

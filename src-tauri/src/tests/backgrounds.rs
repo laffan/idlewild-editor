@@ -18,7 +18,7 @@
 //! megapixels — right for a backdrop, wrong for a test that runs on every
 //! commit.
 
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::psd_background;
 use crate::psd_write::{AnchorMarks, MarkPoint};
 use crate::{psd_pipeline, store};
@@ -75,7 +75,7 @@ fn a_background_carries_a_tile_group_and_an_anchor() {
     let meta = store::create_project(
         "Backdrop",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -139,7 +139,7 @@ fn a_painted_backdrop_is_a_tileset_of_slices() {
     let meta = store::create_project(
         "Backdrop tiles",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

@@ -26,6 +26,9 @@ beforeEach(() => store.clear());
 const tree = (...paths: string[]): GameFile[] =>
   paths.map((path) => ({ path, isDir: path.endsWith("/") }));
 
+/** What a vanilla project holds: no scenes, no `js/` at all. */
+const VANILLA = tree("game.config.json", "index.html", "script.js", "style.css");
+
 /** What a project scaffolded by this editor actually holds. */
 const SCAFFOLD = tree(
   "index.html",
@@ -96,6 +99,16 @@ describe("which file the panel opens into", () => {
   it("is the scene for a project nobody has opened Code in", () => {
     expect(opening(SCAFFOLD, null)).toBe("js/scenes/Scene1.js");
     expect(opening(tree("js/scenes/index.js", "js/main.js"), null)).toBe("js/main.js");
+  });
+
+  /**
+   * A vanilla project has neither, so the file that *runs* is `script.js`.
+   * Without its own line the panel landed on whichever file came first, which
+   * for that tree is `game.config.json` — the one file in there nobody can
+   * edit.
+   */
+  it("is the script for a vanilla project", () => {
+    expect(opening(VANILLA, null)).toBe("script.js");
   });
 
   it("is whatever there is, for a tree with neither", () => {

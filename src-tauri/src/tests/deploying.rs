@@ -13,7 +13,7 @@
 //! on somebody's live server rather than in this process — and, in the host
 //! key's case, because a mistake in it is a vulnerability rather than a bug.
 
-use crate::project::{GameOptions, Genre, Projection, PublishTarget, TargetKind};
+use crate::project::{GameOptions, Projection, PublishTarget, Scaffold, TargetKind};
 use crate::publish_targets::Server;
 use crate::{compare, deploy, deploy_github, deploy_ssh, site_files, store};
 
@@ -21,7 +21,7 @@ fn project(name: &str) -> crate::project::ProjectMeta {
     store::create_project(
         name,
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

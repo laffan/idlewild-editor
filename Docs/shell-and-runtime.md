@@ -169,10 +169,13 @@ sees a polygon. See **The marks an import writes** below.
 `psd-log-line` is emitted as an event during processing so the console drawer
 can stream psd-to-json's layer tree as it appears.
 
-`create_project` takes the genre as an optional string, and refuses the one
-pair that has no scaffold — isometric and platformer. Everything else about
-both axes is a label carried into `meta.json`, `doc.json` and the scaffolded
-`game.config.json`.
+`create_project` takes the scaffold as an optional string — the argument is
+`genre`, which is the field's name on disk — and refuses the one pair that has
+no scaffold, isometric and platformer. Everything else about both axes is a
+label carried into `meta.json`, `doc.json` and the scaffolded
+`game.config.json`, and the command does one thing with it on the way past:
+`character` is clamped off for a scaffold that writes no character module, so
+what is stored cannot claim a file the tree has not got.
 
 ### Renaming a PSD
 

@@ -31,25 +31,73 @@ impl Projection {
     }
 }
 
-/// What kind of game the project scaffolds.
+/// What the project scaffolds into `game/`, and how far the editor's own
+/// world reaches into it.
+///
+/// It was `Scaffold`, and it was two answers: a character that walks a floor plan
+/// or one that runs along a cross-section. Two more sit beside them now and
+/// neither is a genre — they are how *much* scaffold a project wants. Drawing
+/// is the same on all four; what differs is the program the drawing is handed
+/// to.
+///
+/// - `Topdown` and `Platformer` are whole games: the document placed, and a
+///   character over it that walks the grid or runs and jumps along it.
+/// - `P2p` is the wiring and nothing above it — a Phaser 4 game with
+///   psd-to-phaser registered, every PSD loaded and the document placed, and
+///   no character, no navigation and no physics. What you drew, on screen,
+///   waiting for a program.
+/// - `Vanilla` is not a Phaser project at all: an `index.html`, a `style.css`
+///   and a `script.js` beside the exported `assets/`. Nothing is wired up,
+///   because the point of it is that nothing is.
 ///
 /// `Default` is what makes this safe to add to a struct already on disk:
 /// every `meta.json` written before the choice existed deserialises as top
 /// down, which is what those projects have always been.
+///
+/// **The field that carries one is still called `genre`** — in `meta.json`, in
+/// `doc.json`, in `game.config.json` and in a `.idlewild` manifest. Every
+/// project and every archive ever written has that key, and the scaffold's own
+/// `canvas.js` reads it; renaming a key on disk to say the same thing a better
+/// way is not a trade worth making. See `Placement::instance` on the frontend
+/// for the same argument.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum Genre {
+pub enum Scaffold {
     #[default]
     Topdown,
     Platformer,
+    /// "Blank PSD to Phaser" on the sheet. `p2p` on disk, because `blank` is
+    /// already a `Projection` and a project can be one and not the other.
+    P2p,
+    Vanilla,
 }
 
-impl Genre {
+impl Scaffold {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Genre::Topdown => "topdown",
-            Genre::Platformer => "platformer",
+            Scaffold::Topdown => "topdown",
+            Scaffold::Platformer => "platformer",
+            Scaffold::P2p => "p2p",
+            Scaffold::Vanilla => "vanilla",
         }
+    }
+
+    /// Whether the scaffold is a Phaser game: everything but `Vanilla`.
+    ///
+    /// What it gates is every part of the tree that only a Phaser project
+    /// has — `js/main.js`, `js/shared/`, the per-scene files, the two
+    /// vendored runtimes an export writes, and the page Page Setup describes.
+    pub fn is_phaser(&self) -> bool {
+        !matches!(self, Scaffold::Vanilla)
+    }
+
+    /// Whether the scaffold writes a character controller.
+    ///
+    /// The `character` option is a switch for the two that do and a fact about
+    /// the files for the two that do not: there is no `shared/character.js` in
+    /// a `P2p` or a `Vanilla` project to read it.
+    pub fn has_character(&self) -> bool {
+        matches!(self, Scaffold::Topdown | Scaffold::Platformer)
     }
 }
 
@@ -382,7 +430,7 @@ pub struct ProjectMeta {
     pub name: String,
     pub projection: Projection,
     #[serde(default)]
-    pub genre: Genre,
+    pub genre: Scaffold,
     #[serde(rename = "gridSize")]
     pub grid_size: u32,
     #[serde(rename = "createdAt")]
@@ -410,7 +458,7 @@ impl ProjectMeta {
         id: String,
         name: String,
         projection: Projection,
-        genre: Genre,
+        genre: Scaffold,
         grid_size: u32,
         options: GameOptions,
     ) -> Self {

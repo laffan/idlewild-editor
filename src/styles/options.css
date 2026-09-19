@@ -141,6 +141,14 @@
    as a variable rather than a class so a page with wider leads says so once. */
 .option.has-lead { --opt-lead: calc(28px + var(--opt-gap)); }
 
+/* A row a page withholds — New Project's character controller, on the two
+   scaffolds that write no character module. `display: flex` above is an author
+   rule and the browser's own `[hidden] { display: none }` is user-agent
+   origin, which loses whatever its specificity, so hiding one takes a rule of
+   its own. The separator is a pseudo-element on the row itself, so a withheld
+   row takes its own rule with it and the list closes up cleanly. */
+.option[hidden] { display: none; }
+
 /* A row that is itself a control — the whole width is the hit target, which is
    what a finger needs and what a settings list has always done. */
 .option.tappable {

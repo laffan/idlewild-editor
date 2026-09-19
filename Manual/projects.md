@@ -20,11 +20,32 @@ Part of [the Idlewild manual](README.md).
 
 ## Making one
 
-- New Project: template (isometric, orthogonal, blank), style (top down,
-  platformer) and grid scale (8–256 px — 8 and 16 are there for pixel art,
-  where a space is a sprite rather than a room). Blank has no lattice: a
-  selection is the exact rectangle it was dragged across, and a fill on it is
-  one rectangle rather than a run of spaces
+- New Project asks two questions, and they are **different kinds of question**.
+  The first is the space: a template (isometric, orthogonal, blank) and the
+  grid scale under it (8–256 px — 8 and 16 are there for pixel art, where a
+  space is a sprite rather than a room). Blank has no lattice: a selection is
+  the exact rectangle it was dragged across, and a fill on it is one rectangle
+  rather than a run of spaces. The scale sits directly under the template
+  because it is a number *about* the template and means nothing on its own
+- The second is **Scaffolding**: how much of a project is written for you.
+  **Top Down** and **Platformer** are whole games — a character that walks the
+  grid over A\*, or one that runs and jumps along it under gravity. **Blank PSD
+  to Phaser** is a Phaser 4 project with psd-to-phaser wired up, every PSD
+  loaded and the document placed, and nothing above that: no character, no
+  pathfinder, no physics, so what you get is exactly what you drew, on screen,
+  waiting for a program. **Vanilla** is not a Phaser project at all — an
+  `index.html`, a `style.css` and a `script.js` beside the exported assets,
+  with the document as data in `game.config.json` and nothing wired up
+- **Nothing about drawing changes between them.** Same canvas, same tools,
+  same selection, same fills, same PSD pipeline, same `assets/` at the end of
+  it. This is the one choice on the sheet the editor itself does not read: it
+  decides the code on the other side of an export rather than anything in
+  front of you, which is what the two leaner answers are for — you can use a
+  template without being bound to it
+- Platformer is the one answer a template can take away. Gravity has no
+  direction on a diamond grid seen from above, so picking **Isometric** greys
+  it out and puts the scaffolding back to Top Down. The other three have
+  nothing that falls, so they pair with any template
 - **The sheet is a settings page, and is drawn as one.** It used to be a column
   of labels each with a grey paragraph under it; it is the same rows the Logins
   sheet is built from now — the vocabulary Publish introduced, which this is the
@@ -55,6 +76,11 @@ Part of [the Idlewild manual](README.md).
   `js/shared/character.js` now, which is the editor's and is written either
   way, so it reads the answer out of the config and turning it on is a save
   rather than a file appearing in your project
+- The row is only there on **Top Down** and **Platformer**, on both sheets.
+  Blank PSD to Phaser and Vanilla write no `js/shared/character.js` and no
+  prefab, so there would be nothing for the switch to reach — and a settings
+  row that changes a value no code reads is the one thing a settings page must
+  not have
 - On an **isometric** project the character sorts itself into the scene as it
   walks, so it goes behind a tree it is standing behind and in front of one it
   is standing in front of. The line it crosses is the one straight up from the

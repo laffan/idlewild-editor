@@ -30,7 +30,7 @@ import { onLongPress } from "../lib/gestures";
 import { platform, projects } from "../lib/ipc";
 import { isMobile } from "../lib/platform";
 import { confirmSheet, openSheet } from "../lib/sheet";
-import type { ProjectMeta } from "../lib/types";
+import { hasCharacter, scaffoldLabel, type ProjectMeta } from "../lib/types";
 import * as log from "../lib/log";
 import {
   deleteProjects,
@@ -156,18 +156,23 @@ export function renderHome(
               choice.name,
               choice.projection,
               choice.gridSize,
-              choice.genre,
+              choice.scaffold,
               choice.options,
             );
             const notes = [
               meta.projection,
-              choice.genre,
+              scaffoldLabel(choice.scaffold).toLowerCase(),
               `${meta.gridSize}px`,
               ...(choice.options.pixelArt ? ["pixel perfect"] : []),
               ...(choice.options.defaultZoom === 1
                 ? []
                 : [`${choice.options.defaultZoom}× zoom`]),
-              ...(choice.options.character ? [] : ["no character"]),
+              // Only worth saying on a scaffold that could have had one. The
+              // other two never write a character module, so "no character"
+              // would be reporting the absence of something never offered.
+              ...(hasCharacter(choice.scaffold) && !choice.options.character
+                ? ["no character"]
+                : []),
             ];
             log.info(`Created ${meta.name} (${notes.join(", ")})`);
             callbacks.onOpenProject(meta);
@@ -400,7 +405,7 @@ function projectCard(
       h("div", {
         class: "project-meta m",
         text:
-          `${meta.projection} · ${meta.genre ?? "topdown"} · ` +
+          `${meta.projection} · ${scaffoldLabel(meta.genre).toLowerCase()} · ` +
           `${meta.gridSize} px · ${describeEdited(meta.updatedAt)}`,
       }),
     ),

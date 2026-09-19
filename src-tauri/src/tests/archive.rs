@@ -11,7 +11,7 @@
 //! assertion about a constant.
 
 use crate::archive;
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::store;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -82,7 +82,7 @@ fn seeded(name: &str) -> String {
     let meta = store::create_project(
         name,
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         64,
         GameOptions::default(),
     )
@@ -125,7 +125,7 @@ fn a_project_survives_a_round_trip_through_an_idlewild_file() {
         assert_ne!(opened.id, source, "an import takes an id of its own");
         assert_eq!(opened.name, "Round trip");
         assert_eq!(opened.projection, Projection::Isometric);
-        assert_eq!(opened.genre, Genre::Topdown);
+        assert_eq!(opened.genre, Scaffold::Topdown);
         assert_eq!(opened.grid_size, 64);
         assert_eq!(
             opened.created_at,

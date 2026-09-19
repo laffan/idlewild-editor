@@ -9,12 +9,17 @@
     <title>Idlewild harness</title>
     <script>
       // Which fixture to open, from the query string, before the app boots:
-      //   ?template=blank&style=platformer&grid=32
+      //   ?template=blank&scaffold=platformer&grid=32
       // Both the stub document and main.ts read these, and both run as
       // modules — so they have to be set from a classic script up here.
+      //
+      // `scaffold` is the sheet's word for it and `style` is what the sheet
+      // used to say; both are taken, because the old one is in scripts and
+      // in these docs. The global keeps the *field's* name, `__genre`, which
+      // is the key the document carries — see `Scaffold`.
       var q = new URLSearchParams(location.search);
       window.__projection = q.get("template") || "isometric";
-      window.__genre = q.get("style") || "topdown";
+      window.__genre = q.get("scaffold") || q.get("style") || "topdown";
       window.__gridSize = Number(q.get("grid")) || 64;
       // Stand-in insets, so the iPad's safe area can be looked at on a Mac:
       //   ?safe=1  or  ?safe=44

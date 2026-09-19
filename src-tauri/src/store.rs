@@ -15,7 +15,7 @@
 //! ```
 
 use crate::project::{
-    now_ms, GameFile, GameOptions, Genre, Presentation, ProjectMeta, Projection, PublishTarget,
+    now_ms, GameFile, GameOptions, Presentation, ProjectMeta, Projection, PublishTarget, Scaffold,
 };
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -102,10 +102,17 @@ pub fn list_projects() -> Result<Vec<ProjectMeta>, String> {
     Ok(out)
 }
 
+/// Write a new project to disk: its meta, its `game/` tree and its document.
+///
+/// `character` is clamped rather than taken. It defaults to on and a scaffold
+/// with no `shared/character.js` has nothing for it to reach, so a P2P or
+/// vanilla project would otherwise record a controller it has no file for.
+/// The sheets do not offer the row; this is what makes the answer on disk
+/// agree with the tree beside it whichever way the store is reached.
 pub fn create_project(
     name: &str,
     projection: Projection,
-    genre: Genre,
+    scaffold: Scaffold,
     grid_size: u32,
     options: GameOptions,
 ) -> Result<ProjectMeta, String> {
@@ -117,9 +124,12 @@ pub fn create_project(
         id.clone(),
         name.to_string(),
         projection,
-        genre,
+        scaffold,
         grid_size,
-        options,
+        GameOptions {
+            character: options.character && scaffold.has_character(),
+            ..options
+        },
     );
     write_meta(&meta)?;
     // Scaffolded before the document is written, because writing a document
@@ -152,7 +162,10 @@ pub fn set_project_options(
     meta.options.pixel_art = pixel_art;
     meta.options.round_pixels = round_pixels;
     meta.options.default_zoom = default_zoom;
-    meta.options.character = character;
+    // Clamped for the reason `create_project` clamps it: on the two scaffolds
+    // with no character module the sheet hides the row, and what is stored
+    // should not disagree with a tree that has no file for it.
+    meta.options.character = character && meta.genre.has_character();
     meta.updated_at = now_ms();
     write_meta(&meta)?;
     let _ = sync_game_config(id);
@@ -278,7 +291,7 @@ pub fn sync_game_config(id: &str) -> Result<(), String> {
     let doc = read_doc(id)?;
     let config = crate::game_config::from_document(&meta, &doc)?;
     let body = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
-    let path = game_dir(id)?.join(safe_relative(crate::game_config::CONFIG_REL)?);
+    let path = game_dir(id)?.join(safe_relative(crate::game_config::config_rel(meta.genre))?);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -291,7 +304,7 @@ pub fn sync_game_config(id: &str) -> Result<(), String> {
     // Never fails the save, for `sync_game_config`'s own reason: a project
     // with a stale scene file and a written document is better off than one
     // with neither.
-    let _ = sync_scene_files(id, previous.as_deref(), &config);
+    let _ = sync_scene_files(id, &meta, previous.as_deref(), &config);
 
     // An unchanged config is not rewritten: the code modal watches this file
     // and a save storm on a drag would otherwise reload the editor under the
@@ -326,7 +339,18 @@ pub fn sync_game_config(id: &str) -> Result<(), String> {
 /// `js/scenes/WorldScene.js` and a `main.js` that imports it by name, and
 /// writing a second scene file beside it would be a file nothing loads. The
 /// test is `js/shared/canvas.js`, which only the new scaffold writes.
-fn sync_scene_files(id: &str, previous: Option<&str>, config: &Value) -> Result<(), String> {
+///
+/// The same test is what keeps a **vanilla** project out of here, and it is
+/// the right one by accident rather than by luck: a tree with no `canvas.js`
+/// is a tree with no scene for a scene file to be. A vanilla project has
+/// `index.html`, `style.css` and `script.js`, and the editor writes exactly
+/// one file into it — the generated config, above.
+fn sync_scene_files(
+    id: &str,
+    meta: &ProjectMeta,
+    previous: Option<&str>,
+    config: &Value,
+) -> Result<(), String> {
     let dir = game_dir(id)?;
     if !dir.join(safe_relative("js/shared/canvas.js")?).exists() {
         return Ok(());
@@ -354,7 +378,7 @@ fn sync_scene_files(id: &str, previous: Option<&str>, config: &Value) -> Result<
                 let _ = fs::remove_file(&from);
             }
             _ if !path.exists() => {
-                fs::write(&path, crate::templates::scene_file(file))
+                fs::write(&path, crate::templates::scene_file(file, meta.genre))
                     .map_err(|e| format!("Cannot write {file}.js: {e}"))?;
             }
             _ => {}
@@ -449,7 +473,7 @@ pub fn rename_scene_class(text: &str, from: &str, to: &str) -> String {
 /// next save. Resetting it means regenerating it, not blanking it.
 pub fn read_game_template(id: &str, rel: &str) -> Result<String, String> {
     let meta = read_meta(id)?;
-    if rel == crate::game_config::CONFIG_REL {
+    if rel == crate::game_config::config_rel(meta.genre) {
         let config = crate::game_config::from_document(&meta, &read_doc(id)?)?;
         return serde_json::to_string_pretty(&config).map_err(|e| e.to_string());
     }

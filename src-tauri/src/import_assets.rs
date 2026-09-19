@@ -85,7 +85,7 @@ pub fn import_psd_from_project(
 
 #[cfg(test)]
 mod tests {
-    use crate::project::{GameOptions, Genre, Projection};
+    use crate::project::{GameOptions, Projection, Scaffold};
     use crate::tests::swatch;
     use crate::{psd_pipeline, psd_write, store};
 
@@ -94,7 +94,7 @@ mod tests {
         let meta = store::create_project(
             name,
             Projection::Orthogonal,
-            Genre::Topdown,
+            Scaffold::Topdown,
             32,
             GameOptions::default(),
         )

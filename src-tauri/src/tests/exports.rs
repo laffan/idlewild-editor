@@ -7,7 +7,7 @@
 //! artwork on its own. They share the store they create projects in and nothing
 //! else.
 
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{export_assets, psd_pipeline, psd_write, publish, save_staging, store};
 
 /// The bug this pins: an export shipped the game tree and the processed
@@ -19,7 +19,7 @@ fn an_export_carries_the_document_in_its_config() {
     let meta = store::create_project(
         "Export",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -108,7 +108,7 @@ fn an_export_carries_what_each_placed_psd_blocks() {
     let meta = store::create_project(
         "Colliders",
         Projection::Isometric,
-        Genre::Topdown,
+        Scaffold::Topdown,
         64,
         GameOptions::default(),
     )
@@ -195,7 +195,7 @@ fn an_export_survives_a_document_it_cannot_read() {
     let meta = store::create_project(
         "Corrupt",
         Projection::Isometric,
-        Genre::Platformer,
+        Scaffold::Platformer,
         64,
         GameOptions::default(),
     )
@@ -252,7 +252,7 @@ fn export_assets_takes_the_files_and_the_halves_it_was_asked_for() {
     let meta = store::create_project(
         "Assets",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -355,7 +355,7 @@ fn export_assets_refuses_an_archive_with_nothing_in_it() {
     let meta = store::create_project(
         "Empty",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -397,7 +397,7 @@ fn export_assets_lists_what_is_on_disk_rather_than_what_is_placed() {
     let meta = store::create_project(
         "Listing",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

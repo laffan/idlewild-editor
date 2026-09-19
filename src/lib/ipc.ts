@@ -12,10 +12,10 @@ export * from "./ipc-psd";
 
 import type {
   GameOptions,
-  Genre,
   Presentation,
   ProjectMeta,
   Projection,
+  Scaffold,
 } from "./types";
 
 /**
@@ -189,18 +189,22 @@ export async function checkAssetServer(base: string): Promise<string | null> {
 
 export const projects = {
   list: () => invoke<ProjectMeta[]>("list_projects"),
+  /**
+   * Make one. `scaffold` crosses as `genre`, which is the name the field has
+   * on disk and in every document written so far — see `Scaffold`.
+   */
   create: (
     name: string,
     projection: Projection,
     gridSize: number,
-    genre: Genre,
+    scaffold: Scaffold,
     options: GameOptions,
   ) =>
     invoke<ProjectMeta>("create_project", {
       name,
       projection,
       gridSize,
-      genre,
+      genre: scaffold,
       options,
     }),
   /**

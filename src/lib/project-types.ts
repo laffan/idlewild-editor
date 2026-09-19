@@ -24,17 +24,78 @@ import type { PublishTarget } from "./publish-target";
 export type Projection = "isometric" | "orthogonal" | "blank";
 
 /**
- * What kind of game the project scaffolds, and how play mode behaves.
+ * What a project scaffolds into `game/`.
  *
- * Top down is the original: a character walks the grid over A*, and the
- * camera follows it. A platformer is side-on — gravity, ground, a jump — and
- * reads the same document, taking non-walkable fills and blocking zones as
- * the solid ground rather than as obstacles to route around.
+ * It was `Genre` and it was two answers. Two more sit beside them now and
+ * neither is a genre — they are how *much* scaffold a project wants, which is
+ * what the New Project sheet calls Scaffolding.
  *
- * Projects written before this existed carry no genre and are top down, which
- * is what they have always been.
+ * - `topdown` is the original: a character walks the grid over A*, and the
+ *   camera follows it.
+ * - `platformer` is side-on — gravity, ground, a jump — and reads the same
+ *   document, taking non-walkable fills and blocking zones as the ground it
+ *   stands on rather than as obstacles to route around.
+ * - `p2p` is **Blank PSD to Phaser**: the plugin registered, every PSD loaded
+ *   and the document placed, and nothing above that. No character, no
+ *   pathfinder, no physics.
+ * - `vanilla` is not a Phaser project at all — an `index.html`, a `style.css`
+ *   and a `script.js` beside the exported `assets/`.
+ *
+ * **Drawing is the same on all four.** Nothing about the canvas, the tools or
+ * what a selection does reads this; what it decides is the program on the
+ * other side of the export. That is the whole reason the last two exist.
+ *
+ * Projects written before this existed carry nothing and are top down, which
+ * is what they have always been. The field that carries one is still called
+ * `genre`, on disk and in the generated config — see `Scaffold` in
+ * src-tauri/src/project.rs for why renaming a key every project already has is
+ * not a trade worth making.
  */
-export type Genre = "topdown" | "platformer";
+export type Scaffold = "topdown" | "platformer" | "p2p" | "vanilla";
+
+/**
+ * The scaffolds, in the order the sheet offers them, with what to call each.
+ *
+ * Here rather than in `new-project.ts` because three sheets read it: New
+ * Project builds its segmented control from it, Project Options reports which
+ * one a project was made with, and the home screen's card line names it. A
+ * fourth reader is the label in a log line when a project is created.
+ */
+export const SCAFFOLDS: ReadonlyArray<{ value: Scaffold; label: string }> = [
+  { value: "topdown", label: "Top Down" },
+  { value: "platformer", label: "Platformer" },
+  { value: "p2p", label: "Blank PSD to Phaser" },
+  { value: "vanilla", label: "Vanilla" },
+];
+
+/** What to call a scaffold, including one this build does not know. */
+export function scaffoldLabel(scaffold: Scaffold | undefined): string {
+  return SCAFFOLDS.find((row) => row.value === scaffold)?.label ?? "Top Down";
+}
+
+/**
+ * Whether the scaffold is a Phaser game: everything but `vanilla`.
+ *
+ * What it gates in the editor is Page Setup, which describes the page
+ * `js/main.js` writes custom properties onto — a file a vanilla project does
+ * not have. Mirrors `Scaffold::is_phaser` in src-tauri/src/project.rs.
+ */
+export function isPhaserScaffold(scaffold: Scaffold | undefined): boolean {
+  return (scaffold ?? "topdown") !== "vanilla";
+}
+
+/**
+ * Whether the scaffold writes a character controller.
+ *
+ * The switch is a switch on the two that do; on the other two there is no
+ * `js/shared/character.js` to read it and no prefab for one to spawn, so both
+ * sheets leave the row out rather than offering a setting with nothing behind
+ * it. Rust clamps the stored value to match — see `store::create_project`.
+ */
+export function hasCharacter(scaffold: Scaffold | undefined): boolean {
+  const value = scaffold ?? "topdown";
+  return value === "topdown" || value === "platformer";
+}
 
 /**
  * How a project renders, and what its scaffold put in it.
@@ -45,7 +106,10 @@ export type Genre = "topdown" | "platformer";
  * `character` was the exception until the scaffold was split up: it was
  * resolved when the files were written, so a project either had a character
  * in it or no way back to one. `js/shared/character.js` is scaffolded either
- * way now and reads `config.character`, so the box is a box.
+ * way now and reads `config.character`, so the box is a box — on the two
+ * scaffolds that have that file. On `p2p` and `vanilla` there is nothing for
+ * it to reach, so both sheets leave the row out and Rust stores `false`
+ * whatever arrives; see `hasCharacter` above.
  *
  * Mirrored by `GameOptions` in src-tauri/src/project.rs.
  */
@@ -172,8 +236,12 @@ export interface ProjectMeta {
   id: string;
   name: string;
   projection: Projection;
-  /** Absent on projects created before the choice existed: they are top down. */
-  genre?: Genre;
+  /**
+   * What the project scaffolded — see `Scaffold`, which explains why a field
+   * holding one is still called this. Absent on projects created before the
+   * choice existed: they are top down.
+   */
+  genre?: Scaffold;
   gridSize: number;
   createdAt: number;
   updatedAt: number;

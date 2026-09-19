@@ -9,7 +9,7 @@
 //! Its own module rather than another case in `config`, which had reached the
 //! seven hundred lines the rest of this codebase keeps to.
 
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::store;
 
 /// A tile layer reaches the game exactly as Tiled wrote it.
@@ -26,7 +26,7 @@ fn a_tile_layer_and_its_palettes_reach_the_config_unchanged() {
     let meta = store::create_project(
         "Tiled",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -81,7 +81,11 @@ fn a_tile_layer_and_its_palettes_reach_the_config_unchanged() {
                             "height": 16,
                             "chunks": [{
                                 "x": 0, "y": 0, "width": 16, "height": 16,
-                                "data": [1, 2, 0, 2147483649]
+                                // Suffixed because a bare literal in `json!`
+                                // is inferred as `i32`, and this one is a gid
+                                // with Tiled's horizontal-flip flag set —
+                                // 0x80000000 above every signed 32-bit value.
+                                "data": [1, 2, 0, 2147483649u32]
                             }]
                         }
                     }]

@@ -15,7 +15,7 @@
 //! of the suite creates projects in, and `swatch`.
 
 use super::swatch;
-use crate::project::{GameOptions, Genre, Projection};
+use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{psd_pipeline, psd_write, store};
 
 /// The manifest lists a PSD's layers top-first, and says how they were stacked.
@@ -34,7 +34,7 @@ fn a_manifest_lists_layers_top_first() {
     let meta = store::create_project(
         "Stacking",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )
@@ -104,7 +104,7 @@ fn psd_layers_can_be_reordered_and_renamed() {
     let meta = store::create_project(
         "Layers",
         Projection::Orthogonal,
-        Genre::Topdown,
+        Scaffold::Topdown,
         32,
         GameOptions::default(),
     )

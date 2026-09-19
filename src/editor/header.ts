@@ -15,7 +15,9 @@
  * Publish, Export Assets, Import Assets, Project Options and Page Setup stay in the
  * hamburger's menu. They are destinations rather than modes — you come back
  * from them to where you were — and folding them in leaves the header carrying
- * the project, undo and redo, and the mode it is in.
+ * the project, undo and redo, and the mode it is in. Page Setup is the one
+ * that comes and goes: a vanilla project has no scaffolded page for it to
+ * describe, so on one it is not on the menu at all.
  *
  * Copy PSD and Paste Image are in there for a different reason: both have a
  * keyboard shortcut and neither has a keyboard on an iPad. They are the two
@@ -49,7 +51,18 @@ export interface HeaderCallbacks {
   /** Artwork from the filesystem or from another project in this app. */
   onImportAssets: () => void;
   onOptions: () => void;
-  onPageSetup: () => void;
+  /**
+   * The HTML page around the game — absent on a project that has no such
+   * page.
+   *
+   * A vanilla scaffold's `index.html` is the author's from the moment it is
+   * written: there is no `js/main.js` reading the presentation out of the
+   * config and no `styles.css` full of custom properties for it to set, so
+   * every setting on that sheet would be a value nothing reads. The item is
+   * withheld rather than shown doing nothing — see `header-wiring.ts`, which
+   * is where the scaffold is known.
+   */
+  onPageSetup?: () => void;
 }
 
 /** The three sections, in the order the header offers them. */
@@ -224,11 +237,18 @@ export class EditorHeader {
         // things: Project Options is how the canvas renders, and this is the
         // HTML page the exported game is embedded in. One reaches the editor's
         // own view; the other only ever shows up in Play and in an export.
-        {
-          label: "Page Setup",
-          glyph: ICONS.file,
-          onSelect: callbacks.onPageSetup,
-        },
+        //
+        // And absent altogether on a project whose scaffold writes no such
+        // page — see `onPageSetup`.
+        ...(callbacks.onPageSetup
+          ? [
+              {
+                label: "Page Setup",
+                glyph: ICONS.file,
+                onSelect: callbacks.onPageSetup,
+              },
+            ]
+          : []),
       ],
       () => {
         this.menu = null;

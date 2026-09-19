@@ -18,9 +18,11 @@ Part of [the Idlewild manual](README.md).
   in between. The machinery is in `js/shared/` — `canvas.js` puts the document
   on screen, `character.js` wires up whatever moves in it — and a scene file is
   a short one that calls six of them and is otherwise yours, with nothing in it
-  marked at all. `canvas.js` is the same file for both styles; what differs
-  between a game seen from above and one seen from the side is the character,
-  which is what `character.js` is
+  marked at all. `canvas.js` is the same file for every Phaser scaffold; what
+  differs between a game seen from above and one seen from the side is the
+  character, which is what `character.js` is — and a **Blank PSD to Phaser**
+  project has no `character.js` at all, so its scene file calls five of the six
+  and nothing moves
 - **One file per scene, named after it.** Add a scene in the sidebar and
   `js/scenes/<Name>.js` appears beside the others; rename it and the file, the
   class and the Phaser key all move together, carrying whatever you wrote in
@@ -40,7 +42,9 @@ Part of [the Idlewild manual](README.md).
   rather than something the editor does. A platformer reads
   the same document from the side: every non-walkable fill, blocking boundary
   and placed PSD's collider is the ground it stands on rather than an obstacle
-  to route around
+  to route around. A **Blank PSD to Phaser** project plays too, and what it
+  plays is your artwork placed and nothing else; a **Vanilla** one plays its
+  own page, which is whatever you have written in `script.js`
 - **A file you change while the game is running restarts it**, the way saving
   code does: ink applied in PSD Edit mode, a layer renamed or turned off, a
   re-parse, a PSD replaced by a drop. Code runs the game beside the canvas,
@@ -178,8 +182,8 @@ Part of [the Idlewild manual](README.md).
 
 ## What a project scaffolds
 
-- The game a project scaffolds is laid out the way you would lay one out
-  yourself:
+- A **Top Down** or **Platformer** project is laid out the way you would lay
+  one out yourself:
 
   ```text
   index.html
@@ -206,10 +210,38 @@ Part of [the Idlewild manual](README.md).
   this layout keeps the one it was made with — your `game/` tree is your copy —
   and plays and publishes from wherever its own `index.html` says
 
+- **Blank PSD to Phaser** is that tree with the bottom four lines gone. No
+  `shared/character.js`, no `shared/navigation.js` or `physics.js`, no
+  `prefabs/character.js` — the plugin is registered, every PSD is loaded, the
+  document is placed, and the scene file stops there. Nothing to read past
+  before you start, and nothing to delete either
+
+- **Vanilla** is four files and no Phaser:
+
+  ```text
+  index.html
+  style.css
+  script.js
+  game.config.json        the document, generated on every save
+  ```
+
+  The config is at the root here because there is no `js/` for it to sit
+  under, and `script.js` fetches it — that is the one line in there doing
+  anything. Everything else is a blank page. There is no Page Setup on a
+  vanilla project, because the page it would describe is this `index.html`,
+  and that file is yours from the moment it is written
+
+- **Every scaffold gets the same `assets/`.** Importing a PSD writes its output
+  beside `game/` rather than inside it, so what you picked on the New Project
+  sheet decides the code around your artwork and never the artwork. A
+  published site carries the assets either way; a vanilla one simply does not
+  carry Phaser with them
+
 ## Page Setup
 
-- **Page Setup**, beside Project Options in the menu, is the HTML and CSS
-  *around* the game rather than the game. Six settings: a **fixed size** with a
+- **Page Setup**, beside Project Options in the menu — on every scaffold but
+  Vanilla, which has no scaffolded page for it to describe — is the HTML and
+  CSS *around* the game rather than the game. Six settings: a **fixed size** with a
   width and a height — or the window, which is what every project has done until
   now — **centred** or top left, a **margin**, a **corner radius**, and the
   **page colour** behind it all. That last one is the HTML background, not

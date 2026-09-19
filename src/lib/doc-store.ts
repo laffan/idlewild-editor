@@ -27,12 +27,12 @@ import type {
   Collider,
   FillPatch,
   GameDoc,
-  Genre,
   Layer,
   LayerKind,
   MapPoint,
   Placement,
   Projection,
+  Scaffold,
   Scene,
   StoredDoc,
   Stroke,
@@ -100,8 +100,8 @@ export class DocStore extends EventTarget {
     return this.state.gridSize;
   }
 
-  /** Top down unless the document says otherwise — see `Genre`. */
-  get genre(): Genre {
+  /** Top down unless the document says otherwise — see `Scaffold`. */
+  get scaffold(): Scaffold {
     return this.state.genre ?? "topdown";
   }
 
