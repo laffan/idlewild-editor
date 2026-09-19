@@ -424,13 +424,48 @@ file's flattened composite, which is the picture Photoshop and the Finder show
 for it.
 
 The point is the useful half, because it is recorded in **canvas
-coordinates**. `placedPosition` puts it on the grid space's world point and
-steps out to each layer from there, so what stays fixed across a re-import is
-the mark, not the canvas. An artist can grow the canvas, move the artwork
-inside it, or redraw the file, and the artwork comes back lined up as long as
-the dot stayed on the spot that should sit on that space. Moving the dot is
-therefore the interface: put it at the artwork's bottom-left and the thing
-stands on its tile instead of floating centred over it.
+coordinates**. `placedPosition` puts it on the world point the mark is
+standing on and steps out to each layer from there, so what stays fixed across
+a re-import is the mark, not the canvas. An artist can grow the canvas, move
+the artwork inside it, or redraw the file, and the artwork comes back lined up
+as long as the dot stayed on the spot that should sit on that space. Moving
+the dot is therefore the interface: put it at the artwork's bottom-left and
+the thing stands on its tile instead of floating centred over it.
+
+#### Where the mark is standing, and why the grid space could not say
+
+A placement records the space it was dropped on — `Placement.anchor`, a cell —
+and for a long while that cell was also taken to be where the mark stands: a
+re-parse put the dot on `cellToWorld(anchor)` and laid every layer out from
+there. It is the obvious reading, and it is wrong for one very ordinary
+reason.
+
+A **resize** breaks it. Everything inside a placement is measured against the
+size the manifest exported — that ratio is the scale — so making a placed PSD
+bigger scales the distance from its grid space to its artwork's corner along
+with everything else. The cell is still the space the file was dropped on; it
+is no longer the point the dot is over. Positioning from it at the new scale
+therefore moved the artwork by the mark's own offset times the change in
+scale, and an imported image is anchored on its *middle*, so doubling one and
+re-parsing it moved it half its own width. That is the "the PSD jumps when I
+re-import it" this section is really about: nothing in the file had moved, and
+the thing on the grid still shifted by more than a tile. The inspector's Width
+box did the same, being the other way to change the scale.
+
+So a placement keeps `fromAnchor` as well: where its layer's top-left sits
+relative to the dot, **in the file's own pixels**, written by `place` and
+re-read on every parse. The mark is then at `x - fromAnchor.x * scale`, which
+is a derived answer rather than a second copy of one — a drag carries it along
+and a resize scales it, and nothing that moves a placement has to remember to
+maintain it. `game/reconcile.ts` positions from that point; `anchorWorldOf` is
+the one function that answers the question, and a document written before the
+offset existed has none and falls back to the cell, which is exact for every
+placement nobody has resized.
+
+Extrude's re-apply is the one caller that clears it on purpose. A second Apply
+rewrites the file around a *different* space, so the offset describes a
+version of the artwork that no longer exists; `reanchor` names the new cell
+and drops the offset, and the parse that follows records the new one.
 
 The zone is the orienting half, and it shows the spaces rather than only the
 region: an outline alone says how much room the artwork has, while the
@@ -499,8 +534,8 @@ disagree, and the typings are what the vendored build actually exposes.
 walking the manifest's `layers` by name (`shared/findLayer.ts`), so it must be
 given a real one. Asking for `"root"` finds nothing, logs *No layer found with
 path: root*, and returns an empty group — a selection box with no image in it.
-`src/lib/manifest.ts` reads the manifest and anchors one placement per
-top-level layer, each keeping its offset inside the PSD canvas. Documents
+`src/lib/manifest.ts` reads the manifest and `src/lib/placing.ts` anchors one
+placement per top-level layer, each keeping its offset inside the PSD canvas. Documents
 written by earlier builds are repointed on open.
 
 **It needs a global `Phaser`.** Its sources use the ambient namespace in
@@ -691,11 +726,12 @@ timeout and placed a PSD whose textures had all been evicted and never replaced.
 settles the wait as a second, weaker signal, and any sprite left without a
 texture is named in the console.
 
-Placements survive the swap: each keeps its position and its size *relative
-to* what the manifest exported, so a deliberately shrunk image stays shrunk
-against new artwork. A placement whose layer is gone from the new file is
-removed — there is nothing left to draw, and a placement that can never
-render is worse than an honest gap.
+Placements survive the swap: each keeps the spot its anchor mark is standing
+on — see **Where the mark is standing, and why the grid space could not say**
+— and its size *relative to* what the manifest exported, so a deliberately
+shrunk image stays shrunk against new artwork. A placement whose layer is gone
+from the new file is removed — there is nothing left to draw, and a placement
+that can never render is worse than an honest gap.
 
 And a layer that is *new* gets a placement of its own. Reconciliation used to
 only revise the placements the document already held, so adding a layer in
@@ -703,8 +739,8 @@ Photoshop and re-parsing changed nothing anyone could see: the layer was
 parsed, exported and listed in the console, and never drawn. The file said one
 thing and the canvas another. A new layer is placed the way its siblings on
 that key were — their document layer, their grid space, their scale, and its
-own position through the PSD's anchor mark — because that is the only
-placement that can be inferred honestly. With no sibling to infer from,
+own position through the spot their anchor mark stands on — because that is
+the only placement that can be inferred honestly. With no sibling to infer from,
 nothing is adopted.
 
 The inspector's list of the file's own layers has to be told too. It is built

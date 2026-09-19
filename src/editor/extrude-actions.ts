@@ -198,7 +198,7 @@ async function applyPlacement(
   if (target && result.key === target.key) {
     // The footprint may have grown past where it started, which moves the
     // space the artwork hangs from. Reconciliation positions each placement
-    // from the anchor the document holds for it, so that has to say where the
+    // from where its anchor mark is standing, so that has to say where the
     // artwork is *now* before the new manifest is read.
     reanchor(store, result.key, anchor);
     await scene.reloadPsd(result.key, result.manifest);
@@ -212,10 +212,18 @@ async function applyPlacement(
  *
  * Every scene's, because the file is the project's: an extrusion re-applied
  * moves the artwork under every placement of it, wherever that placement is.
+ *
+ * The offset each placement holds from the mark goes with it. It describes
+ * the file as it was a moment ago, and a re-apply has just rewritten that
+ * file around a different space — so keeping it would have reconciliation
+ * hunt for the old mark's world point and put the new solid there. Cleared,
+ * the placement falls back to the space named here, which is the one the
+ * artwork was just written around; the parse that follows records the new
+ * offset in its place.
  */
 function reanchor(store: DocStore, key: string, anchor: Cell): void {
   store.updatePlacementsEverywhere((placement) =>
-    placement.psdKey === key ? { anchor } : null,
+    placement.psdKey === key ? { anchor, fromAnchor: undefined } : null,
   );
 }
 

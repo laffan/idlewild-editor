@@ -14,7 +14,7 @@
  * is written with room around it to paint the eaves that hang past the wall.
  * Drawing inside the artwork's box and calling it "inside the PSD" would put
  * the boundary in the wrong place, and it is a boundary somebody is going to
- * draw right up against. `canvasBox` in `lib/manifest.ts` is the arithmetic;
+ * draw right up against. `canvasBox` in `lib/placing.ts` is the arithmetic;
  * see the note there.
  *
  * **It owns no pointer of its own.** This is where it parts company with

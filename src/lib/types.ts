@@ -99,6 +99,30 @@ export interface Placement {
   /** The cell the placement was anchored to, kept so a grid resize can follow. */
   anchor: Cell;
   /**
+   * Where this layer's top-left sits relative to the PSD's `P | anchor` mark,
+   * in the **file's own pixels**.
+   *
+   * What makes the mark survive an edit. A re-parse has to put the anchor
+   * back on the world point it is standing on *now*, and `anchor` — a grid
+   * space — can only say where it was pinned when it landed. The moment the
+   * placement is resized, the offset it holds from that space scales with it
+   * and the cell stops describing where the mark is; positions recomputed
+   * from the cell then moved the artwork by the anchor's own offset times the
+   * change in scale, which for an image import — anchored on its middle — is
+   * half its width per doubling.
+   *
+   * Kept in the file's pixels rather than in the world so that nothing which
+   * moves or resizes a placement has to maintain it: the mark stands at
+   * `x - fromAnchor.x * scale`, which follows a drag and scales with a resize
+   * on its own. Only placing and re-parsing write it, and both write it from
+   * the manifest.
+   *
+   * Optional, because documents written before it existed have none and fall
+   * back to the anchor cell — which is right for every placement that has not
+   * been resized since, and is what the editor did for all of them before.
+   */
+  fromAnchor?: Point;
+  /**
    * Which **unit** of the PSD this belongs to.
    *
    * Placing a PSD makes one placement per placeable layer, and they share

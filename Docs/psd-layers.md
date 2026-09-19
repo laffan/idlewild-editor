@@ -375,7 +375,7 @@ construction. So a frame drawn from the placement would sit inside the
 document by most of a grid space, and it is a boundary somebody is going to
 draw right up against.
 
-`canvasBox` in `lib/manifest.ts` is `placedPosition` run over the canvas
+`canvasBox` in `lib/placing.ts` is `placedPosition` run over the canvas
 corner instead of a layer: put the file's anchor mark on the placement's grid
 space, step back by where that mark sits inside the canvas, and take the
 canvas's own size — all scaled by how big the artwork is being shown against

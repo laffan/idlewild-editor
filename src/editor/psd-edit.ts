@@ -42,7 +42,11 @@ import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
 import * as log from "../lib/log";
-import { canvasBox, parseManifest, type Manifest } from "../lib/manifest";
+import {
+  parseManifest,
+  type Manifest,
+} from "../lib/manifest";
+import { canvasBox } from "../lib/placing";
 import { manifestName } from "./psd-layer-owner";
 import { layerKind } from "../lib/layer-kinds";
 import { unitOf } from "../game/unit";

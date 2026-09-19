@@ -23,10 +23,14 @@ import {
   textureKey,
   textureNeeds,
   placeableLayers,
-  placedPosition,
   placedVisibility,
   stackOrder,
 } from "../lib/manifest";
+import {
+  anchorOffset,
+  offsetFromAnchor,
+  placedPosition,
+} from "../lib/placing";
 import type { Cell, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
 import type { DocRenderer } from "./doc-renderer";
@@ -242,6 +246,12 @@ export class PsdPlacements {
       // document nothing in it says which of two layers was above.
       const stack = stackOrder(manifest);
 
+      // Where the file's own `P | anchor` sits in its canvas. Each placement
+      // keeps its offset from it, because that offset is the only thing that
+      // can find the mark again once the placement has been resized — see
+      // `Placement.fromAnchor`.
+      const mark = anchorOffset(manifest);
+
       let last: Placement | null = null;
       for (const entry of layers) {
         const width = entry.width || manifest.width;
@@ -259,6 +269,7 @@ export class PsdPlacements {
           naturalWidth: width,
           naturalHeight: height,
           anchor: at,
+          fromAnchor: offsetFromAnchor(mark, entry),
           instance,
           order: stack.get(entry.path) ?? 0,
           // What the file says is turned off, here and inside it.

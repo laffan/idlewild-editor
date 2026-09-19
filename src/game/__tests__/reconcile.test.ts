@@ -383,6 +383,195 @@ describe("a re-import that lost its anchor", () => {
 });
 
 /**
+ * The mark still finding its place after the placement has been resized.
+ *
+ * The bug this exists for, and it was the loud one: re-parse a PSD that had
+ * been made bigger or smaller on the canvas and the artwork jumped, often by
+ * more than a grid space, with nothing in the file having moved.
+ *
+ * Reconciliation put each placement's anchor mark on `cellToWorld(anchor)` —
+ * the grid space the PSD was dropped on. A drag keeps that cell and the
+ * placement in step, but a resize cannot: every offset inside a placement
+ * scales with it, so the distance from the space to the artwork's corner is
+ * no longer the distance it was, and the cell stops saying where the mark is.
+ * The position was then recomputed at the new scale from the old space, which
+ * moves the artwork by the mark's own offset times the change in scale. An
+ * image import is anchored on its middle, so doubling one moved it half its
+ * own width.
+ *
+ * The numbers are the extrusion above: a 512 x 480 canvas with the artwork at
+ * (128, 64) and the dot at (256, 288), placed on the space at (0, 0) at a
+ * half — so the mark stands at the world origin and the artwork at
+ * (-64, -112).
+ */
+describe("a placement that has been resized since it was placed", () => {
+  const APPLIED = JSON.stringify({
+    name: "extrude-abc",
+    width: 512,
+    height: 480,
+    layers: [
+      { name: "anchor", category: "point", x: 256, y: 288, width: 12, height: 12 },
+      { name: "grid-2x2", category: "zone", x: 128, y: 224, width: 256, height: 192 },
+      {
+        name: "extrude-abc",
+        category: "sprite",
+        x: 128,
+        y: 64,
+        width: 256,
+        height: 320,
+      },
+    ],
+  });
+
+  /** As `place` writes it: the offset from the mark, in the file's pixels. */
+  function placed(): Placement {
+    return {
+      ...placement("extrude-abc", "extrude-abc"),
+      x: -64,
+      y: -112,
+      width: 128,
+      height: 160,
+      naturalWidth: 256,
+      naturalHeight: 320,
+      fromAnchor: { x: -128, y: -224 },
+    };
+  }
+
+  /** Dragged out to twice the size by its bottom-right handle. */
+  function doubled(): Placement {
+    return { ...placed(), width: 256, height: 320 };
+  }
+
+  it("leaves it where it is", () => {
+    const s = store(doubled());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(APPLIED));
+    const after = s.layers[0].placements[0];
+    // Positioning from the anchor *cell* put it at (-128, -224): a tile
+    // across and most of two down, for a file nothing had moved.
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  it("leaves one that has not been resized where it is too", () => {
+    const s = store(placed());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(APPLIED));
+    const after = s.layers[0].placements[0];
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  /**
+   * The inspector's Width box is the other way to change the scale, and it
+   * writes the width on its own — no anchor, no position.
+   */
+  it("leaves one resized through the inspector where it is", () => {
+    const s = store({ ...placed(), width: 256 });
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(APPLIED));
+    const after = s.layers[0].placements[0];
+    // The old reading moved it in x alone, to -128, and left y as it was.
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  /** And a second re-parse is the same, because the offset is re-recorded. */
+  it("records the offset it found the mark by", () => {
+    const s = store(doubled());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(APPLIED));
+    expect(s.layers[0].placements[0].fromAnchor).toEqual({ x: -128, y: -224 });
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(APPLIED));
+    const after = s.layers[0].placements[0];
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  /**
+   * The feature itself, on a resized placement: the artist slides the artwork
+   * 64 px right inside the canvas and leaves the dot alone, so the picture
+   * moves on the grid by 64 at the scale it is shown at.
+   */
+  it("still follows artwork moved inside the canvas", () => {
+    const MOVED = JSON.stringify({
+      name: "extrude-abc",
+      width: 512,
+      height: 480,
+      layers: [
+        { name: "anchor", category: "point", x: 256, y: 288, width: 12, height: 12 },
+        {
+          name: "extrude-abc",
+          category: "sprite",
+          x: 192,
+          y: 64,
+          width: 256,
+          height: 320,
+        },
+      ],
+    });
+    const s = store(doubled());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(MOVED));
+    const after = s.layers[0].placements[0];
+    expect([after.x, after.y]).toEqual([0, -112]);
+  });
+
+  /**
+   * A document written before the offset was recorded has none, and falls
+   * back to the anchor cell — which is what every placement did before, and
+   * is exact for one nobody has resized.
+   */
+  it("falls back to the anchor cell for a document that has no offset", () => {
+    const { fromAnchor: _unused, ...legacy } = placed();
+    const s = store(legacy);
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(APPLIED));
+    const after = s.layers[0].placements[0];
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  /**
+   * A crop that took the dot off the canvas.
+   *
+   * Photoshop deletes what falls outside a crop, and the row stays in the
+   * layer list with nothing in it — so the file still *looks* anchored and
+   * psd-to-json reports the point at 0 × 0 on the origin. Read as a position
+   * that is an anchor on the canvas's top-left corner, and the artwork lands
+   * most of a canvas away from where it was.
+   */
+  it("holds a placement whose mark was cropped away", () => {
+    const EMPTIED = JSON.stringify({
+      name: "extrude-abc",
+      width: 256,
+      height: 320,
+      layers: [
+        { name: "anchor", category: "point", x: 0, y: 0, width: 0, height: 0 },
+        {
+          name: "extrude-abc",
+          category: "sprite",
+          x: 0,
+          y: 0,
+          width: 256,
+          height: 320,
+        },
+      ],
+    });
+    const s = store(placed());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(EMPTIED));
+    const after = s.layers[0].placements[0];
+    // Reading the empty row as an anchor on (0, 0) put it at (0, 0).
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+
+  /** And a resized one whose file came home flattened is still held. */
+  it("holds a resized placement whose mark has gone", () => {
+    const FLATTENED = JSON.stringify({
+      name: "extrude-abc",
+      width: 512,
+      height: 480,
+      layers: [
+        { name: "extrude-abc", category: "sprite", x: 0, y: 0, width: 512, height: 480 },
+      ],
+    });
+    const s = store(doubled());
+    reconcilePlacements(s, grid, "extrude-abc", parseManifest(FLATTENED));
+    const after = s.layers[0].placements[0];
+    expect([after.x, after.y]).toEqual([-64, -112]);
+  });
+});
+
+/**
  * Grouping loose sprites into an atlas.
  *
  * The edit that took a document off the canvas. `S | confetti | atlas |` eats

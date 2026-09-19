@@ -69,6 +69,10 @@ running it on a device.
 picking (a point's and both marquees'), what is drawn over what, resize
 geometry, what the minimap frames and that the camera is always inside it,
 what a manifest says is hidden and what a placement records about it,
+where a re-parse puts the artwork — that the anchor mark survives the canvas
+being grown, the artwork moved inside it, the mark being cropped away and,
+the one that used to move it by more than a grid space, the placement having
+been resized since —
 undo's three answers about a write and what a restored document is,
 what each canvas mode counts as one step of its own, whether a selection still
 names something, the unit arithmetic

@@ -11,16 +11,19 @@
 
 import type { DocStore } from "../lib/doc-store";
 import {
-  anchorImpliedBy,
-  anchorOffset,
   frameOwners,
   layerName,
   placeableLayers,
   placedVisibility,
-  positionFrom,
   stackOrder,
   type Manifest,
 } from "../lib/manifest";
+import {
+  anchorImpliedBy,
+  anchorOffset,
+  offsetFromAnchor,
+  positionFrom,
+} from "../lib/placing";
 import type { Grid } from "../lib/grid";
 import type { Placement, Point } from "../lib/types";
 import * as log from "../lib/log";
@@ -40,11 +43,13 @@ import * as log from "../lib/log";
  *
  * Everything else keeps two things. Its size *relative to* what the manifest
  * exported, so a deliberately shrunk image stays shrunk against new artwork.
- * And its grid space — the position is recomputed from the anchor cell it
- * was placed on and the PSD's own anchor mark, rather than being left where
- * it was. That is what lets an artist resize the canvas, move the artwork
- * inside it, or redraw the whole thing: as long as the mark stays on the
- * spot that should sit on that grid space, the artwork comes back lined up.
+ * And the spot the anchor mark is standing on — the position is recomputed
+ * from there and from where the mark sits in the new file, rather than being
+ * left where it was. That is what lets an artist resize the canvas, move the
+ * artwork inside it, or redraw the whole thing: as long as the mark stays on
+ * the spot that should sit on that grid space, the artwork comes back lined
+ * up. Where that spot *is* comes from the placement itself — see
+ * `anchorWorldOf`.
  *
  * And when the mark is *gone* — a file flattened on save, an edit that came
  * home as a picture — nothing moves at all. See `anchorFor`.
@@ -73,7 +78,9 @@ export function reconcilePlacements(
  * its keep. Flatten a PSD on save and the mark goes with every other layer;
  * bring the edit home through the photo library, or as a PNG, and what lands
  * is a picture with no marks in it at all — `reimport` writes none, because
- * the file coming back is supposed to be carrying its own.
+ * the file coming back is supposed to be carrying its own. And a crop that
+ * takes the dot off the canvas leaves the row behind with nothing in it,
+ * which `findAnchor` reads as no mark rather than as one on the corner.
  *
  * `anchorOffset` answers that with the canvas centre, which is the only
  * defensible guess about a file nobody has placed and a bad one about a file
@@ -107,11 +114,12 @@ function anchorFor(
       );
       if (!entry) continue;
       log.warn(
-        `${key}.psd came back with no "P | anchor" — holding it where it is. ` +
-          "Bring a PSD home rather than a flattened copy to keep the mark.",
+        `${key}.psd came back with no readable "P | anchor" — holding it ` +
+          "where it is. Bring a PSD home rather than a flattened copy, and " +
+          "keep the dot inside the canvas when you crop.",
       );
       return anchorImpliedBy(
-        grid.cellToWorld(placement.anchor),
+        anchorWorldOf(grid, placement),
         placement,
         entry,
         scaleXOf(placement),
@@ -120,6 +128,38 @@ function anchorFor(
     }
   }
   return anchorOffset(manifest);
+}
+
+/**
+ * The world point this placement's anchor mark is standing on.
+ *
+ * Not `cellToWorld(placement.anchor)`, and that difference is the whole of
+ * what makes a mark survive an edit. The cell says which grid space the PSD
+ * was pinned to when it landed, and a drag keeps the two in step — but a
+ * **resize** cannot: every offset inside the placement scales with it, so the
+ * distance from the space to the artwork's corner is not the distance it was,
+ * and the cell stops describing where the mark is. Positioning from the cell
+ * then moved the artwork by the mark's own offset times the change in scale.
+ * An image import is anchored on its middle, so doubling one and re-parsing
+ * it moved it half its own width — which is what "the PSD jumps when I
+ * re-import it" was.
+ *
+ * So the offset the file dictated is kept on the placement, in the PSD's own
+ * pixels, and the mark is found by walking back along it at the scale the
+ * placement is displayed at now. That follows a drag and scales with a resize
+ * without anything having to maintain it — see `Placement.fromAnchor`.
+ *
+ * A placement from a document written before that was recorded has none, and
+ * falls back to the cell: right for everything that has not been resized
+ * since, and what every placement did before this.
+ */
+function anchorWorldOf(grid: Grid, placement: Placement): Point {
+  const from = placement.fromAnchor;
+  if (!from) return grid.cellToWorld(placement.anchor);
+  return {
+    x: placement.x - from.x * scaleXOf(placement),
+    y: placement.y - from.y * scaleYOf(placement),
+  };
 }
 
 /** Where a placement's layer has got to in the new file, if it is still there. */
@@ -219,7 +259,7 @@ function adoptNewLayers(
 
   const scale = scaleXOf(sibling.placement);
   const cell = sibling.placement.anchor;
-  const world = grid.cellToWorld(cell);
+  const world = anchorWorldOf(grid, sibling.placement);
 
   const stack = stackOrder(manifest);
   for (const entry of placeableLayers(manifest)) {
@@ -246,6 +286,7 @@ function adoptNewLayers(
       naturalWidth: width,
       naturalHeight: height,
       anchor: cell,
+      fromAnchor: offsetFromAnchor(anchor, entry),
       // Part of the same placed thing as the layers it arrived beside, so
       // the PSD still moves as one.
       instance: sibling.placement.instance,
@@ -332,7 +373,7 @@ function reviseExisting(
       const width = entry.width || manifest.width;
       const height = entry.height || manifest.height;
 
-      const world = grid.cellToWorld(placement.anchor);
+      const world = anchorWorldOf(grid, placement);
       const at = positionFrom(world, anchor, entry, scaleX, scaleY);
       store.updatePlacement(layer.id, placement.id, {
         layerPath: path,
@@ -342,6 +383,10 @@ function reviseExisting(
         height: height * scaleY,
         naturalWidth: width,
         naturalHeight: height,
+        // Re-read from the file, like the size beside it: the artwork may
+        // have moved inside the canvas since, and this is what the *next*
+        // re-parse will find the mark by.
+        fromAnchor: offsetFromAnchor(anchor, entry),
         order: stack.get(path) ?? placement.order ?? 0,
         // Re-read from the file every time, and cleared when it says so:
         // turning an eye back on in the inspector is a rewrite and a

@@ -12,9 +12,11 @@
  * anchor point is what tells this editor where on the grid the artwork
  * belongs, which is why it survives the artist moving or resizing everything
  * else in the file.
+ *
+ * Reading only. Turning what is read into a position on the canvas — the
+ * anchor, the offsets measured from it, and the arithmetic both placing and
+ * re-parsing run — is `lib/placing.ts`.
  */
-
-import type { Point } from "./types";
 
 export type LayerCategory = "sprite" | "tileset" | "zone" | "point" | "group";
 
@@ -305,24 +307,32 @@ export function hasRootAnchor(layers: unknown): boolean {
   });
 }
 
+/**
+ * The mark's position, or null when the file has none this can be read from.
+ *
+ * **A point with no area is not a position.** psd-to-json reports a point as
+ * the centre of its layer's rectangle, and a layer whose pixels have gone has
+ * no rectangle: it comes back as 0 × 0 at the origin, which reads as an anchor
+ * on the canvas's top-left corner rather than as the absence of one. That is
+ * not hypothetical — cropping a PSD in Photoshop deletes what falls outside
+ * the new canvas, and `psd_marks::layout` can leave the dot on the very edge
+ * or, when the anchor space is not one the artwork covers, past it. The row is
+ * still in the layer list afterwards, so it looks to everybody like the mark
+ * is right where they left it, and the artwork lands a canvas away.
+ *
+ * Null is the honest answer, and it is also the useful one: `reconcile.ts`
+ * reads it as "hold this where it is" and says so in the console, rather than
+ * moving artwork to a corner on the strength of an empty layer.
+ */
 function findAnchor(all: readonly ManifestLayer[]): { x: number; y: number } | null {
   const point = all.find(
-    (l) => l.category === "point" && l.name.toLowerCase() === ANCHOR_LAYER,
+    (l) =>
+      l.category === "point" &&
+      l.name.toLowerCase() === ANCHOR_LAYER &&
+      l.width > 0 &&
+      l.height > 0,
   );
   return point ? { x: point.x, y: point.y } : null;
-}
-
-/**
- * Where a PSD's anchor sits in its canvas, falling back to the middle.
- *
- * The centre is what the editor used before the mark existed and what any
- * PSD from elsewhere still gets — it is the only defensible guess when
- * nothing in the file says otherwise.
- */
-export function anchorOffset(manifest: Manifest): { x: number; y: number } {
-  return (
-    manifest.anchor ?? { x: manifest.width / 2, y: manifest.height / 2 }
-  );
 }
 
 function walk(
@@ -379,95 +389,6 @@ function walk(
   }
 
   return layer;
-}
-
-/**
- * Where a manifest layer belongs in the world.
- *
- * The one formula both placing and re-importing use: put the PSD's anchor
- * mark on the grid space's world point, then step out to where this layer
- * sits relative to that mark inside the canvas — scaled, because the
- * displayed size is measured against the size the manifest exported.
- */
-/**
- * Where the PSD's whole canvas sits in the world, given one placement of it.
- *
- * The frame PSD Edit mode draws, and the thing a placement's own outline is *not*:
- * that box is one layer's artwork, cropped to its pixels, which on a file
- * with a margin or several layers is a good deal smaller than the document
- * somebody opens in Photoshop. Drawing inside the artwork's box and calling
- * it "inside the PSD" is the mismatch this exists to close.
- *
- * The arithmetic is `placedPosition` run over the canvas corner: the anchor
- * mark lands on the placement's grid space, and the top-left of the canvas is
- * however far the mark sits from it, scaled by how big the artwork is being
- * shown against its own pixels.
- */
-export function canvasBox(
-  anchorWorld: Point,
-  manifest: Manifest,
-  scale: number,
-): { x: number; y: number; width: number; height: number } {
-  const anchor = anchorOffset(manifest);
-  return {
-    x: anchorWorld.x - anchor.x * scale,
-    y: anchorWorld.y - anchor.y * scale,
-    width: manifest.width * scale,
-    height: manifest.height * scale,
-  };
-}
-
-export function placedPosition(
-  world: Point,
-  manifest: Manifest,
-  entry: Point,
-  scaleX: number,
-  scaleY: number,
-): Point {
-  return positionFrom(world, anchorOffset(manifest), entry, scaleX, scaleY);
-}
-
-/**
- * The same, against an anchor named outright rather than read from the file.
- *
- * A re-import is the one caller that has a better answer than the manifest
- * does. `anchorOffset` falls back to the canvas centre for a file with no
- * mark, which is the only defensible guess about a file nobody has placed —
- * and quite wrong about one that is already standing on the grid. See
- * `game/reconcile.ts`.
- */
-export function positionFrom(
-  world: Point,
-  anchor: Point,
-  entry: Point,
-  scaleX: number,
-  scaleY: number,
-): Point {
-  return {
-    x: world.x + (entry.x - anchor.x) * scaleX,
-    y: world.y + (entry.y - anchor.y) * scaleY,
-  };
-}
-
-/**
- * The anchor a file *would* need for a layer to land on a given spot.
- *
- * The placement formula run backwards. What it is for: a file that has come
- * back from another program without its `P | anchor` — flattened, or saved
- * as a PNG — still has to go back where it was, and where it was is a fact
- * the document holds even though the file has stopped saying it.
- */
-export function anchorImpliedBy(
-  world: Point,
-  at: Point,
-  entry: Point,
-  scaleX: number,
-  scaleY: number,
-): Point {
-  return {
-    x: entry.x - (at.x - world.x) / (scaleX || 1),
-    y: entry.y - (at.y - world.y) / (scaleY || 1),
-  };
 }
 
 /**
