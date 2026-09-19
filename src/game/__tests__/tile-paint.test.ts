@@ -13,7 +13,7 @@
  * exists for: nothing here needs Phaser, a camera or a texture.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DocStore } from "../../lib/doc-store";
 import { Grid } from "../../lib/grid";
 import { addTileset, tileLayer } from "../../lib/tile-layers";
@@ -30,6 +30,8 @@ vi.mock("../../lib/ipc", () => ({
   setTimeout: () => 0,
   clearTimeout: () => undefined,
 };
+
+afterEach(() => vi.restoreAllMocks());
 
 const GRID = new Grid("orthogonal", 32);
 
@@ -310,6 +312,40 @@ describe("the ghost under the pointer", () => {
     expect(state.preview).toHaveLength(1);
     paint.clearHover();
     expect(state.preview).toHaveLength(0);
+  });
+
+  it("moves the sequence on for every space a drag crosses", () => {
+    // The bug this exists for: `consume` and `announce` were one flag, so a
+    // drag's moves said "do not announce" and were heard as "do not take
+    // from the sequence" — and a dragged random stamp laid the same tile on
+    // every space it crossed.
+    const { paint, store, state, set } = fixture();
+    state.random = true;
+    state.stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 3, rows: 2 };
+    // A sequence that *walks* the run rather than a random one, so a space
+    // that reused the previous pick is visible as a repeat rather than as
+    // bad luck. The six-tile run gives four distinct tiles over four spaces.
+    let roll = 0;
+    vi.spyOn(Math, "random").mockImplementation(() => {
+      roll += 1;
+      return (roll % 6) / 6;
+    });
+
+    const start = at(0, 0);
+    paint.begin(start.x, start.y);
+    for (const cx of [1, 2, 3]) {
+      const step = at(cx, 0);
+      paint.move(step.x, step.y);
+    }
+    paint.end();
+
+    const tiles = tileLayer(store.layer("layer-1"));
+    const laid = [0, 1, 2, 3].map((cx) => tileAt(tiles, cx, 0));
+    expect(laid.every((gid) => gid > 0)).toBe(true);
+    // Every space its own tile. With the two flags conflated the drag's
+    // three moves all peeked at the same pick, and this came back as
+    // [2, 3, 3, 3] — which "more than one distinct tile" would have passed.
+    expect(new Set(laid).size).toBe(laid.length);
   });
 
   it("shows nothing for a tool that is not a tile tool", () => {

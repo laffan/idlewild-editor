@@ -22,7 +22,7 @@
  */
 
 import type { DocStore } from "../lib/doc-store";
-import { cellsInPolygon, type Grid } from "../lib/grid";
+import { cellsBounds, cellsInPolygon, type Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
 import {
   paintTiles,
@@ -46,6 +46,9 @@ export type { TileVerb } from "../lib/tile-tools";
 
 /** The most points a sweep keeps. See `trace`. */
 const MAX_TRACE = 2000;
+
+/** What the ghost asks for: look, do not take, and say nothing. */
+const SHOWING = { consume: false, announce: false };
 
 export interface TilePaintHost {
   store: DocStore;
@@ -121,7 +124,7 @@ export class TilePaint {
     }
     this.aim(hand);
     const at = this.host.grid.worldToCell(this.host.worldAt(screenX, screenY));
-    this.host.onPreview(this.stampAt(hand, this.origin ?? at, at, false), []);
+    this.host.onPreview(this.stampAt(hand, this.origin ?? at, at, SHOWING), []);
   }
 
   /** The pointer has left the canvas: nothing is about to land. */
@@ -204,7 +207,10 @@ export class TilePaint {
       log.warn("That sweep did not enclose a whole space.");
       return;
     }
-    this.lay(cells, cells[0], true);
+    // From the **corner of what was swept**, not from the first space the
+    // scan happened to find: a run tiled from a moving origin would come out
+    // offset differently for two sweeps over the same ground.
+    this.lay(cells, cellsBounds(cells).from, true);
   }
 
   /**
@@ -224,10 +230,11 @@ export class TilePaint {
     this.last = cells[cells.length - 1];
     const hand = this.host.hand();
 
-    const writes = hand.erasing
-      ? cells.map((cell) => ({ x: cell.cx, y: cell.cy, gid: 0 }) as TileWrite)
-      : this.stampAt(hand, origin, cells, announce);
-    paintTiles(this.host.store, layerId, writes);
+    paintTiles(
+      this.host.store,
+      layerId,
+      this.stampAt(hand, origin, cells, { consume: true, announce }),
+    );
   }
 
   /**
@@ -235,20 +242,25 @@ export class TilePaint {
    * under the cursor draws.
    *
    * One function for both, which is what stops the preview drifting from the
-   * mark. `consume` is the only difference: the ghost *peeks* at the random
-   * sequence and the placement *takes* from it, so the tile you were shown is
-   * the tile you get.
+   * mark. `how` is the only difference, and it is two flags rather than one
+   * because they part company: **consume** says whether the random sequence
+   * moves on, which every placement does and the ghost never does, and
+   * **announce** says whether an empty palette is worth a line in the
+   * console, which is the start of a gesture only. They were one flag once,
+   * and a dragged random stamp laid the same tile on every space it crossed
+   * — the drag's moves said "do not announce" and were heard as "do not take
+   * from the sequence".
    */
   private stampAt(
     hand: TileHand,
     origin: Cell,
     where: Cell | readonly Cell[],
-    consume: boolean,
+    how: { consume: boolean; announce: boolean },
   ): TileWrite[] {
     const cells = Array.isArray(where) ? where : [where as Cell];
     if (hand.erasing) return cells.map((c) => ({ x: c.cx, y: c.cy, gid: 0 }));
     if (stampIsEmpty(hand.stamp)) {
-      if (consume) {
+      if (how.announce) {
         log.warn("Nothing picked — drag across a palette in the sidebar first.");
       }
       return [];
@@ -267,7 +279,7 @@ export class TilePaint {
     return landing.map((cell) => ({
       x: cell.cx,
       y: cell.cy,
-      gid: consume ? this.picks.take() : this.picks.peek(),
+      gid: how.consume ? this.picks.take() : this.picks.peek(),
     }));
   }
 
