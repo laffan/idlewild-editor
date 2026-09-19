@@ -19,7 +19,6 @@ import * as log from "./log";
 import {
   chunksOf,
   emptyTileLayer,
-  tileAt,
   tileCount,
   writeTiles,
   type TileWrite,
@@ -450,67 +449,6 @@ export function stampRange(
   for (let cy = top; cy <= bottom; cy++) {
     for (let cx = left; cx <= right; cx++) {
       out.push(...stampWrites(tilesets, stamp, origin, { cx, cy }));
-    }
-  }
-  return out;
-}
-
-/**
- * The most spaces one bucket fill will ever touch.
- *
- * A flood fill wants an edge to stop at and this canvas has none, so the
- * ceiling is the edge. It is a ceiling rather than a budget: filling an
- * unenclosed patch of empty ground is a gesture that cannot mean what it
- * looks like it means, and the difference between a slow fill and an editor
- * that has stopped answering is whether anything said no.
- */
-export const MAX_FILL_SPACES = 4096;
-
-/**
- * A bucket fill from one space, bounded by the ground in view.
- *
- * Two bounds, because one is not enough. The **like-for-like** rule is the
- * usual one: the fill spreads over spaces holding what the space it started
- * on holds, which on empty ground means every empty space. The **window** is
- * what stops that being the whole plane — it is the range the camera can see,
- * handed in by the caller, so a fill of open ground fills what you are
- * looking at and says so. `MAX_FILL_SPACES` is behind both in case a window
- * is handed in that is larger than anybody meant.
- */
-export function bucketFill(
-  layer: TiledTileLayer,
-  start: Cell,
-  window: { from: Cell; to: Cell },
-): Cell[] {
-  const left = Math.min(window.from.cx, window.to.cx);
-  const right = Math.max(window.from.cx, window.to.cx);
-  const top = Math.min(window.from.cy, window.to.cy);
-  const bottom = Math.max(window.from.cy, window.to.cy);
-  if (start.cx < left || start.cx > right) return [];
-  if (start.cy < top || start.cy > bottom) return [];
-
-  const target = tileAt(layer, start.cx, start.cy);
-  const seen = new Set<string>([`${start.cx},${start.cy}`]);
-  const out: Cell[] = [];
-  const queue: Cell[] = [start];
-
-  while (queue.length > 0 && out.length < MAX_FILL_SPACES) {
-    const cell = queue.shift() as Cell;
-    out.push(cell);
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]) {
-      const cx = cell.cx + dx;
-      const cy = cell.cy + dy;
-      if (cx < left || cx > right || cy < top || cy > bottom) continue;
-      const key = `${cx},${cy}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (tileAt(layer, cx, cy) !== target) continue;
-      queue.push({ cx, cy });
     }
   }
   return out;

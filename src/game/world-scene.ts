@@ -142,7 +142,7 @@ export class WorldScene extends Phaser.Scene {
       config: this.config,
       activeLayerId: () => this.activeLayerId,
       worldAt: (x, y) => this.worldAt(x, y),
-      visible: () => this.gridRenderer.visibleRange(this.cameras.main),
+      canvas: this.game.canvas,
       psdLayers: (key) => this.psds.layersOf(key),
     });
     this.docRenderer = new DocRenderer(this, this.store, this.grid);
@@ -680,6 +680,7 @@ export class WorldScene extends Phaser.Scene {
     this.drops.destroy();
     this.marquee.destroy();
     this.modes.destroy();
+    this.tiling.destroy();
     this.docRenderer.destroy();
   }
 }

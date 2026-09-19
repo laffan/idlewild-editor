@@ -30,7 +30,7 @@ import {
 import { chunksOf, tileCount } from "../lib/tiled/chunks";
 import { tileId } from "../lib/tiled/gid";
 import { PSD_PROPERTY, type TiledTileset } from "../lib/tiled/types";
-import type { Layer } from "../lib/types";
+import type { Layer, ToolId } from "../lib/types";
 import type { PanelSurface } from "./inspect-panels";
 import { describeStamp, tilePalette, type TileSelection } from "./tile-palette";
 
@@ -44,6 +44,16 @@ export interface TileActions {
   onImportTiled: (layerId: string) => void;
   /** Take every tile off the layer, leaving its palettes where they are. */
   onClearTiles: (layerId: string) => void;
+  /**
+   * The two tile tools' own options, which are the rail's rather than the
+   * document's — see `tool-routing.ts`. Here because this interface is what
+   * the inspector is handed for everything about tiles, and splitting it
+   * would be two objects arriving at the same panel.
+   */
+  tileRandom: (tool: ToolId) => boolean;
+  onTileRandom: (tool: ToolId, on: boolean) => void;
+  tileDensity: () => number;
+  onTileDensity: (density: number) => void;
 }
 
 /**

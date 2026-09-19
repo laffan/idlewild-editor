@@ -53,6 +53,7 @@ import {
 } from "../lib/tiled/types";
 import type { Layer } from "../lib/types";
 import type { TileActions } from "./inspect-tiles";
+import type { ToolRouting } from "./tool-routing";
 import { TileSelection } from "./tile-palette";
 import { openPsdProgress } from "./psd-progress";
 import type { WorldScene } from "../game/world-scene";
@@ -97,6 +98,11 @@ export function tileDeps(
   },
   onChanged: () => void,
   assetBase: () => string,
+  /**
+   * The rail, read through: it is built after this and it is where a tool's
+   * own settings live, beside the erase flag they sit next to in the panel.
+   */
+  tools: () => ToolRouting,
 ): TileDeps {
   const selection = new TileSelection();
   const deps: TileDeps = {
@@ -110,6 +116,10 @@ export function tileDeps(
     tileSelection: () => selection,
     onImportTiled: (layerId) => void importTiledMap(deps, layerId),
     onClearTiles: (layerId) => clearTiles(deps, layerId),
+    tileRandom: (tool) => tools().tileRandom(tool),
+    onTileRandom: (tool, on) => tools().onTileRandom(tool, on),
+    tileDensity: () => tools().tileDensity(),
+    onTileDensity: (density) => tools().onTileDensity(density),
   };
   return deps;
 }

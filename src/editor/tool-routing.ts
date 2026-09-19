@@ -27,7 +27,12 @@ import type { DrawingLayer, DrawingTool, StrokeStyle } from "../drawing";
 import { patternLibrary, shapeLibrary } from "../lib/library";
 import * as log from "../lib/log";
 import type { LayerKind, ToolId } from "../lib/types";
-import type { TileVerb } from "../game/tile-paint";
+import type { TileStamp } from "../lib/tile-layers";
+import {
+  DENSITY_DEFAULT,
+  DENSITY_RANGE,
+  type TileHand,
+} from "../lib/tile-tools";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
 import {
@@ -49,12 +54,25 @@ export interface ToolRoutingHost {
    * moves; see `editor.ts`.
    */
   layerKind: () => LayerKind;
+  /**
+   * Whether a PSD is open in PSD Edit mode.
+   *
+   * The one thing that makes a tile layer offer the ink again: a file open
+   * for drawing is ordinary artwork, and the layer underneath it happening to
+   * hold tiles has nothing to do with what the pointer is for. Read through
+   * like everything else here, because a session opens and closes without
+   * this file hearing about it — `editor/psd-edit.ts` re-applies the tool at
+   * both ends.
+   */
+  psdEditing: () => boolean;
   /** The canvas wrapper, which carries the cursor for whatever is in hand. */
   canvas: HTMLElement;
   /** Read through, not captured: neither is up when this is built. */
   scene: () => WorldScene | null;
   drawing: () => DrawingLayer | null;
   inspector: Inspector;
+  /** The run picked in the palette — the sidebar's, so it is asked for. */
+  tileStamp: () => TileStamp | null;
 }
 
 export interface ToolRouting {
@@ -81,13 +99,28 @@ export interface ToolRouting {
   /** Whether a tool is currently turned round. */
   isErasing: (tool: ToolId) => boolean;
   /**
-   * What the tool in hand means for tiles, and which way round it is.
+   * Everything the canvas needs to know about the tile tool in hand.
    *
-   * What the canvas reads to decide whether a sweep puts tiles down — see
-   * `game/tile-paint.ts`. `null` whenever the work is not landing on a tile
-   * layer, which is what keeps every other layer's gestures untouched.
+   * Assembled here because this is where the answers already are: which tool
+   * is held, which way round it is, and what its own option is set to. The
+   * run picked in the palette comes in through the host, since that is the
+   * sidebar's. A `verb` of null is every moment the work is not landing on a
+   * tile layer, which is what keeps every other layer's gestures untouched.
    */
-  tileVerb: () => TileVerb;
+  tileHand: () => TileHand;
+  /**
+   * Whether a tile tool is set to its **random** half, and the way to set it.
+   *
+   * Per tool and remembered, for the reason erasing is: a Sweep left
+   * scattering is still scattering when you come back to it, exactly as a
+   * Pattern brush left turned round is still an eraser. One flag for both
+   * would make picking up the Stamp find it doing whatever the Sweep was.
+   */
+  tileRandom: (tool: ToolId) => boolean;
+  onTileRandom: (tool: ToolId, on: boolean) => void;
+  /** How much of a swept area a scatter covers — Sweep's second option. */
+  tileDensity: () => number;
+  onTileDensity: (density: number) => void;
   /**
    * A tool held down rather than tapped: pick it up, and turn it round.
    *
@@ -143,6 +176,9 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
   const sizes: Partial<Record<ToolId, number>> = { pattern: 28 };
   /** Which tools are turned round. See `ToolRouting.setErasing`. */
   const erasing = new Set<ToolId>();
+  /** Which tile tools are on their random half, and how thick a scatter is. */
+  const random = new Set<ToolId>();
+  let density = DENSITY_DEFAULT;
 
   /**
    * The stroke mode and the paint a tool draws with.
@@ -192,7 +228,8 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     // and two of the three a tile layer withholds would go on handing the
     // drawing layer strokes onto a layer whose subject is a grid of tiles.
     // Select is what the canvas does when nothing else is chosen.
-    const offered = toolsFor(host.layerKind());
+    const editing = host.psdEditing();
+    const offered = toolsFor(host.layerKind(), editing);
     const tool = offered.includes(wanted) ? wanted : "select";
     const drawing = host.drawing();
     // Read before the rail is told, because it is what the rail is showing
@@ -225,7 +262,7 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     // nothing. Every other tool is what it always was: Select still selects,
     // Pan still pans, and Slice and the Lasso still reach the ink that is
     // there, because a tile layer can carry strokes like any other.
-    const tiling = host.layerKind() === "tile" && tileVerbOf(tool) !== null;
+    const tiling = !editing && tileVerbOf(tool) !== null;
     const drawingTool = tiling ? null : DRAWN[tool] ?? null;
     const scene = host.scene();
     scene?.suspendGestures(drawingTool !== null);
@@ -279,12 +316,44 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     );
   }
 
+  /** What the canvas reads. See `ToolRouting.tileHand`. */
+  function tileHand(): TileHand {
+    const tool = host.rail.tool;
+    const verb =
+      host.layerKind() === "tile" && !host.psdEditing()
+        ? tileVerbOf(tool)
+        : null;
+    return {
+      verb,
+      stamp: host.tileStamp(),
+      random: random.has(tool),
+      density,
+      erasing: erasing.has(tool),
+    };
+  }
+
   return {
     apply,
     setErasing,
     isErasing: (tool) => erasing.has(tool),
-    tileVerb: () =>
-      host.layerKind() === "tile" ? tileVerbOf(host.rail.tool) : null,
+    tileHand,
+    tileRandom: (tool) => random.has(tool),
+    onTileRandom: (tool, on) => {
+      if (on) random.add(tool);
+      else random.delete(tool);
+      host.inspector.setTool(tool, host.drawing()?.style ?? null);
+      log.info(
+        on
+          ? `${toolName(tool)} draws from the run at random`
+          : `${toolName(tool)} lays the run out as it was picked`,
+      );
+    },
+    tileDensity: () => density,
+    onTileDensity: (next) => {
+      density = Math.round(
+        Math.max(DENSITY_RANGE.min, Math.min(DENSITY_RANGE.max, next)),
+      );
+    },
     hold: (tool) => {
       apply(tool, false);
       setErasing(tool, !erasing.has(tool));

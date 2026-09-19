@@ -161,7 +161,12 @@ export async function mountEditor(
   // Import Tiled and the tile palette want the same answers New Background
   // does — all of them are ways onto a layer with no canvas gesture of its
   // own — so they borrow them rather than keeping a second copy.
-  const tiles: TileDeps = tileDeps(backgrounds, refreshPanels, () => base);
+  const tiles: TileDeps = tileDeps(
+    backgrounds,
+    refreshPanels,
+    () => base,
+    () => tools,
+  );
 
   // Every control in the properties sidebar, wired in `inspect-wiring.ts`.
   // Almost everything it reaches is built after it — the scene, the drawing
@@ -298,6 +303,8 @@ export async function mountEditor(
     drawing: () => drawing,
     inspector,
     layerKind: () => layerKind(store.layer(activeLayerId)),
+    tileStamp: () => tiles.tileSelection().stamp,
+    psdEditing: () => handle?.scene.modes.psdEdit.active ?? false,
   });
 
   // Undo, the three sections, and the six things behind the menu — wired in
@@ -474,12 +481,9 @@ export async function mountEditor(
       // document moves when it does, so without this every row would keep
       // showing what was true before anything had been read.
       onPsdsLoaded: refreshPanels,
-      // What a tile tool means, and what it puts down. Read through, because
-      // both are the shell's: which tool is in hand is the rail's, and the run
-      // picked in the palette is the sidebar's — see `game/tile-paint.ts`.
-      tileVerb: () => tools.tileVerb(),
-      tileErasing: () => tools.isErasing(rail.tool),
-      tileStamp: () => tiles.tileSelection().stamp,
+      // What the tile tool in hand is, what it is set to and what it would
+      // put down — assembled by the rail, which is where the answers are.
+      tileHand: () => tools.tileHand(),
       onExtrudeChange: () => extrude.sync(),
       onColliderChange: () => collider.sync(),
       onPsdEditChange: () => psdEdit.sync(),

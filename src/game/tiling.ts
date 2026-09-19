@@ -21,11 +21,23 @@ import type { ManifestLayer } from "../lib/manifest";
 import type { CellRange } from "../lib/pattern";
 import type { Point } from "../lib/types";
 import { TilePaint } from "./tile-paint";
+import { EMPTY_HAND } from "../lib/tile-tools";
 import { TileRender } from "./tile-render";
 import type { WorldSceneConfig } from "./world-scene-config";
 
 export interface TilingHost {
   scene: Phaser.Scene;
+  /**
+   * The element the pointer moves over, which is the one thing here that is
+   * not the scene's own business.
+   *
+   * Phaser reports a pointer that is *down*; a preview has to follow one that
+   * is merely over the canvas, and on a desktop that is most of the time. So
+   * the hover comes straight off the element, and it is unbound in `destroy`
+   * — a listener holding a scene that has gone is a listener drawing ghosts
+   * into a destroyed renderer.
+   */
+  canvas: HTMLElement;
   store: DocStore;
   grid: Grid;
   /** What the shell says is in hand — see `WorldSceneConfig.tileVerb`. */
@@ -33,8 +45,6 @@ export interface TilingHost {
   /** The layer new work lands on. Read through: it moves as the user works. */
   activeLayerId: () => string;
   worldAt: (screenX: number, screenY: number) => Point;
-  /** The ground the camera can see, which is what bounds a bucket fill. */
-  visible: () => CellRange;
   /** A loaded PSD's own layers — `PsdPlacements.layersOf`. */
   psdLayers: (psdKey: string) => ManifestLayer[];
 }
@@ -54,14 +64,38 @@ export class Tiling {
       grid: host.grid,
       activeLayerId: host.activeLayerId,
       worldAt: host.worldAt,
-      verb: () => host.config.tileVerb?.() ?? null,
-      erasing: () => host.config.tileErasing?.() ?? false,
-      stamp: () => host.config.tileStamp?.() ?? null,
-      visible: host.visible,
+      hand: () => host.config.tileHand?.() ?? EMPTY_HAND,
+      // What would land if the pointer went down, and the outline of a sweep
+      // in flight. Chrome about a gesture rather than anything in the
+      // document, which is why it goes to the renderer rather than the store.
+      onPreview: (tiles, trace) => this.render.preview(tiles, trace),
       // A tile put down moves no camera, so the renderer would not notice
       // until something else did.
       onChanged: () => this.render.invalidate(),
     });
+    host.canvas.addEventListener("pointermove", this.onHover);
+    host.canvas.addEventListener("pointerleave", this.onLeave);
+  }
+
+  /**
+   * What would land if the pointer went down where it is.
+   *
+   * Only for a pointer that is *not* pressed: while a gesture is running the
+   * preview is the gesture's, pushed from `TilePaint` as it goes, and a
+   * second opinion arriving from here would fight it every frame.
+   */
+  private readonly onHover = (event: PointerEvent): void => {
+    if (event.buttons !== 0) return;
+    this.paint.hover(event.clientX, event.clientY);
+  };
+
+  private readonly onLeave = (): void => this.paint.clearHover();
+
+  /** Leaving would otherwise strand two listeners holding a dead scene. */
+  destroy(): void {
+    this.host.canvas.removeEventListener("pointermove", this.onHover);
+    this.host.canvas.removeEventListener("pointerleave", this.onLeave);
+    this.render.clear();
   }
 
   /**

@@ -57,7 +57,8 @@ import {
   type TiledTileset,
 } from "../lib/tiled/types";
 import { textureKey } from "../lib/manifest";
-import type { Cell } from "../lib/types";
+import type { Cell, Point } from "../lib/types";
+import type { TileWrite } from "../lib/tiled/chunks";
 import type { CellRange } from "../lib/pattern";
 import * as log from "../lib/log";
 
@@ -73,6 +74,20 @@ const DEPTH_STRIDE = 1000;
  * than anybody can see anything on, and the console says when it bites.
  */
 const MAX_ON_SCREEN = 4000;
+
+/**
+ * How much of itself a ghost keeps, and where it sits.
+ *
+ * Enough to read the artwork against whatever is under it, little enough that
+ * it is never mistaken for a tile already down — the same bargain the drawing
+ * layer's own tool cursor makes, at the same value. Over every layer, because
+ * what is about to land is about to land in front of you.
+ */
+const GHOST_ALPHA = 0.45;
+const GHOST_DEPTH = 870_000;
+
+/** The accent, which is what every mark the editor makes is drawn in. */
+const TRACE_COLOR = 0xec3013;
 
 /** One live tile: the object, and what it is a copy of. */
 interface Live {
@@ -93,11 +108,73 @@ export class TileRender {
   private warned = false;
   /** Keys held off the canvas while their textures are being replaced. */
   private readonly offline = new Set<string>();
+  /**
+   * The tiles under the pointer, and the outline of a sweep in flight.
+   *
+   * Chrome about a gesture rather than anything in the document — nothing
+   * here is saved, and it all goes when the pointer leaves. Kept as its own
+   * objects rather than as faded copies in `live`, because the sweep has to
+   * be able to change on every pointer move without the document sweep
+   * running, and because a ghost must never be mistaken for a tile the next
+   * pass then declines to destroy.
+   */
+  private readonly ghosts: Phaser.GameObjects.Image[] = [];
+  private readonly trace: Phaser.GameObjects.Graphics;
+  private previewed = "";
 
   constructor(scene: Phaser.Scene, store: DocStore, grid: Grid) {
     this.scene = scene;
     this.store = store;
     this.grid = grid;
+    this.trace = scene.add.graphics();
+    // Over everything the document draws and under the selection overlay,
+    // which is where every other mark the editor makes about a gesture sits.
+    this.trace.setDepth(880_000);
+  }
+
+  /**
+   * Show what would land, and the shape being drawn round it.
+   *
+   * **The ghost is the real write, faded.** What is handed in is the list
+   * `TilePaint` would send to the document, made by the same two functions —
+   * so the tile under the cursor cannot drift from the tile that lands, which
+   * is the whole reason a preview is worth having. A random stamp *peeks* at
+   * its sequence to build this and *takes* from it to place, so the tile you
+   * were shown is the tile you get.
+   */
+  preview(tiles: readonly TileWrite[], trace: readonly Point[]): void {
+    const signature =
+      tiles.map((t) => `${t.x},${t.y},${t.gid}`).join(";") +
+      "|" +
+      trace.length +
+      "|" +
+      this.grid.tileWidth;
+    if (signature === this.previewed) return;
+    this.previewed = signature;
+
+    for (const ghost of this.ghosts) ghost.destroy();
+    this.ghosts.length = 0;
+    for (const tile of tiles) {
+      const image = this.make(tile.gid, { cx: tile.x, cy: tile.y }, GHOST_DEPTH);
+      if (!image) continue;
+      image.setAlpha(GHOST_ALPHA);
+      this.ghosts.push(image);
+    }
+
+    this.trace.clear();
+    if (trace.length < 2) return;
+    // One screen pixel whatever the camera is doing, like every other mark
+    // the editor draws about the document — see `Docs/data-model.md`.
+    this.trace.lineStyle(1 / this.scene.cameras.main.zoom, TRACE_COLOR, 0.9);
+    this.trace.beginPath();
+    this.trace.moveTo(trace[0].x, trace[0].y);
+    for (let i = 1; i < trace.length; i++) {
+      this.trace.lineTo(trace[i].x, trace[i].y);
+    }
+    // Closed, because what the release fills is the inside of a closed shape
+    // — so the line has to show the shape that is really being described.
+    this.trace.closePath();
+    this.trace.strokePath();
   }
 
   /**
@@ -224,6 +301,36 @@ export class TileRender {
   }
 
   /**
+   * One tile as a loose object, for the preview to hold.
+   *
+   * The same three answers `draw` works out — which patch of which texture,
+   * where it stands, how big it is — without the bookkeeping, because a ghost
+   * belongs to a pointer rather than to a space and is thrown away whole.
+   */
+  private make(
+    gid: number,
+    cell: Cell,
+    depth: number,
+  ): Phaser.GameObjects.Image | null {
+    const held = localId(tilesetsOf(this.store), gid);
+    if (!held) return null;
+    const psdKey = propertyOf(held.tileset, PSD_PROPERTY);
+    const layerPath = propertyOf(held.tileset, PSD_LAYER_PROPERTY) ?? "root";
+    if (!psdKey || this.offline.has(psdKey)) return null;
+    const frame = this.frameFor(psdKey, layerPath, held.tileset, held.id);
+    if (!frame) return null;
+
+    const stand = this.standing(cell);
+    const image = this.scene.add.image(stand.x, stand.y, frame.texture, frame.name);
+    image.setOrigin(0, 1);
+    image.setScale(
+      held.tileset.tilewidth > 0 ? this.grid.tileWidth / held.tileset.tilewidth : 1,
+    );
+    image.setDepth(depth);
+    return image;
+  }
+
+  /**
    * Where a tile's bottom-left corner goes.
    *
    * The bottom-left of the space's **bounding box**, which on an orthogonal
@@ -305,6 +412,7 @@ export class TileRender {
   clear(): void {
     for (const held of this.live.values()) held.image.destroy();
     this.live.clear();
+    this.preview([], []);
     this.lastRange = "";
   }
 }

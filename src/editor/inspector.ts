@@ -50,8 +50,15 @@ import {
 import { renderBackground } from "./inspect-background";
 import { renderText, type TextActions } from "./inspect-text";
 import { captureFocus, restoreFocus } from "./inspect-focus";
+import { nameRow } from "./inspect-head";
 import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
 import { renderTileLayer, type TileActions } from "./inspect-tiles";
+import {
+  isTileTool,
+  tileToolPanel,
+  TILE_TOOL_HINTS,
+  TILE_TOOL_TITLES,
+} from "./inspect-tile-tools";
 import { layerKind } from "../lib/layer-kinds";
 import {
   renderPlacement,
@@ -371,6 +378,11 @@ export class Inspector {
    * rearranged to stop. See `inspect-brush.ts`.
    */
   private renderTool(): void {
+    // A tile tool first, because it is the one kind whose panel is not about
+    // a stroke style at all — there is no size, no tip and no colour on it,
+    // and the style may not even have been built yet. See
+    // `inspect-tile-tools.ts`.
+    if (isTileTool(this.toolId)) return this.renderTileTool();
     if (!this.strokeStyle) return;
     const title = TOOL_TITLES[this.toolId];
     if (!title) return;
@@ -393,6 +405,26 @@ export class Inspector {
       onErasing: (on) => this.callbacks.onErasing(this.toolId, on),
     });
     if (rows) this.zone.body.append(...rows);
+    this.zone.mount(this.body);
+  }
+
+  /** TOOL, for the two tools a tile layer offers. */
+  private renderTileTool(): void {
+    this.open("TOOL", {
+      subject: TILE_TOOL_TITLES[this.toolId] ?? "Tiles",
+      hint: TILE_TOOL_HINTS[this.toolId] ?? ZONE_HINTS.TOOL,
+    });
+    this.zone.body.append(
+      ...tileToolPanel(this.toolId, {
+        random: this.callbacks.tileRandom(this.toolId),
+        onRandom: (on) => this.callbacks.onTileRandom(this.toolId, on),
+        density: this.callbacks.tileDensity(),
+        onDensity: (next) => this.callbacks.onTileDensity(next),
+        erasing: this.callbacks.erasing(this.toolId),
+        onErasing: (on) => this.callbacks.onErasing(this.toolId, on),
+        stamp: this.callbacks.tileSelection().stamp,
+      }),
+    );
     this.zone.mount(this.body);
   }
 
@@ -535,11 +567,8 @@ export class Inspector {
   /**
    * A head whose title is the thing itself, and can be retyped.
    *
-   * Borderless until it is focused, like the layer names in the left panel:
-   * the panel is a column of facts and one of them happens to be editable,
-   * which a box drawn round it all the time would overstate. `suffix` is
-   * shown beside the field rather than in it — the extension is not part of
-   * the name and retyping it would only be a way to get it wrong.
+   * The field is `inspect-head.ts`; what is here is the two things it needs
+   * from the zone — the kicker claimed, and where the row goes.
    */
   private editableHead(
     kicker: string,
@@ -547,44 +576,8 @@ export class Inspector {
     suffix: string,
     onCommit: (next: string) => void,
   ): void {
-    const input = h("input", {
-      class: "inspect-name",
-      value,
-      spellcheck: "false",
-      "aria-label": `${kicker} name`,
-      onChange: (event: Event) => {
-        const next = (event.target as HTMLInputElement).value.trim();
-        if (!next || next === value) {
-          // Cleared or unchanged: put the real name back rather than
-          // committing a rename that says nothing.
-          (event.target as HTMLInputElement).value = value;
-          return;
-        }
-        onCommit(next);
-      },
-      onKeyDown: (event: KeyboardEvent) => {
-        const field = event.target as HTMLInputElement;
-        if (event.key === "Enter") field.blur();
-        if (event.key === "Escape") {
-          field.value = value;
-          field.blur();
-        }
-      },
-    });
-
     this.zone.name(kicker);
-    this.zone.body.appendChild(
-      h(
-        "div",
-        { class: "inspect-head" },
-        h(
-          "div",
-          { class: "inspect-title inspect-name-row" },
-          input,
-          h("span", { class: "inspect-ext", text: suffix }),
-        ),
-      ),
-    );
+    this.zone.body.appendChild(nameRow(kicker, value, suffix, onCommit));
     this.current = this.zone.body;
   }
 

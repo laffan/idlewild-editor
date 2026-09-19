@@ -18,7 +18,8 @@ import { DocStore } from "../../lib/doc-store";
 import { Grid } from "../../lib/grid";
 import { addTileset, tileLayer } from "../../lib/tile-layers";
 import { tileAt, tileCount } from "../../lib/tiled/chunks";
-import { TilePaint, type TileVerb } from "../tile-paint";
+import { TilePaint } from "../tile-paint";
+import { EMPTY_HAND, type TileHand, type TileVerb } from "../../lib/tile-tools";
 import type { GameDoc, LayerKind } from "../../lib/types";
 
 vi.mock("../../lib/ipc", () => ({
@@ -69,11 +70,12 @@ function fixture(kind: LayerKind = "tile", locked = false) {
     imageheight: 64,
   });
 
-  const state = {
+  const state: TileHand & { changed: number; preview: number[] } = {
+    ...EMPTY_HAND,
     verb: "stamp" as TileVerb,
-    erasing: false,
     stamp: { firstgid: set.firstgid, col: 0, row: 0, cols: 1, rows: 1 },
     changed: 0,
+    preview: [],
   };
   const paint = new TilePaint({
     store,
@@ -82,10 +84,10 @@ function fixture(kind: LayerKind = "tile", locked = false) {
     // A world point is a cell times the grid on an orthogonal project, and
     // this host is the whole of what the gesture knows about the screen.
     worldAt: (x, y) => ({ x, y }),
-    verb: () => state.verb,
-    erasing: () => state.erasing,
-    stamp: () => state.stamp,
-    visible: () => ({ from: { cx: 0, cy: 0 }, to: { cx: 4, cy: 4 } }),
+    hand: () => state,
+    onPreview: (tiles) => {
+      state.preview = tiles.map((tile) => tile.gid);
+    },
     onChanged: () => {
       state.changed += 1;
     },
@@ -209,42 +211,113 @@ describe("turned round", () => {
   });
 });
 
-describe("a pour", () => {
-  it("fills the ground in view and stops at its edge", () => {
+describe("a sweep", () => {
+  /** Drag a closed loop round a 3 x 3 patch and let go. */
+  function loop(paint: TilePaint, from: [number, number], to: [number, number]) {
+    const corners: [number, number][] = [
+      [from[0], from[1]],
+      [to[0], from[1]],
+      [to[0], to[1]],
+      [from[0], to[1]],
+      [from[0], from[1]],
+    ];
+    const first = at(corners[0][0], corners[0][1]);
+    paint.begin(first.x - 16, first.y - 16);
+    for (const [cx, cy] of corners.slice(1)) {
+      const step = at(cx, cy);
+      paint.move(step.x - 16, step.y - 16);
+    }
+    paint.end();
+  }
+
+  it("fills every space the outline encloses", () => {
     const { paint, store, state } = fixture();
-    state.verb = "fill";
-    const start = at(2, 2);
-    paint.tap(start);
-    // The window this fixture reports is five spaces square.
-    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(25);
-    expect(tileAt(tileLayer(store.layer("layer-1")), 5, 5)).toBe(0);
+    state.verb = "sweep";
+    loop(paint, [0, 0], [3, 3]);
+    // The loop runs along the corners of a 3 x 3 patch of spaces, so that is
+    // what its inside is.
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(9);
+    expect(tileAt(tileLayer(store.layer("layer-1")), 1, 1)).toBe(1);
+    expect(tileAt(tileLayer(store.layer("layer-1")), 4, 4)).toBe(0);
   });
 
-  it("spreads over like ground only", () => {
-    const { paint, store, state, set } = fixture();
-    // A wall of a second tile down the middle.
-    const wall = { firstgid: set.firstgid, col: 1, row: 0, cols: 1, rows: 1 };
-    state.stamp = wall;
-    for (const cy of [0, 1, 2, 3, 4]) {
-      const step = at(2, cy);
-      paint.tap(step);
-    }
+  it("writes nothing until the release", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "sweep";
+    const first = at(0, 0);
+    paint.begin(first.x, first.y);
+    const step = at(3, 0);
+    paint.move(step.x, step.y);
+    // Until the shape is closed there is no inside to fill.
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(0);
+    paint.end();
+  });
 
-    state.verb = "fill";
-    state.stamp = { firstgid: set.firstgid, col: 2, row: 0, cols: 1, rows: 1 };
-    paint.tap(at(0, 0));
+  it("puts one tile down for a sweep that never travelled", () => {
+    // A press that goes nowhere is a tap, and a tap on this tool should still
+    // do something rather than nothing at all.
+    const { paint, store, state } = fixture();
+    state.verb = "sweep";
+    const start = at(2, 2);
+    paint.begin(start.x, start.y);
+    paint.end();
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(1);
+  });
 
-    const tiles = tileLayer(store.layer("layer-1"));
-    expect(tileAt(tiles, 0, 0)).toBe(3);
-    // The wall is untouched, and so is the room on the other side of it.
-    expect(tileAt(tiles, 2, 0)).toBe(2);
-    expect(tileAt(tiles, 3, 0)).toBe(0);
+  it("is one step of undo for the whole shape", () => {
+    const { paint, store, state } = fixture();
+    state.verb = "sweep";
+    loop(paint, [0, 0], [3, 3]);
+    store.history.undo();
+    expect(tileCount(store.layer("layer-1")?.tiles)).toBe(0);
   });
 
   it("tells the canvas to redraw, because a tile moves no camera", () => {
     const { paint, state } = fixture();
     paint.tap(at(0, 0));
-    expect(state.changed).toBe(1);
+    expect(state.changed).toBeGreaterThan(0);
+  });
+});
+
+describe("the ghost under the pointer", () => {
+  it("shows exactly what a press would put down", () => {
+    const { paint, state } = fixture();
+    const over = at(2, 2);
+    paint.hover(over.x, over.y);
+    expect(state.preview).toEqual([1]);
+  });
+
+  it("shows the tile a random stamp is about to take, and then takes it", () => {
+    // The whole of "the cursor shows the next thing to be stamped": the ghost
+    // peeks at the sequence and the placement takes from it, so the tile you
+    // were shown is the tile you get.
+    const { paint, store, state, set } = fixture();
+    state.random = true;
+    state.stamp = { firstgid: set.firstgid, col: 0, row: 0, cols: 3, rows: 2 };
+    const over = at(1, 1);
+    paint.hover(over.x, over.y);
+    const shown = state.preview[0];
+    expect(shown).toBeGreaterThan(0);
+
+    paint.tap(over);
+    expect(tileAt(tileLayer(store.layer("layer-1")), 1, 1)).toBe(shown);
+  });
+
+  it("shows nothing once the pointer has left the canvas", () => {
+    const { paint, state } = fixture();
+    const over = at(0, 0);
+    paint.hover(over.x, over.y);
+    expect(state.preview).toHaveLength(1);
+    paint.clearHover();
+    expect(state.preview).toHaveLength(0);
+  });
+
+  it("shows nothing for a tool that is not a tile tool", () => {
+    const { paint, state } = fixture();
+    state.verb = null;
+    const over = at(0, 0);
+    paint.hover(over.x, over.y);
+    expect(state.preview).toHaveLength(0);
   });
 });
 

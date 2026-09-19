@@ -47,6 +47,7 @@
  */
 
 import { h, ICONS, icon } from "../lib/dom";
+import type { TileVerb } from "../lib/tile-tools";
 import type { LayerKind, ToolId } from "../lib/types";
 
 /** Which column a tool sits in. */
@@ -123,48 +124,74 @@ export const TOOLS: ToolSpec[] = [
     bar: "draw",
     path: ICONS.text,
   },
+  // A tile layer's two, and nowhere else's. They stand where the ink does,
+  // on the bottom column, because they are what a hand is doing most of the
+  // time on a tile layer — the same argument that put the brushes there.
+  {
+    id: "stamp",
+    name: "Stamp",
+    hint: "Put the tiles picked in the palette down; drag to lay a run",
+    bar: "draw",
+    path: ICONS.stamp,
+  },
+  {
+    id: "sweep",
+    name: "Sweep fill",
+    hint: "Draw a shape and every space inside it is filled",
+    bar: "draw",
+    path: ICONS.sweep,
+  },
 ];
+
+/** The two a tile layer offers, and the two nothing else does. */
+const TILE_TOOLS: readonly ToolId[] = ["stamp", "sweep"];
 
 /**
  * Which tools a layer of this kind offers.
  *
- * **A tile layer withdraws three.** The Pattern and Shape brushes reveal a
- * library row and stamp a library shape, and the Text tool writes words that
- * become pixels; none of the three has anything to do with a grid of tiles,
- * and a button that silently does nothing is worse than a button that is not
- * there. What is left is what a tile tool *is*: the same drawing tools with
- * something else on the end of them — the Pencil lays the run picked in the
- * palette, and Fill pours it — which is the relationship Tiled has between
- * its palette and its tools and the one this is modelled on.
+ * **A tile layer swaps the ink out rather than re-pointing it.** The first
+ * version kept the Pencil and Fill and gave them a second meaning there, and
+ * that was wrong in a way worth writing down: a tool whose meaning depends on
+ * which layer is selected is a tool nobody can learn, and every panel
+ * describing it has to describe two things. So the seven ink tools go and
+ * Stamp and Sweep fill arrive — two tools that are exactly what they are
+ * called, with their own options and their own panel.
  *
  * Everything on the rail proper stays. Select, Pan, Point and Boundary are
  * about the canvas rather than about what is drawn on it, and a named place
  * or a blocking boundary on a tile layer means exactly what it means
  * anywhere else.
  *
- * The lineup will grow — a rectangle, a picker, a magic wand are all tools
- * Tiled has and this does not. Starting with what is already here is what
- * keeps the first version a re-pointing rather than a second toolbar.
+ * **`psdEditing` is the one exception, and it is not one really.** A PSD
+ * opened in PSD Edit mode over a tile layer is ordinary artwork being drawn
+ * on — the layer underneath it happens to hold tiles, which has nothing to do
+ * with what the pointer is for while a file is open. So the ink comes back
+ * for the length of the session and the two tile tools step aside, because
+ * there is nowhere for a tile to go while the canvas belongs to a file.
+ *
+ * The lineup will grow — a rectangle, a tile picker and a terrain brush are
+ * all things Tiled has and this does not. Two is where it starts.
  */
-const WITHHELD: Partial<Record<LayerKind, readonly ToolId[]>> = {
-  tile: ["pattern", "shape", "text"],
-};
-
-export function toolsFor(kind: LayerKind): ToolId[] {
-  const gone = WITHHELD[kind] ?? [];
-  return TOOLS.map((tool) => tool.id).filter((id) => !gone.includes(id));
+export function toolsFor(kind: LayerKind, psdEditing = false): ToolId[] {
+  const tiling = kind === "tile" && !psdEditing;
+  return TOOLS.filter((tool) => {
+    // The swap is the **ink column's** alone. The rail proper is about the
+    // canvas rather than about what is drawn on it, so it is the same four
+    // on every kind of layer.
+    if (tool.bar === "rail") return true;
+    return TILE_TOOLS.includes(tool.id) === tiling;
+  }).map((tool) => tool.id);
 }
 
 /**
  * What the tool in hand means for tiles, if anything.
  *
- * The two tools that draw and the one flag that turns them round. `null` is
- * every other tool, and it is what makes a tile layer still selectable,
- * pannable and pointable — see `toolsFor`.
+ * `null` is every other tool, and it is what makes a tile layer still
+ * selectable, pannable and pointable — see `toolsFor`.
  */
-export function tileVerbOf(tool: ToolId): "stamp" | "fill" | null {
-  if (tool === "pencil") return "stamp";
-  if (tool === "fill") return "fill";
+export function tileVerbOf(tool: ToolId): TileVerb {
+  if (tool === "stamp") return "stamp";
+  if (tool === "sweep") return "sweep";
   return null;
 }
 
@@ -184,7 +211,18 @@ export function tileVerbOf(tool: ToolId): "stamp" | "fill" | null {
  * bar — and four brushes that can be turned round is the same capability with
  * nothing to learn twice. See `editor/tool-routing.ts`.
  */
-export const ERASABLE: readonly ToolId[] = ["pencil", "pattern", "shape", "fill"];
+export const ERASABLE: readonly ToolId[] = [
+  "pencil",
+  "pattern",
+  "shape",
+  "fill",
+  // The two tile tools are erasers turned round like every other tool that
+  // makes a mark: what Stamp would put down it takes off, and what a sweep
+  // would fill it clears. That is the whole of how tiles are removed — there
+  // is no separate rubber, for the reason there is none anywhere else here.
+  "stamp",
+  "sweep",
+];
 
 /** Whether a tool can be used as an eraser at all. */
 export function canErase(tool: ToolId): boolean {

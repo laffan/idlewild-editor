@@ -240,6 +240,18 @@ export const ICONS = {
   ],
   layerBackground: ["M3 5h18v14H3z", "m3 16 5-5 4 4 3-3 6 5"],
   layerTile: ["M4 4h16v16H4z", "M4 9.33h16", "M4 14.67h16", "M9.33 4v16", "M14.67 4v16"],
+  /* The two tile tools. A stamp is a square coming down on a square — the
+     thing in hand over the space it lands on — and a sweep is a loop drawn
+     round a patch of grid, which is the gesture said as a picture. Both read
+     as *tiles* rather than as ink, which is the distinction the toolbar is
+     making when it swaps one set for the other. */
+  stamp: ["M8 3h8v6H8z", "M6 13h12v3H6z", "M5 20h14", "M12 9v4"],
+  sweep: [
+    "M4 8h4v4H4z",
+    "M10 8h4v4h-4z",
+    "M4 14h4v4H4z",
+    "M20 5c0 4-3 6-7 6s-7 2-7 6",
+  ],
   /* A tileset: the same ruled grid with one space picked out, which is what
      the palette is for and what the Import Tiled row carries. */
   tiles: ["M4 4h16v16H4z", "M4 12h16", "M12 4v12", "M12 12h8v8h-8z"],

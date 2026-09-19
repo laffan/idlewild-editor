@@ -14,11 +14,9 @@ import { DocStore } from "../doc-store";
 import { Grid } from "../grid";
 import {
   addTileset,
-  bucketFill,
   cutIntoTileset,
   syncTilesets,
   tilesetArt,
-  MAX_FILL_SPACES,
   nextFirstGid,
   paintTiles,
   propertyOf,
@@ -31,7 +29,7 @@ import {
   tilesetsOf,
   describeTiles,
 } from "../tile-layers";
-import { tileAt, tileCount, writeTiles, emptyTileLayer } from "../tiled/chunks";
+import { tileAt, tileCount } from "../tiled/chunks";
 import { PSD_PROPERTY } from "../tiled/types";
 import type { GameDoc } from "../types";
 
@@ -360,42 +358,6 @@ describe("a stamp", () => {
       { cx: 1, cy: 0 },
     );
     expect(writes).toEqual([]);
-  });
-});
-
-describe("a bucket fill", () => {
-  const window = { from: { cx: 0, cy: 0 }, to: { cx: 4, cy: 4 } };
-
-  it("stops at the edge of what is in view", () => {
-    // There is no world bound on this canvas for a flood to stop at, so the
-    // ground in view is the edge. Five by five is twenty-five spaces.
-    const spread = bucketFill(emptyTileLayer(1, "Ground"), { cx: 2, cy: 2 }, window);
-    expect(spread).toHaveLength(25);
-    expect(spread.every((c) => c.cx >= 0 && c.cx <= 4)).toBe(true);
-  });
-
-  it("spreads only over spaces holding what it started on", () => {
-    let layer = emptyTileLayer(1, "Ground");
-    // A wall down the middle of the window.
-    layer = writeTiles(
-      layer,
-      [0, 1, 2, 3, 4].map((cy) => ({ x: 2, y: cy, gid: 9 })),
-    );
-    const left = bucketFill(layer, { cx: 0, cy: 0 }, window);
-    expect(left).toHaveLength(10);
-    expect(left.every((c) => c.cx < 2)).toBe(true);
-    // And starting on the wall fills the wall rather than the room.
-    expect(bucketFill(layer, { cx: 2, cy: 0 }, window)).toHaveLength(5);
-  });
-
-  it("refuses a start outside the window rather than filling the wrong room", () => {
-    expect(bucketFill(emptyTileLayer(1, "G"), { cx: 9, cy: 9 }, window)).toEqual([]);
-  });
-
-  it("never returns more spaces than the ceiling", () => {
-    const wide = { from: { cx: -500, cy: -500 }, to: { cx: 500, cy: 500 } };
-    const spread = bucketFill(emptyTileLayer(1, "G"), { cx: 0, cy: 0 }, wide);
-    expect(spread).toHaveLength(MAX_FILL_SPACES);
   });
 });
 

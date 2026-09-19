@@ -597,6 +597,14 @@ export type EditorMode = "draw" | "code" | "play";
  * into any of them, so each has to be a thing you do to it. A boundary can
  * still be made the other way — from strokes already drawn and lassoed — which
  * is an action on a selection rather than a tool.
+ *
+ * **"stamp" and "sweep" are a tile layer's, and nothing else's.** They were
+ * the Pencil and Fill wearing another hat for one version, and that was a
+ * mistake worth naming: a tool whose meaning depends on which layer is
+ * selected is a tool nobody can learn. So a tile layer withdraws the ink and
+ * offers these two instead — see `toolsFor` in `editor/tool-rail.ts`, which
+ * is also where the one exception is, because a PSD opened in PSD Edit mode
+ * over a tile layer is ordinary artwork being drawn on.
  */
 export const TOOL_IDS = [
   "select",
@@ -610,6 +618,8 @@ export const TOOL_IDS = [
   "lasso",
   "fill",
   "text",
+  "stamp",
+  "sweep",
 ] as const;
 
 export type ToolId = (typeof TOOL_IDS)[number];
