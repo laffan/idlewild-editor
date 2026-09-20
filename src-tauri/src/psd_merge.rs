@@ -88,8 +88,13 @@ pub fn merge(
     read: &dyn Fn(&str) -> Result<Vec<u8>, String>,
     emit_log: &dyn Fn(&str),
 ) -> Result<Vec<u8>, String> {
-    if parts.len() < 2 {
-        return Err("A merge needs two or more placed PSDs".to_string());
+    // One part is a legitimate call and always was: **Extract** writes a file
+    // out of layers taken from PSDs already in the project, and taking one
+    // layer out of one file is the smallest thing anybody would ask for. The
+    // "two or more" rule belongs to Merge, which is a thing to do to a *set*
+    // of placed files, and `editor/merge-actions.ts` is where it is now.
+    if parts.is_empty() {
+        return Err("A merge needs something to merge".to_string());
     }
 
     let layout = psd_marks::layout(width, height, marks);
@@ -356,13 +361,18 @@ fn parse_name(raw: &str) -> Named<'_> {
 
 /// Which top-level item of a file a placement stands for.
 ///
+/// Shared with `psd_extract`, which needs exactly this answer: the layer a
+/// merge *took* has to be the layer the rewrite *drops*, and two matchers
+/// that agreed most of the time would leave a copy of somebody's roof in the
+/// file it was extracted from.
+///
 /// By name, which is the only handle a placement has on it — and by the
 /// *manifest's* name, which is the middle of the three parts above. An unknown
 /// name is an error rather than a guess: the editor sends what the manifest
 /// said, so a miss means the file has changed under the document, and merging
 /// the wrong artwork puts it somewhere it cannot be told from the right
 /// artwork.
-fn pick(doc: &Psd, path: &str) -> Option<Item> {
+pub(crate) fn pick(doc: &Psd, path: &str) -> Option<Item> {
     // A placement's path is a top-level name and so has no slash in it. A
     // Photoshop layer may itself be *called* something with a slash, so the
     // whole string is tried first and its last segment only after.

@@ -405,6 +405,24 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       };
     case "list_game_files":
       return [...TREE].sort((a, b) => a.path.localeCompare(b.path));
+    // The same column as a publish sees it: the editable tree, plus the
+    // processed artwork and the two things an export generates — see
+    // `src-tauri/src/site_listing.rs`. The generated half is what the code
+    // modal draws dimmed, so the harness has to have some of it or that half
+    // of the column cannot be looked at here at all.
+    case "list_site_files":
+      return [
+        ...TREE.map((file) => ({ ...file, editable: true })),
+        { path: "README.txt", isDir: false, editable: false },
+        { path: "assets", isDir: true, editable: false },
+        { path: "assets/tower", isDir: true, editable: false },
+        { path: "assets/tower/data.json", isDir: false, editable: false },
+        { path: "assets/tower/sprites", isDir: true, editable: false },
+        { path: "assets/tower/sprites/roof.png", isDir: false, editable: false },
+        { path: "js/lib", isDir: true, editable: false },
+        { path: "js/lib/phaser.min.js", isDir: false, editable: false },
+        { path: "js/lib/psd-to-phaser.umd.js", isDir: false, editable: false },
+      ].sort((a, b) => a.path.localeCompare(b.path));
     // A file with one managed block in it, so the code modal's read-only
     // lines, its Reset and its refusals are all reachable in the harness.
     // The template has a second block the file does not, which is what puts

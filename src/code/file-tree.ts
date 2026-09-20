@@ -159,7 +159,13 @@ export class FileTree {
 
   async reload(): Promise<SiteFile[]> {
     try {
-      this.files = await gameFiles.site(this.projectId);
+      const listed = await gameFiles.site(this.projectId);
+      // Checked rather than trusted: a rejected call is caught below, but a
+      // call that *resolves* with something that is not a list — a command
+      // this build does not have, a stub that answers everything — would
+      // otherwise take the panel down inside `render`, where the cause is no
+      // longer anywhere near the symptom.
+      this.files = Array.isArray(listed) ? listed : [];
     } catch (err) {
       log.error("Could not list project files:", err);
       this.files = [];

@@ -485,11 +485,18 @@ fn a_layers_attributes_survive_the_rename() {
     );
 }
 
-/// One file is already one file.
+/// One part is a file, and nothing is not.
+///
+/// "Two or more" was checked here once, and it belonged a level up: it is a
+/// rule about **Merge**, which is a thing to do to a *set* of placed files, and
+/// `editor/merge-actions.ts` is where it is now. **Extract** goes through this
+/// same function to write one layer out as a file of its own, which is the
+/// smallest thing anybody asks of it — so the floor here is having something
+/// to write rather than having two of them.
 #[test]
-fn a_merge_of_one_is_refused() {
+fn one_part_is_a_file_and_none_is_not() {
     let read_fn = library(vec![("wall", sprite("S | wall", 16, [200, 40, 20, 255]))]);
-    let err = psd_merge::merge(
+    let bytes = psd_merge::merge(
         16,
         16,
         &[part("wall", "wall", 0.0, 0.0, 16.0)],
@@ -497,8 +504,16 @@ fn a_merge_of_one_is_refused() {
         &read_fn,
         &|_| {},
     )
-    .expect_err("one part is not a merge");
-    assert!(err.contains("two or more"));
+    .expect("one layer is a file");
+    let names: Vec<String> = read(&bytes).into_iter().map(|(name, ..)| name).collect();
+    assert!(
+        names.contains(&"S | wall-wall".to_string()),
+        "the one part is in it, under the name a merge gives: {names:?}"
+    );
+
+    let err = psd_merge::merge(16, 16, &[], &marks(16.0, 16.0), &read_fn, &|_| {})
+        .expect_err("nothing to merge");
+    assert!(err.contains("something to merge"), "{err}");
 }
 
 /// A name the file does not have is an error rather than a guess.
@@ -525,4 +540,101 @@ fn a_layer_that_is_not_there_stops_the_merge() {
     )
     .expect_err("a missing layer should stop it");
     assert!(err.contains("chimney"));
+}
+
+/// **Extract**: the layers leave the file they came from.
+///
+/// The half a merge does not do. A merge reads its sources and leaves them
+/// exactly as they were, which is right when the sources are whole files
+/// being composed — and wrong when what was taken is *part* of a file, because
+/// the artwork would then be in the project twice and an edit to one copy is
+/// an edit nobody can find the other half of.
+///
+/// Three things are pinned. The named layer goes and the rest stay, which is
+/// the feature. The **anchor mark survives**, because it is what says where on
+/// the grid the remaining artwork belongs and it is not a layer anybody
+/// selected. And a file whose every placeable layer was taken is left *alone*
+/// rather than written empty or deleted — another scene may be drawing it,
+/// and a PSD with no layers is not a file.
+#[test]
+fn extracting_a_layer_takes_it_out_of_its_file() {
+    use crate::project::{GameOptions, Projection, Scaffold};
+    use crate::{psd_extract, psd_pipeline, store};
+
+    let meta = store::create_project(
+        "Extract",
+        Projection::Orthogonal,
+        Scaffold::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let mut builder = PsdBuilder::new(16, 16);
+        // Bottom-up, so this is walls with a roof over them, and the anchor
+        // mark an import writes underneath the pair.
+        builder.add_layer(
+            LayerBuilder::new("P | anchor").rgba(1, 1, swatch(1, 1, [236, 48, 19, 255])),
+        );
+        builder.add_layer(
+            LayerBuilder::new("S | walls").rgba(16, 16, swatch(16, 16, [1, 2, 3, 255])),
+        );
+        builder.add_layer(
+            LayerBuilder::new("S | roof").rgba(16, 8, swatch(16, 8, [4, 5, 6, 255])),
+        );
+        std::fs::write(
+            store::psd_dir(&meta.id).unwrap().join("hut.psd"),
+            builder.to_bytes().expect("PSD should build"),
+        )
+        .expect("PSD should save");
+        psd_pipeline::process(
+            &meta.id,
+            "hut",
+            &psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("processing should succeed");
+
+        // The manifest's name, not the file's: psd-to-json strips the pipe
+        // prefix, so the document holds `roof` and this has to find `S | roof`.
+        let taken =
+            psd_extract::drop_layers(&meta.id, "hut", &["roof".to_string()], |_| {})
+                .expect("the roof should come out");
+        assert!(!taken.emptied);
+        assert_eq!(taken.dropped, 1);
+
+        let left = crate::psd_layers::read(&meta.id, "hut").expect("read the stack");
+        let names: Vec<&str> = left.layers.iter().map(|l| l.name.as_str()).collect();
+        assert!(!names.contains(&"S | roof"), "the roof went: {names:?}");
+        assert!(names.contains(&"S | walls"), "the walls stayed: {names:?}");
+        // The mark is nobody's layer and says where the rest belongs.
+        assert!(names.contains(&"P | anchor"), "the anchor stayed: {names:?}");
+
+        // A path the file does not have is an error rather than a quiet
+        // rewrite: the editor sends what the manifest said, so a miss means
+        // the file moved under the document.
+        assert!(
+            psd_extract::drop_layers(&meta.id, "hut", &["roof".to_string()], |_| {}).is_err(),
+            "the roof has already gone"
+        );
+
+        // And taking the last placeable layer leaves the file as it was.
+        let emptied =
+            psd_extract::drop_layers(&meta.id, "hut", &["walls".to_string()], |_| {})
+                .expect("an emptied file is not an error");
+        assert!(emptied.emptied);
+        assert!(emptied.manifest.is_none());
+        let after = crate::psd_layers::read(&meta.id, "hut").expect("read the stack");
+        assert_eq!(
+            after.layers.len(),
+            left.layers.len(),
+            "nothing was written to a file with nothing left"
+        );
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
 }

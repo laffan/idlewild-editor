@@ -59,15 +59,27 @@ export interface InspectWiringDeps {
    * Tying placed PSDs together, letting them go, and making one file of them
    * — `group-actions.ts` and `merge-actions.ts`.
    */
-  groups: () => { group: () => void; ungroup: () => void; merge: () => void };
+  groups: () => {
+    group: () => void;
+    ungroup: () => void;
+    merge: () => void;
+    extract: () => void;
+  };
   /**
    * Which tool is in hand and which way round it is.
    *
    * Read through like the rest: the routing is built after the panel, and it
    * is the routing rather than the style that remembers which tools are set
    * to erase — see `tool-routing.ts`.
+   *
+   * **Null until it exists**, and that is load-bearing rather than defensive.
+   * `Inspector` renders in its own constructor, which is *before* the shell
+   * has a routing to hand it — so a callback that reached one unconditionally
+   * was a `ReferenceError` the moment the first render touched it, and the
+   * project simply failed to open. The panel asks and takes no for an answer;
+   * the render that follows the first tool pick has the real one.
    */
-  tools: () => ToolRouting;
+  tools: () => ToolRouting | null;
   /**
    * What a tile layer's panel needs: where a palette's picture is served
    * from, what is in hand, and the two things the panel can do to a map.
@@ -135,6 +147,9 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     onRenameGroup: (layerId, groupId, name) =>
       renameGroup(store, layerId, groupId, name),
     onMerge: () => deps.groups().merge(),
+    // And the one that takes layers rather than files, which is the same
+    // set of buttons one level in — see `editor/extract-actions.ts`.
+    onExtract: () => deps.groups().extract(),
     // The one exit a note has: the words become pixels in a file of their
     // own, placed where they were standing — see `editor/text-actions.ts`.
     onTextToPsd: () => deps.convert().textToPsd(),
@@ -195,13 +210,13 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     // Use as Eraser, the first row of every brush's panel. The routing owns
     // the flag because it is per tool and outlives the panel; all this does
     // is ask it and tell it.
-    erasing: (tool) => deps.tools().isErasing(tool),
-    onErasing: (tool, on) => deps.tools().setErasing(tool, on),
+    erasing: (tool) => deps.tools()?.isErasing(tool) ?? false,
+    onErasing: (tool, on) => deps.tools()?.setErasing(tool, on),
 
     // Snap to grid, which is the whole of Select's panel. Held by the routing
     // beside the erase flags and for the same reason — it is the state of a
     // tool rather than of the document, and it outlives this panel.
-    snapToGrid: () => deps.tools().snapToGrid(),
-    onSnapToGrid: (on) => deps.tools().onSnapToGrid(on),
+    snapToGrid: () => deps.tools()?.snapToGrid() ?? true,
+    onSnapToGrid: (on) => deps.tools()?.onSnapToGrid(on),
   };
 }

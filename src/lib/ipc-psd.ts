@@ -365,6 +365,24 @@ export const psd = {
   writeLayers: (id: string, key: string, layers: PsdLayerEdit[]) =>
     invoke<string>("write_psd_layers", { id, key, layers }),
   /**
+   * Take named layers **out** of a PSD, and re-parse what is left.
+   *
+   * The second half of Extract: the first writes the layers out as a file of
+   * their own through `merge`, and this is what stops the artwork being in
+   * the project twice. The paths are the manifest's names, which is what a
+   * placement carries — see `src-tauri/src/psd_extract.rs`, which matches them
+   * with the merge's own matcher so the layer taken is the layer dropped.
+   *
+   * `manifest` is null for a file every placeable layer was taken from: it is
+   * left exactly as it was, because a PSD with no layers is not a file and
+   * another scene may be drawing this one.
+   */
+  dropLayers: (id: string, key: string, paths: readonly string[]) =>
+    invoke<{ manifest: string | null; emptied: boolean; dropped: number }>(
+      "drop_psd_layers",
+      { id, key, paths },
+    ),
+  /**
    * Put an empty sprite layer on the top of the stack, and re-parse.
    *
    * It arrives holding a single transparent pixel — a real row to rename,

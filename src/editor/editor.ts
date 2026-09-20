@@ -39,12 +39,14 @@ import { layerOf } from "./inspect-zone";
 import { addImageToRegion, generatePsdForRegion } from "./fill-actions";
 import { createConversions } from "./conversions";
 import { createCanvasModeUis } from "./canvas-mode-ui";
-import { createToolRouting } from "./tool-routing";
+import { createToolRouting, type ToolRouting } from "./tool-routing";
 import { libraryPointer, libraryStyle } from "./stamp-box";
-import { createDeletes, type DeleteWiring } from "./layer-actions";
+import { createDeletes } from "./layer-actions";
 import { createModeSwitch } from "./mode-switch";
 import { groupSelection, ungroupSelection } from "./group-actions";
-import { mergeSelection, type MergeDeps } from "./merge-actions";
+import { mergeSelection } from "./merge-actions";
+import { extractSelection } from "./extract-actions";
+import { selectionWiring } from "./selection-wiring";
 import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
 import { Minimap } from "./minimap";
@@ -75,6 +77,12 @@ export async function mountEditor(
   // Built once the scene is up — see below. The header's two buttons and the
   // keyboard both reach it through closures, which run long after.
   let history: HistoryUi | null = null;
+  /**
+   * What a tool means to the pointer: declared here, built far below, and
+   * null until then because the panels read it before it exists. See
+   * `InspectWiringDeps.tools`, which holds the note.
+   */
+  let tools: ToolRouting | null = null;
 
   const canvasWrap = h("div", { class: "editor-canvas-wrap" });
   // Pixel art, whole-pixel drawing and the zoom a scene opens at: what boot is
@@ -199,6 +207,7 @@ export async function mountEditor(
         group: () => groupSelection(selected),
         ungroup: () => ungroupSelection(selected),
         merge: () => void mergeSelection(merging),
+        extract: () => void extractSelection(extracting),
       }),
       tools: () => tools,
       tiles: () => tiles,
@@ -273,9 +282,9 @@ export async function mountEditor(
     host: canvasWrap,
     scene: () => handle?.scene ?? null,
     drawing: () => drawing,
-    useSelectTool: () => tools.apply("select", false),
-    usePencil: () => tools.apply("pencil", false),
-    reapplyTool: () => tools.apply(rail.tool, false),
+    useSelectTool: () => tools?.apply("select", false),
+    usePencil: () => tools?.apply("pencil", false),
+    reapplyTool: () => tools?.apply(rail.tool, false),
     inkLayerId: () => activeLayerId,
     defaultZoom: () => render.options.defaultZoom,
     onPsdWritten: async (key, manifest) => {
@@ -297,14 +306,14 @@ export async function mountEditor(
   // which turns a brush round into an eraser — is `tool-routing.ts`; `tools`
   // is read through a closure because the bars are built before it.
   const rail = new ToolRail(
-    (tool: ToolId) => tools.apply(tool),
-    (tool: ToolId) => tools.hold(tool),
+    (tool: ToolId) => tools?.apply(tool),
+    (tool: ToolId) => tools?.hold(tool),
   );
   // What the camera is doing, at the head of that column — a readout that is
   // also the way back to 1:1. See `zoom-badge.ts`.
   const zoomBadge = new ZoomBadge(() => handle?.scene.resetZoom());
   rail.head.appendChild(zoomBadge.root);
-  const tools = createToolRouting({
+  tools = createToolRouting({
     rail,
     canvas: canvasWrap,
     scene: () => handle?.scene ?? null,
@@ -589,7 +598,7 @@ export async function mountEditor(
     // layer withholds three of them and points two others at the grid — so
     // the tool in hand is put down and picked up again. Quietly: moving to
     // another layer is not a reason to say what the Pencil is for.
-    tools.apply(rail.tool, false);
+    tools?.apply(rail.tool, false);
   }
 
   function onSelection(selection: Selection): void {
@@ -621,33 +630,22 @@ export async function mountEditor(
     layers.render();
   }
 
-  // What the three things that act on a whole selection are handed: deleting
-  // it, grouping it and letting a group go. Deleting is `layer-actions.ts`,
-  // beside the sheet it puts up; grouping is `group-actions.ts`.
-  const selected: DeleteWiring = {
-    store,
-    selection: () => handle?.scene.getSelection() ?? null,
-    setSelection: (selection) => handle?.scene.setSelection(selection),
-    setActiveLayer,
-    redrawLayers: () => layers.render(),
-    removeSelectedPlacement: () => handle?.scene.removeSelectedPlacement(),
-    removeStrokes: (ids) => drawing?.removeStrokes(ids),
-    clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
-  };
-  const { deleteSelection, deleteLayer } = createDeletes(selected);
-
-  // And making one file out of several, which needs the pipeline as well as
-  // the document — `merge-actions.ts`.
-  const merging: MergeDeps = {
+  // What the four things that act on a whole selection are handed — deleting
+  // it, grouping it, merging the files and extracting the layers. One host in
+  // and three records out; see `selection-wiring.ts`.
+  const { selected, merging, extracting } = selectionWiring({
     projectId: meta.id,
     store,
     grid,
     scene: () => handle?.scene ?? null,
-    selection: () => handle?.scene.getSelection() ?? null,
+    drawing: () => drawing,
+    setActiveLayer,
     redrawLayers: () => layers.render(),
-    focusLayer: (layerId) => setActiveLayer(layerId),
-    onMerged: () => inspector.revealPsdLayers(),
-  };
+    revealPsdLayers: () => inspector.revealPsdLayers(),
+    applyLayers: (key, manifest) =>
+      psdFile.applyLayers(key, manifest, new Map()),
+  });
+  const { deleteSelection, deleteLayer } = createDeletes(selected);
 
   // Draw, Code or Play, and what each of them does to the shell —
   // `mode-switch.ts`, which holds the mode itself.

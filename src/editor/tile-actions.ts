@@ -56,6 +56,7 @@ import {
 import type { Layer, PaletteMode } from "../lib/types";
 import type { TileActions } from "./inspect-tiles";
 import type { ToolRouting } from "./tool-routing";
+import { DENSITY_DEFAULT } from "../lib/tile-tools";
 import { TileSelection } from "./tile-palette";
 import { openPsdProgress } from "./psd-progress";
 import type { WorldScene } from "../game/world-scene";
@@ -104,7 +105,7 @@ export function tileDeps(
    * The rail, read through: it is built after this and it is where a tool's
    * own settings live, beside the erase flag they sit next to in the panel.
    */
-  tools: () => ToolRouting,
+  tools: () => ToolRouting | null,
 ): TileDeps {
   const selection = new TileSelection();
   const deps: TileDeps = {
@@ -122,12 +123,15 @@ export function tileDeps(
     tileSelection: () => selection,
     onImportTiled: (layerId) => void importTiledMap(deps, layerId),
     onClearTiles: (layerId) => clearTiles(deps, layerId),
-    tileRandom: (tool) => tools().tileRandom(tool),
-    onTileRandom: (tool, on) => tools().onTileRandom(tool, on),
-    tileDensity: () => tools().tileDensity(),
-    onTileDensity: (density) => tools().onTileDensity(density),
-    tileShape: () => tools().tileShape(),
-    onTileShape: (shape) => tools().onTileShape(shape),
+    // Null until the routing exists — see `InspectWiringDeps.tools`, where
+    // the reason is written down: the inspector renders in its own
+    // constructor, which is before the shell has one to hand it.
+    tileRandom: (tool) => tools()?.tileRandom(tool) ?? false,
+    onTileRandom: (tool, on) => tools()?.onTileRandom(tool, on),
+    tileDensity: () => tools()?.tileDensity() ?? DENSITY_DEFAULT,
+    onTileDensity: (density) => tools()?.onTileDensity(density),
+    tileShape: () => tools()?.tileShape() ?? "rect",
+    onTileShape: (shape) => tools()?.onTileShape(shape),
     onSelectPsd: (selection) => base.scene()?.setSelection(selection),
     onPaletteMode: (psdKey, mode) => setPaletteMode(deps, psdKey, mode),
   };

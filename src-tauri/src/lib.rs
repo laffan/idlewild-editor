@@ -24,6 +24,7 @@ mod import_assets;
 mod project;
 mod projects;
 mod psd_background;
+mod psd_extract;
 mod psd_flatten;
 mod psd_layers;
 mod psd_marks;
@@ -31,6 +32,7 @@ mod psd_merge;
 mod psd_paint;
 mod psd_palette;
 mod psd_pipeline;
+mod psd_stack;
 mod psd_rebuild;
 mod psd_write;
 mod publish;
@@ -459,51 +461,6 @@ fn read_psd_bytes(id: String, key: String) -> Result<String, String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
 }
 
-/// A PSD's real layer stack, for the inspector's layer editor.
-#[tauri::command]
-fn read_psd_layers(id: String, key: String) -> Result<psd_layers::PsdLayerList, String> {
-    psd_layers::read(&id, &key)
-}
-
-/// Rewrite that stack in the order and under the names the user gave it,
-/// then run the file back through psd-to-json. Returns the fresh manifest.
-#[tauri::command(async)]
-fn write_psd_layers(
-    app: tauri::AppHandle,
-    id: String,
-    key: String,
-    layers: Vec<psd_layers::LayerEdit>,
-) -> Result<String, String> {
-    psd_layers::write(&id, &key, &layers, logger(&app))
-}
-
-/// Put an empty sprite layer on the top of a PSD's stack.
-///
-/// Returns the fresh manifest, as every write that touches the file does:
-/// the layer arrives with a single transparent pixel in it, which is nothing
-/// to draw but is a real row to rename, reorder or draw into.
-#[tauri::command(async)]
-fn add_psd_layer(app: tauri::AppHandle, id: String, key: String) -> Result<String, String> {
-    psd_layers::add(&id, &key, logger(&app))
-}
-
-/// Lay ink into one layer of a PSD — what PSD Edit mode applies.
-///
-/// `index` and `name` together name the row, and both are checked: a paint
-/// against an index the file has since renumbered would put a drawing in the
-/// wrong layer, and nothing about the result would say so.
-#[tauri::command(async)]
-fn paint_psd_layer(
-    app: tauri::AppHandle,
-    id: String,
-    key: String,
-    index: usize,
-    name: String,
-    paint: psd_paint::Paint,
-) -> Result<String, String> {
-    psd_layers::paint(&id, &key, index, &name, paint, logger(&app))
-}
-
 #[tauri::command]
 fn read_psd_manifest(id: String, key: String) -> Result<String, String> {
     psd_pipeline::read_manifest(&id, &key)
@@ -647,10 +604,11 @@ pub fn run() {
             open_psd,
             read_psd_bytes,
             sync_psd_palette,
-            read_psd_layers,
-            write_psd_layers,
-            add_psd_layer,
-            paint_psd_layer,
+            psd_stack::read_psd_layers,
+            psd_stack::write_psd_layers,
+            psd_stack::drop_psd_layers,
+            psd_stack::add_psd_layer,
+            psd_stack::paint_psd_layer,
             read_psd_manifest,
             is_psd_processed,
             list_psd_outputs,

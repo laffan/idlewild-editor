@@ -23,7 +23,7 @@
 import { h } from "../lib/dom";
 import { colliderPanel, colliderSection } from "./inspect-collider";
 import { patternSection, type PatternActions } from "./inspect-pattern";
-import type { PanelSurface } from "./inspect-panels";
+import { extractSection, type PanelSurface } from "./inspect-panels";
 import { scaleOf, sizeControls } from "./inspect-transform";
 import type { PsdLayerEditor } from "./psd-layers";
 import { instanceCount } from "../game/instances";
@@ -55,6 +55,13 @@ export interface PlacementActions extends PatternActions {
   /** Open the selected PSD's collider up to be drawn on the grid. */
   onEditCollider: () => void;
   onDeleteSelection: () => void;
+  /**
+   * The selected layer, moved into a PSD of its own — see
+   * `PanelActions.onExtract`, which is the same callback for a selection of
+   * several. Declared here as well because this panel is handed
+   * `PlacementActions` rather than the whole set.
+   */
+  onExtract: () => void;
 }
 
 /** The state the panel owns and this needs borrowed. */
@@ -238,6 +245,14 @@ export function renderPlacement(
   // neither, and left the two senses of "layer" — Phaser's and Photoshop's —
   // to be told apart by the reader.
   const one = open && members.length > 1;
+
+  // **Extract**, for the file that has been opened up. What is selected then
+  // is one *layer* of it rather than the whole thing, which is exactly what
+  // this takes — see `inspect-panels.ts`, which draws the same section for a
+  // selection of several. Withheld while the PSD moves as one, where the
+  // selection means the file and there would be nothing left behind.
+  if (one) extractSection(panel, store, actions.onExtract, [placement]);
+
   const foot = panel.section();
   foot.appendChild(
     h("button", {

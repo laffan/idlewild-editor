@@ -20,9 +20,10 @@ import { count } from "./layer-items";
 import { unionRect } from "../game/unit";
 import { groupOfUnit, groupPlacements, liveGroups } from "../lib/groups";
 import { unitKey } from "../lib/units";
+import { describeExtract, extractLeavesSomething } from "./extract-actions";
 import type { DocStore } from "../lib/doc-store";
 import { describeRange, type Grid } from "../lib/grid";
-import type { FillPatch, Selection } from "../lib/types";
+import type { FillPatch, Placement, Selection } from "../lib/types";
 
 /**
  * What a panel writes into: the inspector's own body and its row helpers.
@@ -110,6 +111,16 @@ export interface PanelActions {
    * a merge means there are no longer several. See `editor/merge-actions.ts`.
    */
   onMerge: () => void;
+  /**
+   * The selected *layers*, moved into a PSD of their own and taken out of the
+   * files they came from.
+   *
+   * Beside Merge because both write a file out of what is selected, and
+   * against it because they differ in the one way that matters: a merge
+   * leaves its sources exactly as they were, and this takes the artwork out
+   * of them. See `editor/extract-actions.ts`.
+   */
+  onExtract: () => void;
 }
 
 /**
@@ -436,6 +447,56 @@ export function renderPlacements(
         class: "panel-btn",
         text: "Delete images",
         onClick: actions.onDeleteSelection,
+      }),
+    ],
+  );
+
+  extractSection(panel, store, actions.onExtract, placements);
+}
+
+/**
+ * **Extract**, under Merge, and only when it would take something out.
+ *
+ * The two are next to each other because both write one file out of what is
+ * selected, and apart because of the one way they differ: a merge leaves its
+ * sources exactly as they were, and this takes the artwork *out* of them. A
+ * marquee catches placements and a placement is one layer of one PSD, so what
+ * is selected here is often a few layers of each of several files — the
+ * shadows off five houses, the one wall drawn in the wrong document — and
+ * that is the thing this is for.
+ *
+ * Withheld when nothing would be left behind, which is `extractLeavesSomething`:
+ * a selection holding every placed layer of every file it touches would write
+ * the same new file Merge writes and leave the same sources untouched, so
+ * offering both there would be two buttons for one outcome under two names.
+ *
+ * The line says the part that cannot be undone. A step back gives the
+ * placements their old positions; it does not put the layers back into the
+ * files, because undo walks the document and a rewritten PSD is a rewritten
+ * PSD. Saying so before the press is the whole of what can be done about it.
+ */
+export function extractSection(
+  panel: PanelSurface,
+  store: DocStore,
+  onExtract: () => void,
+  placements: readonly Placement[],
+): void {
+  if (!extractLeavesSomething(store, placements)) return;
+  append(
+    panel.section(
+      "Extract",
+      "One PSD holding these layers, in the places they are standing — and " +
+        "they leave the files they came from. Undo puts the placements back, " +
+        "not the layers.",
+    ),
+    [
+      h("button", {
+        class: "panel-btn",
+        text: `Move ${describeExtract(placements)} to a new PSD`,
+        title:
+          "Every placement of those files loses the layers that go, because " +
+          "what changes is the file rather than this drawing of it.",
+        onClick: onExtract,
       }),
     ],
   );
