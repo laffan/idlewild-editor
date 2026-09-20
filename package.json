@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "check:types": "tsc --noEmit",
     "check:lines": "bash scripts/check-line-limits.sh",
+    "format:templates": "prettier --write \"src-tauri/templates/**/*.{js,css,html}\"",
     "vendor:p2p": "node scripts/vendor-p2p.mjs",
     "tauri": "tauri",
     "build:macos": "tauri build",

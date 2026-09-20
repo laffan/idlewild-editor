@@ -88,13 +88,17 @@
     if (typeof value === "boolean") return { t: "boolean", v: value };
     if (value === null) return { t: "empty", v: "null" };
     if (value === undefined) return { t: "empty", v: "undefined" };
-    if (typeof value === "bigint") return { t: "number", v: String(value) + "n" };
+    if (typeof value === "bigint")
+      return { t: "number", v: String(value) + "n" };
     if (typeof value === "symbol") return { t: "other", v: value.toString() };
     if (typeof value === "function") {
       return { t: "other", v: "ƒ " + (value.name || "anonymous") + "()" };
     }
     if (value instanceof Error) {
-      return { t: "other", v: value.stack || value.name + ": " + value.message };
+      return {
+        t: "other",
+        v: value.stack || value.name + ": " + value.message,
+      };
     }
     if (typeof Element !== "undefined" && value instanceof Element) {
       return { t: "other", v: "<" + value.tagName.toLowerCase() + ">" };

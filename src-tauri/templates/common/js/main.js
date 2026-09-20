@@ -11,9 +11,13 @@ import config from "./game.config.json" with { type: "json" };
 // These three lines are yours, unmarked on purpose: to pin the opening scene
 // instead, replace `opening` with one of your own — `byFile.TitleScreen`,
 // under the name the sidebar gives it.
-const active = (config.scenes ?? []).find((scene) => scene.id === config.activeScene);
+const active = (config.scenes ?? []).find(
+  (scene) => scene.id === config.activeScene,
+);
 const opening = (active && byFile[active.file]) ?? scenes[0];
-const running = opening ? [opening, ...scenes.filter((s) => s !== opening)] : scenes;
+const running = opening
+  ? [opening, ...scenes.filter((s) => s !== opening)]
+  : scenes;
 
 // How the rendering options chosen in the editor reach Phaser.
 //
@@ -54,7 +58,10 @@ style.setProperty("--game-margin", `${page.margin ?? 0}px`);
 style.setProperty("--game-radius", `${page.radius ?? 0}px`);
 style.setProperty("--game-width", fixed ? `${page.width}px` : "100%");
 style.setProperty("--game-height", fixed ? `${page.height}px` : "100%");
-style.setProperty("--game-place", page.centered === false ? "flex-start" : "center");
+style.setProperty(
+  "--game-place",
+  page.centered === false ? "flex-start" : "center",
+);
 
 const scale = fixed
   ? {

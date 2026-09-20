@@ -618,6 +618,22 @@ in front of you.
 
 ---
 
+## The templates are Prettier's output
+
+`src-tauri/templates/` is formatted with Prettier, at its defaults, and is
+kept that way — `npm run format:templates`. The editor's own `src/` is **not**,
+deliberately: a house style that has been tuned line by line is not worth
+three thousand added lines and five files over the seven-hundred-line rule to
+restate.
+
+The reason the templates are is the code panel's Tidy, which is Prettier —
+see [Code Settings](code-panel.md#code-settings-the-gear-over-the-file-column).
+A scaffolded file that was not already its output would be reformatted the
+first time somebody tidied anything, which would turn the editor's own lines
+into the user's the moment they pressed the button (see below). Formatted
+templates mean a tidy on a file nobody has touched changes nothing at all,
+and only ever reprints what the user wrote.
+
 ## Lines the editor owns
 
 The editor writes code into a project and the user edits that same code.

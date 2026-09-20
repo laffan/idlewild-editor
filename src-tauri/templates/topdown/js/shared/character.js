@@ -40,7 +40,9 @@ export function spawnCharacter(scene) {
   // A project with no lattice has nothing to path on, so it walks a square
   // one of the project's nominal unit — the grid scale chosen in New Game,
   // which is what that setting is for on a template that does not snap.
-  scene.nav = scene.grid.snaps ? scene.grid : createGrid("orthogonal", config.grid);
+  scene.nav = scene.grid.snaps
+    ? scene.grid
+    : createGrid("orthogonal", config.grid);
 
   const start = sceneOf(scene)?.spawn ?? config.spawn ?? { cx: 0, cy: 0 };
   scene.character = createCharacter(scene, {
@@ -125,7 +127,10 @@ export function readColliders(scene) {
       const collider = placement.collider;
       if (!collider || !collider.blocking) continue;
       if (scene.grid.snaps && !collider.rect) {
-        for (const cell of scene.grid.colliderCells(collider, placement.anchor)) {
+        for (const cell of scene.grid.colliderCells(
+          collider,
+          placement.anchor,
+        )) {
           scene.blockedCells.add(`${cell.cx},${cell.cy}`);
         }
       } else {

@@ -60,10 +60,14 @@ export function createGrid(projection, size) {
         return [c.x, c.y - hh, c.x + hw, c.y, c.x, c.y + hh, c.x - hw, c.y];
       }
       return [
-        c.x, c.y,
-        c.x + cell, c.y,
-        c.x + cell, c.y + cell,
-        c.x, c.y + cell,
+        c.x,
+        c.y,
+        c.x + cell,
+        c.y,
+        c.x + cell,
+        c.y + cell,
+        c.x,
+        c.y + cell,
       ];
     },
 
@@ -140,7 +144,9 @@ export function createGrid(projection, size) {
           },
         ];
       }
-      return this.colliderCells(collider, at).map((c) => this.cellBox(c.cx, c.cy));
+      return this.colliderCells(collider, at).map((c) =>
+        this.cellBox(c.cx, c.cy),
+      );
     },
   };
 }

@@ -54,7 +54,12 @@ export function findPath(isWalkable, start, goal, maxNodes = 20000) {
 
       cameFrom.set(nKey, current);
       gScore.set(nKey, tentative);
-      open.push({ cx: nx, cy: ny, g: tentative, f: tentative + heuristic(nx, ny) });
+      open.push({
+        cx: nx,
+        cy: ny,
+        g: tentative,
+        f: tentative + heuristic(nx, ny),
+      });
     }
   }
   return null;

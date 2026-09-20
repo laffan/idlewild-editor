@@ -28,7 +28,13 @@ export function createCharacter(scene, { grid, start, solids }) {
   // how big this project's spaces actually are, so an 8px platformer plays
   // the way a 64px one does instead of at eight times the speed. See
   // `TUNED_GRID` there.
-  const body = createBody(world.x, world.y, width, height, gridScale(grid.size));
+  const body = createBody(
+    world.x,
+    world.y,
+    width,
+    height,
+    gridScale(grid.size),
+  );
   const sprite = scene.add
     .rectangle(body.x, body.y, width, height, 0x201e1d)
     .setDepth(1e6);

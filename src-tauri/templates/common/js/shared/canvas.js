@@ -219,7 +219,11 @@ export function placeDocument(scene) {
       (layer.kind ?? "object") === "object";
     const order = drawOrder(layer.placements ?? [], sortOnY);
     order.forEach((placement, step) => {
-      const object = scene.P2P.place(scene, placement.psdKey, placement.layerPath);
+      const object = scene.P2P.place(
+        scene,
+        placement.psdKey,
+        placement.layerPath,
+      );
       if (object && object.setPosition) {
         object.setPosition(placement.x, placement.y);
         applyScale(object, placement);
@@ -259,7 +263,10 @@ export function paintBackgrounds(scene) {
     if (layer.kind !== "background" || layer.visible === false) return;
     const depth = (layers.length - index) * 1000 - 1;
     const g = scene.add.graphics().setDepth(depth);
-    scene.backdrops.push({ g, backgrounds: [...(layer.backgrounds ?? [])].reverse() });
+    scene.backdrops.push({
+      g,
+      backgrounds: [...(layer.backgrounds ?? [])].reverse(),
+    });
   });
   drawBackdrops(scene);
 }
@@ -310,7 +317,13 @@ export function placePatterns(scene) {
     .map(({ layer, index }) => ({
       id: `pattern-${index}`,
       depth: (layers.length - index) * 1000,
-      spec: layer.pattern ?? { type: "random", density: 8, repeat: { cols: 20, rows: 20 }, seed: 1, shapes: [] },
+      spec: layer.pattern ?? {
+        type: "random",
+        density: 8,
+        repeat: { cols: 20, rows: 20 },
+        seed: 1,
+        shapes: [],
+      },
       elements: patternElements(layer, scene.grid),
     }));
   syncPatterns(scene);
@@ -334,11 +347,19 @@ export function syncPatterns(scene) {
       const key = `${layer.id}:${made.id}`;
       seen.add(key);
       if (scene.patternLive.has(key)) continue;
-      const object = scene.P2P.place(scene, made.element.psdKey, made.element.path);
+      const object = scene.P2P.place(
+        scene,
+        made.element.psdKey,
+        made.element.path,
+      );
       if (!object || !object.setPosition) continue;
       const world = scene.grid.cellToWorld(made.cell.cx, made.cell.cy);
-      object.setPosition(world.x + made.element.offsetX, world.y + made.element.offsetY);
-      if (object.setScale) object.setScale(made.element.scaleX, made.element.scaleY);
+      object.setPosition(
+        world.x + made.element.offsetX,
+        world.y + made.element.offsetY,
+      );
+      if (object.setScale)
+        object.setScale(made.element.scaleX, made.element.scaleY);
       object.setDepth(layer.depth);
       scene.patternLive.set(key, object);
     }
@@ -550,7 +571,8 @@ export function applyDepth(object, depth) {
   }
   const ranked = [...children].sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0));
   ranked.forEach((child, rank) => {
-    if (child.setDepth) child.setDepth(depth + (rank + 1) / (ranked.length + 1));
+    if (child.setDepth)
+      child.setDepth(depth + (rank + 1) / (ranked.length + 1));
   });
 }
 // idlewild:end applyDepth
@@ -571,7 +593,10 @@ export function applyScale(object, placement) {
   const naturalWidth = placement.naturalWidth ?? placement.width;
   const naturalHeight = placement.naturalHeight ?? placement.height;
   if (!naturalWidth || !naturalHeight || !object.setScale) return;
-  object.setScale(placement.width / naturalWidth, placement.height / naturalHeight);
+  object.setScale(
+    placement.width / naturalWidth,
+    placement.height / naturalHeight,
+  );
 }
 // idlewild:end applyScale
 
@@ -764,7 +789,11 @@ export function patternInstances(spec, elements, range, limit = 1200) {
 
   const out = [];
   for (let ty = Math.floor(lowY / rows); ty <= Math.floor(highY / rows); ty++) {
-    for (let tx = Math.floor(lowX / cols); tx <= Math.floor(highX / cols); tx++) {
+    for (
+      let tx = Math.floor(lowX / cols);
+      tx <= Math.floor(highX / cols);
+      tx++
+    ) {
       for (const made of patternTile(spec, elements, tx, ty)) {
         const { cx, cy } = made.cell;
         if (cx < lowX || cx > highX || cy < lowY || cy > highY) continue;
@@ -812,7 +841,8 @@ function patternTile(spec, elements, tileX, tileY) {
     }
     out.push({
       id: `${tileX}:${tileY}:${i}`,
-      element: elements[patternHash(seed, tileX, tileY, i, 3) % elements.length],
+      element:
+        elements[patternHash(seed, tileX, tileY, i, 3) % elements.length],
       cell: { cx, cy },
     });
   }

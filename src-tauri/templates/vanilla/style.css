@@ -16,7 +16,9 @@ body {
   min-height: 100%;
   background: #2d2b2b;
   color: #f4f2ef;
-  font: 16px/1.5 system-ui, sans-serif;
+  font:
+    16px/1.5 system-ui,
+    sans-serif;
 }
 
 #app {
