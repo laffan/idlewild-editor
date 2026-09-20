@@ -17,11 +17,14 @@
  */
 
 import { h } from "../lib/dom";
+import { optionSegmented } from "../lib/options-controls";
 import { sectionTitle } from "./inspect-collapse";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import {
   describeTiles,
+  isMergedTileset,
+  paletteMode,
   propertyOf,
   tileLayer,
   tilesetsOf,
@@ -30,7 +33,7 @@ import { chunksOf, tileCount } from "../lib/tiled/chunks";
 import type { TileShape } from "../lib/tile-tools";
 import { tileId } from "../lib/tiled/gid";
 import { PSD_PROPERTY, type TiledTileset } from "../lib/tiled/types";
-import type { Cell, Layer, Selection, ToolId } from "../lib/types";
+import type { Cell, Layer, PaletteMode, Selection, ToolId } from "../lib/types";
 import type { PanelActions, PanelSurface } from "./inspect-panels";
 import {
   describeStamp,
@@ -72,6 +75,11 @@ export interface TileActions {
   onTileShape: (shape: TileShape) => void;
   /** Put a palette's own file in the panel below — see `selectPsdRow`. */
   onSelectPsd: (selection: Selection) => void;
+  /**
+   * Cut a PSD's palette from the whole file, or from each of its layers —
+   * the Layers toggle over each palette. See `layersToggle`.
+   */
+  onPaletteMode: (psdKey: string, mode: PaletteMode) => void;
 }
 
 /**
@@ -145,6 +153,7 @@ export function renderTileLayer(
           paletteName(tileset, layer, actions),
           zoomControls(tileset.firstgid, selection, actions.canvasZoom, resize),
         ),
+        layersToggle(store, tileset, actions),
         tilePalette({
           tileset,
           assetBase: actions.assetBase(),
@@ -232,6 +241,68 @@ function describeSpread(cells: readonly Cell[]): string {
 }
 
 /**
+ * **Layers: Merged or Separate**, over the palette it decides the shape of.
+ *
+ * A PSD on a tile layer is cut into a palette, and it used to be cut one
+ * palette per layer whether or not that was what the file was. For a
+ * tileset drawn as *ground*, *walls* and *props* that is exactly right. For
+ * a building drawn as walls, roof and shadow it is three sparse pictures,
+ * each missing the other two's tiles, and the way to paint the building is to
+ * stamp from all three onto the same space — which is not a thing anybody
+ * would design. So the file as it looks is the default and the layer-by-layer
+ * cut is the thing you ask for.
+ *
+ * **Above the palette rather than in a menu**, because it is the first thing
+ * to ask about a picture you are looking at — *is this one sheet or several*
+ * — and because the answer changes what is underneath it. A segmented pair
+ * rather than a switch, because neither answer is the absence of the other:
+ * "Merged / off" says nothing about what happens instead.
+ *
+ * **Per file, and kept in the document.** `psd/` is one directory for the
+ * project, so a file is cut one way everywhere; a second answer per layer
+ * would be two palettes of the same picture with different gids, and a tile
+ * put down from one would be a tile the other cannot explain.
+ *
+ * Switching **adds** the other palette rather than replacing this one. A gid
+ * means the nth tile across every tileset in the map, so a palette anything
+ * has ever been painted from has to stay exactly where it is — the same rule
+ * that is why there is no way to take a palette out at all. What the toggle
+ * changes is which palettes this panel offers and how the next file to arrive
+ * is cut; nothing already on the ground moves.
+ */
+function layersToggle(
+  store: DocStore,
+  tileset: TiledTileset,
+  actions: TileActions,
+): HTMLElement | null {
+  const key = propertyOf(tileset, PSD_PROPERTY);
+  // A palette that came in from a Tiled map somebody else made has no PSD
+  // behind it and therefore nothing to cut differently — see `Import Tiled`.
+  if (!key) return null;
+
+  const control = optionSegmented(
+    [
+      { value: "merged", label: "Merged" },
+      { value: "separate", label: "Separate" },
+    ],
+    paletteMode(store, key),
+    (value) => actions.onPaletteMode(key, value as PaletteMode),
+  );
+  return h(
+    "div",
+    {
+      class: "tile-palette-layers",
+      title:
+        "Merged cuts the whole file into one palette. Separate cuts one " +
+        "palette per layer, for a file whose layers are different sets of " +
+        "tiles. Tiles already put down never move.",
+    },
+    h("span", { class: "tile-palette-layers-label m", text: "Layers" }),
+    control.root,
+  );
+}
+
+/**
  * A palette's name, which is the way to the file it was cut from.
  *
  * The name itself rather than a link beside it. It was a *Select PSD* row
@@ -290,11 +361,21 @@ function palettesOn(store: DocStore, layer: Layer): TiledTileset[] {
   const standing = gidsOn(layer);
   return tilesetsOf(store).filter((tileset) => {
     const key = propertyOf(tileset, PSD_PROPERTY);
-    if (key !== undefined && here.has(key)) return true;
-    return standing.some(
+    const used = standing.some(
       (gid) =>
         gid >= tileset.firstgid && gid < tileset.firstgid + tileset.tilecount,
     );
+    // Something standing on it is the strongest reason there is: the panel
+    // has to be able to explain what is on the ground, whichever way the
+    // file happens to be cut *now*. This is also what keeps the palettes a
+    // switch left behind from vanishing out from under their own tiles.
+    if (used) return true;
+    if (key === undefined || !here.has(key)) return false;
+    // Otherwise it is the cut this file is currently set to. Both sets can
+    // exist once somebody has switched — no palette is ever taken away,
+    // because a gid means the nth tile across every tileset in the map — and
+    // showing both would be the same picture twice with different gids.
+    return isMergedTileset(tileset) === (paletteMode(store, key) === "merged");
   });
 }
 

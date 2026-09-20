@@ -145,6 +145,7 @@ export class WorldScene extends Phaser.Scene {
       worldAt: (x, y) => this.worldAt(x, y),
       canvas: this.game.canvas,
       psdLayers: (key) => this.psds.layersOf(key),
+      psdSize: (key) => this.psds.sizeOf(key),
       selection: () => this.selection,
       setSelection: (selection) => this.setSelection(selection),
     });

@@ -237,6 +237,20 @@ export const psd = {
       marks,
     }),
   /**
+   * A PSD composited into the one picture a **merged** tile palette is cut
+   * from, written beside its layer sprites as `assets/<key>/merged.png`.
+   *
+   * A real file rather than a canvas in the sidebar, because a tileset names
+   * the image its tiles come out of and that name reaches `game.config.json`
+   * — see `src-tauri/src/psd_flatten.rs`, which also rebuilds it whenever the
+   * file is re-parsed. Idempotent: asking twice writes it twice.
+   */
+  merged: (id: string, key: string) =>
+    invoke<{ filePath: string; width: number; height: number }>("merge_psd_art", {
+      id,
+      key,
+    }),
+  /**
    * An empty tiled backdrop, `width` x `height` pixels.
    *
    * What New Background writes for an image backdrop: a PSD the size the

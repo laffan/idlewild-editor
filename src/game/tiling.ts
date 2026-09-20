@@ -17,8 +17,19 @@ import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
-import { syncTilesets, tilesetArt, tilesUnderBox } from "../lib/tile-layers";
-import type { ManifestLayer } from "../lib/manifest";
+import {
+  isMergedTileset,
+  mergedArt,
+  MERGED_FILE,
+  propertyOf,
+  syncTilesets,
+  tilesetArt,
+  tilesetsOf,
+  tilesUnderBox,
+} from "../lib/tile-layers";
+import { textureKey, type ManifestLayer } from "../lib/manifest";
+import { MERGED_LAYER, PSD_PROPERTY } from "../lib/tiled/types";
+import * as log from "../lib/log";
 import type { CellRange } from "../lib/pattern";
 import type { Point, Rect, Selection } from "../lib/types";
 import { TileMove } from "./tile-move";
@@ -49,6 +60,14 @@ export interface TilingHost {
   worldAt: (screenX: number, screenY: number) => Point;
   /** A loaded PSD's own layers — `PsdPlacements.layersOf`. */
   psdLayers: (psdKey: string) => ManifestLayer[];
+  /**
+   * How big a loaded PSD's own canvas is — `PsdPlacements.sizeOf`.
+   *
+   * What a **merged** palette is measured against, and not the union of the
+   * file's artwork: a palette is cut on the project's grid from the file's
+   * own corner, so a picture trimmed to its contents would shift every tile.
+   */
+  psdSize: (psdKey: string) => { width: number; height: number } | undefined;
   /** What is selected, and the way to say where a moved run ended up. */
   selection: () => Selection;
   setSelection: (selection: Selection) => void;
@@ -62,6 +81,8 @@ export class Tiling {
   /** Carrying a selected run somewhere else — `tile-move.ts`. */
   readonly dragging: TileMove;
   private readonly host: TilingHost;
+  /** Files whose merged picture is being written — see `mergePalette`. */
+  private readonly merging = new Set<string>();
 
   constructor(host: TilingHost) {
     this.host = host;
@@ -158,11 +179,98 @@ export class Tiling {
    */
   cutPalettes(): void {
     const { store, grid } = this.host;
-    store.history.silence(() =>
-      syncTilesets(store, grid, (key, path) =>
-        tilesetArt(this.host.psdLayers(key), path),
-      ),
+    const cut = store.history.silence(() =>
+      syncTilesets(store, grid, {
+        layer: (key, path) => tilesetArt(this.host.psdLayers(key), path),
+        merged: (key) => mergedArt(this.host.psdSize(key)),
+      }),
     );
+    // A merged palette's picture is not one psd-to-phaser loaded: it is
+    // composited from the file and written beside the layer sprites, so the
+    // scene has to ask for it and load it itself. Every merged palette in the
+    // document rather than only the ones just cut — a project opened again
+    // has all of its palettes and none of their textures, and `mergePalette`
+    // returns on the first line for one that is already in.
+    const fresh = new Set(
+      cut.filter(isMergedTileset).map((set) => propertyOf(set, PSD_PROPERTY)),
+    );
+    for (const tileset of tilesetsOf(store)) {
+      if (!isMergedTileset(tileset)) continue;
+      const key = propertyOf(tileset, PSD_PROPERTY);
+      if (key) void this.mergePalette(key, fresh.has(key));
+    }
+  }
+
+  /**
+   * Write a merged palette's picture, and get its texture into the scene.
+   *
+   * Two things psd-to-phaser does for a layer sprite and does not do for
+   * this: the file does not exist until the Rust side composites it, and
+   * nothing loads it afterwards because the plugin has never heard of it. So
+   * both are here, keyed on the texture the renderer will ask for — see
+   * `TileRender.frameFor`, which looks it up by `textureKey`.
+   *
+   * Guarded by `merging` rather than by the texture alone, because
+   * `cutPalettes` runs on every document change and the write takes as long
+   * as compositing a PSD does: without it a palette cut once would be written
+   * again on every keystroke in a layer name.
+   */
+  private async mergePalette(psdKey: string, fresh: boolean): Promise<void> {
+    const texture = textureKey(psdKey, MERGED_LAYER);
+    if (this.merging.has(psdKey) || this.host.scene.textures.exists(texture)) {
+      return;
+    }
+    this.merging.add(psdKey);
+    try {
+      // A palette cut just now has no picture yet; one cut in an earlier
+      // session almost certainly has, and compositing every PSD in a project
+      // again on every open would be seconds of work to produce files that
+      // are already there. So the write is skipped and the load is what
+      // finds out — and a load that fails is the one case worth paying for.
+      if (fresh) await this.host.config.mergePsdArt?.(psdKey);
+      try {
+        await this.loadMerged(psdKey, texture);
+      } catch (err) {
+        if (fresh) throw err;
+        await this.host.config.mergePsdArt?.(psdKey);
+        await this.loadMerged(psdKey, texture);
+      }
+      // The palette is in the document either way; what has just arrived is
+      // the picture it is cut out of, so every tile standing on it can be
+      // drawn now.
+      this.render.invalidate();
+    } catch (err) {
+      log.error(`Could not merge ${psdKey}.psd into one palette:`, err);
+    } finally {
+      this.merging.delete(psdKey);
+    }
+  }
+
+  /** The merged picture, into the scene's texture manager. */
+  private loadMerged(psdKey: string, texture: string): Promise<void> {
+    const { scene } = this.host;
+    if (scene.textures.exists(texture)) return Promise.resolve();
+    const url = `${this.host.config.assetBase}/assets/${psdKey}/${MERGED_FILE}`;
+    return new Promise((resolve, reject) => {
+      // Phaser's loader is a queue with global events, so both handlers are
+      // taken off again the moment either fires: a second palette merged in
+      // the same session would otherwise resolve this one's promise.
+      const done = () => {
+        scene.load.off("filecomplete-image-" + texture, done);
+        scene.load.off("loaderror", failed);
+        resolve();
+      };
+      const failed = (file: { key?: string }) => {
+        if (file?.key !== texture) return;
+        scene.load.off("filecomplete-image-" + texture, done);
+        scene.load.off("loaderror", failed);
+        reject(new Error(`${url} did not load`));
+      };
+      scene.load.once("filecomplete-image-" + texture, done);
+      scene.load.on("loaderror", failed);
+      scene.load.image(texture, url);
+      scene.load.start();
+    });
   }
 
   /**
@@ -197,10 +305,29 @@ export class Tiling {
   /** Both halves of the window where a file's textures are being replaced. */
   dropKey(psdKey: string): void {
     this.render.dropKey(psdKey);
+    // A merged palette's texture is this file's own rather than one
+    // psd-to-phaser loaded, so nothing else evicts it — and a re-parse has
+    // just rewritten the picture it was made from. Left in place it would be
+    // the artwork as it was before the edit, for ever.
+    const texture = textureKey(psdKey, MERGED_LAYER);
+    if (this.host.scene.textures.exists(texture)) {
+      this.host.scene.textures.remove(texture);
+    }
   }
 
   restoreKey(psdKey: string): void {
     this.render.restoreKey(psdKey);
+    // And back again, for a file that has one. `cutPalettes` will not ask —
+    // the palette is already in the document — so the reload is asked for
+    // here, where the file is known to have just landed.
+    const held = this.host.store.doc.tilesets ?? [];
+    const merged = held.some(
+      (set) => isMergedTileset(set) && propertyOf(set, PSD_PROPERTY) === psdKey,
+    );
+    // Not `fresh`: the picture has already been rebuilt by the re-parse that
+    // cleared the directory — `psd_flatten::refresh` runs at the end of every
+    // processing run — so this is a load rather than a second composite.
+    if (merged) void this.mergePalette(psdKey, false);
   }
 
   /** A scene switch, or the layer ceasing to be one. */

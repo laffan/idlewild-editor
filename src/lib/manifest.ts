@@ -165,6 +165,26 @@ export function manifestLayers(layers: unknown): ManifestLayer[] {
   return all;
 }
 
+/**
+ * The PSD's own canvas, off the plugin's copy of its manifest.
+ *
+ * The **file's** rectangle rather than the union of its artwork, which is the
+ * distinction that matters to the one thing that asks: a merged tile palette
+ * is cut on the project's grid from the file's top-left corner, so a size
+ * trimmed to the pixels would shift every tile in it. Undefined for a file
+ * nobody has loaded, and for one whose manifest says something that is not a
+ * size — a guess there would be a palette with the wrong number of tiles.
+ */
+export function manifestSize(
+  original: unknown,
+): { width: number; height: number } | undefined {
+  const held = original as { width?: unknown; height?: unknown } | undefined;
+  const width = Number(held?.width);
+  const height = Number(held?.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return undefined;
+  return width > 0 && height > 0 ? { width, height } : undefined;
+}
+
 /** How deep in the stack a layer sits, from its slash-joined path. */
 export function layerDepth(path: string): number {
   return path.split("/").length - 1;

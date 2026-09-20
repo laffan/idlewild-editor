@@ -196,6 +196,11 @@ pub(crate) fn process_held(
         .map_err(|e| format!("Cannot write manifest: {e}"))?;
 
     emit_log(&format!("Wrote assets/{key}/data.json"));
+    // The directory this run cleared may have held the merged picture a tile
+    // palette is cut from, and that picture is made of the file that has just
+    // changed — see `psd_flatten.rs`. A no-op for a project with no merged
+    // palette of this file, which is almost all of them.
+    crate::psd_flatten::refresh(project_id, key);
     read_manifest(project_id, key)
 }
 

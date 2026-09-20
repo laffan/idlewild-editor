@@ -30,6 +30,7 @@ import type {
   Layer,
   LayerKind,
   MapPoint,
+  PaletteMode,
   Placement,
   Projection,
   Scaffold,
@@ -530,6 +531,27 @@ export class DocStore extends EventTarget {
     const next = { ...this.state.colliders, [to]: held };
     if (!keepOriginal) delete next[from];
     this.commit({ ...this.state, colliders: next });
+  }
+
+  // ── palettes ──────────────────────────────────────────────────────────────
+
+  /**
+   * How each PSD on a tile layer is cut into a palette.
+   *
+   * Document-level for the reason the colliders and the tilesets are: `psd/`
+   * is one directory for the project, so a file is cut one way everywhere.
+   * Absent until somebody asks for something other than the default — see
+   * `paletteMode` in `lib/tile-layers.ts`, which is what everything reads.
+   */
+  get palettes(): Record<string, PaletteMode> | undefined {
+    return this.state.palettes;
+  }
+
+  setPaletteMode(key: string, mode: PaletteMode): void {
+    this.commit({
+      ...this.state,
+      palettes: { ...this.state.palettes, [key]: mode },
+    });
   }
 
   /** Replace a layer's strokes wholesale — how the drawing layer writes. */

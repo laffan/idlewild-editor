@@ -52,6 +52,16 @@ export interface WorldSceneConfig {
    * because it owns the IPC.
    */
   onDetachCopy?: (layerId: string, placementId: string, key: string) => void;
+  /**
+   * Composite a PSD into the one picture a **merged** tile palette is cut
+   * from, and resolve once it is on disk.
+   *
+   * The editor owns it because it owns the IPC, exactly as `onDetachCopy` is
+   * the editor's. What comes back is nothing: the picture is served over the
+   * asset server like every other asset, so what the scene does next is load
+   * it — see `game/tiling.ts`.
+   */
+  mergePsdArt?: (psdKey: string) => Promise<void>;
   /** Extrude mode has started, finished, or changed what it is holding. */
   onExtrudeChange?: () => void;
   /** Collider mode has started, finished, or changed the spaces it holds. */

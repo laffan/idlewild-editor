@@ -149,3 +149,26 @@ export const PSD_PROPERTY = "idlewild:psd";
 
 /** And which layer of it, for a PSD holding more than one. */
 export const PSD_LAYER_PROPERTY = "idlewild:layer";
+
+/**
+ * What that property says when the palette is the **whole file** rather than
+ * one layer of it.
+ *
+ * A PSD on a tile layer is cut into a palette, and it used to be cut one
+ * palette per layer — a building drawn as walls, roof and shadow arrived as
+ * three sparse tilesets. That is right for a file whose layers are separate
+ * sets of tiles and wrong for a sheet somebody drew in layers, so the panel
+ * offers both and this is how the record says which it is.
+ *
+ * A sentinel in the layer field rather than a property of its own, because
+ * the two answers are exclusive: a tileset is cut from one layer *or* from
+ * the file, and two fields would let a record say both. The asterisks are
+ * what keep it out of the space of real answers — a layer path is a run of
+ * psd-to-json layer names joined by slashes, and the pipeline strips the
+ * `S |` prefix rather than adding punctuation.
+ *
+ * The picture it names is `assets/<key>/merged.png`, composited by
+ * `src-tauri/src/psd_flatten.rs`, which reads this same string back to decide
+ * whether a re-parse has to rebuild it.
+ */
+export const MERGED_LAYER = "*merged*";

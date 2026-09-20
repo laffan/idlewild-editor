@@ -26,12 +26,20 @@ import {
 } from "./tiled/chunks";
 import { gidAt, tileGrid } from "./tiled/gid";
 import {
+  MERGED_LAYER,
   PSD_LAYER_PROPERTY,
   PSD_PROPERTY,
   type TiledTileLayer,
   type TiledTileset,
 } from "./tiled/types";
-import type { Cell, Layer, Placement, Projection, Rect } from "./types";
+import type {
+  Cell,
+  Layer,
+  PaletteMode,
+  Placement,
+  Projection,
+  Rect,
+} from "./types";
 
 /**
  * Whether this project can have tile layers at all.
@@ -74,6 +82,32 @@ export function tilesetForPsd(
     if (layerPath === undefined) return true;
     return (propertyOf(tileset, PSD_LAYER_PROPERTY) ?? "root") === layerPath;
   });
+}
+
+/**
+ * How a PSD on a tile layer is cut into a palette.
+ *
+ * **Merged unless the document says otherwise**, and the default is the whole
+ * of this function's reason to exist. A PSD used to be cut one palette per
+ * layer, which is right for a file whose layers are separate sets of tiles
+ * and wrong for every file that is a sheet somebody drew in layers: a
+ * building came into the sidebar as three sparse pictures, each missing the
+ * other two's tiles, and the way to paint the building was to stamp from all
+ * three onto the same space. So the file as it looks is the default, and the
+ * layer-by-layer cut is the thing you ask for.
+ *
+ * Absent from the document for every project that has never asked, which is
+ * what makes this a migration nobody has to run: a document written before
+ * the choice existed answers `merged`, and its per-layer palettes are still
+ * in `tilesets` with every gid standing on them still pointing where it did.
+ */
+export function paletteMode(store: DocStore, psdKey: string): PaletteMode {
+  return store.doc.palettes?.[psdKey] === "separate" ? "separate" : "merged";
+}
+
+/** Whether a palette is the whole file rather than one layer of it. */
+export function isMergedTileset(tileset: TiledTileset): boolean {
+  return propertyOf(tileset, PSD_LAYER_PROPERTY) === MERGED_LAYER;
 }
 
 /** The value of one of a tileset's custom properties. */
@@ -250,26 +284,78 @@ export function tilesetArt(
  * has not loaded yet, which is not a failure: the load fires
  * `onPsdsLoaded`, and that is one of the two moments this runs.
  *
- * Answers whether anything was cut, so a caller inside a change handler can
- * tell a repair from a no-op.
+ * Answers **which** palettes it cut, rather than merely whether it cut any.
+ * A caller inside a change handler needs to tell a repair from a no-op, and a
+ * merged one needs more than that: its picture has to exist on disk and its
+ * texture has to be in the scene, neither of which is psd-to-phaser's doing.
+ * See `game/tiling.ts`.
  */
 export function syncTilesets(
   store: DocStore,
   grid: Grid,
-  art: (psdKey: string, layerPath: string) => TilesetArt | undefined,
-): boolean {
-  let cut = false;
+  art: PaletteSource,
+): TiledTileset[] {
+  const cut: TiledTileset[] = [];
   for (const layer of store.layers) {
     if (layer.kind !== "tile") continue;
     for (const placement of layer.placements) {
-      if (tilesetForPsd(store, placement.psdKey, placement.layerPath)) continue;
-      const found = art(placement.psdKey, placement.layerPath);
+      const merged = paletteMode(store, placement.psdKey) === "merged";
+      // A merged palette is one per **file**, so every layer of a PSD that
+      // arrived as several placements asks the same question and the second
+      // and third find it already answered. A separate one is one per layer,
+      // as it has always been.
+      const path = merged ? MERGED_LAYER : placement.layerPath;
+      if (tilesetForPsd(store, placement.psdKey, path)) continue;
+      const found = merged
+        ? art.merged(placement.psdKey)
+        : art.layer(placement.psdKey, placement.layerPath);
       if (!found) continue;
-      cut = cutIntoTileset(store, grid, layer, placement, found) !== null || cut;
+      const made = cutIntoTileset(store, grid, layer, placement, found);
+      if (made) cut.push(made);
     }
   }
   return cut;
 }
+
+/**
+ * Where the picture a palette is cut from comes from.
+ *
+ * Two questions rather than one, because the two answers come from different
+ * places. A layer's artwork is in the manifest psd-to-phaser already holds;
+ * the file as one picture is composited by the Rust side and written beside
+ * those layers — see `src-tauri/src/psd_flatten.rs`. Both answer undefined
+ * for a file that has not loaded yet, which is not a failure: the load fires
+ * `onPsdsLoaded`, and that is one of the two moments `syncTilesets` runs.
+ */
+export interface PaletteSource {
+  layer(psdKey: string, layerPath: string): TilesetArt | undefined;
+  merged(psdKey: string): TilesetArt | undefined;
+}
+
+/**
+ * The whole file, as a palette source.
+ *
+ * `path` is the sentinel rather than a layer name, which is what makes a
+ * merged tileset findable as one — and `filePath` is the picture
+ * `psd_flatten.rs` writes, which is a sibling of the layer sprites rather
+ * than one of them. The size is the **PSD's canvas**, not the union of its
+ * artwork: a palette is cut on the project's grid from the file's own corner,
+ * so a picture trimmed to its contents would shift every tile in it.
+ */
+export function mergedArt(
+  size: { width: number; height: number } | undefined,
+): TilesetArt | undefined {
+  if (!size || size.width <= 0 || size.height <= 0) return undefined;
+  return {
+    path: MERGED_LAYER,
+    filePath: MERGED_FILE,
+    width: size.width,
+    height: size.height,
+  };
+}
+
+/** What `psd_flatten.rs` calls the picture it writes. */
+export const MERGED_FILE = "merged.png";
 
 /**
  * One PSD on a tile layer, cut into a palette.

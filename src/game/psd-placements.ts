@@ -20,6 +20,7 @@ import type { ManifestLayer } from "../lib/manifest";
 import {
   hasRootAnchor,
   manifestLayers,
+  manifestSize,
   parseManifest,
   scopeKeys,
   textureKey,
@@ -567,6 +568,11 @@ export class PsdPlacements {
   layersOf(key: string): ManifestLayer[] {
     const data = this.plugin()?.getData(key);
     return data ? manifestLayers((data.original as { layers?: unknown })?.layers) : [];
+  }
+
+  /** A loaded PSD's own canvas — what a merged palette is cut on. */
+  sizeOf(key: string): { width: number; height: number } | undefined {
+    return manifestSize(this.plugin()?.getData(key)?.original);
   }
 
   private load(key: string): Promise<void> {

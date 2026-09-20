@@ -39,6 +39,7 @@ import {
   addTilesets,
   eraseTiles,
   nextFirstGid,
+  paletteMode,
   tiledCells,
   tilesetsOf,
 } from "../lib/tile-layers";
@@ -52,7 +53,7 @@ import {
   type TiledTileLayer,
   type TiledTileset,
 } from "../lib/tiled/types";
-import type { Layer } from "../lib/types";
+import type { Layer, PaletteMode } from "../lib/types";
 import type { TileActions } from "./inspect-tiles";
 import type { ToolRouting } from "./tool-routing";
 import { TileSelection } from "./tile-palette";
@@ -128,8 +129,39 @@ export function tileDeps(
     tileShape: () => tools().tileShape(),
     onTileShape: (shape) => tools().onTileShape(shape),
     onSelectPsd: (selection) => base.scene()?.setSelection(selection),
+    onPaletteMode: (psdKey, mode) => setPaletteMode(deps, psdKey, mode),
   };
   return deps;
+}
+
+/**
+ * Cut a PSD's palette from the whole file, or from each of its layers.
+ *
+ * An ordinary undo step, unlike the palettes themselves: cutting one is a
+ * repair the editor makes on somebody's behalf — see `Tiling.cutPalettes`,
+ * which is silent on the stack — but *asking for the other cut* is a thing
+ * somebody did, and it is the one thing about a palette that can be taken
+ * back. What it takes back is the choice; the palette the choice produced
+ * stays, for the reason none of them is ever removed.
+ *
+ * The palette itself is cut by the sweep on the next document change, which
+ * is why nothing here makes one: every route onto a tile layer goes through
+ * that sweep, and a second place that cut palettes would be the second place
+ * to forget.
+ */
+function setPaletteMode(
+  deps: TileDeps,
+  psdKey: string,
+  mode: PaletteMode,
+): void {
+  if (paletteMode(deps.store, psdKey) === mode) return;
+  deps.store.setPaletteMode(psdKey, mode);
+  log.info(
+    mode === "merged"
+      ? `${psdKey}.psd is one palette of the whole file`
+      : `${psdKey}.psd is one palette per layer`,
+  );
+  deps.onChanged?.();
 }
 
 /**

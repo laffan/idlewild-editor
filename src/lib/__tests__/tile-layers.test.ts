@@ -16,8 +16,11 @@ import {
   addTileset,
   blockCorner,
   cutIntoTileset,
+  isMergedTileset,
+  mergedArt,
   syncTilesets,
   tilesetArt,
+  type PaletteSource,
   nextFirstGid,
   paintTiles,
   propertyOf,
@@ -34,7 +37,7 @@ import {
   describeTiles,
 } from "../tile-layers";
 import { tileAt, tileCount } from "../tiled/chunks";
-import { PSD_PROPERTY } from "../tiled/types";
+import { PSD_LAYER_PROPERTY, PSD_PROPERTY } from "../tiled/types";
 import type { GameDoc } from "../types";
 
 // The store writes through `ipc.doc.write`, which wants Tauri, and debounces
@@ -230,7 +233,7 @@ describe("the sweep that cuts palettes", () => {
       placements: [
         ...layer.placements,
         {
-          id: `p-${key}`,
+          id: `p-${key}-${layerPath}`,
           psdKey: key,
           layerPath,
           x: 0,
@@ -255,6 +258,12 @@ describe("the sweep that cuts palettes", () => {
     },
   ];
 
+  /** The whole file as one picture, and each of its layers on its own. */
+  const source = (loaded = true): PaletteSource => ({
+    layer: (_key, path) => (loaded ? tilesetArt(art(path), path) : undefined),
+    merged: () => (loaded ? mergedArt({ width: 192, height: 128 }) : undefined),
+  });
+
   it("cuts a palette for a PSD that arrived by a route place never sees", () => {
     // The bug this exists for: carrying a file onto a tile layer from the
     // layer panel goes through `movePlacements` and never near `place`, so
@@ -264,9 +273,7 @@ describe("the sweep that cuts palettes", () => {
     carry(held, "art");
     expect(tilesetsOf(held)).toHaveLength(0);
 
-    expect(syncTilesets(held, GRID, (_key, path) => tilesetArt(art(path), path))).toBe(
-      true,
-    );
+    expect(syncTilesets(held, GRID, source())).toHaveLength(1);
     expect(tilesetsOf(held)).toHaveLength(1);
     expect(tilesetsOf(held)[0].columns).toBe(3);
   });
@@ -274,10 +281,9 @@ describe("the sweep that cuts palettes", () => {
   it("does nothing the second time, so a change handler can call it freely", () => {
     const held = store();
     carry(held, "art");
-    const find = (_key: string, path: string) => tilesetArt(art(path), path);
-    syncTilesets(held, GRID, find);
+    syncTilesets(held, GRID, source());
     const after = held.doc;
-    expect(syncTilesets(held, GRID, find)).toBe(false);
+    expect(syncTilesets(held, GRID, source())).toHaveLength(0);
     expect(held.doc).toBe(after);
   });
 
@@ -286,7 +292,7 @@ describe("the sweep that cuts palettes", () => {
     // from a guess would be a palette with the wrong number of tiles in it.
     const held = store();
     carry(held, "art");
-    expect(syncTilesets(held, GRID, () => undefined)).toBe(false);
+    expect(syncTilesets(held, GRID, source(false))).toHaveLength(0);
     expect(tilesetsOf(held)).toHaveLength(0);
   });
 
@@ -294,8 +300,72 @@ describe("the sweep that cuts palettes", () => {
     const held = store();
     held.editLayer("layer-1", (layer) => ({ ...layer, kind: "object" }));
     carry(held, "art");
-    expect(syncTilesets(held, GRID, (_k, p) => tilesetArt(art(p), p))).toBe(false);
+    expect(syncTilesets(held, GRID, source())).toHaveLength(0);
     expect(tilesetsOf(held)).toHaveLength(0);
+  });
+
+  /**
+   * The default, and the whole point of the change: a PSD drawn in layers
+   * arrives as **one** palette of the file as it looks, rather than as one
+   * sparse palette per layer with the others' tiles missing.
+   */
+  it("cuts one palette for a whole file, however many layers it has", () => {
+    // Two placements of the same file: a PSD with two layers arrives as one
+    // placement each, and on the canvas they are one thing.
+    const held = store();
+    carry(held, "hut", "S | walls");
+    carry(held, "hut", "S | roof");
+
+    const made = syncTilesets(held, GRID, source());
+    expect(made).toHaveLength(1);
+    expect(isMergedTileset(made[0])).toBe(true);
+    expect(propertyOf(made[0], PSD_PROPERTY)).toBe("hut");
+    // The picture is the merge written beside the layer sprites, not one of
+    // them — see `src-tauri/src/psd_flatten.rs`.
+    expect(made[0].image).toBe("assets/hut/merged.png");
+  });
+
+  /**
+   * And the other answer, for a file whose layers really are separate sets of
+   * tiles. Asked for per file and kept in the document, because `psd/` is one
+   * directory for the project.
+   */
+  it("cuts one palette per layer when the file is set to Separate", () => {
+    const held = store();
+    carry(held, "hut", "S | walls");
+    carry(held, "hut", "S | roof");
+    held.setPaletteMode("hut", "separate");
+
+    const made = syncTilesets(held, GRID, source());
+    expect(made).toHaveLength(2);
+    expect(made.map((set) => propertyOf(set, PSD_LAYER_PROPERTY))).toEqual([
+      "S | walls",
+      "S | roof",
+    ]);
+    expect(made.every((set) => !isMergedTileset(set))).toBe(true);
+    // And the second palette takes the block after the first, because a gid
+    // means the nth tile across every tileset in the map.
+    expect(made[1].firstgid).toBe(made[0].firstgid + made[0].tilecount);
+  });
+
+  /**
+   * Switching does not take the palettes already cut away, and it must not:
+   * a gid means the nth tile across every tileset in the map, so a palette
+   * anything has ever been painted from has to stay exactly where it is.
+   */
+  it("leaves the palettes already cut alone when the mode changes", () => {
+    const held = store();
+    carry(held, "art");
+    syncTilesets(held, GRID, source());
+    expect(tilesetsOf(held)).toHaveLength(1);
+    const merged = tilesetsOf(held)[0];
+
+    held.setPaletteMode("art", "separate");
+    syncTilesets(held, GRID, source());
+    const after = tilesetsOf(held);
+    expect(after).toHaveLength(2);
+    expect(after[0]).toBe(merged);
+    expect(after[0].firstgid).toBe(merged.firstgid);
   });
 
   it("falls back to the file's first picture when the path has moved", () => {

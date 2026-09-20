@@ -6,7 +6,7 @@
 import { clear, h } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import { assetBase, platform } from "../lib/ipc";
+import { assetBase, platform, psd } from "../lib/ipc";
 import { exposeDevHooks, reportAssetServer } from "./editor-boot";
 import { nudger } from "./nudge-actions";
 import type { ProjectMeta, Selection, ToolId } from "../lib/types";
@@ -491,6 +491,11 @@ export async function mountEditor(
       },
       onDetachCopy: (layerId, placementId, key) =>
         void psdFile.detach(layerId, placementId, key),
+      // The picture a merged tile palette is cut from. The editor owns it
+      // because it owns the IPC; the scene loads what it writes.
+      mergePsdArt: async (key) => {
+        await psd.merged(meta.id, key);
+      },
       // The panels ask the plugin whether a file carries its anchor mark, and
       // the answer changes the moment the manifest arrives. Nothing about the
       // document moves when it does, so without this every row would keep

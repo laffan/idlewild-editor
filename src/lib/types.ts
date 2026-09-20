@@ -464,6 +464,23 @@ export interface Scene {
 }
 
 /** The saved body of a project. */
+/**
+ * How a PSD on a tile layer is cut into a palette.
+ *
+ * **Merged** is the default and is one palette of the whole file, cut from a
+ * picture of it composited beside its layer sprites. **Separate** is one
+ * palette per layer, which is what a file whose layers are genuinely
+ * different sets of tiles wants — and is what every PSD used to get, whether
+ * it wanted it or not.
+ *
+ * Neither is reversible in the sense of taking the other's tilesets away: a
+ * gid means the nth tile across every tileset in the map, so a palette that
+ * anything has ever been painted from has to stay where it is. Switching
+ * changes which palettes the panel offers and which the next file is cut
+ * into; it never renumbers what is already on the ground.
+ */
+export type PaletteMode = "merged" | "separate";
+
 export interface GameDoc {
   version: 1 | 2;
   projection: Projection;
@@ -512,6 +529,21 @@ export interface GameDoc {
    * project that has never made one.
    */
   tilesets?: TiledTileset[];
+  /**
+   * How each PSD on a tile layer is cut into a palette, by key.
+   *
+   * Document-level for the reason the tilesets are: `psd/` is one directory
+   * for the project, so a file cut one way on one layer is cut that way
+   * everywhere — a second answer per layer would be two palettes of the same
+   * picture with different gids, and a tile put down from one would be a tile
+   * the other cannot explain.
+   *
+   * Absent on every document written before the choice existed and on every
+   * project that has only ever taken the default, which is `merged` — see
+   * `paletteMode` in `lib/tile-layers.ts`. A key is written only when
+   * somebody has asked for the other one.
+   */
+  palettes?: Record<string, PaletteMode>;
   /**
    * Where layers lived before scenes existed, and where the camera did.
    *
