@@ -279,6 +279,16 @@ export function toolName(tool: ToolId): string {
 export class ToolRail {
   /** What you do to the canvas, hanging from the top-left corner. */
   readonly root: HTMLElement;
+  /**
+   * The strip above the first tool, for whatever belongs at the head of the
+   * column without being one of its buttons.
+   *
+   * There is one thing that goes there — the zoom badge, which is a readout
+   * about the *view* rather than a tool — and a slot is the honest way to say
+   * so, exactly as the code modal's file column has one for its Find strip.
+   * The rail keeps it across `setOffered`, which replaces the buttons.
+   */
+  readonly head: HTMLElement;
   /** The ink, standing on the bottom-left corner. */
   readonly drawBar: HTMLElement;
   readonly label: HTMLElement;
@@ -303,6 +313,8 @@ export class ToolRail {
     onHold?: (tool: ToolId) => void,
   ) {
     this.root = h("div", { class: "tool-rail" });
+    this.head = h("div", { class: "tool-rail-head" });
+    this.root.appendChild(this.head);
     this.label = h("div", { class: "tool-name m", text: "Select" });
     this.drawBar = h("div", { class: "tool-rail draw-bar" });
 
@@ -394,7 +406,8 @@ export class ToolRail {
     // with it every time somebody tabbed to a tool and pressed it.
     if (wanted === this.offered) return;
     this.offered = wanted;
-    this.root.replaceChildren();
+    // The head survives, because what is in it is not a tool: see `head`.
+    this.root.replaceChildren(this.head);
     this.drawBar.replaceChildren();
     for (const tool of TOOLS) {
       if (!tools.includes(tool.id)) continue;

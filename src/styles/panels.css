@@ -170,6 +170,61 @@
 .overlays-row.off .overlays-name { color: var(--chrome-dim); }
 .overlays-row.off .overlays-eye { color: var(--color-neutral-600); }
 
+/* The lattice's own two settings, directly under the Grid switch and folded
+   away with it. Indented past the eye column so they read as belonging to the
+   row above rather than as two more marks to switch; shorter than a switch
+   row, because they are adjustments rather than targets a finger has to find
+   in a hurry. See editor/grid-style.ts. */
+.overlays-grid-style {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 6px 30px;
+}
+.overlays-setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+.overlays-setting .overlays-name {
+  flex: none;
+  width: 68px;
+  font: 500 10px var(--font-label);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.overlays-slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--color-accent);
+}
+/* Wide enough for "100%" so the slider beside it does not resize as the
+   number changes — the same rule the palette's own zoom readout follows. */
+.overlays-readout {
+  flex: none;
+  width: 34px;
+  text-align: right;
+  font: 500 10px/1 var(--font-mono);
+}
+/* The colour itself is the control: a chip that opens the picker under it.
+   Folded rather than always showing, because a full picker permanently above
+   the minimap costs the map more than a colour anybody sets once is worth. */
+.overlays-colour { cursor: pointer; }
+.overlays-colour:hover .overlays-name { color: var(--chrome-text); }
+.overlays-swatch-chip {
+  flex: none;
+  width: 22px;
+  height: 14px;
+  border: 1px solid var(--chrome-rule);
+}
+.overlays-picker { padding: 2px 0 6px; }
+
 /* Switched off from the row above it. `display: none` also stops the paint:
    the body has no box to fit anything into, `Minimap.paint` returns on that,
    and the ResizeObserver brings it back the moment there is one again — the

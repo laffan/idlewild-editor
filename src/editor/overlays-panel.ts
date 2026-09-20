@@ -40,9 +40,27 @@
  * folded inspector section, so it lives in `localStorage` and never reaches
  * `doc.json`. Two people opening the same project see their own answer, and
  * no overlay switch has ever been a thing to undo.
+ *
+ * **The Grid row has two settings under it, and only while it is on.** How
+ * strong the lattice is and what colour its lines are is the difference
+ * between a grid you can work over and one you switch off — pale blue
+ * hairlines vanish under pale artwork and shout over dark artwork, and both
+ * of those end with somebody hiding the thing they are measuring against.
+ * They are the same *kind* of answer as the switch above them, so they are
+ * stored beside it and applied by the same call; they are folded away with
+ * the switch off, because a colour for a mark nobody is drawing is two rows
+ * of chrome about nothing. See `editor/grid-style.ts`, which owns them.
  */
 
 import { h, ICONS, icon } from "../lib/dom";
+import {
+  clampGridOpacity,
+  gridStyleRows,
+  readGridColor,
+  readGridOpacity,
+  GRID_STYLE_DEFAULTS,
+} from "./grid-style";
+import { hexToNumber } from "../lib/color";
 import type { Minimap } from "./minimap";
 import type { ScreenGuide } from "./screen-guide";
 
@@ -55,18 +73,26 @@ import type { ScreenGuide } from "./screen-guide";
  */
 export interface LatticeHost {
   setGridVisible(on: boolean): void;
+  /** The lines' colour, as a Phaser colour number, and their weight, 0–1. */
+  setGridStyle(color: number, opacity: number): void;
 }
 
 const STORAGE_KEY = "idlewild.overlays";
 
-/** What the panel remembers: the four marks, and whether it is folded. */
-export interface OverlayState {
-  grid: boolean;
-  boundary: boolean;
-  centre: boolean;
-  minimap: boolean;
+/** The four marks, each of which is a switch and nothing more. */
+export type OverlaySwitch = "grid" | "boundary" | "centre" | "minimap";
+
+/**
+ * What the panel remembers: the four marks, the lattice's own two settings,
+ * and whether the section is folded.
+ */
+export type OverlayState = Record<OverlaySwitch, boolean> & {
   open: boolean;
-}
+  /** The lattice's line colour, as a hex string — see `editor/grid-style.ts`. */
+  gridColor: string;
+  /** And its weight, 0 to 1, multiplied into the fade the renderer applies. */
+  gridOpacity: number;
+};
 
 /**
  * Everything on, and the section folded. What a project opens as.
@@ -85,7 +111,16 @@ export const OVERLAY_DEFAULTS: OverlayState = {
   centre: true,
   minimap: true,
   open: false,
+  ...GRID_STYLE_DEFAULTS,
 };
+
+/** The keys that are plainly switches, which is how a stored one is read. */
+const SWITCHES: readonly OverlaySwitch[] = [
+  "grid",
+  "boundary",
+  "centre",
+  "minimap",
+];
 
 /**
  * The stored state, with anything missing or malformed taken from the
@@ -103,9 +138,15 @@ export function readOverlays(raw: string | null): OverlayState {
     if (!parsed || typeof parsed !== "object") return { ...OVERLAY_DEFAULTS };
     const record = parsed as Record<string, unknown>;
     const state = { ...OVERLAY_DEFAULTS };
-    for (const key of Object.keys(OVERLAY_DEFAULTS) as (keyof OverlayState)[]) {
+    for (const key of [...SWITCHES, "open" as const]) {
       if (typeof record[key] === "boolean") state[key] = record[key];
     }
+    // The lattice's own two, each read the way its control writes it: a hex
+    // that is not one and a number outside the range both fall back to the
+    // default, for the reason the switches do — a mark drawn in nothing at
+    // all is a mark nobody can find the switch for.
+    state.gridColor = readGridColor(record.gridColor);
+    state.gridOpacity = readGridOpacity(record.gridOpacity);
     return state;
   } catch {
     return { ...OVERLAY_DEFAULTS };
@@ -114,7 +155,7 @@ export function readOverlays(raw: string | null): OverlayState {
 
 /** One switch, as the rows are described below. */
 interface Row {
-  key: Exclude<keyof OverlayState, "open">;
+  key: OverlaySwitch;
   label: string;
   title: string;
 }
@@ -152,6 +193,14 @@ export class OverlaysPanel {
   private readonly body: HTMLElement;
   private readonly rows: readonly Row[];
   private readonly buttons = new Map<Row["key"], HTMLElement>();
+  /**
+   * The lattice's own two controls, or null for a project with no lattice.
+   *
+   * Held so the Grid switch can fold them away without the panel being
+   * rebuilt — the picker inside is a live control with a drag in progress
+   * half the time this runs.
+   */
+  private gridStyle: HTMLElement | null = null;
   private state: OverlayState;
   /** Handed over once it exists — see `setGuide`. */
   private guide: ScreenGuide | null = null;
@@ -183,6 +232,18 @@ export class OverlaysPanel {
       );
       this.buttons.set(row.key, button);
       this.body.appendChild(button);
+      // Directly under the switch they belong to, rather than at the foot of
+      // the list: they are settings *for* the Grid row, and a colour four
+      // rows below the mark it colours is a colour for whatever is nearest.
+      if (row.key === "grid") {
+        this.gridStyle = gridStyleRows({
+          color: this.state.gridColor,
+          opacity: this.state.gridOpacity,
+          onColor: (hex) => this.setStyle({ gridColor: hex }),
+          onOpacity: (opacity) => this.setStyle({ gridOpacity: opacity }),
+        });
+        this.body.appendChild(this.gridStyle);
+      }
     }
 
     this.section = h(
@@ -241,6 +302,21 @@ export class OverlaysPanel {
     this.apply();
   }
 
+  /**
+   * One of the lattice's two settings moved.
+   *
+   * Applied and saved but **not** painted: the slider fires on every pixel of
+   * a drag and the picker on every pixel of two, and repainting would mean
+   * rebuilding the controls under the fingers doing the dragging. Each of
+   * them keeps its own readout current, which is the same bargain the
+   * inspector's `updateStrokeStyle` strikes.
+   */
+  private setStyle(patch: Partial<OverlayState>): void {
+    this.state = { ...this.state, ...patch };
+    this.save();
+    this.apply();
+  }
+
   private setOpen(open: boolean): void {
     this.state = { ...this.state, open };
     this.save();
@@ -250,6 +326,9 @@ export class OverlaysPanel {
   /** The switches, as they stand. */
   private paint(): void {
     this.section.classList.toggle("closed", !this.state.open);
+    // A colour for a mark nobody is drawing is two rows of chrome about
+    // nothing, so the lattice's settings go with its switch.
+    if (this.gridStyle) this.gridStyle.hidden = !this.state.grid;
     for (const row of this.rows) {
       const button = this.buttons.get(row.key);
       if (!button) continue;
@@ -267,6 +346,10 @@ export class OverlaysPanel {
     this.minimap.setVisible(this.state.minimap);
     this.guide?.setMarksVisible(this.state.boundary, this.state.centre);
     this.lattice?.setGridVisible(this.state.grid);
+    this.lattice?.setGridStyle(
+      hexToNumber(this.state.gridColor),
+      clampGridOpacity(this.state.gridOpacity),
+    );
   }
 
   destroy(): void {

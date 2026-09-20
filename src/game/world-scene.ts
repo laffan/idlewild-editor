@@ -28,6 +28,7 @@ import { Marquee } from "./marquee";
 import { DragController } from "./drag";
 import { CanvasModes } from "./canvas-modes";
 import { PsdPlacements } from "./psd-placements";
+import { psdHost } from "./psd-host";
 import { layerImage, type LayerImage } from "./psd-loader";
 import { handleDoubleTap, handleTap, type TappingHost } from "./tapping";
 import { DEFAULT_TEXT_STYLE, type TextStyle } from "./text-style";
@@ -234,35 +235,23 @@ export class WorldScene extends Phaser.Scene {
       }),
     );
 
-    this.psds = new PsdPlacements({
-      scene: this,
-      store: this.store,
-      grid: this.grid,
-      docRenderer: this.docRenderer,
-      assetBase: this.config.assetBase,
-      // Read through, not captured: the active layer changes as the user
-      // works, and a PSD is placed on whichever one is current.
-      get activeLayerId() {
-        return sceneRef.activeLayerId;
-      },
-      setSelection: (selection) => this.setSelection(selection),
-      reselect: () => this.setSelection(this.selection),
-      refresh: () => this.refresh(),
-      onPsdsLoaded: () => this.config.onPsdsLoaded?.(),
-      // Both renderers that make objects the *document* has no record of —
-      // a pattern's copies and a tile layer's tiles. A sprite still drawing
-      // against a frame whose source has been destroyed is a throw inside
-      // Phaser on every frame from then on, so each one is told before the
-      // textures go and told again when they are back.
-      releaseKey: (key) => {
-        sceneRef.patterns.dropKey(key);
-        sceneRef.tiling.dropKey(key);
-      },
-      restoreKey: (key) => {
-        sceneRef.patterns.restoreKey(key);
-        sceneRef.tiling.restoreKey(key);
-      },
-    });
+    // The shape the pieces above are handed over in — see `psd-host.ts`,
+    // which also holds the argument for `derived`.
+    this.psds = new PsdPlacements(
+      psdHost({
+        scene: this,
+        store: this.store,
+        grid: this.grid,
+        docRenderer: this.docRenderer,
+        assetBase: this.config.assetBase,
+        activeLayerId: () => sceneRef.activeLayerId,
+        setSelection: (selection) => this.setSelection(selection),
+        reselect: () => this.setSelection(this.selection),
+        refresh: () => this.refresh(),
+        onPsdsLoaded: () => this.config.onPsdsLoaded?.(),
+        derived: () => [sceneRef.patterns, sceneRef.tiling],
+      }),
+    );
 
     this.store.addEventListener("change", () => {
       // A pattern's rule and a backdrop's colours live in the document, and
@@ -348,6 +337,11 @@ export class WorldScene extends Phaser.Scene {
     this.gridRenderer.setVisible(on);
   }
 
+  /** And what it is drawn in: the two controls under that switch. */
+  setGridStyle(color: number, opacity: number): void {
+    this.gridRenderer.setStyle(color, opacity);
+  }
+
   /** How the world maps onto the screen right now. */
   viewport(): Viewport {
     return this.cam.viewport();
@@ -361,6 +355,12 @@ export class WorldScene extends Phaser.Scene {
 
   zoomAt(factor: number, screenX: number, screenY: number): void {
     this.cam.zoomBy(factor, screenX, screenY);
+    this.cam.persist();
+  }
+
+  /** One screen pixel per world pixel — what the zoom badge asks for. */
+  resetZoom(): void {
+    this.cam.zoomTo(1);
     this.cam.persist();
   }
 

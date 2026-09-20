@@ -135,6 +135,29 @@ export class SceneCamera {
   }
 
   /**
+   * Go to a zoom outright, keeping what is in the middle of the screen there.
+   *
+   * What the badge over the tool rail asks for, and the one camera move that
+   * is a *number* rather than a gesture: a pinch and a wheel both scale about
+   * the point under the fingers, because that is the thing being reached for,
+   * and there is no such point when the instruction came from a button. The
+   * middle of the viewport is the answer that loses nobody's place.
+   *
+   * `centerOn` is re-issued after the scale rather than trusted to survive
+   * it: Phaser works the camera's mid-point out from its scroll and its zoom,
+   * so a zoom applied to an unchanged scroll leaves the middle somewhere
+   * else — near enough at small steps to look like drift, and a long way off
+   * from 8× to 1×.
+   */
+  zoomTo(zoom: number): void {
+    const middle = this.camera.midPoint.clone();
+    this.camera.setZoom(Phaser.Math.Clamp(zoom, MIN_ZOOM, MAX_ZOOM));
+    this.camera.centerOn(middle.x, middle.y);
+    this.config.onInvalidate();
+    this.config.onScaled();
+  }
+
+  /**
    * Stand somewhere else, at the zoom you are already at.
    *
    * What the minimap moves the camera with: a tap on it names a place, not a

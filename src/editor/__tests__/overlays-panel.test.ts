@@ -33,6 +33,12 @@ describe("the remembered switches", () => {
       centre: true,
       minimap: true,
       open: false,
+      // And the lattice as the renderer draws it when nobody has said
+      // otherwise: `--canvas-line`, at full weight. Written out here for the
+      // same reason the switches are — this says what a first run looks like
+      // rather than agreeing with the constant.
+      gridColor: "#a9c2d3",
+      gridOpacity: 1,
     });
   });
 
@@ -43,8 +49,32 @@ describe("the remembered switches", () => {
       centre: true,
       minimap: false,
       open: false,
+      gridColor: "#ff0000",
+      gridOpacity: 0.4,
     };
     expect(readOverlays(JSON.stringify(stored))).toEqual(stored);
+  });
+
+  /**
+   * The lattice's two settings are read the way its control writes them, and
+   * anything else falls back — a colour that is not a colour and a weight
+   * outside the range would both draw a lattice nobody could find the switch
+   * for.
+   */
+  it("refuses a colour that is not one and a weight out of range", () => {
+    const read = readOverlays(
+      JSON.stringify({ gridColor: "teal", gridOpacity: 4 }),
+    );
+    expect(read.gridColor).toBe(OVERLAY_DEFAULTS.gridColor);
+    expect(read.gridOpacity).toBe(1);
+    // Zero is the Grid switch, which is the row directly above this control:
+    // a slider that silently does what the switch does is a second way into
+    // a state whose switch still reads "on".
+    expect(readOverlays('{"gridOpacity":0}').gridOpacity).toBe(0.1);
+    // Shorthand and an alpha both settle to an opaque six-digit hex: the
+    // weight is the slider, and a colour carrying one too would be the same
+    // number said twice.
+    expect(readOverlays('{"gridColor":"#0f08"}').gridColor).toBe("#00ff00");
   });
 
   /**

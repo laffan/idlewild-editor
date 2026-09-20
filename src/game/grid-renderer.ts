@@ -12,6 +12,18 @@ import type { Cell } from "../lib/types";
 
 /** Beyond this zoom-out the lines stop reading and start costing; fade them. */
 const MIN_VISIBLE_TILE_PX = 6;
+
+/**
+ * The lattice as it is drawn when nobody has said otherwise: the canvas line
+ * colour from `tokens.css`, at its full weight.
+ *
+ * Both halves are adjustable from Overlays — see `editor/overlays-panel.ts` —
+ * and this is what that panel falls back to, so the number lives here rather
+ * than being written out in two places.
+ */
+export const GRID_LINE_COLOR = 0xa9c2d3;
+export const GRID_LINE_OPACITY = 1;
+
 /** A margin of cells past the viewport, so a pan does not reveal bare ground. */
 const OVERDRAW = 2;
 
@@ -28,6 +40,9 @@ export class GridRenderer {
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly grid: Grid;
   private lastSignature = "";
+  /** What the lines are drawn in — see `setStyle`. */
+  private color = GRID_LINE_COLOR;
+  private opacity = GRID_LINE_OPACITY;
 
   constructor(graphics: Phaser.GameObjects.Graphics, grid: Grid) {
     this.graphics = graphics;
@@ -69,6 +84,32 @@ export class GridRenderer {
    */
   setVisible(on: boolean): void {
     this.graphics.setVisible(on);
+  }
+
+  /**
+   * What the lines are drawn in, and how strongly — the two controls under
+   * the Grid switch in Overlays.
+   *
+   * A per-install preference like the switch above it, so it arrives from the
+   * panel and is never written to the document; see `editor/overlays-panel.ts`
+   * for why the marks the canvas draws *about* a document are not part of it.
+   *
+   * **The opacity multiplies the fade rather than replacing it.** The alpha
+   * this draws with already falls away as the tiles approach the legibility
+   * floor, and that is not a preference — it is what stops a zoomed-out
+   * canvas being a grey field. So what the slider sets is the weight of a
+   * lattice that is legible at all, and a lattice at 100% is exactly the one
+   * this has always drawn.
+   *
+   * Invalidated rather than redrawn: `update` runs every frame and redraws
+   * from the viewport it is handed, and re-stroking here would mean holding a
+   * camera this class deliberately does not keep.
+   */
+  setStyle(color: number, opacity: number): void {
+    if (color === this.color && opacity === this.opacity) return;
+    this.color = color;
+    this.opacity = opacity;
+    this.invalidate();
   }
 
   /** Redraw if the visible cell range changed. Cheap to call every frame. */
@@ -132,7 +173,8 @@ export class GridRenderer {
 
     // Fade the lines out as tiles approach the legibility floor rather than
     // popping them off at the threshold.
-    const alpha = Math.min(0.9, (tilePx - MIN_VISIBLE_TILE_PX) / 30);
+    const alpha = Math.min(0.9, (tilePx - MIN_VISIBLE_TILE_PX) / 30) * this.opacity;
+    if (alpha <= 0) return;
     // One *screen* pixel, whatever the zoom. A width in world pixels is
     // multiplied by the camera's scale like everything else it draws, so the
     // lattice a pixel-art project opens at 4× came out four pixels thick —
@@ -141,7 +183,7 @@ export class GridRenderer {
     // is the hairline it has always been, and it stays that hairline as the
     // camera comes in. The same arithmetic is in every other overlay on this
     // canvas, and in the lines an extrusion bakes.
-    g.lineStyle(1 / zoom, 0xa9c2d3, alpha);
+    g.lineStyle(1 / zoom, this.color, alpha);
 
     // Two edges per cell, not the whole tile outline: neighbours supply the
     // other two. Stroking every outline drew each shared edge twice, which

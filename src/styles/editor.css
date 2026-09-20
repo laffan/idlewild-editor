@@ -258,7 +258,10 @@
 .tool-name {
   position: absolute;
   left: 84px;
-  top: 28px;
+  /* The middle of the rail's *first button*, which is the zoom badge's height
+     below the top of the column — see `zoom-badge.css`, which owns the token
+     and falls back to zero for a rail with no badge on it. */
+  top: calc(28px + var(--rail-head-h, 0px));
   font-size: 10px;
   color: var(--color-neutral-700);
   z-index: 5;

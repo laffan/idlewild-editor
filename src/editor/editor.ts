@@ -6,7 +6,8 @@
 import { clear, h } from "../lib/dom";
 import { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
-import { assetBase, checkAssetServer, platform } from "../lib/ipc";
+import { assetBase, platform } from "../lib/ipc";
+import { exposeDevHooks, reportAssetServer } from "./editor-boot";
 import type { ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
@@ -25,6 +26,7 @@ import { startIntake } from "./intake";
 import { GameFrame } from "./game-frame";
 import { Terminal } from "./terminal";
 import { ToolRail } from "./tool-rail";
+import { ZoomBadge } from "./zoom-badge";
 import { createShell } from "./shell";
 import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
 import { type BackgroundDeps } from "./background-actions";
@@ -297,6 +299,10 @@ export async function mountEditor(
     (tool: ToolId) => tools.apply(tool),
     (tool: ToolId) => tools.hold(tool),
   );
+  // What the camera is doing, at the head of that column — a readout that is
+  // also the way back to 1:1. See `zoom-badge.ts`.
+  const zoomBadge = new ZoomBadge(() => handle?.scene.resetZoom());
+  rail.head.appendChild(zoomBadge.root);
   const tools = createToolRouting({
     rail,
     canvas: canvasWrap,
@@ -471,6 +477,7 @@ export async function mountEditor(
         drawing?.sync(view);
         minimap.setViewport(view);
         guide.sync(view);
+        zoomBadge.setZoom(view.zoom);
         // The shape is in world units and the bar is chrome, so the bar has to
         // be moved every time the camera does.
         fillBar.sync();
@@ -544,28 +551,9 @@ export async function mountEditor(
   drawing.style = libraryStyle(grid, drawing.style);
   canvasWrap.appendChild(drawing.root);
   drawing.sync(handle.scene.viewport());
-  if (import.meta.env.DEV) {
-    // Handles for the browser harness in harness/; dev builds only. The panel
-    // is here as well as the scene because some of what it does is reached
-    // from nowhere else — `revealPsdLayers` fires at the end of a conversion
-    // that needs the Rust side to have written a file.
-    const hooks = window as unknown as Record<string, unknown>;
-    hooks.__idlewildScene = handle.scene;
-    hooks.__idlewildInspector = inspector;
-  }
+  if (import.meta.env.DEV) exposeDevHooks(handle.scene, inspector);
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
-  // Not awaited: it is a loopback request that says whether images can arrive
-  // at all, and the editor is usable either way.
-  void checkAssetServer(base).then((trouble) => {
-    if (trouble) {
-      log.error(
-        `The asset server at ${base} is not answering this page — ${trouble}. ` +
-          "Every PSD will import and then place empty.",
-      );
-    } else {
-      log.info(`Asset server ready at ${base}`);
-    }
-  });
+  reportAssetServer(base);
 
   /** New strokes land on the layer the rest of the editor is working on. */
   /**

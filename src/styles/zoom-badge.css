@@ -1,0 +1,68 @@
+/* The zoom badge at the head of the tool rail: what the camera is doing, and
+   the way back to 1:1.
+
+   Its own stylesheet for the reason guides.css is one — editor.css is at the
+   line limit — and because this is one control rather than a piece of the
+   shell's furniture. See editor/zoom-badge.ts.
+
+   The height is a token because two rules need it and they are in different
+   files: the badge itself, and the floating tool name in editor.css, which is
+   positioned against the middle of the rail's *first button* and would
+   otherwise point at the badge. */
+:root {
+  --rail-head-h: 34px;
+}
+
+/* The slot the rail keeps across `setOffered`. Nothing of its own, and gone
+   entirely when nothing is in it — a rail built without a badge (the tool-bar
+   tests do exactly that) must not carry an empty strip where a tool should
+   be. */
+.tool-rail-head:empty { display: none; }
+
+/* The first tool now follows the head rather than being `:first-child`, so
+   the rule that keeps a column's top edge clean has to say so. Left as a
+   sibling rule rather than reaching for a "first visible" selector, which
+   does not exist — the same constraint `ToolRail.setOffered` works around by
+   detaching withheld tools instead of hiding them. */
+.tool-rail-head + .tool-btn { border-top: 0; }
+
+/* Same 56px column as the buttons under it, and shorter, so it reads as a cap
+   on the rail rather than as a tool nobody drew an icon for. The rule along
+   the bottom is the one line between it and Select. */
+.zoom-badge {
+  width: 56px;
+  height: var(--rail-head-h);
+  border: 0;
+  border-bottom: 1px solid var(--chrome-rule);
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  cursor: pointer;
+  padding: 0;
+}
+.zoom-badge:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+
+/* The number in the monospace face, so a camera being pinched does not make
+   the badge shuffle between 88% and 100% under the finger doing the pinching.
+   The word under it is the uppercase micro-label the rest of the chrome uses,
+   at the smallest size anything in this app is set at — it is there to say
+   what the number counts, once, and then to be ignored. */
+.zoom-badge-value {
+  font: 500 11px/1 var(--font-mono);
+}
+.zoom-badge-label {
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  color: var(--chrome-dim);
+}
+
+/* At 1:1 the tap has nowhere to go. Dimmed rather than disabled: a disabled
+   control is one somebody has to work out the rule behind, and the rule here
+   is the number it is showing. */
+.zoom-badge.at-one { color: var(--chrome-rule); }
+.zoom-badge.at-one .zoom-badge-label { color: var(--chrome-rule); }
+.zoom-badge.at-one:hover { color: var(--chrome-dim); }
