@@ -419,6 +419,17 @@ describe("the sidebar as a directory", () => {
     expect(ruleIn(panelsCss, ".panel-add[hidden]").display).toBe("none");
   });
 
+  /**
+   * The same trap, one section down. The lattice's weight and colour fold
+   * away with the Grid switch above them through the `hidden` attribute, and
+   * `.overlays-grid-style` sets `display: flex` — so without a rule of its
+   * own the two settings stay on screen for a mark nobody is drawing, with a
+   * colour picker among them.
+   */
+  it("actually folds the lattice's settings away with its switch", () => {
+    expect(ruleIn(panelsCss, ".overlays-grid-style[hidden]").display).toBe("none");
+  });
+
   it("lets the names be selected, which nothing else in the shell allows", () => {
     // The point of a lookup is copying what you looked up.
     expect(

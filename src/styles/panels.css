@@ -180,6 +180,12 @@
   flex-direction: column;
   padding: 0 8px 6px 30px;
 }
+/* Folded away with the Grid switch. The rule is needed rather than tidy:
+   `display: flex` above is an author style and the browser's own
+   `[hidden] { display: none }` is user-agent origin, which loses whatever its
+   specificity — the same trap `.tool-btn[hidden]` documents, where a withheld
+   tool went on showing. */
+.overlays-grid-style[hidden] { display: none; }
 .overlays-setting {
   display: flex;
   align-items: center;
