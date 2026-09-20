@@ -441,6 +441,96 @@ fn export_assets_lists_what_is_on_disk_rather_than_what_is_placed() {
     }
 }
 
+/// What the code modal's file column shows, against what a publish sends.
+///
+/// The bug this pins is the one the column had from the start: it listed
+/// `game/` and called itself the project's files, while a publish sent that
+/// *and* the processed `assets/` — which is most of a project's weight and
+/// the entire output of the PSD pipeline. Somebody checking what an export
+/// carried had no way to look. So the listing is built from `site_entries`,
+/// the same function the zip and the rsync are, and this asserts that the two
+/// cannot drift: every file the publish names is a row, and no row is a file
+/// the publish does not name.
+#[test]
+fn the_file_column_lists_exactly_what_a_publish_sends() {
+    let meta = store::create_project(
+        "Column",
+        Projection::Orthogonal,
+        Scaffold::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        // A PSD, processed, so there is something under `assets/` to list.
+        let psd_dir = store::psd_dir(&meta.id).expect("psd dir");
+        let bytes =
+            psd_write::psd_from_rgba_marked("hut", 8, 8, super::swatch(8, 8, [9, 9, 9, 255]), None)
+                .expect("a PSD should be written");
+        std::fs::write(psd_dir.join("hut.psd"), &bytes).expect("save");
+        psd_pipeline::process(
+            &meta.id,
+            "hut",
+            &psd_pipeline::ProcessOptions::default(),
+            |_| {},
+        )
+        .expect("psd-to-json should process it");
+
+        let rows = crate::site_listing::site_files(&meta.id).expect("column should list");
+        let (_root, sent) = publish::site_entries(&meta.id).expect("site should describe itself");
+
+        let mut listed: Vec<&str> = rows
+            .iter()
+            .filter(|row| !row.is_dir)
+            .map(|row| row.path.as_str())
+            .collect();
+        listed.sort_unstable();
+        let mut expected: Vec<&str> = sent.iter().map(|entry| entry.rel.as_str()).collect();
+        expected.sort_unstable();
+        assert_eq!(listed, expected, "the column is the site, file for file");
+
+        let editable = |path: &str| {
+            rows.iter()
+                .find(|row| row.path == path)
+                .unwrap_or_else(|| panic!("{path} should be a row: {listed:?}"))
+                .editable
+        };
+
+        // The tree the modal owns.
+        assert!(editable("index.html"), "the page is the project's own");
+        // psd-to-json's output. Renaming it would be undone by the next
+        // re-parse, so the modal shows it and offers nothing on it.
+        assert!(
+            !editable("assets/hut/data.json"),
+            "the manifest is written from the PSD"
+        );
+        // Vendored into the binary and written at the moment of the publish —
+        // see `file_server.rs`, which serves them from there.
+        assert!(!editable("js/lib/phaser.min.js"));
+        assert!(!editable("README.txt"));
+
+        // And the folders between them, which a column of rows has to have to
+        // fold. `assets` is not on disk in `game/`, so it is not the modal's.
+        let assets = rows
+            .iter()
+            .find(|row| row.path == "assets")
+            .expect("the artwork's folder should be a row");
+        assert!(assets.is_dir);
+        assert!(!assets.editable);
+        let js = rows
+            .iter()
+            .find(|row| row.path == "js")
+            .expect("the code's folder should be a row");
+        assert!(js.is_dir && js.editable);
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 /// The entry names in a zip, sorted — a zip's own order is the writer's.
 fn names_in_zip(bytes: &[u8]) -> Vec<String> {
     let archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("zip should read");

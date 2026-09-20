@@ -89,6 +89,18 @@ export interface GameFile {
   isDir: boolean;
 }
 
+/**
+ * One row of the code modal's file column: the *site*, not just `game/`.
+ *
+ * The column lists everything a publish would send — the editable tree, the
+ * processed `assets/`, the two vendored runtime libraries and the README —
+ * so `editable` is what separates the files the modal may act on from the
+ * ones it is only showing. See `src-tauri/src/site_listing.rs`.
+ */
+export interface SiteFile extends GameFile {
+  editable: boolean;
+}
+
 
 
 
@@ -255,6 +267,11 @@ export const doc = {
 
 export const gameFiles = {
   list: (id: string) => invoke<GameFile[]>("list_game_files", { id }),
+  /**
+   * The same column, as a publish sees it: `game/` plus everything else that
+   * leaves with it. What the code modal draws — see `SiteFile`.
+   */
+  site: (id: string) => invoke<SiteFile[]>("list_site_files", { id }),
   read: (id: string, path: string) =>
     invoke<string>("read_game_file", { id, path }),
   /**

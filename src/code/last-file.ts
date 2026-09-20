@@ -23,7 +23,7 @@
  * an empty editor.
  */
 
-import type { GameFile } from "../lib/ipc";
+import type { SiteFile } from "../lib/ipc";
 
 const KEY = "idlewild.code.lastFile";
 /**
@@ -74,7 +74,15 @@ export function forgetFile(projectId: string): void {
  * would land on whichever file the listing happened to put first — usually
  * `game.config.json`, which is the one file in there nobody can edit.
  */
-export function opening(files: readonly GameFile[], remembered: string | null): string | null {
+export function opening(
+  listing: readonly SiteFile[],
+  remembered: string | null,
+): string | null {
+  // The column lists the whole site now — `assets/` included, which sorts
+  // first and is nobody's to edit — so the search is over the part of it that
+  // can actually be opened. Without this the fallback at the bottom would
+  // land the panel in a sprite sheet's manifest.
+  const files = listing.filter((f) => f.editable);
   const isFile = (path: string | null): path is string =>
     !!path && files.some((f) => !f.isDir && f.path === path);
 

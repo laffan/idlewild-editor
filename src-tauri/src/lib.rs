@@ -37,6 +37,7 @@ mod publish_targets;
 mod save_staging;
 mod scene_names;
 mod site_files;
+mod site_listing;
 mod ssh_keys;
 mod store;
 mod templates;
@@ -617,6 +618,7 @@ pub fn run() {
             projects::read_thumbnail,
             projects::write_thumbnail,
             game_files::list_game_files,
+            site_listing::list_site_files,
             game_files::read_game_file,
             game_files::read_game_template,
             game_files::write_game_file,

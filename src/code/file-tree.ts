@@ -1,6 +1,23 @@
 /**
- * The code modal's file column: the project's real `game/` tree, and the
- * things you do to it.
+ * The code modal's file column: **the site**, and the things you do to the
+ * part of it that is yours.
+ *
+ * It listed `game/` and nothing else, which was the tree you edit rather than
+ * the thing that leaves. A publish sends `game/` *and* the processed
+ * `assets/`, plus two runtime libraries and a README that exist nowhere on
+ * disk — and the artwork is most of a project's weight and the whole reason
+ * the PSD pipeline is there. So the column shows what will be uploaded, which
+ * is also the only listing anybody can check a publish against. See
+ * `src-tauri/src/site_listing.rs`, which builds it from the same function the
+ * zip and the rsync are built from.
+ *
+ * **What is shown is not all editable**, and each row says which it is. The
+ * generated ones are dimmed, carry no menu, cannot be dragged and cannot be
+ * dropped into: `assets/` is rewritten from the PSD on every re-parse, the
+ * libraries are vendored into the binary, and the README is written at the
+ * moment of the publish. Offering a Rename there would be offering an edit
+ * the next import silently undoes. Dimmed rather than hidden, because the
+ * point of the change is that they are there.
  *
  * Split from the modal because it grew a life of its own — creating,
  * renaming, copying, deleting and dragging are five operations with the same
@@ -24,7 +41,7 @@
 
 import { clear, h, ICONS, icon } from "../lib/dom";
 import { gameFiles } from "../lib/ipc";
-import type { GameFile } from "../lib/ipc";
+import type { SiteFile } from "../lib/ipc";
 import { openMenu } from "../lib/menu";
 import { confirmSheet, promptSheet } from "../lib/sheet";
 import * as log from "../lib/log";
@@ -57,7 +74,7 @@ export class FileTree {
   private readonly list: HTMLElement;
   /** Whatever stands above the column's own controls — see `setHeader`. */
   private readonly head: HTMLElement;
-  private files: GameFile[] = [];
+  private files: SiteFile[] = [];
   private openPath: string | null = null;
   private drag: { path: string; isDir: boolean; release: () => void } | null = null;
   /** The folders that are shut. Read once, written on every fold. */
@@ -140,9 +157,9 @@ export class FileTree {
     this.render();
   }
 
-  async reload(): Promise<GameFile[]> {
+  async reload(): Promise<SiteFile[]> {
     try {
-      this.files = await gameFiles.list(this.projectId);
+      this.files = await gameFiles.site(this.projectId);
     } catch (err) {
       log.error("Could not list project files:", err);
       this.files = [];
@@ -204,7 +221,7 @@ export class FileTree {
     if (changed) writeCollapsed(this.collapsed);
   }
 
-  private row(file: GameFile): HTMLElement {
+  private row(file: SiteFile): HTMLElement {
     const depth = file.path.split("/").length - 1;
     const name = basename(file.path);
     const folds = file.isDir && this.holds(file.path);
@@ -213,18 +230,31 @@ export class FileTree {
     if (file.isDir) classes.push("dir");
     if (file.path === this.openPath) classes.push("active");
     if (folds && shut) classes.push("shut");
+    // Shown, and not the modal's to change: `assets/` and the two things a
+    // publish generates. The class is what dims it; everything below reads
+    // the flag itself rather than the class.
+    if (!file.editable) classes.push("generated");
 
     const row = h(
       "div",
       {
         class: classes.join(" "),
-        dataset: { path: file.path, dir: String(file.isDir) },
+        dataset: {
+          path: file.path,
+          dir: String(file.isDir),
+          editable: String(file.editable),
+        },
+        title: file.editable ? undefined : generatedNote(file.path),
         style: { paddingLeft: `${12 + depth * 14}px` },
-        onPointerDown: (event: PointerEvent) => this.beginDrag(event, file),
+        onPointerDown: (event: PointerEvent) => {
+          if (file.editable) this.beginDrag(event, file);
+        },
         onClick: () => {
           if (file.isDir) {
+            // Folding is about reading the column rather than about editing
+            // the tree, so a generated folder folds like any other.
             if (folds) this.toggleFolder(file.path);
-          } else {
+          } else if (file.editable) {
             this.callbacks.onOpen(file.path);
           }
         },
@@ -237,6 +267,10 @@ export class FileTree {
       icon(file.isDir ? ICONS.folder : ICONS.file, 14),
       h("span", { class: "code-file-name", text: name }),
     );
+
+    // No menu on a row whose three items would all be refused — see the note
+    // at the top of this file.
+    if (!file.editable) return row;
 
     row.appendChild(
       h(
@@ -258,7 +292,7 @@ export class FileTree {
     return row;
   }
 
-  private openRowMenu(anchor: HTMLElement, file: GameFile): void {
+  private openRowMenu(anchor: HTMLElement, file: SiteFile): void {
     openMenu(anchor, [
       {
         label: "Rename…",
@@ -303,7 +337,7 @@ export class FileTree {
     }
   }
 
-  private async rename(file: GameFile): Promise<void> {
+  private async rename(file: SiteFile): Promise<void> {
     const next = await promptSheet({
       title: `Rename ${basename(file.path)}`,
       label: "Path inside game/",
@@ -321,7 +355,7 @@ export class FileTree {
     }
   }
 
-  private async duplicate(file: GameFile): Promise<void> {
+  private async duplicate(file: SiteFile): Promise<void> {
     try {
       const copy = await gameFiles.copy(this.projectId, file.path);
       await this.reload();
@@ -331,7 +365,7 @@ export class FileTree {
     }
   }
 
-  private async remove(file: GameFile): Promise<void> {
+  private async remove(file: SiteFile): Promise<void> {
     const what = file.isDir ? "the folder and everything in it" : "the file";
     const sure = await confirmSheet(
       `Delete ${basename(file.path)}?`,
@@ -355,7 +389,7 @@ export class FileTree {
    * Follow the gesture on `window`, as the layer panel does: a re-render mid
    * drag takes the row out of the document, and pointer capture goes with it.
    */
-  private beginDrag(event: PointerEvent, file: GameFile): void {
+  private beginDrag(event: PointerEvent, file: SiteFile): void {
     if (this.drag) return;
     const startX = event.clientX;
     const startY = event.clientY;
@@ -422,7 +456,7 @@ export class FileTree {
    * than none. Inert to pointers, or it would be the thing under the finger
    * and `dropTarget` would never see a row.
    */
-  private showGhost(file: GameFile): void {
+  private showGhost(file: SiteFile): void {
     // Not the uppercase micro-label the rest of the chrome uses: this is a
     // path, and a path that reads JS/SHARED is a path you would not type.
     this.ghostTarget = h("span", { class: "code-ghost-target" });
@@ -474,6 +508,12 @@ export class FileTree {
       if (!(el instanceof HTMLElement)) continue;
       const rect = el.getBoundingClientRect();
       if (clientY < rect.top || clientY > rect.bottom) continue;
+      // A generated row is not a destination. Nothing may be moved into
+      // `assets/`: it is psd-to-json's output and the next re-parse would
+      // write over whatever landed there. Answering null rather than the
+      // root, because a drop that silently went somewhere else is worse than
+      // one the ghost says will be cancelled.
+      if (el.dataset.editable === "false") return null;
       const path = el.dataset.path ?? "";
       return el.dataset.dir === "true" ? path : dirname(path);
     }
@@ -489,7 +529,7 @@ export class FileTree {
     this.list.classList.toggle("drop-root", target === "");
   }
 
-  private async moveInto(file: GameFile, folder: string): Promise<void> {
+  private async moveInto(file: SiteFile, folder: string): Promise<void> {
     const name = basename(file.path);
     const to = folder ? `${folder}/${name}` : name;
     if (to === file.path) return;
@@ -512,6 +552,27 @@ export class FileTree {
       log.error(`Could not move ${file.path}:`, err);
     }
   }
+}
+
+/**
+ * Why a row cannot be edited, in the words of the thing that writes it.
+ *
+ * On the row rather than in a line under the column, because it is a question
+ * about one file — *why can I not open this* — asked of that file. Three
+ * answers, because there are three kinds and each is regenerated by something
+ * different.
+ */
+function generatedNote(path: string): string {
+  if (path === "assets" || path.startsWith("assets/")) {
+    return (
+      `${path} — psd-to-json's output, written from the PSD. It goes with ` +
+      "the site; edit the file it came from instead."
+    );
+  }
+  if (path.endsWith(".js")) {
+    return `${path} — a runtime library, shipped with the app and written at export.`;
+  }
+  return `${path} — written by the export.`;
 }
 
 function basename(path: string): string {

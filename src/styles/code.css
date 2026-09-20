@@ -152,6 +152,26 @@
 .code-file.active { background: var(--chrome-rule); color: var(--chrome-text); }
 .code-file.dir { color: var(--color-neutral-500); }
 
+/* The half of the site the modal only shows: the processed `assets/`, the two
+   vendored runtime libraries, and the README a publish writes. They are here
+   because the column's job is to say what will be uploaded — see
+   `code/file-tree.ts` — and they are dimmed because nothing on them is a
+   control: no menu, no drag, and a tap does not open one.
+
+   Dimmed rather than greyed to the point of illegibility. A file listed at an
+   opacity nobody can read is a file that may as well not be listed, and the
+   point of showing them is that somebody can check what an export carries.
+   The default cursor is the other half of the same sentence: the pointer says
+   there is nothing to press before anything is pressed. */
+.code-file.generated {
+  color: var(--color-neutral-500);
+  cursor: default;
+}
+.code-file.generated .code-file-name { opacity: 0.75; }
+/* A generated *folder* still folds, so it keeps a pointer on its arrow: a
+   project with thirty PSDs in it is thirty rows of `assets/` to get past. */
+.code-file.generated.dir { cursor: pointer; }
+
 /* The per-row menu: rename, duplicate, delete. Hidden until the row is
    under the pointer, so a long tree stays a list of names. */
 .code-file-menu {

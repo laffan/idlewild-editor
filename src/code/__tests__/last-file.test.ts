@@ -10,7 +10,7 @@
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
-import type { GameFile } from "../../lib/ipc";
+import type { SiteFile } from "../../lib/ipc";
 import { forgetFile, lastFile, opening, rememberFile } from "../last-file";
 
 /** A `localStorage` for a suite that runs in node. */
@@ -23,8 +23,17 @@ const store = new Map<string, string>();
 
 beforeEach(() => store.clear());
 
-const tree = (...paths: string[]): GameFile[] =>
-  paths.map((path) => ({ path, isDir: path.endsWith("/") }));
+const tree = (...paths: string[]): SiteFile[] =>
+  paths.map((path) => ({ path, isDir: path.endsWith("/"), editable: true }));
+
+/** The rest of what the column shows: the site's generated half. */
+const GENERATED: SiteFile[] = [
+  { path: "README.txt", isDir: false, editable: false },
+  { path: "assets", isDir: true, editable: false },
+  { path: "assets/hut", isDir: true, editable: false },
+  { path: "assets/hut/data.json", isDir: false, editable: false },
+  { path: "js/lib/phaser.min.js", isDir: false, editable: false },
+];
 
 /** What a vanilla project holds: no scenes, no `js/` at all. */
 const VANILLA = tree("game.config.json", "index.html", "script.js", "style.css");
@@ -115,5 +124,20 @@ describe("which file the panel opens into", () => {
     expect(opening(tree("styles.css"), null)).toBe("styles.css");
     expect(opening(tree(), null)).toBeNull();
     expect(opening(tree("js/"), null)).toBeNull();
+  });
+
+  /**
+   * The column lists the whole published site now, and `assets/` sorts first
+   * in it — so the fallback at the bottom of `opening` would land the panel
+   * in a sprite sheet's manifest, which is not a file anybody can edit. And a
+   * remembered path pointing into the generated half is no longer an answer
+   * either: the same thing happens the moment somebody taps one.
+   */
+  it("ignores the part of the site that is not editable", () => {
+    const site = [...GENERATED, ...SCAFFOLD];
+    expect(opening(site, null)).toBe("js/scenes/Scene1.js");
+    expect(opening(site, "assets/hut/data.json")).toBe("js/scenes/Scene1.js");
+    expect(opening([...GENERATED, ...tree("styles.css")], null)).toBe("styles.css");
+    expect(opening(GENERATED, null)).toBeNull();
   });
 });
