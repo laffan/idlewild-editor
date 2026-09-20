@@ -7,23 +7,20 @@
  * long as anything stands on it, because a gid means the nth tile across
  * every tileset in the map. And a bucket fill on a canvas with no edge is
  * bounded by **what you can see**, because there is nothing else to stop it.
+ *
+ * One suite over both halves of the subject — `tile-layers.ts` and the
+ * palettes next door in `tile-palettes.ts` — because the three claims cross
+ * the seam: cutting a palette and standing a tile on it is one story, and
+ * splitting the tests along the files would put the two ends of it in
+ * different rooms.
  */
 
 import { describe, expect, it, vi } from "vitest";
 import { DocStore } from "../doc-store";
 import { Grid } from "../grid";
 import {
-  addTileset,
   blockCorner,
-  cutIntoTileset,
-  isMergedTileset,
-  mergedArt,
-  syncTilesets,
-  tilesetArt,
-  type PaletteSource,
-  nextFirstGid,
   paintTiles,
-  propertyOf,
   eraseTiles,
   moveTiles,
   stampRange,
@@ -32,10 +29,21 @@ import {
   tileLayer,
   tilesUnderBox,
   tileLayersAllowed,
-  tilesetForPsd,
-  tilesetsOf,
   describeTiles,
 } from "../tile-layers";
+import {
+  addTileset,
+  cutIntoTileset,
+  isMergedTileset,
+  mergedArt,
+  syncTilesets,
+  tilesetArt,
+  type PaletteSource,
+  nextFirstGid,
+  propertyOf,
+  tilesetForPsd,
+  tilesetsOf,
+} from "../tile-palettes";
 import { tileAt, tileCount } from "../tiled/chunks";
 import { PSD_LAYER_PROPERTY, PSD_PROPERTY } from "../tiled/types";
 import type { GameDoc } from "../types";

@@ -17,6 +17,7 @@ import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
+import { tilesUnderBox } from "../lib/tile-layers";
 import {
   isMergedTileset,
   mergedArt,
@@ -25,8 +26,7 @@ import {
   syncTilesets,
   tilesetArt,
   tilesetsOf,
-  tilesUnderBox,
-} from "../lib/tile-layers";
+} from "../lib/tile-palettes";
 import { textureKey, type ManifestLayer } from "../lib/manifest";
 import { MERGED_LAYER, PSD_PROPERTY } from "../lib/tiled/types";
 import * as log from "../lib/log";

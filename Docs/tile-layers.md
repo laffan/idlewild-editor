@@ -186,7 +186,7 @@ custom property — `idlewild:psd`, with `idlewild:layer` for the layer inside
 it. Those are ordinary Tiled properties: a map can go out to Tiled, be worked
 on, and come home still able to say which file each palette was.
 
-### Merged or Separate: one palette, or one per layer
+### Merge layers: one palette, or one per layer
 
 A PSD arrives on a layer as one placement per placeable layer — see [A PSD's
 own layers](psd-layers.md) — and the first version of this cut a palette for
@@ -197,9 +197,16 @@ sidebar as three sparse pictures, each missing the other two's tiles, and the
 way to paint the building was to stamp from all three onto the same space —
 which is not a thing anybody would design.
 
-So the panel carries a **Layers** toggle over each palette, and the default is
-**Merged**: one palette of the file as it looks. **Separate** is the old
-behaviour, asked for rather than assumed.
+So the panel carries a **Merge layers** switch under each palette, on by
+default: one palette of the file as it looks. Off is the old behaviour, one
+palette per layer, asked for rather than assumed.
+
+It reads that way round — a small switch beneath the picture rather than a
+*Merged | Separate* pair across the top of it — because the picture has
+already answered the question a segmented pair was asking. You can see whether
+you are looking at one sheet or at one of three. What is left to say is the
+one thing that is not visible: that merging is something being *done* to the
+file, and that it can be turned off.
 
 The mode is per **file** and lives in the document (`GameDoc.palettes`, keyed
 by PSD key), for the reason the tilesets themselves are document-level: `psd/`
@@ -219,12 +226,12 @@ cut. `palettesOn` shows the cut the file is currently set to, **plus** any
 palette with tiles standing on it: the panel has to be able to explain what is
 on the ground whichever way the file happens to be cut now.
 
-That leaves both cuts of a file in the list at once, so the toggle itself is
+That leaves both cuts of a file in the list at once, so the switch itself is
 placed rather than repeated: `toggleRows` gives **one per file**, on a palette
-that agrees with the answer it is showing. Three copies of the control over
+that agrees with the answer it is showing. Three copies of the control under
 three layer palettes would read as three answers to give rather than one, and
-a control reading *Merged* directly over one of those three would be a control
-contradicting the picture under it.
+a switch reading *on* directly under one of those three would be a control
+contradicting the picture above it.
 
 #### The merged picture is a real file
 
@@ -277,6 +284,40 @@ has an exception for PSD Edit mode, which frames the space the file is
 anchored to, and a tile layer has none. A palette has no anchor and nothing is
 copied from where it sits, so there is nothing to frame. It is looked at in
 the inspector, which is where it actually is.
+
+### Carrying a palette off the layer takes its tiles with it
+
+A PSD carried from a tile layer to another one in the layer panel used to
+leave its tiles standing. Nothing broke: a tile is a number, the palette stays
+in `GameDoc.tilesets` because a `firstgid` handed out is permanent, and the
+document goes on describing every one of those tiles perfectly. The canvas
+simply drew nothing, because nothing on that layer loads the artwork any more.
+That is the worst of the two possible wrongs — a document that is right about
+a picture nobody can see — so the tiles go with the file.
+
+**Asked, not assumed.** Tiles are work: a hillside somebody painted over ten
+minutes is a hundred gids, and taking them away as a side effect of dragging a
+row in a list would be the editor throwing work away on a gesture that says
+nothing about tiles. `editor/carry-psd.ts` puts up a sheet naming the file,
+counting the tiles and saying both halves of what is about to happen, and a
+carry that is refused leaves the list and the selection where they were.
+
+`orphanedByCarry` answers **per file**, and only for a file that is actually
+leaving: a PSD placed twice with one of its placements staying is still on the
+layer, and its palette is still drawable. `tilesFromPsd` finds the spaces by
+walking every tileset cut from that key — both cuts, if it has been switched —
+and matching the gids in their blocks with the flags taken off, since a
+flipped tile is the same tile.
+
+The erase and the carry are **one undo step**, `store.history.group` around
+both: a history that could put the file back without putting the tiles back
+would be a step that half happened.
+
+Its own file rather than a branch inside `layer-drag.ts`, which is about what
+a finger on the layer panel *means* — and because the question is about the
+document rather than about the gesture, so anything else that grows a way to
+carry a file between layers asks it by calling the same function. Deleting a
+placement outright does not yet ask; see [Known gaps](known-gaps.md).
 
 ## The palette, and what it hands the tools
 
@@ -704,7 +745,9 @@ first.
 | `lib/tiled/chunks.ts` | An infinite layer, and the sparse patches it is made of |
 | `lib/tiled/read.ts` | `.tmj` and `.tmx`, and the four encodings |
 | `lib/tiled/write.ts` | A map assembled from the document, and the `.tmj` |
-| `lib/tile-layers.ts` | What the document does with all of that: palettes, stamps, fills |
+| `lib/tile-palettes.ts` | What a PSD is cut into: the tilesets, and the one choice about them |
+| `lib/tile-layers.ts` | What is standing on the ground: stamps, writes, the spaces a tile is in |
+| `editor/carry-psd.ts` | What a PSD takes with it when it leaves a tile layer |
 | `editor/tile-actions.ts` | Import Tiled, and the shell's side of a palette |
 | `editor/tile-palette.ts` | The control, and the run in hand |
 | `editor/inspect-tiles.ts` | The panel it sits in |

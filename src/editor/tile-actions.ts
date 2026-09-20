@@ -35,14 +35,13 @@ import type { Grid } from "../lib/grid";
 import { droppedFile, fromBase64, psd } from "../lib/ipc";
 import * as log from "../lib/log";
 import { parseManifest, placeableLayers } from "../lib/manifest";
+import { eraseTiles, tiledCells } from "../lib/tile-layers";
 import {
   addTilesets,
-  eraseTiles,
   nextFirstGid,
   paletteMode,
-  tiledCells,
   tilesetsOf,
-} from "../lib/tile-layers";
+} from "../lib/tile-palettes";
 import { chunksOf } from "../lib/tiled/chunks";
 import { tileFlags, tileId } from "../lib/tiled/gid";
 import { readTiledMap } from "../lib/tiled/read";

@@ -1,5 +1,5 @@
 /**
- * Which palette in the sidebar carries the Layers toggle.
+ * Which palette in the sidebar carries the Merge layers switch.
  *
  * Both cuts of a file can be in the list at once. A palette with tiles
  * standing on it is always shown, whichever way the file is cut *now*,
@@ -7,9 +7,9 @@
  * `firstgid` handed out is permanent, so switching never takes one away. That
  * leaves two things to get right, and this is both of them: one toggle per
  * file, because the choice is the file's; and on a palette that **agrees**
- * with the answer it is showing, because a control reading *Merged* directly
- * over one of three layer palettes is a control contradicting the picture
- * under it.
+ * with the answer it is showing, because a switch reading *on* directly under
+ * one of three layer palettes is a control contradicting the picture above
+ * it.
  *
  * There is no DOM in this suite, as in `tool-bars.test.ts`, so the rows are
  * not built — what is asserted is the function that decides which of them
@@ -68,7 +68,7 @@ function palette(firstgid: number, key: string, layer: string): TiledTileset {
   };
 }
 
-describe("the Layers toggle", () => {
+describe("the Merge layers switch", () => {
   it("goes on the one palette of a file cut as one", () => {
     const held = store();
     const merged = palette(1, "hut", MERGED_LAYER);

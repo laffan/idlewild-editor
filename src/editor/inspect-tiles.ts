@@ -17,18 +17,17 @@
  */
 
 import { h } from "../lib/dom";
-import { optionSegmented } from "../lib/options-controls";
+import { optionSwitchRow } from "../lib/options-controls";
 import { sectionTitle } from "./inspect-collapse";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
+import { describeTiles, tileLayer } from "../lib/tile-layers";
 import {
-  describeTiles,
   isMergedTileset,
   paletteMode,
   propertyOf,
-  tileLayer,
   tilesetsOf,
-} from "../lib/tile-layers";
+} from "../lib/tile-palettes";
 import { chunksOf, tileCount } from "../lib/tiled/chunks";
 import type { TileShape } from "../lib/tile-tools";
 import { tileId } from "../lib/tiled/gid";
@@ -77,7 +76,7 @@ export interface TileActions {
   onSelectPsd: (selection: Selection) => void;
   /**
    * Cut a PSD's palette from the whole file, or from each of its layers —
-   * the Layers toggle over each palette. See `layersToggle`.
+   * the Merge layers switch under each palette. See `layersToggle`.
    */
   onPaletteMode: (psdKey: string, mode: PaletteMode) => void;
 }
@@ -117,8 +116,8 @@ export function renderTileLayer(
     class: "field-hint",
     text: `In hand: ${describeStamp(selection.stamp)}`,
   });
-  // One Layers toggle per file, over a palette that agrees with it — see
-  // `toggleRows`.
+  // One Merge layers switch per file, under a palette that agrees with it —
+  // see `toggleRows`.
   const toggles = toggleRows(store, tilesets);
 
   /**
@@ -156,9 +155,6 @@ export function renderTileLayer(
           paletteName(tileset, layer, actions),
           zoomControls(tileset.firstgid, selection, actions.canvasZoom, resize),
         ),
-        toggles.has(tileset.firstgid)
-          ? layersToggle(store, tileset, actions)
-          : null,
         tilePalette({
           tileset,
           assetBase: actions.assetBase(),
@@ -169,6 +165,9 @@ export function renderTileLayer(
             summary.textContent = `In hand: ${describeStamp(stamp)}`;
           },
         }),
+        toggles.has(tileset.firstgid)
+          ? layersToggle(store, tileset, actions)
+          : null,
       ),
     ),
   );
@@ -246,19 +245,19 @@ function describeSpread(cells: readonly Cell[]): string {
 }
 
 /**
- * Which palettes in the list carry the Layers toggle, by `firstgid`.
+ * Which palettes in the list carry the Merge layers switch, by `firstgid`.
  *
  * **One per file**, because the choice is the file's: a file cut Separate
- * shows three palettes, and three copies of the same control over them would
+ * shows three palettes, and three copies of the same control under them would
  * read as three answers to give rather than one.
  *
  * And it goes on a palette that **agrees with the answer it is showing**.
  * Both cuts of a file can be in the list at once — a palette with tiles
  * standing on it is always shown, whichever way the file is cut now, because
- * the panel has to be able to explain what is on the ground. A control
- * reading *Merged* directly above one of three layer palettes would be a
- * control contradicting the picture under it, so the toggle takes the palette
- * that matches, and the first one of that file otherwise.
+ * the panel has to be able to explain what is on the ground. A switch reading
+ * *on* directly under one of three layer palettes would be a control
+ * contradicting the picture above it, so the toggle takes the palette that
+ * matches, and the first one of that file otherwise.
  */
 export function toggleRows(
   store: DocStore,
@@ -282,7 +281,7 @@ export function toggleRows(
 }
 
 /**
- * **Layers: Merged or Separate**, over the palette it decides the shape of.
+ * **Merge layers**, under the palette it decides the shape of.
  *
  * A PSD on a tile layer is cut into a palette, and it used to be cut one
  * palette per layer whether or not that was what the file was. For a
@@ -293,11 +292,14 @@ export function toggleRows(
  * would design. So the file as it looks is the default and the layer-by-layer
  * cut is the thing you ask for.
  *
- * **Above the palette rather than in a menu**, because it is the first thing
- * to ask about a picture you are looking at — *is this one sheet or several*
- * — and because the answer changes what is underneath it. A segmented pair
- * rather than a switch, because neither answer is the absence of the other:
- * "Merged / off" says nothing about what happens instead.
+ * **A switch rather than a pair of buttons**, and under the picture rather
+ * than over it. It was *Layers: Merged | Separate* across the top, which is
+ * a control the width of the column asking a question the picture below it
+ * has already answered — you can see whether you are looking at one sheet or
+ * at one of three. What is left to say is the one thing that is not visible:
+ * that merging is something being *done* to the file, and that it can be
+ * turned off. A switch is the shape of that, and small, under the palette,
+ * it reads as a note on the picture rather than as a section between two.
  *
  * **Per file, and kept in the document.** `psd/` is one directory for the
  * project, so a file is cut one way everywhere; a second answer per layer
@@ -321,26 +323,18 @@ function layersToggle(
   // behind it and therefore nothing to cut differently — see `Import Tiled`.
   if (!key) return null;
 
-  const control = optionSegmented(
-    [
-      { value: "merged", label: "Merged" },
-      { value: "separate", label: "Separate" },
-    ],
-    paletteMode(store, key),
-    (value) => actions.onPaletteMode(key, value as PaletteMode),
-  );
-  return h(
-    "div",
-    {
-      class: "tile-palette-layers",
-      title:
-        "Merged cuts the whole file into one palette. Separate cuts one " +
-        "palette per layer, for a file whose layers are different sets of " +
-        "tiles. Tiles already put down never move.",
-    },
-    h("span", { class: "tile-palette-layers-label m", text: "Layers" }),
-    control.root,
-  );
+  const row = optionSwitchRow({
+    label: "Merge layers",
+    value: paletteMode(store, key) === "merged",
+    small: true,
+    onChange: (on) => actions.onPaletteMode(key, on ? "merged" : "separate"),
+    title:
+      "On, the whole file is cut into one palette. Off, one palette per " +
+      "layer, for a file whose layers are different sets of tiles. Tiles " +
+      "already put down never move.",
+  });
+  row.root.classList.add("tile-palette-layers");
+  return row.root;
 }
 
 /**

@@ -251,7 +251,7 @@ renumber the tiles standing in another. See
 **`DocStore.editDoc` is how the three of them are written**, and it is
 `editLayer`'s counterpart one level up: public for the same reason, because
 what a kind of thing the document holds *means* is somebody else's subject —
-`lib/extrusions.ts` for a solid, `lib/tile-layers.ts` for a palette — and this
+`lib/extrusions.ts` for a solid, `lib/tile-palettes.ts` for a palette — and this
 is the one thing those edits need from the store. A commit either way, so undo
 and autosave see them exactly as they see every other write.
 

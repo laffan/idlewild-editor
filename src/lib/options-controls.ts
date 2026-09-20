@@ -139,6 +139,14 @@ export interface SwitchRowOptions {
   onChange: (on: boolean) => void;
   /** The sentence the row carries. It may say something different when on. */
   title?: string;
+  /**
+   * The same row, drawn small — for a setting that belongs to the thing right
+   * beside it rather than to the panel. A tool's own options are the panel's
+   * subject and take the full row; the Merge layers switch under a palette is
+   * a note on that palette, and a full-height row there would read as another
+   * section between two pictures.
+   */
+  small?: boolean;
 }
 
 /**
@@ -161,7 +169,7 @@ export function optionSwitchRow(options: SwitchRowOptions): SwitchRow {
   const root = h(
     "div",
     {
-      class: "opt-switch-row",
+      class: options.small ? "opt-switch-row small" : "opt-switch-row",
       ...(options.title ? { title: options.title } : {}),
       onClick: () => {
         const next = !control.get();

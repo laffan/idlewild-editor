@@ -23,7 +23,7 @@
 
 import type { DocStore } from "../lib/doc-store";
 import { reorderUnit } from "../lib/units";
-import { pruneLayerGroups } from "../lib/groups";
+import { carryPlacements } from "./carry-psd";
 import type { Selection } from "../lib/types";
 
 /** A layer row being moved to a position in the list. */
@@ -332,27 +332,39 @@ export class LayerDrags {
     }
 
     if (target && target !== drag.layerId) {
-      const from = drag.layerId;
-      // One step: the carry, and the group it may have taken the last member
-      // out of. A group is one layer's, so a unit carried away leaves it —
-      // see `lib/groups.ts`.
-      this.host.store.history.group(() => {
-        this.host.store.movePlacements(from, drag.placementIds, target);
-        pruneLayerGroups(this.host.store, from);
-      });
-      // Follow it: the row the finger let go of is now under a different
-      // layer, and leaving the selection pointing at the old one would show
-      // the inspector an image that is no longer there.
-      this.host.expand(target);
-      this.host.select({
-        kind: "placement",
-        layerId: target,
-        placementId: drag.placementIds[0],
-      });
+      // Awaited rather than done here, because carrying a palette off a tile
+      // layer takes its tiles with it and asks first — see `carry-psd.ts`.
+      // The list is put back below either way; the drop's own consequences
+      // wait for the answer.
+      void this.carry(drag.layerId, drag.placementIds, target);
     }
     // A cancelled drop still has to put the list back the way it was: the
     // store only re-renders when something actually changed.
     this.host.render();
+  }
+
+  /** The carry, once whatever it has to ask has been answered. */
+  private async carry(
+    from: string,
+    placementIds: readonly string[],
+    target: string,
+  ): Promise<void> {
+    const carried = await carryPlacements(
+      this.host.store,
+      from,
+      placementIds,
+      target,
+    );
+    if (!carried) return;
+    // Follow it: the row the finger let go of is now under a different
+    // layer, and leaving the selection pointing at the old one would show
+    // the inspector an image that is no longer there.
+    this.host.expand(target);
+    this.host.select({
+      kind: "placement",
+      layerId: target,
+      placementId: placementIds[0],
+    });
   }
 
   private endDrag(commit: boolean): void {

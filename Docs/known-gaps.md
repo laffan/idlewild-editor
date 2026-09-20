@@ -15,6 +15,14 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   right first is the format, because that is the half a document is written in
   and cannot be changed afterwards without rewriting everybody's projects; a
   scene that reads a config is a scene. See [Tile layers](tile-layers.md).
+- **Deleting a PSD from a tile layer still orphans its tiles.** Carrying one
+  off the layer asks first and takes the tiles with it — see [Tile
+  layers](tile-layers.md#carrying-a-palette-off-the-layer-takes-its-tiles-with-it)
+  — and deleting the placement outright goes through `removeSelectedPlacement`,
+  which knows nothing about palettes. The tiles are left drawing from artwork
+  nothing on the layer loads any more: the document is right and the canvas is
+  empty. The question is the same one and the answer is the same function;
+  what is missing is the second call site.
 - **Tile layers are painted with two tools.** The Pencil and Fill, re-pointed,
   because those are the two that already existed and the first version is a
   re-pointing rather than a second toolbar. A rectangle, a tile picker and a

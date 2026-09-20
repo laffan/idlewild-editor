@@ -16,7 +16,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DocStore } from "../../lib/doc-store";
 import { Grid } from "../../lib/grid";
-import { addTileset, tileLayer } from "../../lib/tile-layers";
+import { tileLayer } from "../../lib/tile-layers";
+import { addTileset } from "../../lib/tile-palettes";
 import { tileAt, tileCount } from "../../lib/tiled/chunks";
 import { TilePaint } from "../tile-paint";
 import { EMPTY_HAND, type TileHand, type TileVerb } from "../../lib/tile-tools";

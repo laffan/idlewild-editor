@@ -47,27 +47,12 @@
   text-underline-offset: 2px;
 }
 
-/* Layers: Merged or Separate — whether this file is one palette or one per
-   layer. Over the picture it decides the shape of, because it is the first
-   thing to ask about a picture you are looking at: is this one sheet or
-   several? See `editor/inspect-tiles.ts` for why it is a pair rather than a
-   switch, and why switching never moves a tile already on the ground. */
-.tile-palette-layers {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 2px;
-}
-.tile-palette-layers-label {
-  flex: none;
-  font-size: 10px;
-  color: var(--chrome-dim);
-}
-/* The pair takes what is left, so the two choices are the same width as each
-   other whatever the sidebar is — a segmented control whose halves disagree
-   reads as one of them being the real answer. */
-.tile-palette-layers .opt-seg { flex: 1; min-width: 0; }
-.tile-palette-layers .opt-seg-btn { flex: 1; }
+/* `Merge layers` — whether this file is one palette or one per layer — under
+   the picture it decides the shape of. See `editor/inspect-tiles.ts` for why
+   it reads that way round, and why switching never moves a tile already on
+   the ground. An `opt-switch-row small` (options.css), so all this adds is
+   the gap between it and the palette above it and the row below it. */
+.tile-palette-layers { padding: 2px 0 6px; }
 
 /* The box clips and scrolls; the sheet inside it is the picture at its real
    size. A palette tile is a canvas tile — see `editor/tile-palette.ts` — so a

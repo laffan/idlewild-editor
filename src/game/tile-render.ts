@@ -41,7 +41,8 @@ import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
-import { tileLayer, tilesetsOf } from "../lib/tile-layers";
+import { tileLayer } from "../lib/tile-layers";
+import { propertyOf, tilesetsOf } from "../lib/tile-palettes";
 import { tilesInRange } from "../lib/tiled/chunks";
 import {
   FLIPPED_HORIZONTALLY,
@@ -50,7 +51,6 @@ import {
   tileFlags,
   tileRect,
 } from "../lib/tiled/gid";
-import { propertyOf } from "../lib/tile-layers";
 import {
   PSD_LAYER_PROPERTY,
   PSD_PROPERTY,

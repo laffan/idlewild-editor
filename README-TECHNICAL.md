@@ -167,6 +167,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Attach palette to PSDs | [`Docs/colour.md`](Docs/colour.md) |
 | Adding a layer, and the empty one | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Browse Palettes | [`Docs/colour.md`](Docs/colour.md) |
+| Carrying a palette off a tile layer | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
 | Colliders | [`Docs/colliders.md`](Docs/colliders.md) |
 | Console | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | Data model | [`Docs/data-model.md`](Docs/data-model.md) |
@@ -183,7 +184,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Layer visibility | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Leaving with a file, and the order iOS needs | [`Docs/exports.md`](Docs/exports.md) |
 | Lines the editor owns | [`Docs/exported-game.md`](Docs/exported-game.md) |
-| Merged or Separate: one palette, or one per layer | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
+| Merge layers: one palette, or one per layer | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
 | One file per scene, named after it | [`Docs/data-model.md`](Docs/data-model.md) |
 | Four scaffolds, one document | [`Docs/data-model.md`](Docs/data-model.md) |
 | One picker, five places | [`Docs/colour.md`](Docs/colour.md) |

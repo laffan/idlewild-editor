@@ -15,7 +15,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { DocStore } from "../../lib/doc-store";
 import { Grid } from "../../lib/grid";
-import { addTileset, paintTiles, tileLayer } from "../../lib/tile-layers";
+import { paintTiles, tileLayer } from "../../lib/tile-layers";
+import { addTileset } from "../../lib/tile-palettes";
 import { tileAt, tileCount } from "../../lib/tiled/chunks";
 import { TileMove } from "../tile-move";
 import type { GameDoc, Selection } from "../../lib/types";

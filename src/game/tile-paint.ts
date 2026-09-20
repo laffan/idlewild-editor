@@ -32,9 +32,9 @@ import {
   stampWrites,
   stampIsEmpty,
   tiledGid,
-  tilesetsOf,
   type TileStamp,
 } from "../lib/tile-layers";
+import { tilesetsOf } from "../lib/tile-palettes";
 import {
   EMPTY_HAND,
   gidsInStamp,

@@ -10,7 +10,7 @@
    positioned against the middle of the rail's *first button* and would
    otherwise point at the badge. */
 :root {
-  --rail-head-h: 34px;
+  --rail-head-h: 26px;
 }
 
 /* The slot the rail keeps across `setOffered`. Nothing of its own, and gone
@@ -37,32 +37,22 @@
   background: transparent;
   color: var(--chrome-dim);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
   cursor: pointer;
   padding: 0;
 }
 .zoom-badge:hover { background: var(--chrome-rule); color: var(--chrome-text); }
 
 /* The number in the monospace face, so a camera being pinched does not make
-   the badge shuffle between 88% and 100% under the finger doing the pinching.
-   The word under it is the uppercase micro-label the rest of the chrome uses,
-   at the smallest size anything in this app is set at — it is there to say
-   what the number counts, once, and then to be ignored. */
+   the badge shuffle between 88% and 100% under the finger doing the
+   pinching. */
 .zoom-badge-value {
   font: 500 11px/1 var(--font-mono);
-}
-.zoom-badge-label {
-  font-size: 7px;
-  letter-spacing: 0.1em;
-  color: var(--chrome-dim);
 }
 
 /* At 1:1 the tap has nowhere to go. Dimmed rather than disabled: a disabled
    control is one somebody has to work out the rule behind, and the rule here
    is the number it is showing. */
 .zoom-badge.at-one { color: var(--chrome-rule); }
-.zoom-badge.at-one .zoom-badge-label { color: var(--chrome-rule); }
 .zoom-badge.at-one:hover { color: var(--chrome-dim); }

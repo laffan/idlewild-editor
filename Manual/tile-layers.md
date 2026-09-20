@@ -79,19 +79,19 @@ pick up is what is going to land, at the size it is going to land. A picture
 wider than the column therefore runs off the edge of its box, and the box
 scrolls.
 
-**Layers: Merged or Separate**, over each palette. A PSD drawn in layers can
-be cut two ways, and which one is right is a fact about the file rather than
+**Merge layers**, the switch under each palette. A PSD drawn in layers can be
+cut two ways, and which one is right is a fact about the file rather than
 about the editor:
 
-- **Merged**, which is what you get unless you say otherwise, is one palette
-  of the file as it looks — walls, roof and shadow composited into the one
+- **On**, which is what you get unless you say otherwise, is one palette of
+  the file as it looks — walls, roof and shadow composited into the one
   picture you drew.
-- **Separate** is one palette per layer, which is what you want when the
-  layers really are different sets of tiles: *ground*, *walls*, *props*.
+- **Off** is one palette per layer, which is what you want when the layers
+  really are different sets of tiles: *ground*, *walls*, *props*.
 
 Switching never moves a tile you have already put down. Both palettes stay in
 the project, because a tile remembers which palette it came from and where in
-it; what the toggle changes is which one the sidebar offers you and how the
+it; what the switch changes is which one the sidebar offers you and how the
 next copy of that file is cut.
 
 **A palette's name is a link.** Pressing it puts that PSD in the panel below,
@@ -104,6 +104,13 @@ the palette back to whatever the canvas is doing. On a trackpad, ⌘ or Ctrl
 with the wheel does the same; on glass, two fingers pinch and move it. One
 finger always means *pick*, which is why moving a large palette around takes
 the second one.
+
+**Dragging a PSD off a tile layer takes its tiles with it.** Carry the file
+to another layer in the layers panel and Idlewild asks first, naming the file
+and counting the tiles: a tile is a number pointing into a palette rather than
+a copy of the artwork, so tiles left behind by the file they were cut from
+would draw nothing at all. Say no and nothing moves; say yes and the tiles go
+in the same step as the file, which is also the step Undo puts back.
 
 **There is no way to take a palette off a project**, and that is deliberate
 rather than missing. A tile remembers which palette it came from as a number,

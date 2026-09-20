@@ -60,11 +60,13 @@ export class ZoomBadge {
         "aria-label": "Canvas zoom, 100%",
         onClick: () => onReset(),
       },
-      // Two lines: the number, and what it is the number of. Without the
-      // second one a lone percentage at the top of the canvas is as likely to
-      // be read as an opacity or a progress bar.
+      // The number and nothing else. It carried the word *zoom* under it for
+      // a while, against the worry that a lone percentage at the top of the
+      // canvas could be read as an opacity — and in place it reads as neither,
+      // because it sits on the camera's own column with a tooltip that says
+      // what it is. Two lines of chrome to answer a question nobody asked is
+      // the trade this editor keeps declining.
       h("span", { class: "zoom-badge-value", text: "100%" }),
-      h("span", { class: "zoom-badge-label", text: "zoom" }),
     ) as HTMLButtonElement;
   }
 
