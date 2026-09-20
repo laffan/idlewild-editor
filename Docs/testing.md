@@ -37,6 +37,22 @@ with the same gids in the same order, flags and all: a gid with `0x80000000`
 set says the tile is flipped, and a reader that treated it as a plain index
 would have turned it into something else entirely.
 
+`tests/tiles.rs` carries the merged palette as well, which is the other half
+of the same claim: that the picture a palette is cut from is a real file and
+stays one. A PSD drawn in layers merges with what is in front on top, with a
+layer somebody turned off left out and the two orienting marks an import
+writes left out — a red anchor dot baked into a palette is a red dot in every
+tile cut from that corner. And a re-parse, which clears the directory that
+picture lives in, rebuilds it for a file the document has a merged palette for
+and writes nothing at all for one it does not.
+
+`tests/exports.rs` also pins what the code modal's file column shows:
+that it is `publish::site_entries`, file for file, so the listing somebody
+checks a publish against cannot drift from the publish. The rows it must not
+offer to edit — `assets/`, the vendored runtimes, the README — are named
+there too, because the flag that decides that is worked out from the
+filesystem rather than from the path.
+
 **And one thing no Rust test can reach: whether the scaffold is a working
 game.** Every assertion above is about text. A scene that places nothing, or a
 second scene that waits fifteen seconds for assets the first one already
@@ -96,7 +112,11 @@ every layer of the object rather than the row that was selected, what the
 inspector remembers about a folded section, what a bulk delete asks and how it
 answers a no, what the clipboard hands a paste and where that paste lands, what a failed clipboard read says happened and which of a dragged
 selection of files a drop takes, colour, the log's `%c` parsing, the manifest
-reader, the platformer's body step, the docs panel's markdown rendering and
+reader, the platformer's body step — measured in **spaces**, on grids five
+steps apart, against the template itself rather than a copy of it, because a
+copy is the thing that stays right while the scaffold drifts — what the arrow
+keys move and the two kinds they refuse to, what the zoom badge says at either
+end of the camera's range, the docs panel's markdown rendering and
 its two kinds of lookup, what a project with no options of its own renders as,
 and the drawing layer's ported maths. The handful of CSS declarations that are
 load-bearing for input are asserted as text — the drawing surface's

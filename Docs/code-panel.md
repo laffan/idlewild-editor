@@ -133,6 +133,36 @@ the height is the row's and there is nothing underneath to leave room for. A
 flex item needs, so the panel stopped at half the dock and its page was cut off
 at the same line however long the page was. Lifted for `docs-right` only.
 
+### The column is the site, not just `game/`
+
+It listed `game/`, which is the tree you edit, and called itself the project's
+files. A publish sends that **and** the processed `assets/`, plus the two
+runtime libraries and a README that exist nowhere on disk — and the artwork is
+most of a project's weight and the entire output of the PSD pipeline, with
+nothing anywhere in the app that would show it to you. So the column shows
+what will be uploaded.
+
+`src-tauri/src/site_listing.rs` builds it from `publish::site_entries`, which
+is the same function the zip and the rsync are built from, so the two cannot
+drift; `exports.rs` asserts the listing is the publish, file for file. Folders
+are derived from the paths, plus any empty one somebody made in `game/` —
+which has no file to be derived from and would otherwise make New Folder look
+as though it had done nothing.
+
+**Shown is not editable, and each row says which it is.** `assets/` is
+rewritten from the PSD on every re-parse, the libraries are vendored into the
+binary (see `file_server.rs`, which serves them from there) and the README is
+written at the moment of the publish. Those rows are dimmed, carry no menu,
+cannot be dragged and cannot be dropped into — a Rename there would be an edit
+the next import silently undoes, and a drop into `assets/` would be a file the
+next re-parse deletes. Dimmed rather than hidden, because the point of the
+change is that they are there: the only way anybody can check what an export
+carries is to look at it.
+
+The one fact that decides the flag is whether the file is in `game/`, which is
+the tree the modal owns. That answers correctly for all three of the others
+without knowing anything about them.
+
 **The file column folds two ways.** Its folders collapse — the list Rust returns
 is flat and sorted, so "inside" is a path prefix and a shut folder is rows not
 rendered — and the choice is remembered per install rather than per project,
@@ -169,6 +199,11 @@ folds the file column keeps. Two things about the shape:
   than a scene — then `js/main.js`, then whatever is first. A project with no
   files at all answers null and the panel opens with no file, which is the
   honest thing to show.
+- **Over the editable half of the listing only.** The column lists the whole
+  site now and `assets/` sorts first in it, so without that filter the
+  fallback at the bottom would land the panel in a sprite sheet's manifest —
+  and a remembered path pointing into the generated half is no longer an
+  answer either.
 
 A rename carries the answer with it (`onMoved`), and a delete drops it, so the
 next visit falls through rather than looking for something that is not there.

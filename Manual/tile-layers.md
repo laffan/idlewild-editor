@@ -79,6 +79,21 @@ pick up is what is going to land, at the size it is going to land. A picture
 wider than the column therefore runs off the edge of its box, and the box
 scrolls.
 
+**Layers: Merged or Separate**, over each palette. A PSD drawn in layers can
+be cut two ways, and which one is right is a fact about the file rather than
+about the editor:
+
+- **Merged**, which is what you get unless you say otherwise, is one palette
+  of the file as it looks — walls, roof and shadow composited into the one
+  picture you drew.
+- **Separate** is one palette per layer, which is what you want when the
+  layers really are different sets of tiles: *ground*, *walls*, *props*.
+
+Switching never moves a tile you have already put down. Both palettes stay in
+the project, because a tile remembers which palette it came from and where in
+it; what the toggle changes is which one the sidebar offers you and how the
+next copy of that file is cut.
+
 **A palette's name is a link.** Pressing it puts that PSD in the panel below,
 where its layer list and **Open PSD** are — which is the way to go and change
 the artwork a palette is cut from.
@@ -90,10 +105,12 @@ with the wheel does the same; on glass, two fingers pinch and move it. One
 finger always means *pick*, which is why moving a large palette around takes
 the second one.
 
-The **×** beside a palette's name takes it off the project. It takes every
-tile made of it off with it, which is why it is the smallest control in the
-panel: a tile whose picture has gone would draw nothing with nothing on screen
-to say why.
+**There is no way to take a palette off a project**, and that is deliberate
+rather than missing. A tile remembers which palette it came from as a number,
+and those numbers are handed out in order and never given back — so removing
+a palette would have to take every tile made of it off the map as well, and a
+tile whose picture had gone would draw nothing with nothing on screen to say
+why. An unused palette costs a line in the project file.
 
 ## Painting
 

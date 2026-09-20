@@ -32,6 +32,48 @@ Resizing writes a displayed `width`/`height` against the `naturalWidth`/
 A sprite placed with `setOrigin(0, 0)` scales away from its top-left, which is
 the corner the placement's x/y describes, so box and image agree.
 
+## Snap to grid, and the arrow keys
+
+A drag with Select has always moved what it is holding a **whole grid space at
+a time**, and that is what lines a building up with the one beside it. It is
+also what makes it impossible to hang a sign over a doorway. Both are wanted,
+so the coarse gesture keeps the lattice and the fine one is the keyboard:
+
+- **Snap to grid**, the one row of Select's TOOL panel, turns snapping off for
+  a drag. On, to begin with, because the grid is what this editor is about.
+- **The arrow keys** move what is selected by one world pixel, whatever the
+  switch says, and only while Select is in hand.
+
+The switch is a *tool's* setting, held by `editor/tool-routing.ts` beside the
+erase flags rather than in the document — nothing saved should record how
+somebody was dragging — and `DragController` asks it on every pointer move
+rather than capturing it at pointer-down, so it can be flipped with the other
+hand mid-gesture, which is exactly when somebody reaches for it.
+
+`DragController.move` works out one `step` either way and every kind of thing
+applies the same one: snapped, it is the cell delta projected back through
+`cellToWorld`; free, it is the raw distance the finger has covered since it
+went down. A placement's **anchor** stays a cell either way, because that is
+what an anchor is — it is what a grid resize follows, and there is no such
+thing as half a space to record — so off the lattice it lands on the cell the
+artwork's origin now sits in, which is what a resize has always done. Where
+the PSD's own mark really is comes from `fromAnchor`, in the file's pixels,
+and follows a drag on its own.
+
+**Two kinds refuse to leave the lattice**, in a drag and under an arrow alike:
+a named place *is* a cell, and a fill drawn as a run of spaces is a set of
+them, so neither has a position between two spaces to be put at. The bare
+rectangle a drag on blank ground makes is the fill that can move.
+
+The arrow keys are `editor/nudge-actions.ts` rather than a second path through
+`game/drag.ts`, and the split is the interesting part. A drag replays from
+state captured at pointer-down — every move recomputes the whole position from
+the origin, so a gesture that crosses the same ground twice never compounds. A
+nudge is a single relative step with nothing to compound, so it reads the
+document and adds to it, which is both simpler and the only thing that makes a
+run of key repeats add up. One press is one undo step however many placements
+it writes, for the reason a drag is.
+
 ## A drag catches what is on the layer under it
 
 `Marquee.end` asks two questions in order, and the first one is only ever

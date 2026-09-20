@@ -29,6 +29,14 @@ Part of [the Idlewild manual](README.md).
   space borrows it from wherever you are
 - Press and hold to ask for a patch of grid, and get Fill, Add Image,
   Generate PSD and Extrude over it
+- **The zoom is at the top of the toolbar**, over Select: one number saying
+  how far in you are, and a tap on it puts the canvas back to 100% — one
+  screen pixel per world pixel, which is the size the artwork is measured at
+- **Overlays > Grid** has two settings under it while the grid is showing:
+  how strong the lines are and what colour they are drawn in. The pale blue
+  default disappears into a pale sketch and shouts over a dark one, and both
+  end with the grid switched off — which is not what you want on a canvas
+  whose whole point is the spaces
 
 ## Where the game's screen is
 

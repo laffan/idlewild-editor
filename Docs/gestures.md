@@ -15,7 +15,7 @@ shortest of them means is `src/game/tapping.ts`. The spec's contract:
 
 | Input | Result |
 |---|---|
-| One finger down on the current selection | Drag it, snapped to the grid |
+| One finger down on the current selection | Drag it, snapped to the grid unless Select says otherwise |
 | One finger, moved, under **Select** | Rubber-band a selection from where it went down |
 | One finger, moved, under **Pan** or **Point** | Pan |
 | One finger, down or moved, with a **tile** in hand | Lay the run picked in the palette, or pour it |
@@ -77,7 +77,10 @@ A selected boundary drags like a placed image: the cell delta is projected
 back into world space with `cellToWorld`, which is linear and has no offset
 term in either projection — which is what makes it usable on a *difference*
 as well as on a position. The outline keeps its shape and whatever sub-cell
-offset it had, and moves a whole space at a time.
+offset it had, and moves a whole space at a time — or freely, when Select's
+**Snap to grid** switch is off. See [Snap to grid, and the arrow
+keys](selection.md#snap-to-grid-and-the-arrow-keys), which also covers the
+arrow keys: one world pixel a press, whatever the switch says.
 
 Only the *current selection* is draggable. A pointer-down anywhere else
 starts whatever the tool says — a marquee, or a pan — which makes a drag of

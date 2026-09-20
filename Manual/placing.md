@@ -27,6 +27,14 @@ Part of [the Idlewild manual](README.md).
 
 - Drag placed images, fills and boundaries, snapped to the grid; resize images
   from their corner handles, or freely from the inspector
+- **Snap to grid** is a switch at the top of Select's panel, on to begin with.
+  Turned off, a drag moves freely — for a sign over a doorway or a shadow out
+  from under a wall, which the lattice has nothing to say about
+- **The arrow keys nudge by one pixel**, whichever way that switch is set, as
+  long as Select is the tool in hand. Drag it roughly there, then tap it into
+  place. A named place and a fill drawn as a run of grid spaces are the two
+  things this leaves alone: both of them *are* spaces, so there is nowhere
+  between two of them to put one
 - A placed PSD moves as one thing: every layer it came in with drags and
   resizes together, keeping the arrangement it was built with. Double-tap to
   open it up and move a single layer, and tap away to close it again

@@ -133,6 +133,28 @@ that was never drawn — which reads as broken rather than as absent.
 `overlayRows(hasLattice)` is that decision, and it is the panel's one piece of
 per-project shape; `editor.ts` asks `grid.snaps` for the answer.
 
+**The Grid row has two settings under it**, folded away with the switch when
+the lattice is off: how strong its lines are, and what colour they are drawn
+in. They exist because one pale blue hairline is the right answer over bare
+ground and the wrong one over artwork twice — it disappears into a pale sketch
+and prints a blue cage over a dark one, and both end with somebody switching
+the grid off and then measuring by eye on a canvas whose whole point is the
+spaces. `editor/grid-style.ts` owns the pair and `GridRenderer.setStyle` is
+what they reach.
+
+The weight **multiplies** the fade `GridRenderer.draw` already applies as
+tiles approach the size below which they stop reading, rather than replacing
+it: that fade is not a preference, it is what stops a zoomed-out canvas being
+a grey field. So 100% is exactly the lattice this editor has always drawn, and
+the slider stops at 10% rather than zero — zero is the switch directly above
+it, and a slider that silently did what the switch does would be a second way
+into a state whose switch still reads *on*.
+
+Both are stored beside the switches in `localStorage`, never in the document,
+for the reason the switches are; the colour is kept opaque on the way in and
+out, because the weight is the slider next to it and a colour carrying its own
+alpha would be the same number said twice.
+
 **Hidden, not skipped.** `GridRenderer.setVisible` takes the Phaser `Graphics`
 object down rather than short-circuiting the redraw, because `visibleRange` is
 what the pattern layers are synced over in `WorldScene.update` and that reading
@@ -437,6 +459,42 @@ one pressed state across them, because only one tool is ever in hand):
 |---|---|---|---|
 | rail | hangs from the top left | Select, Pan, Point, Boundary | what you do *to* the canvas: the camera and the pointer, then the two that make something out of bare ground — nothing already on it can be promoted into either |
 | draw | stands on the bottom left | Pencil, Pattern, Shape, Slice, Lasso, Fill, Text | the ink |
+
+### The zoom badge, at the head of the rail
+
+Above Select, and it is not a tool: it is what the camera is doing, as one
+number, and a tap on it puts the canvas back to 100%. The zoom is reached by
+pinching, by wheeling with a modifier and by palming a trackpad — three
+gestures that are easy to trip and none of which says what they left behind —
+so until now there was no answer anywhere on screen to *how far in am I*, and
+no way back to 1:1 short of pinching until the lattice looked about right. The
+tile palette in the properties sidebar has carried exactly this control for as
+long as it has had a zoom of its own; this is that control for the camera.
+
+**In the rail's own head slot** (`ToolRail.head`, which `setOffered` keeps
+across a rebuild) rather than positioned over the column, so it moves with it
+and goes down with it in Code and Play — where the canvas is behind a running
+game and the number would be describing something nobody can see. The floating
+tool name beside the rail is positioned against the middle of the *first
+button*, so it moves down by the badge's height: `--rail-head-h` in
+`zoom-badge.css` is that one number, shared by the two rules that need it.
+
+**A tap is 100%, not the zoom the project opens at.** Those are two different
+questions and the second already has an answer in Project Options. What this
+is for is getting back to one screen pixel per world pixel, which is the scale
+artwork is measured at and the only zoom whose number means anything on its
+own. `SceneCamera.zoomTo` re-issues `centerOn` after the scale rather than
+trusting the scroll to survive it — Phaser works the mid-point out from the
+scroll and the zoom, so a zoom applied to an unchanged scroll leaves the middle
+somewhere else, near enough at small steps to look like drift and a long way
+off from 8× to 1×.
+
+The label is a whole per cent from 1× up and a tenth below it. The two halves
+of the range are not the same readout: zoomed in, a per cent is already finer
+than anybody is aiming for and an extra digit only shuffles under the finger
+doing the pinching; zoomed out, the camera spends most of its range between
+10% and 100%, where whole per cents round four separate zooms to the same
+number.
 
 **Text is the exception on that column**, and it is worth saying why it is
 there rather than on the rail. Its gesture is a tap on bare ground, like

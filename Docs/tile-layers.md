@@ -186,6 +186,80 @@ custom property — `idlewild:psd`, with `idlewild:layer` for the layer inside
 it. Those are ordinary Tiled properties: a map can go out to Tiled, be worked
 on, and come home still able to say which file each palette was.
 
+### Merged or Separate: one palette, or one per layer
+
+A PSD arrives on a layer as one placement per placeable layer — see [A PSD's
+own layers](psd-layers.md) — and the first version of this cut a palette for
+each of them. That is exactly right for a tileset drawn as *ground*, *walls*
+and *props*: three sets of tiles that happen to share a file. It is wrong for
+everything else. A building drawn as walls, roof and shadow came into the
+sidebar as three sparse pictures, each missing the other two's tiles, and the
+way to paint the building was to stamp from all three onto the same space —
+which is not a thing anybody would design.
+
+So the panel carries a **Layers** toggle over each palette, and the default is
+**Merged**: one palette of the file as it looks. **Separate** is the old
+behaviour, asked for rather than assumed.
+
+The mode is per **file** and lives in the document (`GameDoc.palettes`, keyed
+by PSD key), for the reason the tilesets themselves are document-level: `psd/`
+is one directory for the project, so a file is cut one way everywhere. A
+second answer per layer would be two palettes of the same picture with
+different gids, and a tile put down from one would be a tile the other cannot
+explain. A document written before the choice existed has no `palettes` at all
+and answers Merged, which costs it nothing: its per-layer palettes are still
+in `tilesets`, with every gid standing on them still pointing where it did.
+
+**Switching adds; it never replaces.** A `firstgid` handed out is permanent
+for as long as anything stands on it, so a palette that has ever been painted
+from has to stay exactly where it is — the same rule that is why there is no
+way to take a palette out at all. What the toggle changes is which palettes
+`palettesOn` offers in the panel and how the next placement of that file is
+cut. `palettesOn` shows the cut the file is currently set to, **plus** any
+palette with tiles standing on it: the panel has to be able to explain what is
+on the ground whichever way the file happens to be cut now.
+
+#### The merged picture is a real file
+
+A tileset names the image its tiles are cut out of, and that name reaches
+`game.config.json` — so a palette whose picture existed only in the editor's
+memory would break [the rule the rest of it hangs from](#the-rule-the-rest-of-it-hangs-from).
+`src-tauri/src/psd_flatten.rs` composites the file and writes
+`assets/<key>/merged.png`, beside the layer sprites psd-to-json exported. It
+ships with a publish like the rest of `assets/` and is served over the asset
+server like the rest of it.
+
+It is composited **here rather than read from psd-to-json's output**, because
+psd-to-json writes one PNG per layer and no composite of its own. The stack is
+walked bottom-first with alpha and per-layer opacity — a group's opacity
+folded into its children, since there is no group left to dim — which is
+exactly what the canvas shows when it draws the same layers as separate
+placements. A hidden layer stays out, because the canvas does not draw one
+either, and so do the two orienting marks an import writes: a red anchor dot
+baked into a palette is a red dot in every tile cut from that corner.
+
+The size is the PSD's **canvas**, not the union of its artwork. A palette is
+cut on the project's grid from the file's own corner, so a picture trimmed to
+its contents would shift every tile in it.
+
+**A re-parse rebuilds it.** `psd_pipeline::process` clears `assets/<key>/` so
+stale sprites never outlive an import, and the merged picture lives in there —
+so `process` calls `psd_flatten::refresh` on the way out. That checks the
+document for a tileset carrying `idlewild:layer = "*merged*"` for this key and
+does nothing otherwise, because a project that has never made a merged palette
+should not start carrying a second copy of every picture in it.
+
+**The scene loads that texture itself.** psd-to-phaser has never heard of
+`merged.png`, so nothing else would: `Tiling.mergePalette` asks the editor to
+write it (the editor owns the IPC, as it does for Make Unique) and then loads
+it under the key `TileRender.frameFor` will ask for. It runs over every merged
+palette in the document rather than only the ones just cut, because a project
+opened again has all of its palettes and none of their textures — and it skips
+the write for one whose picture is presumably already there, letting the load
+find out. `Tiling.dropKey` removes that texture when a file goes offline for a
+rewrite, since nothing else evicts it and a merged picture left in place would
+be the artwork as it was before the edit, for ever.
+
 `image` names the artwork psd-to-json exported, under `assets/<key>/`, so a
 `.tmj` written beside the project points at a real picture.
 

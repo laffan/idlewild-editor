@@ -112,7 +112,14 @@ Part of [the Idlewild manual](README.md).
   the column they create into, folders fold away — and stay folded, per
   install — and a switch beside the open file's path takes the whole column off
   when the code wants the room. Rename, duplicate, delete and dragging files
-  between folders are on the rows. A drag carries a **ghost** of the row under
+  between folders are on the rows.
+- **The column is everything a publish sends**, not only the code. `assets/`
+  is there — the pictures every PSD in the project was turned into, which is
+  most of what an export weighs — along with the two runtime libraries and the
+  README a publish writes. Those rows are dimmed and carry no menu: they are
+  written for you, from the files they came from, and an edit to one would be
+  undone by the next import. They are listed so that *what will be uploaded*
+  is something you can look at rather than take on trust. A drag carries a **ghost** of the row under
   your finger, naming the folder it would land in, and that folder's row lights
   up as you pass it — pointer events have no drag image of their own, and a
   finger drag with nothing following it looks like nothing happening

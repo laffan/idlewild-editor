@@ -48,6 +48,7 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  psd_merge.rs    several placed PSDs, written back out as one  │
 │  psd_paint.rs    ink → a layer already in a PSD                │
 │  psd_palette.rs  the palette, into a PSD leaving for Photoshop │
+│  psd_flatten.rs  one PSD as one picture: a merged tile palette │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
 │  templates.rs    the four scaffolds, per-projection grid       │
@@ -63,6 +64,7 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  github_api.rs   the two questions git cannot answer           │
 │  compare.rs      the far end beside the staged site            │
 │  site_files.rs   that site, as a list of files with hashes     │
+│  site_listing.rs the same site, as the code modal's column     │
 │  export_assets.rs  chosen PSDs alone: sources, output, or both │
 │  archive.rs      a whole project, as one .idlewild file        │
 │  import_assets.rs  the same door inward, several files at once │
@@ -161,6 +163,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Section | Page |
 |---|---|
 | A colour carries its own opacity | [`Docs/drawing.md`](Docs/drawing.md) |
+| A platformer moves in spaces, not pixels | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | Attach palette to PSDs | [`Docs/colour.md`](Docs/colour.md) |
 | Adding a layer, and the empty one | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Browse Palettes | [`Docs/colour.md`](Docs/colour.md) |
@@ -180,6 +183,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Layer visibility | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Leaving with a file, and the order iOS needs | [`Docs/exports.md`](Docs/exports.md) |
 | Lines the editor owns | [`Docs/exported-game.md`](Docs/exported-game.md) |
+| Merged or Separate: one palette, or one per layer | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
 | One file per scene, named after it | [`Docs/data-model.md`](Docs/data-model.md) |
 | Four scaffolds, one document | [`Docs/data-model.md`](Docs/data-model.md) |
 | One picker, five places | [`Docs/colour.md`](Docs/colour.md) |
@@ -191,7 +195,9 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Reordering layers | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Select, on the home screen | [`Docs/exports.md`](Docs/exports.md) |
 | Selection | [`Docs/selection.md`](Docs/selection.md) |
+| Snap to grid, and the arrow keys | [`Docs/selection.md`](Docs/selection.md) |
 | Testing | [`Docs/testing.md`](Docs/testing.md) |
+| The column is the site, not just `game/` | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | The config the game reads | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | The inspector's sections fold | [`Docs/inspector.md`](Docs/inspector.md) |
 | The iPad needs a scene | [`Docs/ipad.md`](Docs/ipad.md) |
@@ -204,6 +210,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | The PSD pipeline | [`Docs/psd-pipeline.md`](Docs/psd-pipeline.md) |
 | The reference along the bottom of the code modal | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | The tools, on two columns | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
+| The zoom badge, at the head of the rail | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | Three exits | [`Docs/exports.md`](Docs/exports.md) |
 | Three kinds of layer | [`Docs/layers.md`](Docs/layers.md) |
 | Tile layers | [`Docs/tile-layers.md`](Docs/tile-layers.md) |

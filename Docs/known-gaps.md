@@ -21,6 +21,16 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   terrain brush are all things Tiled has that this does not, and each is a
   tool rather than an argument — they were left out to keep the first version
   about the *data*, not because they are hard.
+- **A merged palette is an alpha composite, not a Photoshop render.**
+  `psd_flatten.rs` walks the stack bottom-first with straight alpha and
+  per-layer opacity, which is exactly what the canvas shows when it draws the
+  same layers as separate placements — and it is not what Photoshop shows for
+  a file using Multiply, Screen or a layer style. The two agree for every file
+  this editor writes and for most files anybody hand-draws as tiles; a file
+  that leans on blend modes will look flatter in its palette than in
+  Photoshop. Cut it as **Separate** and the layers are psd-to-json's own
+  exports again. It also costs a second picture on disk per merged file, which
+  is why nothing writes one until a palette asks for it.
 - **An external `.tsx` tileset is refused rather than resolved.** A map that
   keeps its tilesets in separate files names them by a path relative to
   itself, and following that would mean a second read, a second parse and a

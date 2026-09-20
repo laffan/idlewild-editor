@@ -46,6 +46,13 @@ Part of [the Idlewild manual](README.md).
   direction on a diamond grid seen from above, so picking **Isometric** greys
   it out and puts the scaffolding back to Top Down. The other three have
   nothing that falls, so they pair with any template
+- **Both characters move in grid spaces rather than in pixels**, so a
+  platformer on the 8px grid plays the way one on the 64px grid does instead
+  of eight times faster. The numbers in `js/shared/physics.js` are still
+  written in pixels — that is the unit anybody editing them thinks in — and
+  they are quoted against a 64px grid and scaled by how big this project's
+  spaces actually are. A project scaffolded before this keeps its own copy of
+  that file and its own speed; `game/` is yours, and nothing rewrites it
 - **The sheet is a settings page, and is drawn as one.** It used to be a column
   of labels each with a grey paragraph under it; it is the same rows the Logins
   sheet is built from now — the vocabulary Publish introduced, which this is the

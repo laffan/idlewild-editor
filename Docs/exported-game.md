@@ -429,6 +429,36 @@ a project scaffolded after this gets the shorter file — `game/` is the user's
 copy and nothing writes into it unasked — so an existing platformer keeps its
 pad until those lines are deleted, or Reset is used on the block.
 
+### A platformer moves in spaces, not pixels
+
+`physics.js` is written in world pixels — 260 px/s of run, 2200 px/s² of
+gravity — and a world pixel means nothing on its own. Those numbers were
+arrived at on the 64px grid New Project offers first, where they are a brisk
+walk and a jump a little over two spaces high. On the 8px grid the same sheet
+offers for pixel art they are the same character crossing thirty-two spaces a
+second, which is not fast: it is unplayable.
+
+The constants stay where they are and in the units somebody editing them
+recognises. What changed is that they are quoted against `TUNED_GRID` and
+multiplied by how big this project's spaces actually are, which makes the
+whole model *spaces per second* without turning it into a table of ratios.
+The scale rides on the **body** rather than being handed to `stepBody` on
+every frame — it is a fact about the project and never changes while a game is
+running, and anything else you write that steps a body gets it right by having
+made one. A body created without it moves at the 64px numbers, so a project
+scaffolded before this keeps its own `prefabs/` directory and its own speed,
+for the reason its pad stayed: `game/` is the user's copy.
+
+`SKIN` is deliberately **not** scaled. It is the hair of clearance a resolved
+collision leaves — a floating-point defence against a body resting a
+billionth of a pixel inside the floor it is standing on — rather than a
+distance anybody drew, so it stays a thousandth of a pixel at every grid size.
+
+Top-down needed none of this: its nudge is already `NUDGE_SPACES * grid.size`
+and its walk is one space per tween, so both were in spaces from the start.
+`platformer-physics.test.ts` runs the template itself and measures the same
+run and the same jump on grids five steps apart, in spaces.
+
 ---
 
 ## The config the game reads
