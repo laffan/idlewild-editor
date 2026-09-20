@@ -121,6 +121,12 @@
 .code-new:hover { background: var(--chrome-rule); }
 .code-new svg { flex: none; color: var(--chrome-dim); }
 .code-new:hover svg { color: var(--chrome-text); }
+/* The gear at the end of the strip takes only the glyph's width, so the two
+   named buttons keep the row. It stays on the first line when the dock is
+   narrow enough to stack them, which is what `flex-basis: 100%` above would
+   otherwise do to it as well. */
+.code-gear { flex: none; min-width: 34px; }
+.code-backdrop.dock-right .code-gear { flex-basis: auto; }
 
 .code-files { flex: 1; min-height: 0; }
 .code-file {

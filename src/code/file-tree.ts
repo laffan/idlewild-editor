@@ -49,6 +49,8 @@ import * as log from "../lib/log";
 export interface FileTreeCallbacks {
   /** A file was picked. */
   onOpen: (path: string) => void;
+  /** The gear over the column — see `CodeModal.openSettings`. */
+  onSettings: () => void;
   /** The tree changed under an open file — it may have moved or gone. */
   onMoved: (from: string, to: string) => void;
   onRemoved: (path: string) => void;
@@ -114,6 +116,21 @@ export class FileTree {
         },
         icon(ICONS.folder, 14),
         h("span", { text: "New Folder" }),
+      ),
+      // The gear is in this row because it is about the editor beside the
+      // column rather than about the project — the header's own Project
+      // Options is where a project's settings are. Right-aligned and wordless:
+      // the two beside it are the things you come here to *do*, and a third
+      // labelled button would read as a third of them.
+      h(
+        "button",
+        {
+          class: "code-new code-gear",
+          title: "Code settings",
+          "aria-label": "Code settings",
+          onClick: () => this.callbacks.onSettings(),
+        },
+        icon(ICONS.gear, 14),
       ),
     );
     this.head = h("div", { class: "code-column-head" });

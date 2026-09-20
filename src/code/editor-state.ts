@@ -13,6 +13,11 @@
  *
  * Everything it has to say, it says through the callbacks. Nothing here reads
  * the modal, so the two can be understood a file at a time.
+ *
+ * Two of its inputs are **settings** rather than facts about the file — the
+ * type size and which names are offered as you type — and those can move
+ * while a file is open, so they sit in compartments the panel reconfigures.
+ * See `code-settings.ts` and `reconfigure` below.
  */
 
 import { Compartment, EditorState } from "@codemirror/state";
@@ -23,9 +28,23 @@ import { html as htmlLang } from "@codemirror/lang-html";
 import { css as cssLang } from "@codemirror/lang-css";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { findHighlight } from "./find-matches";
+import { hintExtensions } from "./hints";
 import { managedExtension } from "./managed-view";
+import type { CodeHints } from "./code-settings";
 
 const languageCompartment = new Compartment();
+
+/**
+ * The two settings that can change while a file is open.
+ *
+ * A fresh `EditorState` is built per file, so everything else about a file is
+ * decided once and never moved. These two are not: they are the settings
+ * sheet's, and a size that only took effect on the next file would be a
+ * control somebody presses twice wondering whether it worked. Compartments
+ * are CodeMirror's own answer to that — see `reconfigure` below.
+ */
+const textCompartment = new Compartment();
+const hintCompartment = new Compartment();
 
 export interface FileStateOptions {
   /** The path inside `game/`, which decides the language and the ownership. */
@@ -57,6 +76,12 @@ export interface FileStateOptions {
    * a move. What the reference panel follows in Automatic mode.
    */
   onCursor: () => void;
+  /** ⇧⌥F, and what a save does first while Tidy on save is on. */
+  onTidy: () => void;
+  /** The editor's type size, in CSS pixels — see `code-settings.ts`. */
+  textSize: number;
+  /** Which completion sources this file gets, if any. */
+  hints: CodeHints;
 }
 
 export function fileState(options: FileStateOptions): EditorState {
@@ -95,10 +120,21 @@ export function fileState(options: FileStateOptions): EditorState {
             return true;
           },
         },
+        // The shortcut every editor that has a formatter uses, which is the
+        // whole argument for it being this one rather than a better one.
+        {
+          key: "Shift-Alt-f",
+          preventDefault: true,
+          run: () => {
+            options.onTidy();
+            return true;
+          },
+        },
         ...defaultKeymap,
         ...historyKeymap,
       ]),
       languageCompartment.of(languageFor(path)),
+      hintCompartment.of(hintExtensions(path, options.hints)),
       oneDark,
       // A fresh state per file means a fresh set of marks per file, which is
       // the right answer: the panel re-scans whatever is now under it.
@@ -117,15 +153,39 @@ export function fileState(options: FileStateOptions): EditorState {
         if (update.docChanged) options.onEdit();
         if (update.docChanged || update.selectionSet) options.onCursor();
       }),
-      EditorView.theme({
-        "&": { height: "100%" },
-        // The design system's code face, not CodeMirror's default stack.
-        ".cm-content, .cm-gutters": {
-          fontFamily: "var(--font-mono)",
-          fontSize: "13px",
-        },
-      }),
+      EditorView.theme({ "&": { height: "100%" } }),
+      textCompartment.of(textTheme(options.textSize)),
     ],
+  });
+}
+
+/**
+ * Put a settings change into the editor that is already open.
+ *
+ * `path` as well as the settings, because the hints a file gets depend on
+ * what kind of file it is — a stylesheet is offered none of this whatever the
+ * switches say.
+ */
+export function reconfigure(
+  view: EditorView,
+  path: string,
+  settings: { textSize: number; hints: CodeHints },
+): void {
+  view.dispatch({
+    effects: [
+      textCompartment.reconfigure(textTheme(settings.textSize)),
+      hintCompartment.reconfigure(hintExtensions(path, settings.hints)),
+    ],
+  });
+}
+
+/** The design system's code face, at whatever size the settings say. */
+function textTheme(size: number) {
+  return EditorView.theme({
+    ".cm-content, .cm-gutters": {
+      fontFamily: "var(--font-mono)",
+      fontSize: `${size}px`,
+    },
   });
 }
 

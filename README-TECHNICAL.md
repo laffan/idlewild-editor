@@ -169,6 +169,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Browse Palettes | [`Docs/colour.md`](Docs/colour.md) |
 | Carrying a palette off a tile layer | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
 | Colliders | [`Docs/colliders.md`](Docs/colliders.md) |
+| Code Settings, Tidy and hints | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | Console | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | Data model | [`Docs/data-model.md`](Docs/data-model.md) |
 | Drawing layer | [`Docs/drawing.md`](Docs/drawing.md) |

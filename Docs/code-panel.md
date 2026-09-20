@@ -270,6 +270,87 @@ is what stops the two from both firing as an event bubbles out of the editor.
 Preventing the default matters beyond tidiness: WKWebView takes an
 un-prevented ⌘F as its own page search.
 
+### Code Settings: the gear over the file column
+
+Three answers, behind a gear at the end of the New File / New Folder strip:
+the editor's **text size**, **Tidy on save**, and which **hints** are offered
+as you type. They are in `localStorage` beside the folded folders rather than
+in the document, because none of them is a fact about the project —
+`code/code-settings.ts` reads them, tolerantly: a stored value that is
+missing, the wrong type or out of range answers the default rather than
+throwing, since this is a preference and a cleared browser, a private window
+and a quota error all look the same from here.
+
+The gear is in that strip rather than in the bar, and it is wordless. The two
+buttons beside it are the things you come to the column to *do*; a third
+labelled button would read as a third of them. It is a cog rather than the
+`sliders` glyph the header's Project Options uses, because two settings
+buttons on one screen should not be the same picture — and a cog beside a file
+tree is what every other editor puts there.
+
+**The type size takes effect as it is changed**, which is the whole reason it
+is a sheet with no Save: the number is chosen by looking at the code behind
+it. A fresh `EditorState` is built per file, so everything else about a file
+is decided once; these two are not, so the size and the hint sources sit in
+**compartments** and `editor-state.ts` exposes `reconfigure` for the panel to
+push a change into the editor that is already open.
+
+#### Tidy is Prettier, and it never moves the editor's own lines
+
+`code/tidy.ts` formats with Prettier in the browser — JavaScript, JSON, CSS,
+HTML and Markdown, each parser behind a dynamic `import` so the better part of
+a megabyte is loaded the first time somebody tidies something rather than when
+the panel opens.
+
+Prettier rather than CodeMirror's `indentRange`, which was the other option
+and is a smaller thing than it sounds: it fixes the left edge of every line
+and nothing else, so a call broken across four lines in the middle of an
+argument list comes out exactly as crooked as it went in. Prettier reprints
+from its own parse, which is what "tidy" means to anybody who has used an
+editor before — and it is the formatter this project's own templates are
+written to, so a scaffolded file is already very nearly its output.
+
+The one thing that makes this more than a call into a library is **ownership**.
+A scaffolded file has runs the editor maintains, and a line is the editor's
+only while it is still one of the lines the scaffold wrote — see [Lines the editor
+owns](exported-game.md#lines-the-editor-owns) — so a tidy that reprinted an
+owned line would not break the file visibly. It would dissolve the block,
+silently, and a Reset would later have nothing to put back. So the result is
+checked before it is used: `ownedLinesSurvive` asks whether every owned line's
+text still appears, in order, in the tidied file — trimmed, because
+indentation is Prettier's to decide — and a tidy that fails it is declined and
+says so in the bar. What passes goes in under the `managedEdit` annotation, as
+a Reset does, because a reflow moves every line below the first one and the
+filter over an owned line would otherwise refuse the transaction.
+
+Nothing it cannot do cleanly: a file with no parser, a generated file the
+editor writes end to end, and a file that does not parse are all left exactly
+as they are. ⇧⌥F tidies once and is answered either way; a save that was told
+to tidy is answered only when something it was told to do did not happen.
+`tidy-run.ts` is that half — the editor, the caret and the bar — and it is
+split from the rule for the reason `code-modal.ts` is at the line limit.
+
+#### Hints are two sources, because they are two appetites
+
+`code/hints.ts` offers **Phaser** and **JavaScript** separately. Phaser is a
+reference nobody memorises: it reads the same `phaser-docs.json` the panel
+below the editor reads and matches the same prefixes longest-first, so what is
+offered as you type and what the panel shows when the caret lands are the same
+answer. A completion source is asked for its answer inside a keystroke and has
+nothing to wait with, so a reference that has not been read yet offers nothing
+this time, starts the read, and is there by the next. JavaScript is
+CodeMirror's own `localCompletionSource` and `scopeCompletionSource` — the
+words already in this file, and the browser's globals.
+
+Both are JavaScript files only. The globals are not what is being written in a
+stylesheet, and the Phaser reference in `index.html` would be answering a
+question nobody asked; CodeMirror's HTML and CSS languages bring their own
+completions and those stay whatever these switches say.
+
+The two hints are **tick boxes** where Tidy on save is a **switch**, which is
+not an inconsistency: a switch says *this is on*, and a pair of boxes says
+*these are the ones I want*.
+
 ---
 
 ## The reference along the bottom of the code modal

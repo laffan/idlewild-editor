@@ -445,6 +445,21 @@
   transform: translateX(14px);
 }
 
+/* ── Checkbox ────────────────────────────────────────────────────────────── */
+
+/* The exception to the switch, for a row that is one of several answers — the
+   two hint sources in Code Settings. Native, because a tick box is the one
+   control the platform draws better than we would; `accent-color` is the
+   whole of the theming, and the size is the row's rather than the form's. */
+.opt-check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--opt-accent);
+  cursor: pointer;
+}
+
 /* ── Number ──────────────────────────────────────────────────────────────── */
 
 .opt-number-wrap {

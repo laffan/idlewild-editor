@@ -222,6 +222,24 @@ export const ICONS = {
   search: ["M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14Z", "m16.2 16.2 4.3 4.3"],
   /* Sliders — Project Options, which is settings rather than navigation. */
   sliders: ["M4 7h9", "M17 7h3", "M4 17h3", "M11 17h9", "M15 5v4", "M9 15v4"],
+  /* A cog, for Code Settings. The sliders above are this app's own glyph for
+     settings and would have done — but they sit in the header, over the whole
+     project, and this one sits over a column of files. Two settings buttons on
+     one screen should not be the same picture, and the cog is the one every
+     other editor puts beside a file tree. Drawn as a body, a bore and eight
+     teeth, which is what survives being 14px. */
+  gear: [
+    "M12 6.4a5.6 5.6 0 1 0 0 11.2 5.6 5.6 0 0 0 0-11.2Z",
+    "M12 9.8a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z",
+    "M12 3.2v3.2",
+    "M12 17.6v3.2",
+    "M20.8 12h-3.2",
+    "M6.4 12H3.2",
+    "m18.2 5.8-2.3 2.3",
+    "m8.1 15.9-2.3 2.3",
+    "m18.2 18.2-2.3-2.3",
+    "m8.1 8.1-2.3-2.3",
+  ],
   /* The four kinds of layer, as the dropdown under the `+` offers them and
      as each row carries afterwards. A stack of sheets for the ordinary one,
      a scatter for the pattern, a framed field for the backdrop and a ruled

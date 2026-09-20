@@ -183,6 +183,45 @@ export function optionSwitchRow(options: SwitchRowOptions): SwitchRow {
   return { root, set: (on) => control.set(on) };
 }
 
+export interface CheckControl {
+  root: HTMLInputElement;
+  set: (on: boolean) => void;
+  get: () => boolean;
+}
+
+/**
+ * A tick box, for a row that is one of several answers rather than a setting
+ * in its own right.
+ *
+ * The switch is the settings system's default and this is the exception, so
+ * it is worth saying when to reach for it: a switch says *this is on*, and a
+ * group of boxes says *these are the ones I want* — which is the difference
+ * between Tidy on save and the two hint sources beside it. Native, because a
+ * checkbox is the one control the platform draws better than we would and
+ * `accent-color` is the whole of the theming it needs.
+ */
+export function optionCheckbox(
+  initial: boolean,
+  onChange: (on: boolean) => void,
+  label: string,
+): CheckControl {
+  const box = h("input", {
+    class: "opt-check",
+    type: "checkbox",
+    "aria-label": label,
+    onClick: (event: Event) => event.stopPropagation(),
+  }) as HTMLInputElement;
+  box.checked = initial;
+  box.addEventListener("change", () => onChange(box.checked));
+  return {
+    root: box,
+    set: (on) => {
+      box.checked = on;
+    },
+    get: () => box.checked,
+  };
+}
+
 export interface NumberControl {
   root: HTMLElement;
   input: HTMLInputElement;

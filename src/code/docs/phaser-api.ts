@@ -20,7 +20,15 @@ import {
 } from "./api-render";
 import { DOCS_BASE, type Detected, type DocsSource } from "./types";
 
-const PREFIXES = [
+/**
+ * The expressions the reference is keyed by, longest first — or `this.input.`
+ * would answer for `this.input.keyboard.` and the wrong class would come up.
+ *
+ * Exported because the completions offered as you type are the same question
+ * asked one keystroke earlier: what is on the left of the dot. See
+ * `code/hints.ts`.
+ */
+export const PREFIXES = [
   "this.physics.add.",
   "this.input.keyboard.",
   "this.cameras.main.",
@@ -42,6 +50,18 @@ const MAX_RESULTS = 30;
 const SEARCH_EMPTY = '<div class="docs-empty">Type to search the Phaser API.</div>';
 
 let docs: ApiDocs | null = null;
+
+/**
+ * The reference as it stands, for anything that is not the panel.
+ *
+ * Null until `phaserApi.load()` has been and come back, which is the honest
+ * answer rather than a promise: a completion source is asked for its answer
+ * inside a keystroke and has nothing to wait with, so it offers nothing this
+ * time and everything the next.
+ */
+export function loadedApi(): ApiDocs | null {
+  return docs;
+}
 
 export const phaserApi: DocsSource = {
   cursorMode: true,

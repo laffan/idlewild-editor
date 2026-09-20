@@ -141,6 +141,28 @@ Part of [the Idlewild manual](README.md).
   across launches, and a project that has never been opened in Code lands on
   its scene
 
+## Code settings
+
+- **The gear** at the end of the New File / New Folder strip opens three
+  settings. They are about this device rather than about the project, so they
+  are remembered here and travel with neither
+- **Text size** is how large the code is drawn. It takes effect as you change
+  it — the editor behind the sheet redraws at every step — so you pick it by
+  looking at the code rather than by imagining it
+- **Tidy on save** reprints the file with Prettier on the way to disk:
+  spacing, indentation, quotes and semicolons, from the code's own structure
+  rather than only its left edge. Lines the editor owns are never moved — a
+  tidy that would reprint one is declined, says so, and the file is saved as
+  you wrote it — and a file with a syntax error cannot be reprinted, so the
+  save writes it unchanged and the bar says where the trouble is. **⇧⌥F**
+  tidies the file once without turning the setting on
+- **Code hinting** is two tick boxes. **Phaser** offers the members of the
+  expression you are typing, out of the same reference the panel under the
+  editor shows. **JavaScript** offers the words already in this file and the
+  browser's own names. Both are JavaScript files only, both are offers —
+  Escape closes the list, and nothing is written into the file unless you
+  choose it
+
 ## Find
 
 - **Find, twice, because there are two questions.** ⌘F searches the file that

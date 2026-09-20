@@ -31,6 +31,11 @@
  * "what does this method take?" arrives while you are typing the method — and
  * here it takes whichever side the panel has room for. See `placeDocs`.
  *
+ * The gear over the file column is **Code Settings**: the type size, Tidy on
+ * save and the two hint sources, all of them about this device rather than
+ * about the project — `code-settings.ts` holds them, `settings-sheet.ts` is
+ * the sheet, and a change is pushed into the editor that is already open.
+ *
  * Some of these lines are the editor's. A scaffolded file marks the runs it
  * maintains, and `managed-blocks.ts` works out line by line which of them are
  * still the editor's after everything that has been typed around them: those
@@ -48,11 +53,14 @@ import * as log from "../lib/log";
 import { CodeBar } from "./code-bar";
 import { FileTree } from "./file-tree";
 import { DocsPanel } from "./docs/panel";
-import { fileState } from "./editor-state";
+import { fileState, reconfigure } from "./editor-state";
 import { Finding } from "./finding";
 import { forgetFile, lastFile, opening, rememberFile } from "./last-file";
 import { addMissingBlocks, isGenerated, resetBlock } from "./managed-blocks";
 import { managedEdit, missingBlocksRow } from "./managed-view";
+import { readCodeSettings, writeCodeSettings, type CodeSettings } from "./code-settings";
+import { openCodeSettings } from "./settings-sheet";
+import { tidyInPlace } from "./tidy-run";
 import { createResizer, type Resizer } from "../editor/resizer";
 
 /**
@@ -103,6 +111,22 @@ export class CodeModal {
   private filesShown = true;
   /** ⌘F over the open file, ⇧⌘F over all of them — see `finding.ts`. */
   private readonly find: Finding;
+  /**
+   * How the editor behaves: the type size, Tidy on save, the hint sources.
+   *
+   * Read once here rather than at every use — see `code-settings.ts` — and
+   * held rather than re-read, so the settings sheet and the open editor are
+   * looking at the same object.
+   */
+  private settings: CodeSettings = readCodeSettings();
+  /**
+   * The open file as the scaffold wrote it, or null.
+   *
+   * Kept because Tidy needs it: which lines the editor owns is a question
+   * about this text against that one, and a tidy has to be able to ask it
+   * without a round trip in the middle of a save.
+   */
+  private canonical: string | null = null;
 
   constructor(
     projectId: string,
@@ -115,6 +139,7 @@ export class CodeModal {
     this.onSaved = onSaved;
     this.tree = new FileTree(projectId, {
       onOpen: (path) => void this.openFile(path),
+      onSettings: () => this.openSettings(),
       onMoved: (from, to) => {
         // The editor is showing a file that just changed name or folder.
         if (this.openPath !== from) return;
@@ -413,6 +438,7 @@ export class CodeModal {
     if (token !== this.openToken) return;
 
     this.openPath = path;
+    this.canonical = canonical;
     rememberFile(this.projectId, path);
     this.bar.setFilename(path);
     this.setDirty(false);
@@ -440,6 +466,9 @@ export class CodeModal {
         this.historyMoved();
       },
       onCursor: () => this.reportCursor(),
+      onTidy: () => void this.tidyOpenFile(true),
+      textSize: this.settings.textSize,
+      hints: this.settings.hints,
     });
 
     if (this.view) {
@@ -589,6 +618,11 @@ export class CodeModal {
 
   async save(): Promise<void> {
     if (!this.view || !this.openPath || !this.dirty) return;
+    // Before the write rather than after it: what goes to disk and what is on
+    // screen have to be the same text, and a file tidied afterwards would be
+    // a document that is dirty again the moment it was saved.
+    if (this.settings.tidyOnSave) await this.tidyOpenFile(false);
+    if (!this.view || !this.openPath) return;
     const path = this.openPath;
     try {
       await gameFiles.write(this.projectId, path, this.view.state.doc.toString());
@@ -600,6 +634,45 @@ export class CodeModal {
     } catch (err) {
       log.error(`Could not save ${path}:`, err);
     }
+  }
+
+  /**
+   * The gear over the file column.
+   *
+   * Every press in the sheet arrives here with the whole of the settings: it
+   * is written, and pushed into the editor that is open so a size is chosen
+   * by looking at the code rather than by imagining it. A file opened
+   * afterwards is built with them from the start — see `openFile`.
+   */
+  private openSettings(): void {
+    openCodeSettings(this.settings, (next) => {
+      this.settings = next;
+      writeCodeSettings(next);
+      if (this.view && this.openPath) {
+        reconfigure(this.view, this.openPath, next);
+      }
+    });
+  }
+
+  /**
+   * Reprint the open file — ⇧⌥F, and what a save does first while Tidy on
+   * save is on.
+   *
+   * The rule and the announcements are `tidy-run.ts`'s; what belongs here is
+   * what an open file *is* — the view, its path, and the scaffold it is
+   * measured against.
+   */
+  private async tidyOpenFile(announce: boolean): Promise<void> {
+    if (!this.view || !this.openPath) return;
+    await tidyInPlace(
+      {
+        view: this.view,
+        path: this.openPath,
+        canonical: this.canonical,
+        note: (text, ms) => this.bar.setNote(text, ms),
+      },
+      announce,
+    );
   }
 
   destroy(): void {
