@@ -32,7 +32,7 @@
  */
 
 import { clear, h } from "../lib/dom";
-import type { FillMode, StrokeStyle } from "../drawing";
+import type { StrokeStyle } from "../drawing";
 import {
   makeSectionsCollapsible,
   revealSection,
@@ -48,15 +48,11 @@ import {
   type ZoneOptions,
 } from "./inspect-zone";
 import { renderBackground } from "./inspect-background";
-import { renderText, type TextActions } from "./inspect-text";
+import { renderText } from "./inspect-text";
 import { captureFocus, restoreFocus } from "./inspect-focus";
 import { nameRow } from "./inspect-head";
-import { renderPatternLayer, type PatternActions } from "./inspect-pattern";
-import {
-  renderTileLayer,
-  renderTileSelection,
-  type TileActions,
-} from "./inspect-tiles";
+import { renderPatternLayer } from "./inspect-pattern";
+import { renderTileLayer, renderTileSelection } from "./inspect-tiles";
 import {
   isTileTool,
   tileToolPanel,
@@ -64,10 +60,7 @@ import {
   TILE_TOOL_TITLES,
 } from "./inspect-tile-tools";
 import { layerKind } from "../lib/layer-kinds";
-import {
-  renderPlacement,
-  type PlacementActions,
-} from "./inspect-placement";
+import { renderPlacement } from "./inspect-placement";
 import {
   renderFill,
   renderLayer,
@@ -77,7 +70,6 @@ import {
   renderRegion,
   renderStrokes,
   renderZone,
-  type PanelActions,
   type PanelSurface,
 } from "./inspect-panels";
 import type { PsdLayerEditor } from "./psd-layers";
@@ -87,78 +79,15 @@ import { defaultPatternScale } from "./stamp-box";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import type { FillPatch, Selection, ToolId } from "../lib/types";
+import type { InspectorCallbacks } from "./inspect-callbacks";
 
-export interface InspectorCallbacks
-  extends PatternActions,
-    PanelActions,
-    PlacementActions,
-    TextActions,
-    TileActions {
-  /**
-   * The paint control settled on something — a colour, a pattern or a shape.
-   *
-   * One callback rather than one per kind, because what it means depends on
-   * the selection rather than on the kind: a fill selected is repainted, and a
-   * run of grid spaces is filled. See `fill-actions.ts`.
-   */
-  onFillPaint: (paint: Paint) => void;
-  /**
-   * Get rid of a whole document layer, and everything drawn on it.
-   *
-   * Its own callback rather than a case of `onDeleteSelection`, because it is
-   * the one delete in this panel that asks first — a layer is a container and
-   * the Delete key must not reach it, which is also why `shortcuts.ts` counts
-   * a layer selection as nothing to delete.
-   */
-  onDeleteLayer: (layerId: string) => void;
-  /** Rename a named place. Its own callback because a point's name is the
-   *  only thing about it the panel can change. */
-  onRenamePoint: (layerId: string, pointId: string, name: string) => void;
-  /** Say where the open scene starts play, or that it starts nowhere. */
-  onSetStartPoint: (pointId: string | null) => void;
-  /** Write the selected grid area out as a transparent PNG. */
-  onExportSelection: () => void;
-  onUsePatternImage: () => void;
-  /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
-  onStrokesToPsd: () => void;
-  onStrokesToZone: () => void;
-  /**
-   * The selected PSD's own layer stack, as an editor that loads itself. Built
-   * by the shell rather than here, because it needs the project id and a way
-   * back to the scene once it has rewritten the file.
-   */
-  createPsdLayers: (key: string) => PsdLayerEditor;
-  /** The pencil's brush, size and colour changed. */
-  onStrokeStyle: (patch: Partial<StrokeStyle>) => void;
-  /**
-   * Which layer the LAYER zone falls back to when nothing on the canvas is
-   * selected — the one new work lands on.
-   *
-   * Asked rather than stored, because the active layer is the shell's and can
-   * change without the document changing: picking a row in the left sidebar
-   * moves it, and nothing is written.
-   */
-  activeLayerId: () => string;
-  /** Which half of the sweep fill is aimed, and the way to change it. */
-  fillMode: () => FillMode;
-  onFillMode: (mode: FillMode) => void;
-  /**
-   * How many corners the point-to-point fill has down.
-   *
-   * A readout: what to *do* about them is on the bar floating beside the
-   * shape — see `fill-bar.ts`.
-   */
-  fillPoints: () => number;
-  /**
-   * Whether a tool is turned round to erase, and the way to turn it.
-   *
-   * By tool rather than by style, because that is where the flag is kept —
-   * see `editor/tool-routing.ts`. Setting it re-renders this panel, so the
-   * row and the toolbar button agree about which way round the tool is.
-   */
-  erasing: (tool: ToolId) => boolean;
-  onErasing: (tool: ToolId, on: boolean) => void;
-}
+/**
+ * Everything this panel can ask the shell to do — `inspect-callbacks.ts`.
+ *
+ * Re-exported rather than moved outright, so that the interface and the class
+ * that consumes it are still imported from the same place.
+ */
+export type { InspectorCallbacks } from "./inspect-callbacks";
 
 /**
  * The heading the file's own layer list carries — `psd-layers.ts` writes it.
@@ -387,7 +316,9 @@ export class Inspector {
     // and the style may not even have been built yet. See
     // `inspect-tile-tools.ts`.
     if (isTileTool(this.toolId)) return this.renderTileTool();
-    if (!this.strokeStyle) return;
+    // Select is the one tool here whose setting is not about a stroke, so it
+    // has a panel before the drawing layer exists to have a style.
+    if (!this.strokeStyle && this.toolId !== "select") return;
     const title = TOOL_TITLES[this.toolId];
     if (!title) return;
     // What the tool does is on the heading rather than in a line of prose
@@ -407,6 +338,8 @@ export class Inspector {
       fillPoints: this.callbacks.fillPoints(),
       erasing: this.callbacks.erasing(this.toolId),
       onErasing: (on) => this.callbacks.onErasing(this.toolId, on),
+      snapToGrid: this.callbacks.snapToGrid(),
+      onSnapToGrid: (on) => this.callbacks.onSnapToGrid(on),
     });
     if (rows) this.zone.body.append(...rows);
     this.zone.mount(this.body);

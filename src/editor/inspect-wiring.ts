@@ -197,5 +197,11 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     // is ask it and tell it.
     erasing: (tool) => deps.tools().isErasing(tool),
     onErasing: (tool, on) => deps.tools().setErasing(tool, on),
+
+    // Snap to grid, which is the whole of Select's panel. Held by the routing
+    // beside the erase flags and for the same reason — it is the state of a
+    // tool rather than of the document, and it outlives this panel.
+    snapToGrid: () => deps.tools().snapToGrid(),
+    onSnapToGrid: (on) => deps.tools().onSnapToGrid(on),
   };
 }

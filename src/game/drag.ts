@@ -15,22 +15,18 @@
 
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
-import { rectContains } from "../lib/grid";
 import { makeId } from "../lib/doc-store";
 import type {
   Cell,
-  FillPatch,
-  MapPoint,
   Placement,
   Point,
   Rect,
   Selection,
-  Zone,
 } from "../lib/types";
 import { textWidthAt, updateText, type TextFrame } from "../lib/text-items";
 import { beginTextDrag, beginWrapDrag } from "./drag-text";
+import { beginFillDrag, beginPointDrag, beginZoneDrag } from "./drag-marks";
 import type { DragModifiers } from "./camera-rig";
-import { pointInPolygon, pointReach } from "./picking";
 import {
   unitMembers,
   unitOf,
@@ -143,6 +139,19 @@ export interface DragHost {
   detachCopy(layerId: string, placementId: string, key: string): void;
   /** Brackets the gesture, so the panels can hold their re-renders. */
   onDragStateChange(dragging: boolean): void;
+  /**
+   * Whether a drag moves what it is holding a whole grid space at a time.
+   *
+   * The switch at the top of Select's panel — `editor/tool-routing.ts` holds
+   * it, because it is a tool's setting rather than the document's. Asked on
+   * every move rather than captured at pointer-down, so turning it off with
+   * the other hand takes effect on the drag already in progress, which is
+   * exactly when somebody reaches for it.
+   *
+   * Optional so the controller can still be built from a four-line host in a
+   * test, and because snapping is what this has always done.
+   */
+  snapToGrid?(): boolean;
 }
 
 /** The middle of a box, which is what an anchor is measured from. */
@@ -158,6 +167,16 @@ function asPlacement(rect: Rect): Placement {
 export class DragController {
   private readonly host: DragHost;
   private state: DragState | null = null;
+  /**
+   * Where in the world the finger went down.
+   *
+   * The cell it went down on is on every drag state, because a snapped drag
+   * is a *cell* delta and every kind of thing applies one. This is the other
+   * half of the same question, kept once rather than on each state: with
+   * snapping off the gesture is a world-pixel delta, and one gesture has one
+   * grab point whatever it turned out to be holding.
+   */
+  private grabWorld: Point = { x: 0, y: 0 };
 
   constructor(host: DragHost) {
     this.host = host;
@@ -188,6 +207,7 @@ export class DragController {
     const selection = this.host.getSelection();
     const world = this.host.worldAt(screenX, screenY);
     const grabCell = this.host.grid.worldToCell(world);
+    this.grabWorld = world;
 
     // Everything the gesture writes is one undo step. A drag writes on every
     // pointer move — that is what makes the canvas follow the finger — and a
@@ -203,20 +223,28 @@ export class DragController {
         this.beginPlacements(selection, world, grabCell, modifiers),
       );
     }
+    // The three things the document holds rather than places — `drag-marks.ts`,
+    // which is to those what `drag-text.ts` is to a note. A fill, a boundary
+    // and a point have no file behind them, so shift has nothing to detach.
     if (selection.kind === "fill") {
-      // A fill has no file behind it, so shift has nothing to detach.
       return this.grouped(() =>
-        this.beginFill(selection, world, grabCell, modifiers.alt),
+        beginFillDrag(this.host, selection, world, grabCell, modifiers.alt, (state) =>
+          this.start(state),
+        ),
       );
     }
     if (selection.kind === "zone") {
       return this.grouped(() =>
-        this.beginZone(selection, world, grabCell, modifiers.alt),
+        beginZoneDrag(this.host, selection, world, grabCell, modifiers.alt, (state) =>
+          this.start(state),
+        ),
       );
     }
     if (selection.kind === "point") {
       return this.grouped(() =>
-        this.beginPoint(selection, world, grabCell, modifiers.alt),
+        beginPointDrag(this.host, selection, world, grabCell, modifiers.alt, (state) =>
+          this.start(state),
+        ),
       );
     }
     if (selection.kind === "text") {
@@ -279,20 +307,44 @@ export class DragController {
     const cell = grid.worldToCell(world);
     const dx = cell.cx - drag.grabCell.cx;
     const dy = cell.cy - drag.grabCell.cy;
+    const snap = this.host.snapToGrid?.() ?? true;
+    /**
+     * How far the gesture has travelled, in world pixels.
+     *
+     * Snapped, that is the cell step projected back into world space, which
+     * is what moves a thing a whole space at a time; free, it is the raw
+     * distance the finger has covered since it went down. `cellToWorld` is
+     * linear with no offset term in both projections, which is what makes it
+     * usable on a difference — see the boundary at the end of this method,
+     * where that has always been the argument.
+     */
+    const step = snap
+      ? grid.cellToWorld({ cx: dx, cy: dy })
+      : { x: world.x - this.grabWorld.x, y: world.y - this.grabWorld.y };
 
     if (drag.kind === "placement") {
-      // Snap to the grid: each anchor cell moves whole and by the same step,
-      // and every placement keeps whatever offset it had inside its own.
+      // Each placement keeps whatever offset it had inside its anchor cell,
+      // and every one of them moves by the same step — snapped, that is a
+      // whole number of spaces; free, it is wherever the finger is.
+      //
+      // The **anchor** is a cell either way, because that is what an anchor
+      // is: it is what a grid resize follows, and there is no such thing as
+      // half a space to record. Off the lattice it therefore lands on the
+      // cell the artwork's own origin now sits in, which is the same thing a
+      // resize does — the offset it leaves behind is exactly the sub-space
+      // placement that was asked for. Where the PSD's mark really is comes
+      // from `fromAnchor`, which is in the file's own pixels and follows a
+      // drag on its own.
       for (const member of drag.members) {
-        const anchor = {
-          cx: member.originCell.cx + dx,
-          cy: member.originCell.cy + dy,
-        };
-        const anchorWorld = grid.cellToWorld(anchor);
+        const home = grid.cellToWorld(member.originCell);
+        const moved = { x: home.x + step.x, y: home.y + step.y };
+        const anchor = snap
+          ? { cx: member.originCell.cx + dx, cy: member.originCell.cy + dy }
+          : grid.worldToCell(moved);
         store.updatePlacement(drag.layerId, member.id, {
           anchor,
-          x: anchorWorld.x + member.offsetX,
-          y: anchorWorld.y + member.offsetY,
+          x: moved.x + member.offsetX,
+          y: moved.y + member.offsetY,
         });
       }
       return;
@@ -300,12 +352,16 @@ export class DragController {
 
     if (drag.kind === "fill") {
       if (drag.rect) {
-        const step = grid.cellToWorld({ cx: dx, cy: dy });
         store.updateFill(drag.layerId, drag.id, {
           rect: { ...drag.rect, x: drag.rect.x + step.x, y: drag.rect.y + step.y },
         });
         return;
       }
+      // A fill drawn as a run of spaces **is** those spaces: what it holds is
+      // a list of cells, and there is no position between two of them for a
+      // free drag to put it at. So this one ignores the switch rather than
+      // pretending — the bare rectangle above is the fill that can move off
+      // the lattice, and it is the one a drag on blank ground makes.
       store.updateFill(drag.layerId, drag.id, {
         cells: drag.cells.map((c) => ({ cx: c.cx + dx, cy: c.cy + dy })),
       });
@@ -315,7 +371,9 @@ export class DragController {
     if (drag.kind === "point") {
       // A point is a space, so the drag is the cell step and nothing else —
       // no projection back into world coordinates the way a boundary's
-      // outline needs, because there is no sub-cell offset to preserve.
+      // outline needs, because there is no sub-cell offset to preserve. It
+      // ignores the switch for the same reason the run of filled cells above
+      // does: what a named place records *is* a cell.
       store.updatePoint(drag.layerId, drag.id, {
         cell: { cx: drag.cell.cx + dx, cy: drag.cell.cy + dy },
       });
@@ -323,11 +381,10 @@ export class DragController {
     }
 
     if (drag.kind === "text") {
-      // World pixels moved a whole space at a time, the way a boundary is —
-      // see the note below. A word keeps whatever sub-cell offset it was put
-      // down with, which is what lets it sit over a doorway rather than over
-      // the space the doorway is in.
-      const step = grid.cellToWorld({ cx: dx, cy: dy });
+      // World pixels, the way a boundary is — see the note below. A word
+      // keeps whatever sub-cell offset it was put down with, which is what
+      // lets it sit over a doorway rather than over the space the doorway is
+      // in, and with snapping off it can be put anywhere at all.
       updateText(store, drag.layerId, drag.id, {
         x: drag.at.x + step.x,
         y: drag.at.y + step.y,
@@ -335,15 +392,12 @@ export class DragController {
       return;
     }
 
-    // A boundary is world pixels rather than cells, so the cell delta is
-    // projected back into world space before it is applied. `cellToWorld` is
-    // linear in both projections and has no offset term, which is what makes
-    // it usable on a difference as well as a position: the outline keeps its
-    // shape and whatever sub-cell offset it had, and moves a whole space at a
-    // time exactly as a placed image does.
-    const delta = grid.cellToWorld({ cx: dx, cy: dy });
+    // A boundary is world pixels rather than cells, so it takes the same
+    // world step everything else here does: the outline keeps its shape and
+    // whatever sub-cell offset it had, and moves a whole space at a time or
+    // freely depending on the switch, exactly as a placed image does.
     store.updateZone(drag.layerId, drag.id, {
-      points: drag.points.map((p) => ({ x: p.x + delta.x, y: p.y + delta.y })),
+      points: drag.points.map((p) => ({ x: p.x + step.x, y: p.y + step.y })),
     });
   }
 
@@ -481,97 +535,6 @@ export class DragController {
     return true;
   }
 
-  private beginFill(
-    selection: Extract<Selection, { kind: "fill" }>,
-    world: Point,
-    grabCell: Cell,
-    alt: boolean,
-  ): boolean {
-    const layer = this.host.store.layer(selection.layerId);
-    if (!layer || layer.locked) return false;
-    const fill = layer.fills.find((f) => f.id === selection.fillId);
-    if (!fill) return false;
-
-    const inside = fill.rect
-      ? rectContains(fill.rect, world)
-      : fill.cells.some((c) => c.cx === grabCell.cx && c.cy === grabCell.cy);
-    if (!inside) return false;
-
-    const dragged = alt ? this.copyFill(layer.id, fill) : fill;
-    this.start({
-      kind: "fill",
-      layerId: layer.id,
-      id: dragged.id,
-      grabCell,
-      cells: dragged.cells,
-      rect: dragged.rect,
-    });
-    return true;
-  }
-
-  /**
-   * A boundary drags from anywhere inside its outline.
-   *
-   * Inside, not on the line: a zone is drawn as an outline but it describes
-   * the region it encloses, and asking someone to catch a 1.5px stroke with a
-   * finger would make the gesture unusable on the platform it is mostly for.
-   */
-  private beginZone(
-    selection: Extract<Selection, { kind: "zone" }>,
-    world: Point,
-    grabCell: Cell,
-    alt: boolean,
-  ): boolean {
-    const layer = this.host.store.layer(selection.layerId);
-    if (!layer || layer.locked) return false;
-    const zone = layer.zones.find((z) => z.id === selection.zoneId);
-    if (!zone || !pointInPolygon(world, zone.points)) return false;
-
-    const dragged = alt ? this.copyZone(layer.id, zone) : zone;
-    this.start({
-      kind: "zone",
-      layerId: layer.id,
-      id: dragged.id,
-      grabCell,
-      points: dragged.points,
-    });
-    return true;
-  }
-
-  /**
-   * A point drags from its marker, not from anywhere.
-   *
-   * Everything else here is picked up from inside a shape it fills; a point
-   * has no inside, so the target is the marker itself — the same reach the
-   * tap that selected it used, or there would be places where a point can be
-   * chosen and not moved.
-   */
-  private beginPoint(
-    selection: Extract<Selection, { kind: "point" }>,
-    world: Point,
-    grabCell: Cell,
-    alt: boolean,
-  ): boolean {
-    const layer = this.host.store.layer(selection.layerId);
-    if (!layer || layer.locked) return false;
-    const point = layer.points.find((p) => p.id === selection.pointId);
-    if (!point) return false;
-    const at = this.host.grid.cellCentre(point.cell);
-    if (Math.hypot(at.x - world.x, at.y - world.y) > pointReach(this.host.grid)) {
-      return false;
-    }
-
-    const dragged = alt ? this.copyPoint(layer.id, point) : point;
-    this.start({
-      kind: "point",
-      layerId: layer.id,
-      id: dragged.id,
-      grabCell,
-      cell: dragged.cell,
-    });
-    return true;
-  }
-
   /**
    * Open an undo step for a gesture that is starting, and close it if it
    * turns out not to have started after all.
@@ -592,28 +555,6 @@ export class DragController {
   private start(state: DragState): void {
     this.state = state;
     this.host.onDragStateChange(true);
-  }
-
-  private copyZone(layerId: string, source: Zone): Zone {
-    const { id: _id, ...rest } = source;
-    const copy = this.host.store.addZone(layerId, rest);
-    this.host.setSelection({ kind: "zone", layerId, zoneId: copy.id });
-    return copy;
-  }
-
-  /** The copy takes a name of its own: two points called the same thing is
-   *  exactly what a name is for avoiding. */
-  private copyPoint(layerId: string, source: MapPoint): MapPoint {
-    const copy = this.host.store.addPoint(layerId, source.cell);
-    this.host.setSelection({ kind: "point", layerId, pointId: copy.id });
-    return copy;
-  }
-
-  private copyFill(layerId: string, source: FillPatch): FillPatch {
-    const { id: _id, ...rest } = source;
-    const copy = this.host.store.addFill(layerId, rest);
-    this.host.setSelection({ kind: "fill", layerId, fillId: copy.id });
-    return copy;
   }
 
   /**

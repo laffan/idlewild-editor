@@ -8,6 +8,7 @@ import { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import { assetBase, platform } from "../lib/ipc";
 import { exposeDevHooks, reportAssetServer } from "./editor-boot";
+import { nudger } from "./nudge-actions";
 import type { ProjectMeta, Selection, ToolId } from "../lib/types";
 import * as log from "../lib/log";
 import { bootGame, type GameHandle } from "../game/boot";
@@ -441,6 +442,9 @@ export async function mountEditor(
       return !!selection && selection.kind !== "none" && selection.kind !== "layer";
     },
     onDelete: () => deleteSelection(),
+    // The arrows: the fine half of Select's Snap to grid switch, one world
+    // pixel a press — see `nudge-actions.ts`.
+    onNudge: nudger(store, grid, () => handle?.scene ?? null),
     onUndo: () => history?.undo(),
     onRedo: () => history?.redo(),
     onGroup: () => groupSelection(selected),
@@ -473,6 +477,9 @@ export async function mountEditor(
         inspector.setSuspended(dragging);
         layers.setSuspended(dragging);
       },
+      // Select's own switch, read through on every move so it can be turned
+      // off with the other hand mid-drag — see `tool-routing.ts`.
+      snapToGrid: () => tools.snapToGrid(),
       onViewport: (view) => {
         drawing?.sync(view);
         minimap.setViewport(view);

@@ -126,6 +126,29 @@ export interface ToolRouting {
   tileShape: () => TileShape;
   onTileShape: (shape: TileShape) => void;
   /**
+   * Whether a drag with the Select tool moves what it is holding a whole grid
+   * space at a time, and the way to change it.
+   *
+   * On, and it is on to begin with, because the grid is what this editor is
+   * about: a building dropped into a run of spaces lines up with the one
+   * beside it because both of them snapped, and a drag that landed things a
+   * pixel or two off the lattice would make that true only by accident. Off
+   * is for the other half of the work — a sign hung over a doorway, a shadow
+   * nudged out from under a wall — which is exactly the artwork the lattice
+   * has nothing to say about.
+   *
+   * The *arrow keys* ignore it entirely and always move a single world pixel:
+   * see `editor/nudge-actions.ts`. That is the point of them, and it is why
+   * this is a switch rather than a mode — the coarse gesture and the fine one
+   * are both available without changing anything.
+   *
+   * Held here with the other tools' settings rather than in the document,
+   * because it is the state of a *tool* — like which way round the Pencil is
+   * — and nothing in a saved project should record how somebody was dragging.
+   */
+  snapToGrid: () => boolean;
+  onSnapToGrid: (on: boolean) => void;
+  /**
    * A tool held down rather than tapped: pick it up, and turn it round.
    *
    * The second way into erase mode, the first being the switch at the top of
@@ -185,6 +208,8 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
   let density = DENSITY_DEFAULT;
   /** Which shape a Shape fill draws. One setting, because one tool has it. */
   let shape: TileShape = "rect";
+  /** Whether a drag under Select snaps. See `ToolRouting.snapToGrid`. */
+  let snap = true;
 
   /**
    * The stroke mode and the paint a tool draws with.
@@ -363,6 +388,16 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
     onTileShape: (next) => {
       shape = next;
       host.inspector.setTool(host.rail.tool, host.drawing()?.style ?? null);
+    },
+    snapToGrid: () => snap,
+    onSnapToGrid: (on) => {
+      snap = on;
+      host.inspector.setTool(host.rail.tool, host.drawing()?.style ?? null);
+      log.info(
+        on
+          ? "Select snaps to the grid — a drag moves a whole space at a time"
+          : "Select moves freely; the arrow keys still nudge a pixel at a time",
+      );
     },
     tileDensity: () => density,
     onTileDensity: (next) => {

@@ -15,6 +15,15 @@
  * the game. There is no ⌘ on an iPad, so both are also buttons in the
  * inspector, the way Copy PSD is in the header's menu.
  *
+ * The **arrow keys** nudge what is selected by a single world pixel, and only
+ * while the Select tool is in hand. That last part is what keeps them out of
+ * everything else's way: under the Pencil or a tile tool the canvas is a
+ * surface being drawn on rather than a set of things being arranged, and an
+ * arrow there should go on meaning whatever the browser or a focused control
+ * makes of it. They are the fine half of the pair Select's Snap to grid
+ * switch is the coarse half of — see `editor/nudge-actions.ts`, which holds
+ * the argument and the edit.
+ *
  * ⌘Z and ⇧⌘Z are undo and redo, on the surface the focus is in — see
  * `editor/history.ts`, which decides that and owns the two header buttons
  * that do the same thing without a keyboard. An iPad with a hardware keyboard
@@ -28,6 +37,7 @@
  */
 
 import type { ToolId } from "../lib/types";
+import { NUDGE_PX } from "./nudge-actions";
 
 export interface ShortcutHost {
   /** What the rail is showing now. */
@@ -37,6 +47,15 @@ export interface ShortcutHost {
   /** Whether Delete has anything to act on. */
   hasSelection: () => boolean;
   onDelete: () => void;
+  /**
+   * An arrow key under the Select tool: move what is selected by this many
+   * world pixels.
+   *
+   * Answers whether anything moved, so a press that nothing acted on is a
+   * press this file leaves alone — a selection of nothing, a locked layer, or
+   * one of the kinds that has nowhere between two grid spaces to go.
+   */
+  onNudge: (dx: number, dy: number) => boolean;
   onUndo: () => void;
   onRedo: () => void;
   /** ⌘G and ⇧⌘G — see `editor/group-actions.ts`. */
@@ -98,6 +117,24 @@ export function bindShortcuts(host: ShortcutHost): () => void {
       return;
     }
 
+    // The arrows, before Delete, because they are the busier key and neither
+    // reads the other's cases. Modifiers are left alone: ⌥ and ⌘ with an
+    // arrow are system text navigation on macOS, and shift is free for
+    // whatever a larger step turns out to be worth later.
+    const step = ARROWS[event.key];
+    if (step) {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+        return;
+      }
+      if (host.currentTool() !== "select") return;
+      if (!host.onNudge(step.dx, step.dy)) return;
+      // Only once something has actually moved: an arrow that nudged nothing
+      // is an arrow the page may still want, and on iPadOS an un-prevented
+      // one scrolls whatever the focus is in.
+      event.preventDefault();
+      return;
+    }
+
     if (event.key !== "Delete" && event.key !== "Backspace") return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (!host.hasSelection()) return;
@@ -125,6 +162,21 @@ export function bindShortcuts(host: ShortcutHost): () => void {
     window.removeEventListener("blur", onBlur);
   };
 }
+
+/**
+ * The four arrows, and which way each of them is.
+ *
+ * World pixels, so down is *down the screen* rather than along a grid axis.
+ * That is the same call the top-down scaffold's own nudge makes and for the
+ * same reason: on an isometric project the grid axes run diagonally, so an
+ * arrow bound to one moves the thing in a direction the key is not pointing.
+ */
+const ARROWS: Record<string, { dx: number; dy: number } | undefined> = {
+  ArrowLeft: { dx: -NUDGE_PX, dy: 0 },
+  ArrowRight: { dx: NUDGE_PX, dy: 0 },
+  ArrowUp: { dx: 0, dy: -NUDGE_PX },
+  ArrowDown: { dx: 0, dy: NUDGE_PX },
+};
 
 /**
  * Whether the keyboard belongs to something else.

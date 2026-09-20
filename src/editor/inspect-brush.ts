@@ -7,13 +7,21 @@
  * function of its arguments rather than a method, and the inspector's own
  * file shorter by the length of the whole toolbar's half of the panel.
  *
- * **A tool with nothing to set gets no section at all.** Select, Pan, Point,
- * Boundary, Slice and the Lasso each do one thing with one gesture and
- * have no numbers behind them, so a heading over an explanatory sentence
- * would be a labelled box that never changes — which is exactly what the
- * three zones were introduced to stop. What those tools have to say, they say
- * in their tooltip and in the line the console prints when they are picked
- * up. So this returns null for them, and the inspector shows no TOOL zone.
+ * **A tool with nothing to set gets no section at all.** Pan, Point, Boundary,
+ * Slice and the Lasso each do one thing with one gesture and have no numbers
+ * behind them, so a heading over an explanatory sentence would be a labelled
+ * box that never changes — which is exactly what the three zones were
+ * introduced to stop. What those tools have to say, they say in their tooltip
+ * and in the line the console prints when they are picked up. So this returns
+ * null for them, and the inspector shows no TOOL zone.
+ *
+ * **Select was on that list and is not any more.** It has one thing to set —
+ * whether a drag moves what it is holding a whole grid space at a time — and
+ * that is a real question rather than a restatement of what the tool does:
+ * the grid is what lines a building up with the one beside it, and it is also
+ * what stops a sign being hung half a space over a doorway. The switch is the
+ * whole panel, which is the smallest a TOOL zone is allowed to be and still
+ * be worth its heading.
  *
  * Hush puts these controls in four brush slots with an edit flyout each; here
  * there is one brush at a time, because the editor's pencil is for sketching
@@ -55,10 +63,14 @@ export interface ToolPanelActions {
   /** Whether the tool in hand is turned round, and the way to turn it. */
   erasing: boolean;
   onErasing: (on: boolean) => void;
+  /** Whether a drag under Select snaps to the lattice — see `selectPanel`. */
+  snapToGrid: boolean;
+  onSnapToGrid: (on: boolean) => void;
 }
 
 /** The name the section's heading carries after `TOOL : `. */
 export const TOOL_TITLES: Partial<Record<ToolId, string>> = {
+  select: "Select",
   pencil: "Pencil",
   pattern: "Pattern",
   shape: "Shape",
@@ -77,6 +89,9 @@ export const TOOL_TITLES: Partial<Record<ToolId, string>> = {
  * tool, so it is on the tool's own heading.
  */
 export const TOOL_HINTS: Partial<Record<ToolId, string>> = {
+  select:
+    "Drag a box round what you want, or hold still to ask for a patch of " +
+    "grid. Arrow keys nudge whatever is picked by a single pixel.",
   pencil: "Lays ink down along the path, at the tip and size set below.",
   pattern:
     "Sweep to reveal the pattern. It is pinned to the world rather than to " +
@@ -93,9 +108,18 @@ export const TOOL_HINTS: Partial<Record<ToolId, string>> = {
  */
 export function toolPanel(
   tool: ToolId,
-  style: StrokeStyle,
+  /**
+   * The style the ink will draw with, or null before the drawing layer is up.
+   *
+   * Nullable because Select's panel is not about a stroke at all — it is the
+   * one tool here whose setting is about the *grid* — and the panel has to be
+   * offered on the first frame rather than once a brush exists.
+   */
+  style: StrokeStyle | null,
   actions: ToolPanelActions,
 ): HTMLElement[] | null {
+  if (tool === "select") return selectPanel(actions);
+  if (!style) return null;
   const rows =
     tool === "fill"
       ? fillPanel(style, actions)
@@ -114,6 +138,39 @@ export function toolPanel(
   // `tool-rail.ts`.
   if (canErase(tool)) rows.unshift(eraserRow(actions));
   return rows;
+}
+
+/**
+ * Select's one setting: whether a drag moves things by whole grid spaces.
+ *
+ * One switch, and the sentence it carries changes with its state, exactly as
+ * the eraser row's does and for the same reason — the row says what is
+ * happening now rather than only what the control does, and it says it on the
+ * row rather than under it, because that is a thing to ask for rather than a
+ * thing to read every time. Both halves mention the arrow keys, which are the
+ * fine control this switch is the coarse half of: somebody turning snapping
+ * off to place a sign precisely needs to know they are there, and somebody
+ * who left it off needs to know why their buildings stopped lining up.
+ *
+ * A named place is not affected by it, and neither is a run of filled spaces
+ * that was drawn as a run: both of those *are* cells, so there is nothing
+ * between two positions for them to be moved to. See `game/drag.ts`.
+ */
+function selectPanel(actions: ToolPanelActions): HTMLElement[] {
+  const on = actions.snapToGrid;
+  const row = optionSwitchRow({
+    label: "Snap to grid",
+    value: on,
+    onChange: (next) => actions.onSnapToGrid(next),
+    title: on
+      ? "A drag moves a whole space at a time, so what you put down lines " +
+        "up with what is already there. Arrow keys still nudge one pixel."
+      : "A drag moves freely, off the lattice — for a sign over a doorway " +
+        "or a shadow under a wall. Arrow keys nudge one pixel."
+  });
+  // No `set`, for the reason the eraser row gives: the panel is rebuilt whole
+  // whenever the tool or its state changes.
+  return [h("div", { class: "inspect-section" }, row.root)];
 }
 
 /**

@@ -164,6 +164,7 @@ export class WorldScene extends Phaser.Scene {
       detachCopy: (layerId, placementId, key) =>
         this.config.onDetachCopy?.(layerId, placementId, key),
       onDragStateChange: (dragging) => this.config.onDragStateChange(dragging),
+      snapToGrid: () => this.config.snapToGrid?.() ?? true,
     });
     this.modes = new CanvasModes({
       scene: this,

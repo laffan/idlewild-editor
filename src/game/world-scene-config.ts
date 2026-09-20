@@ -31,6 +31,15 @@ export interface WorldSceneConfig {
    */
   onDragStateChange: (dragging: boolean) => void;
   /**
+   * Whether a drag with the Select tool moves by whole grid spaces.
+   *
+   * The switch at the top of Select's panel, which is the shell's — see
+   * `editor/tool-routing.ts`. Asked rather than handed over, so it can be
+   * flipped mid-gesture, and optional so a scene booted without one snaps,
+   * which is what this has always done.
+   */
+  snapToGrid?: () => boolean;
+  /**
    * The camera, whenever it has actually moved. The drawing layer's stage is
    * slaved to this: its ink is baked in world coordinates and presented
    * with a transform, so it has to be told where the camera is, and told
