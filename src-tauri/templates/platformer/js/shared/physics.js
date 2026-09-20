@@ -7,11 +7,35 @@
 // file of the project's own makes it something to change rather than a plugin
 // to configure around.
 
+/**
+ * The grid these numbers were tuned against, in world pixels.
+ *
+ * Everything below is a speed or an acceleration in world pixels, and a world
+ * pixel means nothing on its own: a project drawn on 8px spaces has a
+ * character three pixels wide, and 260 px/s carries it thirty-two spaces a
+ * second — the same numbers that read as a brisk walk on the 64px default. So
+ * the constants are quoted at 64 and everything is multiplied by how much
+ * bigger this project's spaces are than that, which makes the whole model
+ * *spaces per second* while leaving the numbers in the units somebody editing
+ * them will recognise.
+ *
+ * 64 because that is what New Project offers first, and because these were
+ * arrived at on it.
+ */
+export const TUNED_GRID = 64;
+
+/** How much bigger this project's spaces are than the one above. */
+export function gridScale(gridSize) {
+  const size = Number(gridSize);
+  return Number.isFinite(size) && size > 0 ? size / TUNED_GRID : 1;
+}
+
 export const GRAVITY = 2200;
 export const MOVE_SPEED = 260;
 export const JUMP_SPEED = 720;
 export const MAX_FALL = 1400;
 export const FALL_LIMIT = 4000;
+
 /**
  * The hair of clearance a resolved collision leaves.
  *
@@ -23,13 +47,24 @@ export const FALL_LIMIT = 4000;
  */
 const SKIN = 0.001;
 
-/** A character. x/y are its centre, which is where Phaser draws a rect. */
-export function createBody(x, y, width, height) {
+/**
+ * A character. x/y are its centre, which is where Phaser draws a rect.
+ *
+ * `scale` is `gridScale(grid.size)`: how big this project's spaces are
+ * against the one the constants above were tuned on. It rides on the body
+ * rather than being handed to `stepBody` on every frame, because it is a fact
+ * about the *project* and never changes while a game is running — and because
+ * anything else you write that steps a body then gets it right by having made
+ * one. A body made without it moves at the 64px numbers, which is what every
+ * project made before this did.
+ */
+export function createBody(x, y, width, height, scale = 1) {
   return {
     x,
     y,
     width,
     height,
+    scale,
     vx: 0,
     vy: 0,
     onGround: false,
@@ -97,10 +132,14 @@ function polygonBounds(points) {
  * sliding along a wall from catching on the seam between two boxes.
  */
 export function stepBody(body, solids, input, dt) {
+  // Everything in world pixels is scaled by the project's own spaces — see
+  // `TUNED_GRID`. The one number that is *not* is `dt`: a second is a second
+  // whatever the grid is.
+  const scale = body.scale ?? 1;
   const direction = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  body.vx = direction * MOVE_SPEED;
-  if (input.jump && body.onGround) body.vy = -JUMP_SPEED;
-  body.vy = Math.min(body.vy + GRAVITY * dt, MAX_FALL);
+  body.vx = direction * MOVE_SPEED * scale;
+  if (input.jump && body.onGround) body.vy = -JUMP_SPEED * scale;
+  body.vy = Math.min(body.vy + GRAVITY * scale * dt, MAX_FALL * scale);
 
   // Skipped when nothing moved horizontally: with no direction to push out
   // *along*, "which side of this solid am I on" has no answer, and a body
@@ -131,8 +170,10 @@ export function stepBody(body, solids, input, dt) {
   }
 
   // A project with nothing under the spawn drops for ever otherwise, which
-  // reads as the play button having done nothing.
-  if (body.y - body.spawnY > FALL_LIMIT) respawn(body);
+  // reads as the play button having done nothing. Scaled like the rest: the
+  // limit is "about sixty spaces below where you started", not a distance in
+  // pixels that would be four spaces on one project and a thousand on another.
+  if (body.y - body.spawnY > FALL_LIMIT * scale) respawn(body);
 }
 
 export function respawn(body) {

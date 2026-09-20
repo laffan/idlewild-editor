@@ -1,4 +1,4 @@
-import { createBody, stepBody } from "../shared/physics.js";
+import { createBody, gridScale, stepBody } from "../shared/physics.js";
 
 /**
  * The character, and what the keyboard does to it.
@@ -23,7 +23,12 @@ export function createCharacter(scene, { grid, start, solids }) {
   const height = grid.size * 0.8;
   const world = grid.cellCentre(start.cx, start.cy);
 
-  const body = createBody(world.x, world.y, width, height);
+  // The body moves in *spaces* per second rather than pixels per second: the
+  // constants in `physics.js` are quoted against a 64px grid and scaled by
+  // how big this project's spaces actually are, so an 8px platformer plays
+  // the way a 64px one does instead of at eight times the speed. See
+  // `TUNED_GRID` there.
+  const body = createBody(world.x, world.y, width, height, gridScale(grid.size));
   const sprite = scene.add
     .rectangle(body.x, body.y, width, height, 0x201e1d)
     .setDepth(1e6);
