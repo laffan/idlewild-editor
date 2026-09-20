@@ -83,6 +83,15 @@ export class Tiling {
   private readonly host: TilingHost;
   /** Files whose merged picture is being written — see `mergePalette`. */
   private readonly merging = new Set<string>();
+  /**
+   * Files whose merged picture could not be made, so it is not tried again.
+   *
+   * `cutPalettes` runs on every document change — a keystroke in a layer name
+   * is one — and a PSD whose file has gone would otherwise put a line in the
+   * console per keystroke for the rest of the session. Cleared when the file
+   * comes back from a rewrite, which is the moment the answer can change.
+   */
+  private readonly unmergeable = new Set<string>();
 
   constructor(host: TilingHost) {
     this.host = host;
@@ -217,7 +226,11 @@ export class Tiling {
    */
   private async mergePalette(psdKey: string, fresh: boolean): Promise<void> {
     const texture = textureKey(psdKey, MERGED_LAYER);
-    if (this.merging.has(psdKey) || this.host.scene.textures.exists(texture)) {
+    if (
+      this.merging.has(psdKey) ||
+      this.unmergeable.has(psdKey) ||
+      this.host.scene.textures.exists(texture)
+    ) {
       return;
     }
     this.merging.add(psdKey);
@@ -240,6 +253,7 @@ export class Tiling {
       // drawn now.
       this.render.invalidate();
     } catch (err) {
+      this.unmergeable.add(psdKey);
       log.error(`Could not merge ${psdKey}.psd into one palette:`, err);
     } finally {
       this.merging.delete(psdKey);
@@ -311,6 +325,10 @@ export class Tiling {
     // the artwork as it was before the edit, for ever.
     const texture = textureKey(psdKey, MERGED_LAYER);
     if (this.host.scene.textures.exists(texture)) {
+      // The ghost under the pointer is drawn from the same frames the tiles
+      // are, and an Image whose texture has gone throws inside the renderer
+      // on every frame from then on — so it goes with them.
+      this.render.preview([], []);
       this.host.scene.textures.remove(texture);
     }
   }
@@ -324,6 +342,9 @@ export class Tiling {
     const merged = held.some(
       (set) => isMergedTileset(set) && propertyOf(set, PSD_PROPERTY) === psdKey,
     );
+    // The file is back, so a merge that failed against the old one is worth
+    // trying again.
+    this.unmergeable.delete(psdKey);
     // Not `fresh`: the picture has already been rebuilt by the re-parse that
     // cleared the directory — `psd_flatten::refresh` runs at the end of every
     // processing run — so this is a load rather than a second composite.

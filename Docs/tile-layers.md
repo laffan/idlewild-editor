@@ -219,6 +219,13 @@ cut. `palettesOn` shows the cut the file is currently set to, **plus** any
 palette with tiles standing on it: the panel has to be able to explain what is
 on the ground whichever way the file happens to be cut now.
 
+That leaves both cuts of a file in the list at once, so the toggle itself is
+placed rather than repeated: `toggleRows` gives **one per file**, on a palette
+that agrees with the answer it is showing. Three copies of the control over
+three layer palettes would read as three answers to give rather than one, and
+a control reading *Merged* directly over one of those three would be a control
+contradicting the picture under it.
+
 #### The merged picture is a real file
 
 A tileset names the image its tiles are cut out of, and that name reaches

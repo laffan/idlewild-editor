@@ -117,6 +117,9 @@ export function renderTileLayer(
     class: "field-hint",
     text: `In hand: ${describeStamp(selection.stamp)}`,
   });
+  // One Layers toggle per file, over a palette that agrees with it — see
+  // `toggleRows`.
+  const toggles = toggleRows(store, tilesets);
 
   /**
    * Re-measure one palette after its zoom moved.
@@ -153,7 +156,9 @@ export function renderTileLayer(
           paletteName(tileset, layer, actions),
           zoomControls(tileset.firstgid, selection, actions.canvasZoom, resize),
         ),
-        layersToggle(store, tileset, actions),
+        toggles.has(tileset.firstgid)
+          ? layersToggle(store, tileset, actions)
+          : null,
         tilePalette({
           tileset,
           assetBase: actions.assetBase(),
@@ -238,6 +243,42 @@ function describeSpread(cells: readonly Cell[]): string {
   const cols = Math.max(...xs) - Math.min(...xs) + 1;
   const rows = Math.max(...ys) - Math.min(...ys) + 1;
   return `${cols} × ${rows} spaces`;
+}
+
+/**
+ * Which palettes in the list carry the Layers toggle, by `firstgid`.
+ *
+ * **One per file**, because the choice is the file's: a file cut Separate
+ * shows three palettes, and three copies of the same control over them would
+ * read as three answers to give rather than one.
+ *
+ * And it goes on a palette that **agrees with the answer it is showing**.
+ * Both cuts of a file can be in the list at once — a palette with tiles
+ * standing on it is always shown, whichever way the file is cut now, because
+ * the panel has to be able to explain what is on the ground. A control
+ * reading *Merged* directly above one of three layer palettes would be a
+ * control contradicting the picture under it, so the toggle takes the palette
+ * that matches, and the first one of that file otherwise.
+ */
+export function toggleRows(
+  store: DocStore,
+  tilesets: readonly TiledTileset[],
+): Set<number> {
+  const chosen = new Map<string, TiledTileset>();
+  /** Files that have already found a palette agreeing with their mode. */
+  const settled = new Set<string>();
+  for (const tileset of tilesets) {
+    const key = propertyOf(tileset, PSD_PROPERTY);
+    if (key === undefined || settled.has(key)) continue;
+    if (isMergedTileset(tileset) === (paletteMode(store, key) === "merged")) {
+      chosen.set(key, tileset);
+      settled.add(key);
+    } else if (!chosen.has(key)) {
+      // Stands in until one that agrees turns up, and stays if none does.
+      chosen.set(key, tileset);
+    }
+  }
+  return new Set([...chosen.values()].map((set) => set.firstgid));
 }
 
 /**
