@@ -364,6 +364,8 @@ export interface PrintPage {
   out?: string;
   /** What it asked to be written, or nothing for what the bar says. */
   formats?: PrintFormat[];
+  /** One of several: the run carries on, and Save writes them all. */
+  snapshot?: boolean;
 }
 
 /** What Rust says about the PDF it wrote. */
@@ -393,6 +395,9 @@ export const printing = {
   /** Write the same page as one PNG at the project's DPI. */
   exportPng: (id: string, page: PrintPage) =>
     invoke<PrintResult>("export_print_png", { id, page }),
+  /** Write the same page as one JPG, on white, at the project's DPI. */
+  exportJpg: (id: string, page: PrintPage) =>
+    invoke<PrintResult>("export_print_jpg", { id, page }),
   /** Copy one export — a path an export handed back — to where the save
    *  dialog said. */
   saveFile: (id: string, rel: string, path: string) =>

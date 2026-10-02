@@ -54,7 +54,7 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  print.rs        game or page: the DPI, the sheet, the formats │
 │  print_pdf.rs    ExportForPrint()'s page, as a PDF             │
 │  print_psd.rs    the same page, as a layered PSD at the DPI    │
-│  print_png.rs    the same page, as one PNG at the DPI          │
+│  print_png.rs    the same page, as one PNG or JPG at the DPI   │
 │  print_files.rs  where exports land, and saving them out       │
 │  pdf_writer.rs   the objects of a one-page PDF                 │
 │  project_create.rs making a project, and the sheet of paper    │

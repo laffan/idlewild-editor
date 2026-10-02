@@ -116,11 +116,11 @@ pub struct Output {
     pub paper: String,
     #[serde(default)]
     pub landscape: bool,
-    /// What a page is written as when the code does not say: `pdf`, `psd` or
-    /// `png`. The PDF is the page as it prints; the PSD is the same page as
+    /// What a page is written as when the code does not say: `pdf`, `psd`,
+    /// `png` or `jpg`. The PDF is the page as it prints; the PSD is the same page as
     /// layers at the project's DPI, to carry on with by hand; the PNG is the
-    /// page as one picture at that DPI. See `print_pdf.rs`, `print_psd.rs` and
-    /// `print_png.rs`.
+    /// page as one picture at that DPI — with transparency, or as a JPG on
+    /// white. See `print_pdf.rs`, `print_psd.rs` and `print_png.rs`.
     #[serde(default = "default_formats")]
     pub formats: String,
     /// A `custom` sheet's size, in points. Kept while a standard size is
@@ -159,7 +159,7 @@ impl Default for Output {
 }
 
 fn default_formats() -> String {
-    "pdf".to_string()
+    "png".to_string()
 }
 
 fn default_custom_width() -> f64 {
@@ -175,7 +175,7 @@ fn default_unit() -> String {
 }
 
 /// The answers `formats` can have.
-pub const FORMATS: [&str; 3] = ["pdf", "psd", "png"];
+pub const FORMATS: [&str; 4] = ["pdf", "psd", "png", "jpg"];
 
 /// The paper id for a size somebody typed.
 pub const CUSTOM: &str = "custom";
@@ -292,14 +292,14 @@ impl Output {
         self.is_print().then(|| self.source_scale() / SCREEN_SCALE)
     }
 
-    /// What a page is written as, falling back to a PDF for anything unknown —
+    /// What a page is written as, falling back to a PNG for anything unknown —
     /// including `both`, which an earlier build offered.
     pub fn formats(&self) -> &'static str {
         FORMATS
             .iter()
             .find(|f| **f == self.formats)
             .copied()
-            .unwrap_or("pdf")
+            .unwrap_or("png")
     }
 
     /// Whether the sheet is a size somebody typed.

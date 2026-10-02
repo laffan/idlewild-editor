@@ -665,7 +665,8 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     // has at `print-out/page.pdf`; there is no Rust here to draw one.
     case "export_print_pdf":
     case "export_print_psd":
-    case "export_print_png": {
+    case "export_print_png":
+    case "export_print_jpg": {
       const page = (args as any)?.page;
       const ext = cmd.slice("export_print_".length);
       const psd = ext === "psd";
@@ -674,7 +675,7 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         width: page?.page?.width ?? 612, height: page?.page?.height ?? 792,
         dpi: page?.page?.dpi ?? 300, drawn: page?.items?.length ?? 0,
         screenOnly: [], skipped: page?.skipped ?? 0,
-        preview: psd ? "print-out/preview.png" : ext === "png" ? `exports/${page?.out ?? "page"}.png` : null,
+        preview: psd ? "print-out/preview.png" : ext !== "pdf" ? `exports/${page?.out ?? "page"}.${ext}` : null,
       };
     }
     case "set_project_page": {
@@ -682,9 +683,8 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       w.__output = { ...(w.__output ?? {}), ...((args as any)?.patch ?? {}) };
       return { id: "demo", output: w.__output };
     }
-    case "save_print_file":
-    case "save_print_files":
-      return undefined;
+    case "save_staging": return null;
+    case "save_print_file": case "save_print_files": return undefined;
     case "reimport_psd":
       return {
         key: "tower",

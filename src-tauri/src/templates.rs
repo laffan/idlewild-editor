@@ -336,8 +336,10 @@ pub fn scene_file_for(class: &str, meta: &ProjectMeta) -> String {
         return scene;
     }
     // The one line a print project needs that a game does not: where the page
-    // is printed. Commented out, because when is the author's to decide —
-    // the Export section's own button asks for it too.
+    // is printed. Written in rather than left commented out, so a new print
+    // project prints the moment its artwork has loaded — which is what makes
+    // Output show a page the first time it is opened. When to print is the
+    // author's to change from there.
     // The P2P scene does not import the helper the hint uses; a line that
     // cannot be uncommented would be a hint that does not work.
     let scene = if scene.contains("whenPsdsReady,") {
@@ -348,10 +350,10 @@ pub fn scene_file_for(class: &str, meta: &ProjectMeta) -> String {
     scene.replacen(
         "    placePatterns(this);\n",
         "    placePatterns(this);\n\n    \
-         // When the page is ready, print it: the scenes stop where they are and\n    \
-         // the page is written from the full-resolution files into exports/.\n    \
-         // Every option is optional — see js/shared/print.js.\n    \
-         // whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"pdf\" }));\n",
+         // When the artwork has loaded, print the page: the scenes stop where\n    \
+         // they are, and Save in the Output bar writes it from the full-resolution\n    \
+         // files. Every option is optional — see js/shared/print.js.\n    \
+         whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"png\" }));\n",
         1,
     )
 }

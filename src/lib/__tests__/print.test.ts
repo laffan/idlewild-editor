@@ -94,10 +94,11 @@ describe("what a page is written as", () => {
   it("is what the call asked for, or the project's one format", () => {
     expect(writes({ ...print(300), formats: "png" })).toEqual(["png"]);
     expect(writes(print(300), ["pdf", "png", "pdf"])).toEqual(["pdf", "png"]);
-    // An earlier build's `both`, or anything else, is a PDF.
+    expect(writes({ ...print(300), formats: "jpg" })).toEqual(["jpg"]);
+    // An earlier build's `both`, or anything else, is the default: a PNG.
     expect(
       writes({ ...print(300), formats: "both" as unknown as Output["formats"] }),
-    ).toEqual(["pdf"]);
+    ).toEqual(["png"]);
   });
 });
 

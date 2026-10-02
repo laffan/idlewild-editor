@@ -28,9 +28,9 @@ Project sheet asks **Web** or **Print**; Print asks for a resolution — 300 or
 600 DPI — and the page's dimensions, a standard sheet or a custom size in
 inches or centimetres. The canvas and the code are the same; the page is a
 labelled frame on the canvas you can drag over your artwork, one point to the
-world pixel, and `ExportForPrint(options)` in your code writes it as a
-print-ready PDF, a layered PSD or a PNG — once, or once per frame of an
-animation, under names your code chooses. Every PSD in a print project is written at its DPI, and the canvas and
+world pixel, and `ExportForPrint(options)` in your code captures it into a
+preview — once, or once per frame of an animation as a run of snapshots — and
+Save writes it as a print-ready PDF, a layered PSD, a PNG or a JPG. Every PSD in a print project is written at its DPI, and the canvas and
 your code work with a downsampled copy, so creative coding against
 print-resolution artwork is as quick as against a game's. See
 [Printing](Manual/printing.md).

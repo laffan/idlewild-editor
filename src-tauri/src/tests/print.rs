@@ -61,7 +61,7 @@ fn the_scaffold_and_the_config_describe_the_sheet() {
 
         let scene = std::fs::read_to_string(game.join("js/scenes/Scene1.js")).unwrap();
         assert!(scene.contains(
-            "// whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"pdf\" }));"
+            "\n    whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"png\" }));"
         ));
         assert!(scene.contains("  whenPsdsReady,\n} from"));
 

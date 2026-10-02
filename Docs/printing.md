@@ -23,7 +23,7 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 | `customWidth`, `customHeight` | a custom sheet, in points, half an inch to four feet |
 | `unit` | `in` or `cm` — only how a custom size is typed and shown |
 | `x`, `y` | the page's top-left corner in the world; the origin until it is dragged |
-| `formats` | what a page is written as when the call does not say: `pdf`, `psd` or `png` |
+| `formats` | what Save writes: `pdf`, `psd`, `png` (the default) or `jpg` |
 
 Flat and every field defaulting, the way `PublishTarget` is, so a `meta.json`
 written before it existed reads as a code project. It travels in a
@@ -159,28 +159,31 @@ frame follows the drag at once and the corner is written once, on release.
 `templates/print/js/shared/print.js`, written into every print project and
 installed by `main.js` on the game it starts. The print variant of `main.js` is
 three anchored replacements of the common one (`templates::print_main`) rather
-than a second copy, and a test pins each anchor.
+than a second copy, and a test pins each anchor. Each scene of a new print
+project calls it once its artwork has loaded — `templates::scene_file_for`
+writes the line in, live, so Output shows a page the first time it opens.
 
 ```js
-ExportForPrint({ name, folder, formats, stop })   // → Promise<{ files }>
+ExportForPrint({ name, folder, formats, snapshot, stop })   // → Promise<{ page, pages }>
 ```
 
-Every option is optional: `name` and `folder` say where the files go inside
-`exports/`, `formats` is `"pdf"`, `"psd"`, `"png"` or a list of them, and `stop`
-(default true) pauses every scene once the page is read. The promise settles
-once the editor has written the files, with their paths — so a sequence of
-pages, one per frame of an animation, is a loop with an `await` in it.
+**A call captures; it does not write.** The page is posted to the editor and
+drawn in the preview from the screen-resolution files; nothing is written until
+Save. `name` and `folder` are what the page is called when it is saved,
+`formats` sets what Save is set to, `snapshot: true` adds the page and lets the
+code carry on, and `stop` — default true, except on a snapshot — pauses every
+scene once the page is read. The promise settles once the editor has the page,
+with its index and the count so far, so a run of snapshots is a loop with an
+`await` in it; the run ends at the first call without `snapshot`.
 
 **The page is read at the end of the next frame drawn** — on Phaser's
 `POST_RENDER` — so whatever the calling code just changed has been through a
 render, and a call made straight out of `create()` finds the document placed.
 
-**`stop` pauses the scenes, not the game.** The first version stopped the
-game's loop, which stops the drawing as well as the updating; called before the
-first frame — which is what the scaffold's commented `whenPsdsReady` line does
-— it left the game's canvas blank for good. A paused scene does not update, so
-tweens, timers, physics and animations hold still, but it is still drawn. A
-later call reads paused scenes as well as running ones.
+**`stop` pauses the scenes, not the game.** Stopping the game's loop stops the
+drawing as well as the updating, and a page captured before the first frame
+left the canvas blank. A paused scene does not update, but it is still drawn,
+and a later call reads paused scenes as well as running ones.
 
 What it reads, back to front, into Containers and Layers:
 
@@ -194,29 +197,19 @@ What it reads, back to front, into Containers and Layers:
 - **Anything else that draws** — Graphics, shapes, text, particles — has no
   file behind it. Consecutive runs of those are captured into one page-sized
   `DynamicTexture` at the project's DPI (or the device's maximum texture size,
-  if smaller) and read back with the texture's own `snapshot`, which leaves the
-  renderer's state its own; the first version read the framebuffer through the
-  WebGL context directly. Text is re-rendered at that resolution for the
-  capture and put back after.
+  if smaller) and read back with the texture's own `snapshot`. Text is
+  re-rendered at that resolution for the capture and put back after.
 
 **The file path comes from the loader, not the texture.** Phaser fetches an
 image as a blob and hands the texture an object URL that is revoked once it
-has decoded, so the only place a texture's real address is written down is the
-loader's record of the request. `print.js` listens at
-`LoaderPlugin.fileProcessComplete`, the one method every file passes through as
-it finishes, and keeps a map of texture key to URL.
+has decoded, so `print.js` listens at `LoaderPlugin.fileProcessComplete` and
+keeps a map of texture key to URL.
 
-Inside the editor the page is posted to the parent with an id, the `out` path
-and the formats, and the editor answers `idlewild-print-done` with the same id
-once the files are written. Anywhere else there is no parent and the promise
-settles at once with nothing written. **Export now** posts a request into the
-frame that calls the same function.
-
-Checked against Phaser 4.2.1 in Chromium: a scene with Graphics, text, a scaled
-image, a rotated and flipped half-transparent image and a flipped image in a
-rotated Container, redrawn from the posted page, matches the game; a call from
-`create()` leaves the game on screen; and a second call after a stopping one
-reads the same five items.
+Inside the editor the page is posted to the parent with an id, its name, its
+formats and whether it is a snapshot, and the editor answers
+`idlewild-print-done` with the same id once it has it. Anywhere else there is
+no parent and the promise settles at once. The editor's Save asks for a page
+with `idlewild-print-request`, which calls the same function.
 
 ## The PDF
 
@@ -283,26 +276,27 @@ opacity and the ResolutionInfo resource all read back, and the flattened copy
 of the Chromium page matches the PDF's rendering.
 
 
-## The PNG
+## The PNG and the JPG
 
 `print_png.rs`: the page flattened into one picture at the project's DPI by the
 same `print_psd::flatten` the PSD's flattened copy comes from — the PSD builder
 was split into `render`, which draws and composites and hands each layer to a
-callback, and the two writers over it. Clear where nothing was drawn. The
-`image` crate's encoder writes no `pHYs` chunk, so `with_resolution` splices
-one in after the header — pixels per metre on both axes — or every viewer
-opens a 300 DPI page at four times the size of the paper. The file is its own
-preview.
+callback, and the writers over it. The PNG is clear where nothing was drawn;
+the `image` crate's encoder writes no `pHYs` chunk, so `with_resolution`
+splices one in after the header, or every viewer opens a 300 DPI page at four
+times the size of the paper. The JPG is the same picture laid on white — a JPG
+has no transparency — at quality 92, with its DPI in the JFIF header through
+`JpegEncoder::set_pixel_density`.
 
 ## Output
 
 A print project has two sections: the header leaves Play out
 (`HeaderCallbacks.withoutPlay`) and calls Code **Output** (`codeLabel`). Output
 is the code panel and, over the canvas, the `PrintExport` pane
-(`editor/print-export.ts`) — the preview and its bar — and nothing beside it.
-The game runs underneath the pane, full size and covered: a frame that is
-`display: none` or off screen is one the browser stops drawing, and a game
-that never reaches the end of a frame never prints.
+(`editor/print-export.ts`) — the preview, its bar, and a column of thumbnails —
+and nothing beside it. The game runs underneath the pane, full size and
+covered: a frame that is `display: none` or off screen is one the browser stops
+drawing, and a game that never reaches the end of a frame never captures.
 
 **The game starts as Output opens, and otherwise only when asked.** The mode
 switch calls `GameFrame.run` on the way in. `GameFrame` implements
@@ -310,20 +304,30 @@ switch calls `GameFrame.run` on the way in. `GameFrame` implements
 `CodePanel` puts Stop and Restart (running) or Run (stopped) at the head of the
 file bar's right-hand cluster through `CodeBar.addControl`; Run and Restart save
 the open file first. `GameFrame.reload` returns false on a print project, so a
-code save, a PSD changing and Project Options all leave it alone — a page can
-be seconds of work at full resolution, or a loop writing a hundred files. A
-change to the sheet does restart it: `GameFrame` listens on `onPageChange`,
-compares the page's size and corner with the last it saw, and restarts a
-running game 350 ms after the last change, so a size typed a digit at a time is
-one restart.
+code save, a PSD changing and Project Options leave it alone. A change to the
+sheet's size or corner restarts a running game 350 ms after the last change.
 
-Pages are written one at a time in the order they arrive, in the formats the
-page asked for or the bar's one, and each is answered when its files are on
-disk. The bar carries the format switch — PDF, PSD, PNG; changed after a page,
-that page is written in the new format too — **Export now**, a Save per format
-the last page was written in, and **Save all** once a run has written more than
-the last page's files. Stop keeps the last page in the preview and drops
-whatever was still queued.
+**Captured pages are drawn, not written.** `print-preview.ts` draws a page's
+list onto a canvas from the screen-resolution files the game was using —
+each sprite cut from `assets/` and placed with its matrix through
+`setTransform`, each raster laid over the page, alpha and blend modes the
+canvas's own — for the preview at 1600 pixels and each thumbnail at 180.
+Nothing reaches Rust until Save.
+
+**Save does every step.** It is the bar's one button, labelled with the
+format and the count — `Save PNG`, `Save 24 PNGs`. With a finished run it
+writes each page through `export_print_pdf` / `_psd` / `_png` / `_jpg` into
+`exports/`, then hands one file over with `save_print_file` or several as one
+zip with `save_print_files`, inside `saveAs`'s `write` so the platform's order
+holds. Pressed before anything is captured, or while a run of snapshots is
+open, it posts `idlewild-print-request` and saves when the ending page arrives.
+A page with no name is `page`, or `page-N` in a run; a repeated name gets `-2`.
+
+**Before a page arrives** the pane shows an indeterminate bar. An error the
+game logs through the console bridge while nothing is captured replaces it
+with that error; ten seconds without a call replaces it with a note that
+`ExportForPrint()` has not fired. Stopping keeps what was captured, ready to
+save.
 
 Page Setup on a print project is `editor/print-setup.ts`: the dimension rows,
 and the resolution reported rather than offered.

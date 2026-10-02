@@ -582,6 +582,7 @@ pub fn run() {
             print_files::save_print_files,
             print_psd::export_print_psd,
             print_png::export_print_png,
+            print_png::export_print_jpg,
             projects::rename_project,
             projects::delete_project,
             projects::duplicate_project,

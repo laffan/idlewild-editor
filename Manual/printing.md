@@ -2,7 +2,7 @@
 
 A project can make a page instead of a game: the same canvas, the same tools
 and the same code, pointed at a sheet of paper and written out as a print-ready
-PDF, a layered PSD or a PNG.
+PDF, a layered PSD, a PNG or a JPG.
 
 Part of [the Idlewild manual](README.md).
 
@@ -26,8 +26,8 @@ Part of [the Idlewild manual](README.md).
   what you write — because `ExportForPrint()` reads the page off a running
   Phaser scene, and a character or gravity is a game's. A page is looked at
   one point to the pixel, so it has no default zoom
-- What a page is written as — PDF, PSD or PNG — is not asked here. It is
-  asked where pages are made, in the Output preview's bar
+- What a page is written as — PDF, PSD, PNG or JPG — is not asked here. It
+  is asked where pages are saved, in the Output preview's bar
 
 ## The page on the canvas
 
@@ -60,97 +60,97 @@ Part of [the Idlewild manual](README.md).
 
 ## ExportForPrint()
 
-- Call `ExportForPrint()` from anywhere in your code and the page as it is on
-  screen at the end of the next frame is written out. By default **every
-  scene stops** — tweens, timers, physics, animation — and the page stays on
-  screen as it was printed
+- `ExportForPrint()` **captures the page** as it is on screen at the end of
+  the next frame, and it appears in the Output preview straight away. Nothing
+  is written until you press **Save**. By default the scenes stop — tweens,
+  timers, physics, animation — and the page stays on screen as it was captured
+- **A new print project calls it for you**, once its artwork has loaded — this
+  line is in each scene:
+
+  ```js
+  whenPsdsReady(this, () => ExportForPrint({ name: "page", formats: "png" }));
+  ```
+
 - What prints is what your code made of the scene, not the document as you
   drew it. Move, rotate, scale, flip, fade, tint or clone sprites — a sprite
-  drawn from one of your PSDs prints from the **full-resolution** file, in
+  drawn from one of your PSDs is saved from the **full-resolution** file, in
   exactly the place, angle and size your code left it
 - Anything you draw in code with no file behind it — Graphics, shapes, text —
-  is rendered by the game at the project's DPI and printed as pixels
+  is rendered by the game at the project's DPI and saved as pixels
 - **It takes options**, all of them optional:
 
   ```js
   ExportForPrint({
-    name: "page",     // the file's name, without an extension
-    folder: "",       // a folder inside the project's exports/
-    formats: "pdf",   // "pdf", "psd", "png", or a list — or the bar's
-    stop: true,       // stop every scene once the page is read
+    name: "page",      // the file's name, without an extension
+    folder: "",        // a folder for it, inside a save of several
+    formats: "png",    // "pdf", "psd", "png" or "jpg" — what Save is set to
+    snapshot: false,   // true: add this page and keep going
+    stop: true,        // stop the scenes once the page is captured
   });
   ```
 
-- **It returns a promise** that settles when the files are written, with the
-  paths it wrote. So a series of pages is a loop with an `await` in it — every
-  frame of an animation as its own file, say:
+- **Several pages: `snapshot: true`.** A snapshot adds its page to the list and
+  your code carries on. The run ends at the first call **without**
+  `snapshot: true`, which adds the last page and stops the scenes; Save then
+  writes them all, as one zip. The call returns a promise that settles once the
+  editor has the page, so every frame of an animation is a loop:
 
   ```js
-  async function printFrames(scene) {
-    for (let i = 0; i < 24; i++) {
-      setFrame(scene, i);
-      await ExportForPrint({ folder: "frames", name: `frame-${i}`, stop: false });
-    }
-    scene.scene.pause();
+  for (let i = 0; i < 24; i++) {
+    setFrame(this, i);
+    await ExportForPrint({ name: `frame-${i}`, snapshot: true });
   }
+  ExportForPrint({ name: "frame-24" });
   ```
 
-- Files go into the project's `exports/` folder, under the folder and name you
-  gave — letters, digits, `-` and `_`, anything else becomes `_` — and nowhere
-  else: code running in a page does not get to write wherever it likes on your
-  disk. **Save** in the preview's bar hands them over
-- The scaffold leaves one line in each scene, commented out, that prints once
-  the artwork has loaded:
-
-  ```js
-  // whenPsdsReady(this, () => ExportForPrint({ name: "page", formats: "pdf" }));
-  ```
-
+- A page with no name is `page`, or `page-1`, `page-2`… in a run of several; a
+  name used twice gets `-2`, `-3`. Names are letters, digits, `-` and `_` —
+  anything else becomes `_`
 - In a published site there is no editor to send the page to, so
-  `ExportForPrint()` stops the scenes and the promise settles with nothing
-  written
+  `ExportForPrint()` stops the scenes and does nothing else
 
 ## Output
 
 - A print project has **two sections, Draw and Output**. Output is the code
-  panel and, over the canvas, the **preview** of what your code has printed —
-  and nothing else. The game runs underneath it, covered: what you look at is
-  the page, not the game
+  panel and, over the canvas, the **preview** of what your code has captured —
+  and nothing else. The game runs underneath it, covered
 - **Your code runs as Output opens.** While it is running the code bar has
   **Stop** and **Restart** beside the pin; once stopped, **Run**. Run and
-  Restart save the open file first. It does **not** restart when you save — a
-  page can be seconds of work at full resolution, or a loop writing a hundred
-  files, so running it again is something you ask for
+  Restart save the open file first. It does **not** restart when you save
 - **A new sheet restarts it.** Change the size or orientation in Page Setup, or
   drag the page somewhere else in Draw, and a running Output starts again on
   the new page straight away
-- The bar at the top of the preview:
-  - **PDF / PSD / PNG** — what a page is written as when your code does not
-    say. Switch it after a page has printed and that page is written in the new
-    format too: the game is holding it, and a generative piece would not draw
-    it again
-  - **Export now** — prints the page as it stands, as if your code had called
-    `ExportForPrint()`, so a project that never calls it still prints
-  - **Save PDF**, **Save PSD**, **Save PNG** — the last page's files, through a
-    save dialog on a Mac or the Files export picker on an iPad. **Save all**
-    appears once a run has written more than one file, and hands over every
-    file the run wrote as one zip
-- The preview is the file itself where a page can show one — the PDF, or the
-  PNG. A PSD cannot be shown in a page, so a PSD previews the flattened image
-  inside it
+- **Before a page arrives** the preview shows a bar while your code runs. If
+  your code throws before it gets to `ExportForPrint()`, the preview shows the
+  error; if it runs for ten seconds without calling it, the preview says so
+- The bar at the top of the preview has two things:
+  - **PDF / PSD / PNG / JPG** — what Save writes. A call that names a format
+    sets it
+  - **Save** — one button, labelled with what it will write: **Save PNG**, or
+    **Save 24 PNGs** for a run of snapshots. It does every step. Pressed before
+    your code has captured anything, or while a run of snapshots has not ended,
+    it asks your code for the page — as if `ExportForPrint()` had been called —
+    and then saves. One page is saved as that file; several as one zip. A save
+    dialog on a Mac, the Files export picker on an iPad
+- **Thumbnails.** Once there is more than one page, a column of thumbnails runs
+  down the right of the preview. Press one to see it large
+- Stopping keeps what was captured, ready to save
 
-## The three files
+## The four formats
 
-- **The PDF** is the page as it prints: one page, the size of the sheet, every
+- **PDF** is the page as it prints: one page, the size of the sheet, every
   sprite at the full resolution of its file. The same picture placed five
   hundred times is stored once
-- **The PSD** is the same page to keep working on: one layer per thing on the
+- **PSD** is the same page to keep working on: one layer per thing on the
   page, in the order the scene drew them, named after the file it came from,
   at the project's DPI, with each sprite's transparency as the layer's opacity
   and its blend mode as the layer's blend mode
-- **The PNG** is the page as one picture at the project's DPI, clear where
-  nothing was drawn, and it says its resolution, so it opens at the size of the
-  paper
+- **PNG** is the page as one picture at the project's DPI, clear where nothing
+  was drawn
+- **JPG** is the same picture on white — a JPG has no transparency — at high
+  quality
+- The PNG and the JPG both say their resolution, so they open at the size of
+  the paper
 
 ## Page Setup
 

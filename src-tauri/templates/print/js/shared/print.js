@@ -22,32 +22,42 @@
 //
 //   ExportForPrint({
 //     name: "page",          // the file's name, without an extension
-//     folder: "",            // a folder inside the project's exports/
-//     formats: "pdf",        // "pdf", "psd", "png", or a list — or the bar's
+//     folder: "",            // a folder for it, inside a save of several
+//     formats: "png",        // "pdf", "psd", "png" or "jpg" — what Save offers
+//     snapshot: false,       // true: add this page and keep going
 //     stop: true,            // stop every scene once the page is read
 //   });
 //
-// It returns a promise that settles once the files are written, with the
-// paths it wrote, so a sequence of pages is a loop with an `await` in it —
-// one file per frame of an animation, say:
+// A call **captures** the page — it is drawn in the editor's preview at once —
+// and nothing is written until Save in the Output bar is pressed, which writes
+// every captured page from the full-resolution files in the format the bar
+// says. `formats` is what the bar is set to when the page arrives.
+//
+// **One page, or several.** A call with `snapshot: true` adds its page to the
+// list and the code carries on; the run ends at the first call without it,
+// which adds the last page and stops the scenes. Save then writes them all,
+// as one zip. The promise settles once the editor has the page, so a sequence
+// of snapshots is a loop with an `await` in it — every frame of an animation,
+// say:
 //
 //   for (let i = 0; i < 24; i++) {
 //     setFrame(i);
-//     await ExportForPrint({ folder: "frames", name: `frame-${i}`, stop: false });
+//     await ExportForPrint({ name: `frame-${i}`, snapshot: true });
 //   }
+//   ExportForPrint({ name: "frame-24" });
 //
 // `stop` pauses the scenes rather than the game: nothing updates, so tweens,
 // timers, physics and animations hold still, but the page goes on being drawn,
-// so what was printed stays on screen.
+// so what was printed stays on screen. A snapshot does not stop unless it is
+// asked to.
 //
-// Inside the editor the page goes to the editor, which writes the files and
-// previews the last. Anywhere else — a published site, a file opened from
-// disk — there is no editor to send it to, and the promise settles at once
-// with nothing written. This file is the editor's; it is written into every
+// Inside the editor the page goes to the editor. Anywhere else — a published
+// site, a file opened from disk — there is no editor to send it to, and the
+// promise settles at once. This file is the editor's; it is written into every
 // print project and read by `js/main.js`.
 
 /** What the editor listens for, what it sends to ask for a page, and what it
- *  answers with once a page's files are written. */
+ *  answers with once it has the page. */
 const PAGE_MESSAGE = "idlewild-print";
 const REQUEST_MESSAGE = "idlewild-print-request";
 const DONE_MESSAGE = "idlewild-print-done";
@@ -90,7 +100,8 @@ export function installPrint(game, config) {
       // this has just changed has been through a render, and every object
       // the document placed is standing where it will be drawn.
       game.events.once(Phaser.Core.Events.POST_RENDER, async () => {
-        if (options.stop !== false) freeze(game);
+        const snapshot = options.snapshot === true;
+        if (options.stop ?? !snapshot) freeze(game);
         let page;
         try {
           page = await readPage(game, sheet, options);
@@ -100,7 +111,7 @@ export function installPrint(game, config) {
         }
         report(page, sheet);
         if (!inEditor) {
-          resolve({ files: [] });
+          resolve({ page: 0, pages: 0 });
           return;
         }
         const id = ++next;
@@ -111,6 +122,7 @@ export function installPrint(game, config) {
             id,
             out: outPath(options),
             formats: formatsOf(options.formats),
+            snapshot,
             ...page,
           },
           "*",
@@ -120,8 +132,8 @@ export function installPrint(game, config) {
 
   window.addEventListener("message", (event) => {
     const data = event.data;
-    // The editor's own Export button asks for the page the same way a line
-    // of code does, so a project that never calls it can still be printed.
+    // The editor's Save asks for the page the same way a line of code does
+    // when there is none yet, or a run of snapshots has not ended.
     if (data?.source === REQUEST_MESSAGE) {
       void window.ExportForPrint(data.options ?? {});
       return;
@@ -131,11 +143,11 @@ export function installPrint(game, config) {
     if (!held) return;
     waiting.delete(data.id);
     if (data.error) held.reject(new Error(data.error));
-    else held.resolve({ files: data.files ?? [] });
+    else held.resolve({ page: data.page ?? 0, pages: data.pages ?? 0 });
   });
 }
 
-/** Where the files go, inside exports/, without an extension. */
+/** What the page is called when it is saved — a folder and a name. */
 function outPath(options) {
   const clean = (part) =>
     String(part ?? "")
@@ -144,8 +156,11 @@ function outPath(options) {
       .filter((segment) => segment && segment !== "." && segment !== "..")
       .join("/");
   const folder = clean(options.folder);
-  const name = clean(options.name) || "page";
-  return folder ? `${folder}/${name}` : name;
+  const name = clean(options.name);
+  // Nothing named: the editor names it — `page`, or `page-1`, `page-2` in a
+  // run of snapshots.
+  if (!folder && !name) return undefined;
+  return folder ? `${folder}/${name || "page"}` : name;
 }
 
 /**
@@ -153,7 +168,7 @@ function outPath(options) {
  * the editor's bar says. One format or several: `"png"`, `["pdf", "png"]`.
  */
 function formatsOf(formats) {
-  const known = ["pdf", "psd", "png"];
+  const known = ["pdf", "psd", "png", "jpg"];
   const list = (Array.isArray(formats) ? formats : [formats]).filter((f) =>
     known.includes(f),
   );

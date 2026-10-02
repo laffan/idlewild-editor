@@ -23,10 +23,10 @@ export type Dpi = (typeof DPIS)[number];
 
 /**
  * What a page is written as: a PDF, the same page as a layered PSD at the
- * project's DPI, or the page as one PNG at that DPI. See `print_pdf.rs`,
- * `print_psd.rs` and `print_png.rs`.
+ * project's DPI, or the page as one picture at that DPI — a PNG, or a JPG on
+ * white. See `print_pdf.rs`, `print_psd.rs` and `print_png.rs`.
  */
-export type PrintFormat = "pdf" | "psd" | "png";
+export type PrintFormat = "pdf" | "psd" | "png" | "jpg";
 /** The name the project's default goes by — one format. */
 export type PrintFormats = PrintFormat;
 
@@ -34,6 +34,7 @@ export const FORMATS: ReadonlyArray<{ value: PrintFormat; label: string }> = [
   { value: "pdf", label: "PDF" },
   { value: "psd", label: "PSD" },
   { value: "png", label: "PNG" },
+  { value: "jpg", label: "JPG" },
 ];
 
 /** The units a custom size is typed in. Only how it reads — sizes are points. */
@@ -62,7 +63,7 @@ export const DEFAULT_OUTPUT: Output = {
   dpi: 300,
   paper: "letter",
   landscape: false,
-  formats: "pdf",
+  formats: "png",
   customWidth: 612,
   customHeight: 792,
   unit: "in",
@@ -78,13 +79,13 @@ export const PAGE_RANGE = { min: 36, max: 3456 } as const;
 
 /**
  * What a page is written as: the formats the call named, or the project's
- * default. An earlier build's `both` reads as a PDF.
+ * default. Anything else — an earlier build's `both` — reads as a PNG.
  */
 export function writes(output: Output, asked?: PrintFormat[]): PrintFormat[] {
   const known = (f: unknown): f is PrintFormat => FORMATS.some((row) => row.value === f);
   const list = (asked ?? []).filter(known);
   if (list.length > 0) return [...new Set(list)];
-  return [known(output.formats) ? output.formats : "pdf"];
+  return [known(output.formats) ? output.formats : "png"];
 }
 
 /** A sheet, portrait, in points. Mirrored by `PAPERS` in print.rs. */

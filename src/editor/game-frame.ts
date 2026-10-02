@@ -62,6 +62,7 @@ export class GameFrame {
       ? new PrintExport(meta, {
           post: (message) => this.frame?.contentWindow?.postMessage(message, "*"),
           base: () => this.base,
+          running: () => this.running,
         })
       : null;
     if (this.exporter) {
@@ -251,12 +252,29 @@ export class GameFrame {
       // its own CSS.
       .map((value) => (value.t === "string" ? value.v : (value as LogValue)));
 
-    log.logFrom(
-      { source: "js", ...(readSite(data.site) ?? {}) },
-      readLevel(data.level),
-      ...args,
-    );
+    const level = readLevel(data.level);
+    log.logFrom({ source: "js", ...(readSite(data.site) ?? {}) }, level, ...args);
+    // On a print project an error before the page is captured is the reason
+    // there is no page, and the preview says so rather than waiting.
+    if (level === "error" && this.exporter) {
+      // The first lines are the message and where it was thrown; the rest of
+      // a stack is the console's to show.
+      const text = args.map(plainText).join(" ").split("\n").slice(0, 4).join("\n");
+      this.exporter.gameError(text);
+    }
   };
+}
+
+/** A console argument as a line of text, for the preview's error. */
+function plainText(value: unknown): string {
+  if (typeof value === "string") return value;
+  const v = value as { t?: string; v?: unknown; name?: string; message?: string };
+  if (v && typeof v === "object") {
+    if (typeof v.v === "string") return v.v;
+    if (typeof v.message === "string") return v.message;
+    if (typeof v.name === "string") return v.name;
+  }
+  return "";
 }
 
 function readLevel(raw: unknown): log.LogLevel {
