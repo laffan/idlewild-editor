@@ -61,7 +61,10 @@ fn the_scaffold_and_the_config_describe_the_sheet() {
 
         let scene = std::fs::read_to_string(game.join("js/scenes/Scene1.js")).unwrap();
         assert!(scene.contains(
-            "\n    whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"png\" }));"
+            "\n    // Wait for PSDs to load\n    whenPsdsReady(this, () => {\n      // This following \
+             line stops the script and prepares it for print output.\n      // Every option is \
+             optional — see js/shared/print.js.\n\n      ExportForPrint({ name: \"page\", formats: \
+             \"png\" });\n    });\n"
         ));
         assert!(scene.contains("  whenPsdsReady,\n} from"));
 

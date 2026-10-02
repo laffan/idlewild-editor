@@ -68,7 +68,13 @@ Part of [the Idlewild manual](README.md).
   line is in each scene:
 
   ```js
-  whenPsdsReady(this, () => ExportForPrint({ name: "page", formats: "png" }));
+  // Wait for PSDs to load
+  whenPsdsReady(this, () => {
+    // This following line stops the script and prepares it for print output.
+    // Every option is optional — see js/shared/print.js.
+
+    ExportForPrint({ name: "page", formats: "png" });
+  });
   ```
 
 - What prints is what your code made of the scene, not the document as you

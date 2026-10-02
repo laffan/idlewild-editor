@@ -350,10 +350,12 @@ pub fn scene_file_for(class: &str, meta: &ProjectMeta) -> String {
     scene.replacen(
         "    placePatterns(this);\n",
         "    placePatterns(this);\n\n    \
-         // When the artwork has loaded, print the page: the scenes stop where\n    \
-         // they are, and Save in the Output bar writes it from the full-resolution\n    \
-         // files. Every option is optional — see js/shared/print.js.\n    \
-         whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"png\" }));\n",
+         // Wait for PSDs to load\n    \
+         whenPsdsReady(this, () => {\n      \
+           // This following line stops the script and prepares it for print output.\n      \
+           // Every option is optional — see js/shared/print.js.\n\n      \
+           ExportForPrint({ name: \"page\", formats: \"png\" });\n    \
+         });\n",
         1,
     )
 }
