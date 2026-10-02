@@ -49,6 +49,13 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  psd_paint.rs    ink → a layer already in a PSD                │
 │  psd_palette.rs  the palette, into a PSD leaving for Photoshop │
 │  psd_flatten.rs  one PSD as one picture: a merged tile palette │
+│  psd_downsample.rs a print PSD at screen resolution            │
+│  psd_resolution.rs the DPI a print PSD says it was made at     │
+│  print.rs        game or page: the DPI, the sheet, the formats │
+│  print_pdf.rs    ExportForPrint()'s page, as a PDF             │
+│  print_psd.rs    the same page, as a layered PSD at the DPI    │
+│  pdf_writer.rs   the objects of a one-page PDF                 │
+│  project_create.rs making a project, and the sheet of paper    │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
 │  psd_pipeline.rs PSD → game assets   (psd-to-json-rust)        │
 │  templates.rs    the four scaffolds, per-projection grid       │
@@ -150,6 +157,7 @@ a Mac, that is usually why. See [`Docs/ipad.md`](Docs/ipad.md),
 | [Exports, imports and the home screen](Docs/exports.md) | The three exits, the two doors in, the iOS save order, Select |
 | [Publishing somewhere real](Docs/publishing.md) | SSH and GitHub as libraries; the login is the device's, the destination the project's |
 | [The exported game](Docs/exported-game.md) | What a site is made of, what Play runs, the config, the page, the owned lines |
+| [Print projects](Docs/printing.md) | Two resolutions, the sheet as world, `ExportForPrint()`, the PDF and the PSD |
 | [The code panel](Docs/code-panel.md) | CodeMirror over the real tree, the three places it sits, the reference, the console |
 | [The iPad](Docs/ipad.md) | The safe area, and the scene manifest the app will not launch without |
 | [Testing](Docs/testing.md) | What is covered and where |
@@ -177,6 +185,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Editing a PSD, and getting it back | [`Docs/psd-pipeline.md`](Docs/psd-pipeline.md) |
 | Extrude mode | [`Docs/extrude.md`](Docs/extrude.md) |
 | Eyedropper | [`Docs/colour.md`](Docs/colour.md) |
+| ExportForPrint() | [`Docs/printing.md`](Docs/printing.md) |
 | It reads a patch, not a pixel | [`Docs/colour.md`](Docs/colour.md) |
 | Gesture routing | [`Docs/gestures.md`](Docs/gestures.md) |
 | Import Assets, which is that door inward | [`Docs/exports.md`](Docs/exports.md) |
@@ -192,6 +201,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | One game at a time, and why that is load-bearing | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
 | One screen pixel, whatever the camera is doing | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | PSD Edit mode | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
+| Print projects | [`Docs/printing.md`](Docs/printing.md) |
 | Publish, and what the exported game reads | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | Publishing somewhere real, and logging in once | [`Docs/publishing.md`](Docs/publishing.md) |
 | Reordering layers | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
@@ -199,6 +209,10 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Selection | [`Docs/selection.md`](Docs/selection.md) |
 | Snap to grid, and the arrow keys | [`Docs/selection.md`](Docs/selection.md) |
 | Testing | [`Docs/testing.md`](Docs/testing.md) |
+| The PDF | [`Docs/printing.md`](Docs/printing.md) |
+| The PSD | [`Docs/printing.md`](Docs/printing.md) |
+| The source scale, on the frontend | [`Docs/printing.md`](Docs/printing.md) |
+| Two resolutions | [`Docs/printing.md`](Docs/printing.md) |
 | The column is the site, not just `game/` | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | The config the game reads | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | The inspector's sections fold | [`Docs/inspector.md`](Docs/inspector.md) |

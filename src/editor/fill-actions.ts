@@ -22,6 +22,7 @@
  * own size with nothing inside it to divide, and comes back the same way.
  */
 
+import { sourceScale } from "../lib/print";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, cellsBounds as cellsRange, describeRange, fillShape } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
@@ -34,7 +35,6 @@ import { openAddImage } from "./sheets";
 import type { WorldScene } from "../game/world-scene";
 import {
   anchorCell,
-  EXPORT_SCALE,
   IMPORT_SCALE,
   marksForCells,
   marksForSelection,
@@ -113,7 +113,7 @@ export async function convertFillToPsd(
           // blocks exactly what it did; what grows is the room to paint in.
           margin: psdMargin(grid),
         },
-        EXPORT_SCALE,
+        sourceScale(),
       ),
     );
 
@@ -189,8 +189,8 @@ export async function generatePsdForRegion(
   to: Cell,
 ): Promise<void> {
   const bounds = grid.rangeBounds(from, to);
-  const width = Math.max(1, Math.round(bounds.width * EXPORT_SCALE));
-  const height = Math.max(1, Math.round(bounds.height * EXPORT_SCALE));
+  const width = Math.max(1, Math.round(bounds.width * sourceScale()));
+  const height = Math.max(1, Math.round(bounds.height * sourceScale()));
   if (width * height > MAX_GENERATED_PIXELS) {
     log.warn(
       `That is ${width}×${height} pixels — too big to generate. ` +
@@ -220,7 +220,7 @@ export async function generatePsdForRegion(
           // than being centred on the anchor like an imported image.
           art: { x: bounds.x - anchorWorld.x, y: bounds.y - anchorWorld.y },
         },
-        EXPORT_SCALE,
+        sourceScale(),
       ),
     );
 
@@ -256,8 +256,8 @@ function rasteriseFill(
   // Cropped to the fill exactly. The room to paint in is the *canvas's*, not
   // the artwork's — see `psdMargin` — so nothing here grows and the pixels
   // that arrive on the grid are the fill and only the fill.
-  const width = Math.max(1, Math.ceil(bounds.width * EXPORT_SCALE));
-  const height = Math.max(1, Math.ceil(bounds.height * EXPORT_SCALE));
+  const width = Math.max(1, Math.ceil(bounds.width * sourceScale()));
+  const height = Math.max(1, Math.ceil(bounds.height * sourceScale()));
 
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -265,7 +265,7 @@ function rasteriseFill(
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
-  ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
+  ctx.scale(sourceScale(), sourceScale());
   ctx.translate(-bounds.x, -bounds.y);
   ctx.fillStyle = colour;
   for (const points of shape.polygons) {

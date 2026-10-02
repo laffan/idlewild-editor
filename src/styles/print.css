@@ -1,0 +1,140 @@
+/* The Export section of a print project — editor/print-export.ts.
+
+   The game frame becomes a grid while it is up: a strip across the top, the
+   project's own game on the left and the PDF it printed on the right, so the
+   page and the code that made it are compared at a glance. Narrow, they
+   stack. Its own stylesheet for the reason guides.css is one: editor.css is at
+   the line limit. */
+
+.game-frame.exporting {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--chrome-panel);
+}
+.game-frame.exporting.hidden { display: none; }
+
+.game-frame.exporting .game-frame-view {
+  grid-row: 2;
+  grid-column: 1;
+  min-width: 0;
+}
+
+.print-export-bar,
+.print-export-preview { display: none; }
+
+.game-frame.exporting .print-export-bar {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  background: var(--chrome-bg);
+  border-bottom: 1px solid var(--chrome-rule);
+  color: var(--chrome-text);
+  font-size: 13px;
+}
+
+.print-export-title { font-weight: 600; }
+
+.print-export-status {
+  flex: 1;
+  min-width: 0;
+  color: var(--chrome-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.print-export-actions { display: flex; gap: 8px; }
+
+.print-export-actions .btn {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+/* The two secondary buttons sit on the dark strip, where the light theme's
+   ghost button would be dark text on a dark ground. */
+.print-export-actions .btn-ghost {
+  color: var(--chrome-text);
+  background: transparent;
+  border-color: var(--chrome-rule);
+}
+.print-export-actions .btn-ghost:hover { background: var(--chrome-panel); }
+
+.print-export-actions .btn[disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.game-frame.exporting .print-export-preview {
+  grid-row: 2;
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
+  border-left: 1px solid var(--chrome-rule);
+  background: var(--color-neutral-700);
+}
+
+.print-export-view {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--color-neutral-700);
+}
+
+.print-export-empty {
+  margin: auto;
+  max-width: 320px;
+  padding: 24px;
+  color: var(--chrome-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+.print-export-empty[hidden] { display: none; }
+
+@media (max-width: 760px) {
+  .game-frame.exporting {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .game-frame.exporting .print-export-preview {
+    grid-row: 3;
+    grid-column: 1;
+    border-left: 0;
+    border-top: 1px solid var(--chrome-rule);
+  }
+}
+
+/* What Export writes, in the bar: the settings vocabulary's segmented
+   control, redrawn for the dark strip it sits on here. */
+.print-export-formats { flex: 0 0 auto; border-color: var(--chrome-rule); }
+.print-export-formats .opt-seg-btn {
+  color: var(--chrome-dim);
+  background: transparent;
+  min-height: 30px;
+  font-size: 12px;
+}
+.print-export-formats .opt-seg-btn + .opt-seg-btn { border-left-color: var(--chrome-rule); }
+.print-export-formats .opt-seg-btn:hover:not(:disabled) { background: var(--chrome-panel); }
+.print-export-formats .opt-seg-btn[aria-pressed="true"] {
+  color: var(--chrome-text);
+  background: var(--chrome-rule);
+}
+
+.print-export-actions .btn[hidden] { display: none; }
+
+/* A PSD-only export: the flattened page, fitted and centred like a sheet. */
+.print-export-image {
+  margin: auto;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 32px);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.35);
+  background: #fff;
+}

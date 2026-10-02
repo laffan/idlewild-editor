@@ -39,6 +39,14 @@
   will-change: transform;
 }
 
+/* A print project's sheet: solid rather than dashed, because it is not "about
+   this much world" but the page itself, edge for edge, and a soft shadow
+   outside it so the paper reads as a sheet lying on the canvas. */
+.screen-guide-frame.is-page {
+  border-style: solid;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.6), 0 2px 10px rgb(0 0 0 / 0.18);
+}
+
 /* The origin: two hairlines crossing on it, at a fixed size on screen, so it
    stays findable at any zoom and never grows into a mark of its own. */
 .screen-guide-cross {

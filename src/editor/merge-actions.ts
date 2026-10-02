@@ -26,8 +26,8 @@
  * `tree.psd` exactly where it was, and Export Assets still offers it.
  */
 
+import { sourceScale } from "../lib/print";
 import {
-  EXPORT_SCALE,
   IMPORT_SCALE,
   footprintForBox,
   marksForBox,
@@ -149,10 +149,10 @@ export async function mergeSelection(deps: MergeDeps): Promise<void> {
   const parts: MergePart[] = placements.map((placement) => ({
     key: placement.psdKey,
     path: placement.layerPath,
-    left: (placement.x - box.x) * EXPORT_SCALE,
-    top: (placement.y - box.y) * EXPORT_SCALE,
-    width: placement.width * EXPORT_SCALE,
-    height: placement.height * EXPORT_SCALE,
+    left: (placement.x - box.x) * sourceScale(),
+    top: (placement.y - box.y) * sourceScale(),
+    width: placement.width * sourceScale(),
+    height: placement.height * sourceScale(),
   }));
 
   // The Rust side names each source as it opens it and each part as it lays
@@ -169,8 +169,8 @@ export async function mergeSelection(deps: MergeDeps): Promise<void> {
     const result = await psd.merge(
       deps.projectId,
       mergedName(placements),
-      Math.max(1, Math.round(box.width * EXPORT_SCALE)),
-      Math.max(1, Math.round(box.height * EXPORT_SCALE)),
+      Math.max(1, Math.round(box.width * sourceScale())),
+      Math.max(1, Math.round(box.height * sourceScale())),
       parts,
       scaleMarks(
         {
@@ -182,7 +182,7 @@ export async function mergeSelection(deps: MergeDeps): Promise<void> {
           // what comes out here has none until it is given one.
           margin: psdMargin(grid),
         },
-        EXPORT_SCALE,
+        sourceScale(),
       ),
     );
 

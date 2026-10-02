@@ -13,6 +13,7 @@
  * became, in the same place, at the same size.
  */
 
+import { sourceScale } from "../lib/print";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { addPatternShapePoints } from "../lib/layer-kinds";
@@ -23,7 +24,6 @@ import type { DrawingLayer } from "../drawing";
 import { strokesBox, strokesToPsd, strokesToZonePoints } from "../drawing";
 import type { WorldScene } from "../game/world-scene";
 import {
-  EXPORT_SCALE,
   footprintForBox,
   IMPORT_SCALE,
   marksForCells,
@@ -73,7 +73,7 @@ export async function convertStrokesToPsd(
     // have already decoded rather than the procedural stand-in.
     const result = await strokesToPsd(projectId, name, strokes, {
       atlas: drawing.atlas,
-      scale: EXPORT_SCALE,
+      scale: sourceScale(),
       stage: (line) => progress.stage(line),
       marks: (raster) => ({
         ...scaleMarks(
@@ -81,7 +81,7 @@ export async function convertStrokesToPsd(
             x: raster.bounds.x - anchorWorld.x,
             y: raster.bounds.y - anchorWorld.y,
           }),
-          EXPORT_SCALE,
+          sourceScale(),
         ),
       }),
     });

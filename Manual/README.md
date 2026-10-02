@@ -21,6 +21,7 @@ meet the things they describe.
 | [The properties sidebar](inspector.md) | Three zones, folding sections, and where the explanations live |
 | [A PSD's own layers](psd-layers.md) | The stack inside a placed file, and PSD Edit mode |
 | [Code, Play and the page around the game](code-and-play.md) | The project's own code, running it, the console, the reference, Page Setup |
+| [Printing](printing.md) | Print projects: the page on the canvas, `ExportForPrint()`, and the PDF and PSD it writes |
 | [Publishing](publishing.md) | SSH and GitHub, the logins, and what a publish sends |
 | [Exporting and importing](exporting.md) | The three exits that hand you a file, and the two doors back in |
 | [PSD layer naming](psd-layer-naming.md) | The pipe convention psd-to-json reads, for files drawn elsewhere |

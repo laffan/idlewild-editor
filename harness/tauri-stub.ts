@@ -661,6 +661,25 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
           dataBase64: "AAAA",
         }
       );
+    // A print project's two commands. The PDF is whatever the test server
+    // has at `print-out/page.pdf`; there is no Rust here to draw one.
+    case "export_print_pdf":
+    case "export_print_psd": {
+      const page = (args as any)?.page;
+      const psd = cmd === "export_print_psd";
+      return {
+        path: psd ? "print-out/page.psd" : "print-out/page.pdf", bytes: 2048,
+        width: page?.page?.width ?? 612, height: page?.page?.height ?? 792,
+        dpi: page?.page?.dpi ?? 300, drawn: page?.items?.length ?? 0,
+        screenOnly: [], skipped: page?.skipped ?? 0,
+        preview: psd ? "print-out/page-preview.png" : null,
+      };
+    }
+    case "set_project_paper":
+      return { id: "demo", output: { kind: "print", dpi: 300, paper: (args as any)?.paper,
+        landscape: Boolean((args as any)?.landscape), formats: (args as any)?.formats ?? "pdf" } };
+    case "save_print_file":
+      return undefined;
     case "reimport_psd":
       return {
         key: "tower",

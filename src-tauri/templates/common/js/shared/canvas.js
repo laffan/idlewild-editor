@@ -139,15 +139,20 @@ export function updateCanvas(scene) {
 /**
  * The camera the project opens at.
  *
- * `config.zoom` is the default zoom from Project Options, and
+ * `config.zoom` is the default zoom from Project Options — or, in a print
+ * project, the sheet itself at 1× — and
  * `config.roundPixels` the other half of pixel-perfect rendering — the
  * renderer is told about it in main.js, and the camera has to be told too
  * or a fractional scroll still smears what it draws.
  */
 // idlewild:begin applyCamera
 export function applyCamera(scene) {
-  scene.cameras.main.setZoom(config.zoom ?? 1);
-  scene.cameras.main.roundPixels = config.roundPixels === true;
+  const camera = scene.cameras.main;
+  // A print project's screen is the sheet: its top-left corner is the world's
+  // origin and one point is one pixel, so the camera does not move or zoom.
+  if (config.print) camera.setZoom(1).setScroll(0, 0);
+  else camera.setZoom(config.zoom ?? 1);
+  camera.roundPixels = config.roundPixels === true;
 }
 // idlewild:end applyCamera
 

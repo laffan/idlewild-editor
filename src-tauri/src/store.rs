@@ -11,11 +11,12 @@
 //!       thumbnail.png      home-screen preview, written by the editor
 //!       psd/               source PSDs (imported, or converted from PNG)
 //!       assets/<key>/      psd-to-json output: data.json + sprites/tiles
+//!       print/<key>/       a print project's full-resolution output
 //!       game/              the editable project source the code modal shows
 //! ```
 
 use crate::project::{
-    now_ms, GameFile, GameOptions, Presentation, ProjectMeta, Projection, PublishTarget, Scaffold,
+    now_ms, GameFile, Presentation, ProjectMeta, PublishTarget,
 };
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -55,6 +56,17 @@ pub fn assets_dir(id: &str) -> Result<PathBuf, String> {
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
 }
+
+/// A print project's full-resolution psd-to-json output — what a PDF is drawn
+/// from, and nothing else reads. See `print.rs`.
+pub fn print_dir(id: &str) -> Result<PathBuf, String> {
+    let dir = project_dir(id)?.join("print");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+#[cfg_attr(not(test), allow(unused_imports))]
+pub use crate::project_create::{create_project, create_project_for, set_paper};
 
 pub fn game_dir(id: &str) -> Result<PathBuf, String> {
     let dir = project_dir(id)?.join("game");
@@ -100,44 +112,6 @@ pub fn list_projects() -> Result<Vec<ProjectMeta>, String> {
     }
     out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(out)
-}
-
-/// Write a new project to disk: its meta, its `game/` tree and its document.
-///
-/// `character` is clamped rather than taken. It defaults to on and a scaffold
-/// with no `shared/character.js` has nothing for it to reach, so a P2P or
-/// vanilla project would otherwise record a controller it has no file for.
-/// The sheets do not offer the row; this is what makes the answer on disk
-/// agree with the tree beside it whichever way the store is reached.
-pub fn create_project(
-    name: &str,
-    projection: Projection,
-    scaffold: Scaffold,
-    grid_size: u32,
-    options: GameOptions,
-) -> Result<ProjectMeta, String> {
-    let id = uuid::Uuid::new_v4().to_string();
-    let dir = project_dir(&id)?;
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-
-    let meta = ProjectMeta::new(
-        id.clone(),
-        name.to_string(),
-        projection,
-        scaffold,
-        grid_size,
-        GameOptions {
-            character: options.character && scaffold.has_character(),
-            ..options
-        },
-    );
-    write_meta(&meta)?;
-    // Scaffolded before the document is written, because writing a document
-    // regenerates the config inside `game/` and there has to be a `game/` to
-    // regenerate it in.
-    crate::templates::scaffold_game(&game_dir(&id)?, &meta)?;
-    write_doc(&id, &crate::templates::starter_doc(&meta))?;
-    Ok(meta)
 }
 
 /// Change what a project is rendered with, and hand back the meta as written.
@@ -378,7 +352,7 @@ fn sync_scene_files(
                 let _ = fs::remove_file(&from);
             }
             _ if !path.exists() => {
-                fs::write(&path, crate::templates::scene_file(file, meta.genre))
+                fs::write(&path, crate::templates::scene_file_for(file, &meta))
                     .map_err(|e| format!("Cannot write {file}.js: {e}"))?;
             }
             _ => {}

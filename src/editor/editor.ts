@@ -54,6 +54,7 @@ import { OverlaysPanel } from "./overlays-panel";
 import { addSweptZone } from "./zone-actions";
 import { createFillBarUi } from "./fill-bar";
 import { ScreenGuide } from "./screen-guide";
+import { setOpenProject } from "../lib/print";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
@@ -65,6 +66,7 @@ export async function mountEditor(
   callbacks: EditorCallbacks,
 ): Promise<() => Promise<void>> {
   const store = await DocStore.load(meta.id);
+  setOpenProject(meta); // a print project's source scale and sheet — lib/print.ts
   const grid = new Grid(store.projection, store.gridSize);
   const base = await assetBase(meta.id);
   // Resolved once: it decides whether a PSD's edits come back by re-parsing
@@ -356,7 +358,7 @@ export async function mountEditor(
   // canvas. Built for every project and shown only in play mode — see
   // setMode, and `editor/game-frame.ts` for why Play is the program rather
   // than a second implementation of it.
-  const gameFrame = new GameFrame(meta.id);
+  const gameFrame = new GameFrame(meta);
 
   // The header is a row of the shell, not chrome floating over the canvas, so
   // only the tools and the selection bar are inside the canvas wrapper — the

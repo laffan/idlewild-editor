@@ -28,6 +28,7 @@
  * from rather than leaving a second copy of it on the canvas.
  */
 
+import { sourceScale } from "../lib/print";
 import type { DocStore } from "../lib/doc-store";
 import { setExtrusion } from "../lib/extrusions";
 import type { Grid } from "../lib/grid";
@@ -53,7 +54,6 @@ import type { ExtrudeTarget } from "../game/extrude-mode";
 import type { WorldScene } from "../game/world-scene";
 import {
   anchorCell,
-  EXPORT_SCALE,
   hairline,
   IMPORT_SCALE,
   marksForCells,
@@ -98,8 +98,8 @@ export async function applyExtrusion(
     return false;
   }
 
-  const width = Math.max(1, Math.ceil(bounds.width * EXPORT_SCALE));
-  const height = Math.max(1, Math.ceil(bounds.height * EXPORT_SCALE));
+  const width = Math.max(1, Math.ceil(bounds.width * sourceScale()));
+  const height = Math.max(1, Math.ceil(bounds.height * sourceScale()));
   if (width * height > MAX_PIXELS) {
     log.warn(
       `That shape is ${width}×${height} pixels — too big to apply. ` +
@@ -148,7 +148,7 @@ export async function applyExtrusion(
     // which comes from the voxels, never sees it.
     const marks = scaleMarks(
       { ...marksForCells(grid, cells, anchor, art), margin: psdMargin(grid) },
-      EXPORT_SCALE,
+      sourceScale(),
     );
 
     // Carrying one on **rewrites** the file rather than replacing it. Both
@@ -273,7 +273,7 @@ function rasterise(
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
-  ctx.scale(EXPORT_SCALE, EXPORT_SCALE);
+  ctx.scale(sourceScale(), sourceScale());
   ctx.translate(-bounds.x, -bounds.y);
   // Set after the scale, so it is in world pixels rather than the file's —
   // which is the frame `hairline` answers in. It is the weight the canvas's

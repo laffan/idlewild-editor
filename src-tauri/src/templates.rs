@@ -114,6 +114,8 @@ const PHYSICS_JS: &str = include_str!("../templates/platformer/js/shared/physics
 const PLATFORMER_CHARACTER_JS: &str = include_str!("../templates/platformer/js/shared/character.js");
 const PLATFORMER_PREFAB_JS: &str = include_str!("../templates/platformer/js/prefabs/character.js");
 
+const PRINT_JS: &str = include_str!("../templates/print/js/shared/print.js");
+
 const VANILLA_HTML: &str = include_str!("../templates/vanilla/index.html");
 const VANILLA_CSS: &str = include_str!("../templates/vanilla/style.css");
 const VANILLA_JS: &str = include_str!("../templates/vanilla/script.js");
@@ -233,13 +235,18 @@ pub fn template_files(meta: &ProjectMeta) -> Result<Vec<(&'static str, String)>,
         ]);
     }
 
+    let main_js = if meta.output.is_print() {
+        print_main(MAIN_JS)
+    } else {
+        MAIN_JS.to_string()
+    };
     let mut files = vec![
         (
             "index.html",
             INDEX_HTML.replace("__PROJECT_NAME__", &meta.name),
         ),
         ("styles.css", STYLES_CSS.to_string()),
-        ("js/main.js", MAIN_JS.to_string()),
+        ("js/main.js", main_js),
         ("js/shared/canvas.js", CANVAS_JS.to_string()),
         ("js/shared/grid.js", GRID_JS.to_string()),
     ];
@@ -269,8 +276,44 @@ pub fn template_files(meta: &ProjectMeta) -> Result<Vec<(&'static str, String)>,
         files.push(("js/prefabs/character.js", prefab_js.to_string()));
     }
 
+    // `ExportForPrint()`, on the one kind of project that prints.
+    if meta.output.is_print() {
+        files.push(("js/shared/print.js", PRINT_JS.to_string()));
+    }
+
     files.push(config);
     Ok(files)
+}
+
+/// `js/main.js` for a print project: the same file, with the paper behind the
+/// scenes rather than the sky, and `ExportForPrint()` installed on the game it
+/// starts.
+///
+/// Three anchored replacements of the scaffold's own text rather than a second
+/// copy of a hundred-line file, so the two cannot drift apart — and a test
+/// pins each anchor, so a change to `main.js` that moves one fails loudly
+/// rather than producing a print project that cannot print.
+pub(crate) fn print_main(main_js: &str) -> String {
+    let mut out = main_js.replacen(
+        "import config from \"./game.config.json\" with { type: \"json\" };\n",
+        "import config from \"./game.config.json\" with { type: \"json\" };\n\
+         import { installPrint } from \"./shared/print.js\";\n",
+        1,
+    );
+    out = out.replacen(
+        "  backgroundColor: \"#d9e6ef\",",
+        "  // The paper. A print project's screen is the sheet it prints onto.\n  \
+         backgroundColor: \"#ffffff\",",
+        1,
+    );
+    out = out.replacen("new Phaser.Game({", "const game = new Phaser.Game({", 1);
+    out.push_str(
+        "\n// The moment the page is printed: call `ExportForPrint()` from any scene\n\
+         // and the game stops, and the page as it stands becomes the PDF. See\n\
+         // `js/shared/print.js`.\n\
+         installPrint(game, config);\n",
+    );
+    out
 }
 
 /// One scene's file, as the scaffold writes it.
@@ -287,6 +330,32 @@ pub fn template_files(meta: &ProjectMeta) -> Result<Vec<(&'static str, String)>,
 /// be a scene that will not load. `Vanilla` has no scenes at all and never
 /// asks; it answers with the `P2p` scene rather than panicking, because a
 /// wrong answer nobody reads is better than an unwrap somewhere else.
+pub fn scene_file_for(class: &str, meta: &ProjectMeta) -> String {
+    let scene = scene_file(class, meta.genre);
+    if !meta.output.is_print() {
+        return scene;
+    }
+    // The one line a print project needs that a game does not: where the page
+    // is printed. Commented out, because when is the author's to decide —
+    // the Export section's own button asks for it too.
+    // The P2P scene does not import the helper the hint uses; a line that
+    // cannot be uncommented would be a hint that does not work.
+    let scene = if scene.contains("whenPsdsReady,") {
+        scene
+    } else {
+        scene.replacen("  updateCanvas,\n} from", "  updateCanvas,\n  whenPsdsReady,\n} from", 1)
+    };
+    scene.replacen(
+        "    placePatterns(this);\n",
+        "    placePatterns(this);\n\n    \
+         // When the page is ready, print it. Everything stops where it is and\n    \
+         // the PDF is drawn from the full-resolution files. Export's own button\n    \
+         // does the same, for a page that never asks.\n    \
+         // whenPsdsReady(this, () => ExportForPrint());\n",
+        1,
+    )
+}
+
 pub fn scene_file(class: &str, scaffold: Scaffold) -> String {
     let template = if scaffold.has_character() {
         SCENE_JS
@@ -310,7 +379,7 @@ pub fn scene_file(class: &str, scaffold: Scaffold) -> String {
 /// would otherwise read a file with no blocks as a file missing all of them.
 pub fn template_file(rel: &str, meta: &ProjectMeta) -> Result<String, String> {
     if let Some(class) = scene_class_of(rel) {
-        return Ok(scene_file(&class, meta.genre));
+        return Ok(scene_file_for(&class, meta));
     }
 
     let wanted = MOVED

@@ -139,29 +139,15 @@ pub fn process(
     process_held(project_id, key, options, emit_log)
 }
 
-/// The same, for a caller already holding the lock.
-pub(crate) fn process_held(
-    project_id: &str,
-    key: &str,
+/// psd-to-json over one file, writing `<output_root>/<stem>/`.
+fn run_psd_to_json(
+    source: &Path,
+    output_root: &Path,
     options: &ProcessOptions,
-    emit_log: impl Fn(&str),
-) -> Result<String, String> {
-    let source = psd_path(project_id, key)?;
-    if !source.exists() {
-        return Err(format!("No PSD named {key} in this project"));
-    }
-
-    // Clear the previous run so stale sprites never outlive a re-import.
-    let out = output_dir(project_id, key)?;
-    if out.exists() {
-        let _ = std::fs::remove_dir_all(&out);
-    }
-    let assets_root = store::assets_dir(project_id)?;
-
-    emit_log(&format!("Parsing psd/{key}.psd"));
-
+    emit_log: &dyn Fn(&str),
+) -> Result<(), String> {
     let config = psd_to_json::Config {
-        output_dir: assets_root.display().to_string(),
+        output_dir: output_root.display().to_string(),
         psd_files: vec![source.display().to_string()],
         tile_slice_size: options.tile_slice_size.unwrap_or(512),
         tile_scaled_versions: options.tile_scaled_versions.clone().unwrap_or_default(),
@@ -193,8 +179,82 @@ pub(crate) fn process_held(
     }
 
     psd_to_json::write_json_output(&data, &config, base)
-        .map_err(|e| format!("Cannot write manifest: {e}"))?;
+        .map_err(|e| format!("Cannot write manifest: {e}"))
+}
 
+/// The same, for a caller already holding the lock.
+pub(crate) fn process_held(
+    project_id: &str,
+    key: &str,
+    options: &ProcessOptions,
+    emit_log: impl Fn(&str),
+) -> Result<String, String> {
+    let source = psd_path(project_id, key)?;
+    if !source.exists() {
+        return Err(format!("No PSD named {key} in this project"));
+    }
+
+    // Clear the previous run so stale sprites never outlive a re-import.
+    let out = output_dir(project_id, key)?;
+    if out.exists() {
+        let _ = std::fs::remove_dir_all(&out);
+    }
+    let assets_root = store::assets_dir(project_id)?;
+
+    // A print project's file is at its DPI, and the screen wants it at two
+    // pixels to the world pixel: so the file itself goes to `print/`, and a
+    // downsampled copy of it goes to `assets/` where everything else looks.
+    // See `print.rs`.
+    let output = store::read_meta(project_id)
+        .map(|meta| meta.output)
+        .unwrap_or_default();
+    let Some(factor) = output.downsample() else {
+        emit_log(&format!("Parsing psd/{key}.psd"));
+        run_psd_to_json(&source, &assets_root, options, &emit_log)?;
+        emit_log(&format!("Wrote assets/{key}/data.json"));
+        crate::psd_flatten::refresh(project_id, key);
+        return read_manifest(project_id, key);
+    };
+
+    let bytes = std::fs::read(&source).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    // Photoshop is told the resolution the file was made at, so it opens a
+    // letter page as eight and a half inches rather than seventy.
+    if let Some(stamped) = crate::psd_resolution::stamp(&bytes, output.dpi()) {
+        let _ = std::fs::write(&source, &stamped);
+    }
+
+    let print_root = store::print_dir(project_id)?;
+    let print_out = print_root.join(safe_key(key)?);
+    if print_out.exists() {
+        let _ = std::fs::remove_dir_all(&print_out);
+    }
+    emit_log(&format!("Parsing psd/{key}.psd at {} DPI", output.dpi()));
+    // A big layer is cut into square slices named by their row and column, so
+    // the full-resolution run cuts slices `factor` times bigger: `tile_0_0`
+    // then covers the same patch of the page in both trees, and the PDF's
+    // lookup by path finds the right one.
+    let print_options = ProcessOptions {
+        tile_slice_size: Some(
+            ((options.tile_slice_size.unwrap_or(512) as f64) * factor).round() as u32,
+        ),
+        ..options.clone()
+    };
+    run_psd_to_json(&source, &print_root, &print_options, &emit_log)?;
+
+    emit_log(&format!("Downsampling {key} for the screen (÷{factor:.2})"));
+    let (small, warning) = crate::psd_downsample::downsample(&bytes, factor)?;
+    if let Some(reason) = warning {
+        emit_log(&format!(
+            "{key}: {reason} The screen copy shows it without; the print keeps it."
+        ));
+    }
+    let screen_dir = store::project_dir(project_id)?.join(".screen");
+    std::fs::create_dir_all(&screen_dir).map_err(|e| e.to_string())?;
+    let screen = screen_dir.join(format!("{}.psd", safe_key(key)?));
+    std::fs::write(&screen, small).map_err(|e| format!("Cannot write the screen copy: {e}"))?;
+    let processed = run_psd_to_json(&screen, &assets_root, options, &|_: &str| {});
+    let _ = std::fs::remove_file(&screen);
+    processed?;
     emit_log(&format!("Wrote assets/{key}/data.json"));
     // The directory this run cleared may have held the merged picture a tile
     // palette is cut from, and that picture is made of the file that has just

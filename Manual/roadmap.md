@@ -12,6 +12,8 @@ Part of [the Idlewild manual](README.md).
 
 ---
 
+- **Print**: CMYK, bleed and crop marks, and masks on the page. See
+  [Printing](printing.md#not-yet)
 - A tile layer in the **exported game**. The map is saved, and it travels in
   the config the project's own code reads, but nothing in a scaffolded project
   draws it yet — so a published game shows everything except its tiles. The

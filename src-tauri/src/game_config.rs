@@ -83,6 +83,29 @@ fn wants_character(meta: &ProjectMeta) -> bool {
     meta.genre.has_character() && meta.options.character
 }
 
+/// The page around the game, as the config carries it.
+///
+/// A print project's page is not a setting: it is the sheet, one point to the
+/// CSS pixel, centred on whatever the project's own page colour is. So the
+/// size Page Setup would otherwise write is the paper's, and the game is a
+/// fixed box of exactly that — which `main.js` already knows how to lay out,
+/// so a print project needed no second layout to be written for it.
+fn presentation_of(meta: &ProjectMeta) -> crate::project::Presentation {
+    let page = meta.presentation.sane();
+    if !meta.output.is_print() {
+        return page;
+    }
+    let (width, height) = meta.output.page_size();
+    crate::project::Presentation {
+        fixed: true,
+        width,
+        height,
+        centered: true,
+        radius: 0,
+        ..page
+    }
+}
+
 /// The config a fresh project scaffolds with: the shape of the space, and
 /// nothing in it.
 pub fn empty(meta: &ProjectMeta) -> Value {
@@ -228,7 +251,11 @@ fn config(
         // properties and `styles.css` reads them, so a stylesheet somebody has
         // edited keeps whatever they wrote — see `Presentation`. Clamped here
         // rather than trusted, because a `meta.json` is a file on a disk.
-        "presentation": meta.presentation.sane(),
+        "presentation": presentation_of(meta),
+        // A print project's sheet — its size in points, its DPI — or null for
+        // a game. `shared/print.js` reads it to frame the page and to say what
+        // `ExportForPrint()` is printing onto. See `print.rs`.
+        "print": meta.output.to_config(),
         "spawn": spawn,
         "psdKeys": psd_keys,
         "layers": layers,

@@ -35,6 +35,13 @@ mod psd_pipeline;
 mod psd_stack;
 mod psd_rebuild;
 mod psd_write;
+mod print;
+mod project_create;
+mod pdf_writer;
+mod print_pdf;
+mod print_psd;
+mod psd_downsample;
+mod psd_resolution;
 mod publish;
 mod publish_targets;
 mod save_staging;
@@ -567,6 +574,10 @@ pub fn run() {
             projects::create_project,
             projects::set_project_options,
             projects::set_project_presentation,
+            projects::set_project_paper,
+            print_pdf::export_print_pdf,
+            print_pdf::save_print_file,
+            print_psd::export_print_psd,
             projects::rename_project,
             projects::delete_project,
             projects::duplicate_project,

@@ -94,6 +94,10 @@ psd = { git = "https://github.com/laffan/psd", branch = "master" }
 # TIFF and GIF are here for the clipboard rather than for the file pickers:
 # a macOS pasteboard offers TIFF where it offers anything, and an image the
 # pipeline refuses to decode is worse than one it never offered to take.
+# Compressing the images and the page in a print project's PDF — see
+# `print_pdf.rs`. Already in the tree under `zip`; named here because this
+# crate calls it directly.
+flate2 = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tiff", "gif"] }
 
 # Reading the system pasteboard. WebKit hands a page only a web-safe subset

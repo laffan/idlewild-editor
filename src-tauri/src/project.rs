@@ -451,6 +451,11 @@ pub struct ProjectMeta {
     /// every one of those projects already had.
     #[serde(default)]
     pub presentation: Presentation,
+    /// What the project is for — a game, or a printed page — and for a page,
+    /// the sheet and the resolution. Absent on every `meta.json` written
+    /// before it existed, which reads as a code project. See `print.rs`.
+    #[serde(default)]
+    pub output: crate::print::Output,
 }
 
 impl ProjectMeta {
@@ -475,6 +480,7 @@ impl ProjectMeta {
             options,
             publish: PublishTarget::default(),
             presentation: Presentation::default(),
+            output: crate::print::Output::default(),
         }
     }
 }

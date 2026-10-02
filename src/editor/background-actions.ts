@@ -28,6 +28,7 @@
  * simply not the question the sheet is asking.
  */
 
+import { sourceScale } from "../lib/print";
 import { h, ICONS } from "../lib/dom";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
@@ -38,7 +39,6 @@ import { openSheet } from "../lib/sheet";
 import { psd } from "../lib/ipc";
 import type { Background, Cell, Selection } from "../lib/types";
 import {
-  EXPORT_SCALE,
   IMPORT_SCALE,
   marksForSelection,
   scaleMarks,
@@ -221,8 +221,8 @@ function backdropSize(
     from,
     to,
     bounds,
-    width: Math.max(1, Math.round(bounds.width * EXPORT_SCALE)),
-    height: Math.max(1, Math.round(bounds.height * EXPORT_SCALE)),
+    width: Math.max(1, Math.round(bounds.width * sourceScale())),
+    height: Math.max(1, Math.round(bounds.height * sourceScale())),
   };
 }
 
@@ -294,7 +294,7 @@ async function writeBackground(
           // than being centred on the anchor like an imported image.
           art: { x: bounds.x - anchorWorld.x, y: bounds.y - anchorWorld.y },
         },
-        EXPORT_SCALE,
+        sourceScale(),
       ),
     );
     await progress.stage("Loading the artwork…");

@@ -42,6 +42,8 @@ void mountEditor(
     updatedAt: Date.now(),
     layerCount: 3,
     options,
+    // A print project, when a script asks for one — see `lib/print.ts`.
+    output: (window as any).__output,
   },
   { onBack: () => {} },
 );

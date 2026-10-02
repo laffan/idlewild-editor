@@ -24,6 +24,8 @@ import type { HistoryUi } from "./history";
 import { openImportAssets } from "./import-assets";
 import { pasteTargetFor, type Intake } from "./intake";
 import { openPageSetup } from "./page-setup";
+import { openPrintSetup } from "./print-setup";
+import { isPrint } from "../lib/print";
 import { openExport } from "./sheets";
 import { openPublish } from "./publish";
 
@@ -86,8 +88,16 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
     // file. Its `index.html` and `style.css` are the author's outright, so a
     // sheet that wrote values nothing reads would be the editor claiming a
     // page it does not own. `undefined` takes the item off the menu.
-    ...(isPhaserScaffold(meta.genre)
-      ? { onPageSetup: () => openPageSetup(meta, deps.reloadGame) }
-      : {}),
+    //
+    // A print project's page is a sheet of paper rather than a layout, so its
+    // Page Setup is the paper and its orientation — see `print-setup.ts`.
+    ...(isPrint(meta)
+      ? { onPageSetup: () => openPrintSetup(meta, deps.reloadGame) }
+      : isPhaserScaffold(meta.genre)
+        ? { onPageSetup: () => openPageSetup(meta, deps.reloadGame) }
+        : {}),
+    // Play is Export on a print project: the same game, run until
+    // `ExportForPrint()` and then shown as the PDF it printed.
+    playLabel: isPrint(meta) ? "Export" : "Play",
   };
 }

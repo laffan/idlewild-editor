@@ -29,6 +29,7 @@ mod options;
 mod painting;
 mod palette;
 mod presentation;
+mod print;
 mod publishing;
 mod rewrite;
 mod scaffold_code;

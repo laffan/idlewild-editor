@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { guideBox } from "../screen-guide";
+import { guideBox, pageBox } from "../screen-guide";
 import type { Viewport } from "../../drawing";
 
 /** A camera looking at the world origin from the middle of an 800×600 canvas. */
@@ -85,5 +85,21 @@ describe("the boundary", () => {
   it("falls back to 1× rather than dividing by a broken default zoom", () => {
     expect(guideBox(view(), SCREEN, 0).frame.width).toBe(SCREEN.width);
     expect(guideBox(view(), SCREEN, -2).frame.height).toBe(SCREEN.height);
+  });
+});
+
+describe("pageBox", () => {
+  // A print project's sheet hangs from the origin rather than centring on it,
+  // and only the camera's zoom scales it: the game looks at the page at 1×.
+  it("puts the sheet's top-left corner on the origin, life size at 1×", () => {
+    const box = pageBox(view(), { width: 612, height: 792 });
+    expect(box.x).toBe(400);
+    expect(box.y).toBe(300);
+    expect(box.frame).toEqual({ x: 400, y: 300, width: 612, height: 792 });
+  });
+
+  it("grows with the camera and stays on the origin", () => {
+    const box = pageBox(view({ zoom: 2 }), { width: 612, height: 792 });
+    expect(box.frame).toEqual({ x: 400, y: 300, width: 1224, height: 1584 });
   });
 });

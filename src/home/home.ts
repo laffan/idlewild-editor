@@ -158,6 +158,7 @@ export function renderHome(
               choice.gridSize,
               choice.scaffold,
               choice.options,
+              choice.output,
             );
             const notes = [
               meta.projection,
@@ -172,6 +173,9 @@ export function renderHome(
               // would be reporting the absence of something never offered.
               ...(hasCharacter(choice.scaffold) && !choice.options.character
                 ? ["no character"]
+                : []),
+              ...(choice.output.kind === "print"
+                ? [`print at ${choice.output.dpi} DPI`]
                 : []),
             ];
             log.info(`Created ${meta.name} (${notes.join(", ")})`);

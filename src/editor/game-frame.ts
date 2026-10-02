@@ -25,6 +25,9 @@ import { h } from "../lib/dom";
 import { assetBase } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { LogValue } from "../lib/log-value";
+import { isPrint } from "../lib/print";
+import type { ProjectMeta } from "../lib/types";
+import { isPrintPage, PrintExport } from "./print-export";
 
 /** What the injected bridge posts, and nothing else is listened to. */
 const CONSOLE_MESSAGE = "idlewild-game-console";
@@ -35,15 +38,47 @@ export class GameFrame {
   private frame: HTMLIFrameElement | null = null;
   private base: string | null = null;
   private running = false;
+  /**
+   * The Export section's bar and PDF preview, on a print project — see
+   * `print-export.ts`. They live in this frame's root because they are about
+   * the game in it: the page comes out of that game, and Run again restarts
+   * it.
+   */
+  private readonly exporter: PrintExport | null;
+  private exporting = false;
 
-  constructor(projectId: string) {
-    this.projectId = projectId;
+  constructor(meta: ProjectMeta) {
+    this.projectId = meta.id;
     this.root = h("div", { class: "game-frame hidden" });
+    this.exporter = isPrint(meta)
+      ? new PrintExport(meta, {
+          post: (message) => this.frame?.contentWindow?.postMessage(message, "*"),
+          reload: () => this.reload(),
+          base: () => this.base,
+        })
+      : null;
+    if (this.exporter) this.root.append(this.exporter.bar, this.exporter.preview);
     window.addEventListener("message", this.onMessage);
+  }
+
+  /**
+   * Whether the frame is the Export section — the game beside the PDF it
+   * prints — or the plain game Code shows. Only a print project has the
+   * former; on a game this does nothing.
+   */
+  setExporting(on: boolean): void {
+    if (!this.exporter) return;
+    this.exporting = on;
+    this.root.classList.toggle("exporting", on);
   }
 
   get isRunning(): boolean {
     return this.running;
+  }
+
+  /** Whether this is a print project's frame, with an Export section. */
+  get isPrint(): boolean {
+    return this.exporter !== null;
   }
 
   /**
@@ -104,6 +139,8 @@ export class GameFrame {
     // bridge; without it the page served here is byte-for-byte the published
     // one.
     const url = `${this.base}/game/index.html?idlewild=console&t=${Date.now()}`;
+    // A fresh game has printed nothing yet.
+    this.exporter?.waiting();
     const frame = h("iframe", {
       class: "game-frame-view",
       src: url,
@@ -127,6 +164,15 @@ export class GameFrame {
    * `log-value.ts` describes.
    */
   private readonly onMessage = (event: MessageEvent): void => {
+    // A page from `ExportForPrint()` — only from the game this frame started.
+    if (this.exporter && isPrintPage(event.data)) {
+      if (event.source !== this.frame?.contentWindow) return;
+      // In Code the game stops where it is — which is what the call means —
+      // and the PDF is Export's to make, where there is somewhere to show it.
+      if (this.exporting) void this.exporter.receive(event.data);
+      else log.info("ExportForPrint() — the page is held; open Export to print it");
+      return;
+    }
     const data = event.data as
       | { source?: string; level?: string; args?: unknown; site?: unknown }
       | null;

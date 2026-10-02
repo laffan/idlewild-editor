@@ -16,6 +16,7 @@
 //!   thumbnail.png            if one has been taken
 //!   psd/                     the source files — the reason this format exists
 //!   assets/                  psd-to-json's output, so an import opens without a re-parse
+//!   print/                   a print project's full-resolution output, beside it
 //!   game/                    the project's own code, as it was edited
 //! ```
 //!
@@ -54,7 +55,7 @@ const FORMAT: u32 = 1;
 /// One list, read in both directions: an export puts nothing else in, and an
 /// import takes nothing else out. That second half is the guard — a `.idlewild`
 /// is an untrusted zip, and this is what stops one writing where it likes.
-const CARRIED_DIRS: [&str; 3] = ["psd/", "assets/", "game/"];
+const CARRIED_DIRS: [&str; 4] = ["psd/", "assets/", "print/", "game/"];
 const CARRIED_FILES: [&str; 2] = ["doc.json", "thumbnail.png"];
 
 /// Ceilings on what an import will unpack, so a hostile or broken file cannot
@@ -100,6 +101,12 @@ pub struct ArchivedProject {
     /// defaults.
     #[serde(default)]
     pub presentation: Presentation,
+    /// Game or page, and a page's sheet and DPI. It travels because the PSDs
+    /// in the archive were written at that DPI, and a print project opened as
+    /// a game would place every one of them at the wrong size. Absent on an
+    /// older archive, which is a game.
+    #[serde(default)]
+    pub output: crate::print::Output,
 }
 
 /// **Export project**: the project itself, as a `.idlewild` file — source PSDs
@@ -149,6 +156,7 @@ pub fn export(project_id: &str, dest: &Path) -> Result<(), String> {
             layer_count: meta.layer_count,
             options: meta.options,
             presentation: meta.presentation.clone(),
+            output: meta.output.clone(),
         },
     };
     zip.start_file(MANIFEST, options).map_err(|e| e.to_string())?;
@@ -335,6 +343,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
     meta.updated_at = now_ms();
     meta.layer_count = project.layer_count;
     meta.presentation = project.presentation.clone();
+    meta.output = project.output.clone();
     store::write_meta(&meta)?;
 
     if !store::game_dir(id)?.join("index.html").exists() {

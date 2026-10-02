@@ -49,6 +49,7 @@
  * the second becomes `roof-2`. See `psd_pipeline::free_key`.
  */
 
+import { sourceScale } from "../lib/print";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { clear, h } from "../lib/dom";
 import { Grid } from "../lib/grid";
@@ -371,7 +372,9 @@ async function importAll(
     const result = await bring(at, index);
     if (!result) continue;
     landed++;
-    offset += result.width * IMPORT_SCALE + gap;
+    // The file's width in world pixels: over the source scale, which is the
+    // same as `IMPORT_SCALE` on a game and the DPI's on a print project.
+    offset += result.width / sourceScale() + gap;
   }
 
   if (landed === count) {

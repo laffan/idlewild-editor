@@ -12,6 +12,7 @@
  */
 
 import type { PublishTarget } from "./publish-target";
+import type { Output } from "./print";
 
 /**
  * The three templates.
@@ -254,4 +255,7 @@ export interface ProjectMeta {
   /** The page around the game — absent on projects made before Page Setup
    *  existed. See `projectPresentation`. */
   presentation?: Presentation;
+  /** Game or page — absent on every project made before print existed,
+   *  which is a game. See `lib/print.ts`. */
+  output?: Output;
 }

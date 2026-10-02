@@ -23,6 +23,16 @@ over it, and **Vanilla** is a page, a stylesheet and a script beside the
 exported assets. Drawing is identical on all four — what the choice decides is
 the program on the other side of the export, not the canvas in front of you.
 
+And a project can make a **page** instead of a game. Pick **Print** under
+Output on the New Project sheet, with a resolution — 300 or 600 DPI — and a
+sheet of paper. The canvas and the code are the same; the game's screen is the
+sheet, one point to the world pixel, and calling `ExportForPrint()` in your
+code stops everything and writes the page as a print-ready PDF, a layered PSD,
+or both. Every PSD in a print project is written at its DPI, and the canvas and
+your code work with a downsampled copy, so creative coding against
+print-resolution artwork is as quick as against a game's. See
+[Printing](Manual/printing.md).
+
 Three ideas carry most of it.
 
 **Everything you bring in becomes a PSD.** A dropped PNG, a pasted screenshot,
@@ -68,6 +78,9 @@ Then, in the app:
    and tilt, an Apple Pencil if you have one. See [Drawing](Manual/drawing.md).
 4. **Play**, from the header, to run the project's own code over what you have
    made. See [Code, Play and the page around the game](Manual/code-and-play.md).
+   On a print project it is **Export**, which runs the same code until
+   `ExportForPrint()` and shows the PDF or PSD beside it — see
+   [Printing](Manual/printing.md).
 5. **Export** or **Publish**, from the menu, when it is worth keeping. See
    [Exporting and importing](Manual/exporting.md).
 
@@ -96,6 +109,7 @@ One page per area, in roughly the order you meet them.
 | [The properties sidebar](Manual/inspector.md) | Three zones, folding sections, and where the explanations live |
 | [A PSD's own layers](Manual/psd-layers.md) | The stack inside a placed file, and PSD Edit mode |
 | [Code, Play and the page around the game](Manual/code-and-play.md) | The project's own code, running it, the console, the reference, Page Setup |
+| [Printing](Manual/printing.md) | Print projects: a page instead of a game, `ExportForPrint()`, and the PDF and PSD it writes |
 | [Publishing](Manual/publishing.md) | SSH and GitHub, the logins, and what a publish sends |
 | [Exporting and importing](Manual/exporting.md) | The three exits that hand you a file, and the two doors back in |
 | [PSD layer naming](Manual/psd-layer-naming.md) | The pipe convention psd-to-json reads, for files drawn elsewhere |

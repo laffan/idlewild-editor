@@ -18,6 +18,8 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   thumbnail.png    written by the editor from the live canvas
   psd/             source PSDs, imported or converted
   assets/<key>/    psd-to-json output: data.json + sprites/tiles
+  print/<key>/     a print project's full-resolution output — see printing.md
+  print-out/       the last page a print project exported: page.pdf, page.psd
   game/            the runnable project the code modal edits and Publish zips
 ```
 
@@ -156,6 +158,14 @@ either sheet for `p2p` or `vanilla`: the switch is read by
 `js/shared/character.js`, which those two do not write, so `store` clamps the
 stored value to `false` and `game_config` writes `false` whatever a
 hand-edited `meta.json` says.
+
+### Output: a game or a page
+
+`ProjectMeta.output` says what the project is *for* — a game, which every
+project made before it existed is, or a printed page with a DPI, a sheet of
+paper and the formats Export writes. It is the one field that changes what the
+pipeline does with a PSD, and the reasons are in
+[Print projects](printing.md).
 
 ### Options, and which of them can change
 

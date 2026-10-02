@@ -77,6 +77,9 @@ export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
       deps.header.setMode(next);
       deps.shell.classList.toggle("play-mode", next === "play");
       deps.shell.classList.toggle("code-mode", next === "code");
+      // On a print project the third section is Export: the game beside the
+      // PDF it prints. Code keeps the plain game.
+      deps.gameFrame.setExporting(next === "play");
       deps.scene()?.setMode(next);
       // Code keeps the left sidebar, and turns it into a directory: the game
       // is over the canvas, so there is nothing in that column to act on, and
@@ -93,7 +96,9 @@ export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
       }
       log.info(
         next === "play"
-          ? "Play — running this project's own code"
+          ? deps.gameFrame.isPrint
+            ? "Export — running this project's code until ExportForPrint()"
+            : "Play — running this project's own code"
           : "Code — the game is running beside it; a save restarts it",
       );
       runGame();

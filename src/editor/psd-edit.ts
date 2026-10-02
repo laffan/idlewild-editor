@@ -32,6 +32,8 @@
  * wrong button.
  */
 
+import { sourceScale } from "../lib/print";
+import { EXPORT_SCALE } from "./import-anchor";
 import {
   rasteriseStrokes,
   strokesBox,
@@ -453,6 +455,11 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     if (!scene || !mode || !target || !frame || !held) return;
 
     const strokes = sessionStrokes();
+    // World pixels per pixel of the *file*. The placement's scale is against
+    // the processed manifest, which on a print project is the screen copy;
+    // the file itself is `sourceScale() / EXPORT_SCALE` times denser, and the
+    // ink has to land at the file's own resolution. On a game the two agree.
+    const fileScale = (mode.scale * EXPORT_SCALE) / sourceScale();
     // With the erase mask, because this is the one place in the editor whose
     // pixels land on artwork that is already there. A conversion draws on a
     // clear ground and its erasers have nothing to reach past the session's
@@ -461,7 +468,7 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     const raster = rasteriseStrokes(
       strokes,
       options.drawing()?.atlas,
-      1 / mode.scale,
+      1 / fileScale,
       { eraseMask: true },
     );
     if (!raster) {
@@ -488,8 +495,8 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
         target.index,
         target.name,
         {
-          x: Math.round((raster.bounds.x - frame.x) / mode.scale),
-          y: Math.round((raster.bounds.y - frame.y) / mode.scale),
+          x: Math.round((raster.bounds.x - frame.x) / fileScale),
+          y: Math.round((raster.bounds.y - frame.y) / fileScale),
           width: raster.width,
           height: raster.height,
           rgbaBase64: toBase64(raster.rgba),

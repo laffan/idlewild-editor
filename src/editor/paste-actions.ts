@@ -18,6 +18,7 @@
  * one before it turned out to be. See `editor/import-assets.ts`.
  */
 
+import { sourceScale } from "../lib/print";
 import { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
@@ -27,7 +28,6 @@ import { clipboardImage } from "./clipboard";
 import { pasteName } from "./paste";
 import { trimTransparent } from "./trim-alpha";
 import {
-  EXPORT_SCALE,
   footprintForBox,
   IMPORT_SCALE,
   marksForBox,
@@ -129,10 +129,12 @@ export async function pasteFromClipboard(
  * *top-left* space, which is only the middle of the footprint by accident —
  * so the artwork says where it goes rather than being centred on a corner.
  *
- * Marks are in the PSD's own pixels and the box is in world pixels, and an
- * import is displayed at half size, so the whole thing scales up by
- * `EXPORT_SCALE` on the way out — the same conversion a rasterised sketch
- * makes, for the same reason.
+ * Marks are in the PSD's own pixels and the box is in world pixels, so the
+ * whole thing scales up by the project's source scale on the way out — the
+ * same conversion a rasterised sketch makes, for the same reason. On a game
+ * that is `EXPORT_SCALE`, and an image is the half size every import lands
+ * at; on a print project it is the DPI over 72, so a picture arrives at the
+ * size its pixels make at the project's resolution. See `lib/print.ts`.
  */
 export function planFor(
   grid: Grid,
@@ -141,10 +143,10 @@ export function planFor(
 ): { anchor: Cell; marks: AnchorMarks } {
   const centre = grid.cellToWorld(at);
   const box: Rect = {
-    x: centre.x - (size.width * IMPORT_SCALE) / 2,
-    y: centre.y - (size.height * IMPORT_SCALE) / 2,
-    width: size.width * IMPORT_SCALE,
-    height: size.height * IMPORT_SCALE,
+    x: centre.x - (size.width / sourceScale()) / 2,
+    y: centre.y - (size.height / sourceScale()) / 2,
+    width: size.width / sourceScale(),
+    height: size.height / sourceScale(),
   };
 
   // A grid that does not snap has one-pixel spaces, so asking which of them
@@ -152,7 +154,7 @@ export function planFor(
   // space — which is what a selection in a blank project already is.
   if (!grid.snaps) {
     const anchor = grid.worldToCell({ x: box.x, y: box.y });
-    return { anchor, marks: scaleMarks(marksForBox(grid, box, anchor), EXPORT_SCALE) };
+    return { anchor, marks: scaleMarks(marksForBox(grid, box, anchor), sourceScale()) };
   }
 
   const { cells, anchor } = footprintForBox(grid, box);
@@ -161,5 +163,5 @@ export function planFor(
     x: box.x - world.x,
     y: box.y - world.y,
   });
-  return { anchor, marks: scaleMarks(marks, EXPORT_SCALE) };
+  return { anchor, marks: scaleMarks(marks, sourceScale()) };
 }

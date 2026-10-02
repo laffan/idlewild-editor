@@ -11,6 +11,7 @@
 //! were already a section of their own there, and every one of them is a thin
 //! wrapper over `store` — which is where the rules actually live.
 
+use crate::print::Output;
 use crate::project::{GameOptions, Presentation, ProjectMeta, Projection, Scaffold};
 use crate::store;
 
@@ -31,6 +32,7 @@ pub fn create_project(
     grid_size: u32,
     genre: Option<String>,
     options: Option<GameOptions>,
+    output: Option<Output>,
 ) -> Result<ProjectMeta, String> {
     let projection = match projection.as_str() {
         "isometric" => Projection::Isometric,
@@ -53,13 +55,27 @@ pub fn create_project(
     if projection == Projection::Isometric && scaffold == Scaffold::Platformer {
         return Err("An isometric project cannot be a platformer".into());
     }
-    store::create_project(
+    store::create_project_for(
         &name,
         projection,
         scaffold,
         grid_size,
         options.unwrap_or_default(),
+        output.unwrap_or_default(),
     )
+}
+
+/// Change the sheet a print project is laid out on: which paper, and which
+/// way round, and whether Export writes a PDF, a PSD or both. What Page Setup
+/// writes on a print project.
+#[tauri::command]
+pub fn set_project_paper(
+    id: String,
+    paper: String,
+    landscape: bool,
+    formats: Option<String>,
+) -> Result<ProjectMeta, String> {
+    store::set_paper(&id, &paper, landscape, formats.as_deref())
 }
 
 /// Change how a project renders: pixel art, whole-pixel drawing, the zoom a

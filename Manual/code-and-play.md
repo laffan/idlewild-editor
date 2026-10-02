@@ -268,6 +268,10 @@ Part of [the Idlewild manual](README.md).
 
 ## Page Setup
 
+- On a **print project** Page Setup is the sheet of paper instead — its size,
+  its orientation, what Export writes, and the resolution, reported. The rest
+  of this section is about a game's page. See [Printing](printing.md)
+
 - **Page Setup**, beside Project Options in the menu — on every scaffold but
   Vanilla, which has no scaffolded page for it to describe — is the HTML and
   CSS *around* the game rather than the game. Six settings: a **fixed size** with a

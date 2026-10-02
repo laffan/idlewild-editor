@@ -31,8 +31,8 @@
  * placements. The console says which files that happened to.
  */
 
+import { sourceScale } from "../lib/print";
 import {
-  EXPORT_SCALE,
   IMPORT_SCALE,
   footprintForBox,
   marksForBox,
@@ -192,10 +192,10 @@ export async function extractSelection(deps: ExtractDeps): Promise<void> {
   const parts: MergePart[] = placements.map((placement) => ({
     key: placement.psdKey,
     path: placement.layerPath,
-    left: (placement.x - box.x) * EXPORT_SCALE,
-    top: (placement.y - box.y) * EXPORT_SCALE,
-    width: placement.width * EXPORT_SCALE,
-    height: placement.height * EXPORT_SCALE,
+    left: (placement.x - box.x) * sourceScale(),
+    top: (placement.y - box.y) * sourceScale(),
+    width: placement.width * sourceScale(),
+    height: placement.height * sourceScale(),
   }));
 
   const progress = openPsdProgress(
@@ -208,8 +208,8 @@ export async function extractSelection(deps: ExtractDeps): Promise<void> {
     const result = await psd.merge(
       deps.projectId,
       extractedName(placements),
-      Math.max(1, Math.round(box.width * EXPORT_SCALE)),
-      Math.max(1, Math.round(box.height * EXPORT_SCALE)),
+      Math.max(1, Math.round(box.width * sourceScale())),
+      Math.max(1, Math.round(box.height * sourceScale())),
       parts,
       scaleMarks(
         {
@@ -218,7 +218,7 @@ export async function extractSelection(deps: ExtractDeps): Promise<void> {
             : marksForBox(grid, box, anchor)),
           margin: psdMargin(grid),
         },
-        EXPORT_SCALE,
+        sourceScale(),
       ),
     );
 

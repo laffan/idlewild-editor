@@ -19,6 +19,7 @@
  * So text is temporary on purpose, and this is the one exit it has.
  */
 
+import { sourceScale } from "../lib/print";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
 import { psd, toBase64 } from "../lib/ipc";
@@ -27,7 +28,6 @@ import { plainText } from "../lib/text-markdown";
 import type { Selection, TextItem } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import {
-  EXPORT_SCALE,
   IMPORT_SCALE,
   footprintForBox,
   marksForBox,
@@ -97,7 +97,7 @@ export async function convertTextToPsd(
           // somewhere to paint the shadow under the letters.
           margin: psdMargin(grid),
         },
-        EXPORT_SCALE,
+        sourceScale(),
       ),
     );
 
@@ -132,7 +132,7 @@ function textPixels(
   item: TextItem,
   grid: Grid,
 ): { rgba: Uint8ClampedArray; width: number; height: number } | null {
-  const canvas = rasteriseText(item, EXPORT_SCALE, planeFor(item, grid));
+  const canvas = rasteriseText(item, sourceScale(), planeFor(item, grid));
   const ctx = canvas?.getContext("2d", { willReadFrequently: true });
   if (!canvas || !ctx) return null;
   return {

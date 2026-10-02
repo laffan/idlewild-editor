@@ -82,6 +82,24 @@
  * Project* and nothing else on the screen opens it, so a 22px heading saying
  * the same word spends the best line on the one thing nobody needed telling.
  * The dialog still carries the name for anything reading the page.
+ *
+ * ## Output, last
+ *
+ * The final question is what the project is *for*. **Code** is everything
+ * above as it has always been: a game, played and published. **Print** keeps
+ * the same canvas and the same code and points them at a sheet of paper — the
+ * page is a fixed rectangle of world, one world pixel to the point, and
+ * `ExportForPrint()` in the project's own code is the moment a PDF is made of
+ * it. Print asks one more thing, the **resolution**, because every PSD the
+ * project writes is written at it: 300 or 600 DPI. That is fixed once the
+ * project exists, like the template; the paper is not, and Page Setup has it.
+ * So is what Export writes — a PDF, a layered PSD at that resolution, or both.
+ *
+ * Vanilla is greyed out under Print, the way Platformer is under Isometric:
+ * `ExportForPrint()` reads the page off a running Phaser scene, and a vanilla
+ * page has no scene to read. Picking Print on Vanilla moves the scaffolding to
+ * Blank PSD to Phaser, which is the natural shape of a print project anyway —
+ * the artwork placed, and nothing written above it but what you write.
  */
 
 import { openSheet } from "../lib/sheet";
@@ -92,6 +110,15 @@ import {
   optionSwitch,
   optionText,
 } from "../lib/options-controls";
+import {
+  DEFAULT_OUTPUT,
+  DPIS,
+  FORMATS,
+  PAPERS,
+  type PrintFormats,
+  type Output,
+  type OutputKind,
+} from "../lib/print";
 import {
   DEFAULT_OPTIONS,
   hasCharacter,
@@ -119,6 +146,7 @@ export interface NewProjectChoice {
   scaffold: Scaffold;
   gridSize: number;
   options: GameOptions;
+  output: Output;
 }
 
 export function openNewProject(
@@ -129,6 +157,7 @@ export function openNewProject(
   let gridSize = 64;
   let name = "";
   const options: GameOptions = { ...DEFAULT_OPTIONS };
+  const output: Output = { ...DEFAULT_OUTPUT };
 
   const sheet = openSheet({
     title: "New Project",
@@ -150,6 +179,96 @@ export function openNewProject(
       setCharacterOffered();
     },
   );
+
+  // ── output ────────────────────────────────────────────────────────────────
+
+  const dpiSeg = optionSegmented(
+    DPIS.map((dpi) => ({ value: String(dpi), label: `${dpi} DPI` })),
+    String(output.dpi),
+    (value) => (output.dpi = Number(value)),
+  );
+  const paperSeg = optionSegmented(
+    PAPERS.map((paper) => ({ value: paper.id, label: paper.label })),
+    output.paper,
+    (value) => (output.paper = value),
+  );
+  const orientationSeg = optionSegmented(
+    [
+      { value: "portrait", label: "Portrait" },
+      { value: "landscape", label: "Landscape" },
+    ],
+    "portrait",
+    (value) => (output.landscape = value === "landscape"),
+  );
+  const dpiRow = optionRow({
+    title: "Resolution",
+    hint:
+      "How many pixels to the inch every PSD in the project is written at. " +
+      "The canvas and your code work with a lighter copy of each file; the " +
+      "PDF is drawn from these. Fixed once the project exists, because a file " +
+      "made at 300 has no 600's worth of pixels to give.",
+    control: dpiSeg.root,
+  });
+  const paperRow = optionRow({
+    title: "Paper",
+    hint:
+      "The sheet the page is laid out on. Its top-left corner is the world's " +
+      "origin and one point is one world pixel. It can be changed later in " +
+      "Page Setup.",
+    control: paperSeg.root,
+  });
+  const orientationRow = optionRow({
+    title: "Orientation",
+    control: orientationSeg.root,
+  });
+  const formatsSeg = optionSegmented(
+    FORMATS.map((row) => ({ value: row.value, label: row.label })),
+    output.formats,
+    (value) => (output.formats = value as PrintFormats),
+  );
+  const formatsRow = optionRow({
+    title: "Export as",
+    hint:
+      "What Export writes when the page is printed. The PDF is the page as it " +
+      "prints. The PSD is the same page as layers at full resolution — one per " +
+      "thing on the page — to carry on with in Photoshop. Changeable later, in " +
+      "Page Setup or in Export itself.",
+    control: formatsSeg.root,
+  });
+  const outputSeg = optionSegmented(
+    [
+      { value: "code", label: "Code" },
+      { value: "print", label: "Print" },
+    ],
+    output.kind,
+    (value) => {
+      output.kind = value as OutputKind;
+      setOutputShown();
+    },
+  );
+
+  /**
+   * Show the print rows under Print, and keep the scaffolding to one that can
+   * print. Vanilla is greyed rather than hidden, for the reason Platformer is
+   * under Isometric: greyed says "not with that".
+   */
+  function setOutputShown(): void {
+    const print = output.kind === "print";
+    dpiRow.hidden = !print;
+    paperRow.hidden = !print;
+    orientationRow.hidden = !print;
+    formatsRow.hidden = !print;
+    // A page is looked at at 1× — one point to the world pixel — so the zoom
+    // a game opens at is not a question a print project has.
+    zoomRow.hidden = print;
+    options.defaultZoom = print ? 1 : wantsZoom;
+    scaffoldSeg.setEnabled("vanilla", !print);
+    if (print && scaffold === "vanilla") {
+      scaffold = "p2p";
+      scaffoldSeg.select("p2p");
+      setCharacterOffered();
+    }
+  }
 
   const templateSeg = optionSegmented(
     [
@@ -194,8 +313,22 @@ export function openNewProject(
   const zoomSeg = optionSegmented(
     ZOOMS.map((zoom) => ({ value: String(zoom), label: `${zoom}×` })),
     String(options.defaultZoom),
-    (value) => (options.defaultZoom = Number(value)),
+    (value) => {
+      options.defaultZoom = Number(value);
+      wantsZoom = options.defaultZoom;
+    },
   );
+
+  const zoomRow = optionRow({
+    title: "Default zoom",
+    hint:
+      "What a scene opens at, here and in the game — 8px art usually " +
+      "wants 3× or 4×.",
+    control: zoomSeg.root,
+  });
+  // Kept beside `options.defaultZoom` for the reason `wantsCharacter` is:
+  // Print takes the row away, and Code should give back what was picked.
+  let wantsZoom = options.defaultZoom;
 
   // Pixel perfect is the pair of settings that go together: nearest-neighbour
   // textures, and drawing on whole pixels. One switch, because a project that
@@ -304,13 +437,7 @@ export function openNewProject(
         optionGroup({
           title: "Rendering",
           rows: [
-            optionRow({
-              title: "Default zoom",
-              hint:
-                "What a scene opens at, here and in the game — 8px art usually " +
-                "wants 3× or 4×.",
-              control: zoomSeg.root,
-            }),
+            zoomRow,
             optionRow({
               title: "Pixel perfect",
               hint:
@@ -321,10 +448,24 @@ export function openNewProject(
             characterRow,
           ],
         }),
+        // Last, because it is the one question about where the work goes
+        // rather than how it is made.
+        optionGroup({
+          title: "Output",
+          hint: () => outputNote(output.kind),
+          rows: [
+            optionRow({ control: outputSeg.root }),
+            dpiRow,
+            paperRow,
+            orientationRow,
+            formatsRow,
+          ],
+        }),
       ],
       true,
     ),
   );
+  setOutputShown();
 
   const create = () => {
     sheet.close();
@@ -334,6 +475,7 @@ export function openNewProject(
       scaffold,
       gridSize,
       options: { ...options },
+      output: { ...output },
     });
   };
 
@@ -416,4 +558,17 @@ function writes(scaffold: Scaffold): string {
         "the moment the project is made."
       );
   }
+}
+
+/** What the picked output means, behind the `?` on its heading. */
+function outputNote(kind: OutputKind): string {
+  return kind === "print"
+    ? "A page rather than a game. The canvas, the tools and the code are the " +
+        "same; the game's screen is the sheet, one point to the world pixel " +
+        "from the origin, and calling ExportForPrint() in your code stops " +
+        "everything and prints the page as a PDF at the resolution below. " +
+        "Every PSD is written at that resolution, and the canvas and your code " +
+        "work with a lighter copy. Play becomes Export, with the PDF beside it."
+    : "A game: played in the editor, published as a site. What every project " +
+        "has always been.";
 }

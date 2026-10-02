@@ -423,3 +423,36 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 - An extrusion is greybox: one palette, three shades, no way to colour it.
   What comes out is a stand-in to paint over in Photoshop rather than
   finished artwork, which is what the marks in the file are for.
+
+## Print projects
+
+See [Print projects](printing.md) for how they work.
+
+- **The PDF is RGB.** A print shop that wants CMYK converts it; an ICC
+  profile and a conversion are a colour-management feature of their own.
+- **No bleed, no crop marks.** The PDF's MediaBox and TrimBox are both the
+  sheet. A bleed is a larger page with the art carried past the trim, which is
+  a change to where the page sits in the world rather than to the writer.
+- **Masks and clipping do not reach the screen copy.** `psd_downsample`
+  rebuilds the file with the fork's builder, which cannot write either — the
+  same limit as every rewrite here. The print side reads the original and keeps
+  them in its manifest, but the PDF draws each sprite's pixels without
+  psd-to-phaser's mask filter, so a masked layer prints unmasked too.
+- **A tile layer's merged palette prints from the screen copy.**
+  `psd_flatten` writes it into `assets/` only. The Export bar names every
+  sprite that had no full-resolution twin, so this is reported rather than
+  silent.
+- **The PSD's flattened copy ignores blend modes.** The layers carry them;
+  the composite under them is normal-over. Photoshop recomposites on open.
+- **A multi-atlas texture, a cropped sprite and a RenderTexture print as
+  rasters**, rendered at print resolution by the game rather than drawn from a
+  file. Their source is more than one file, a sub-rectangle `print.js` does not
+  yet carry, or pixels that were never a file.
+- **600 DPI conversions are big canvases.** A full-page fill converted at 600
+  DPI is 5100 × 6600, past the area iOS lets a canvas have. The desktop
+  handles it; on an iPad a conversion that size can fail, and 300 DPI is the
+  safe choice for full-page work.
+- **The output kind and the DPI cannot change.** Every PSD was written at
+  that DPI, so changing it would mean re-rasterising work that may have been
+  painted over in Photoshop since.
+

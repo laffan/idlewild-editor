@@ -34,6 +34,7 @@
  */
 
 import { h } from "../lib/dom";
+import { currentPage } from "../lib/print";
 import type { Viewport } from "../drawing";
 
 /** A box in CSS pixels. */
@@ -80,6 +81,24 @@ export function guideBox(
   const width = screen.width * scale;
   const height = screen.height * scale;
   return { x, y, frame: { x: x - width / 2, y: y - height / 2, width, height } };
+}
+
+/**
+ * Where a print project's sheet falls on the canvas.
+ *
+ * Not centred, and not scaled by any zoom but the camera's: a page is a fixed
+ * rectangle of world — its top-left corner on the origin, one point to the
+ * world pixel — and the game that prints it looks at it at 1×. So the dashes
+ * are the sheet itself, and the crosshair sits on its corner.
+ */
+export function pageBox(view: Viewport, page: Size): GuideBox {
+  const x = -view.originX * view.zoom;
+  const y = -view.originY * view.zoom;
+  return {
+    x,
+    y,
+    frame: { x, y, width: page.width * view.zoom, height: page.height * view.zoom },
+  };
 }
 
 export interface ScreenGuideConfig {
@@ -173,7 +192,11 @@ export class ScreenGuide {
     if (!view || !screen || screen.width <= 0 || screen.height <= 0) return;
     if (!this.showing) return;
 
-    const box = guideBox(view, screen, this.config.defaultZoom());
+    const page = currentPage();
+    const box = page
+      ? pageBox(view, page)
+      : guideBox(view, screen, this.config.defaultZoom());
+    this.frame.classList.toggle("is-page", page !== null);
     this.cross.style.transform = `translate(${box.x}px, ${box.y}px)`;
     this.frame.style.width = `${box.frame.width}px`;
     this.frame.style.height = `${box.frame.height}px`;

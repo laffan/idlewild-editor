@@ -17,6 +17,7 @@ import type {
   Projection,
   Scaffold,
 } from "./types";
+import { DEFAULT_OUTPUT, type Output, type PrintFormats } from "./print";
 
 /**
  * How many bytes are encoded as one standalone piece.
@@ -211,6 +212,7 @@ export const projects = {
     gridSize: number,
     scaffold: Scaffold,
     options: GameOptions,
+    output: Output = DEFAULT_OUTPUT,
   ) =>
     invoke<ProjectMeta>("create_project", {
       name,
@@ -218,7 +220,20 @@ export const projects = {
       gridSize,
       genre: scaffold,
       options,
+      output,
     }),
+  /**
+   * The sheet a print project is laid out on — what Page Setup writes on one.
+   * The kind and the DPI are not here: they are facts about every PSD the
+   * project has already written. See `lib/print.ts`.
+   */
+  setPaper: (
+    id: string,
+    paper: string,
+    landscape: boolean,
+    formats?: PrintFormats,
+  ) =>
+    invoke<ProjectMeta>("set_project_paper", { id, paper, landscape, formats }),
   /**
    * Change how a project renders and what moves in it. Hands back the meta as
    * written, and rewrites the config the project's own code reads — so a game
@@ -327,3 +342,53 @@ export interface SearchResults {
   /** How many files were read. */
   files: number;
 }
+
+/** One thing `ExportForPrint()` read off the page — see `print_pdf.rs`. */
+export interface PrintItem {
+  kind: "asset" | "raster";
+  path?: string;
+  crop?: [number, number, number, number];
+  size?: [number, number];
+  data?: string;
+  matrix: [number, number, number, number, number, number];
+  alpha?: number;
+  blend?: string;
+  tint?: number | null;
+}
+
+/** The page as the running game sends it. */
+export interface PrintPage {
+  page: { width: number; height: number; dpi: number };
+  background: [number, number, number, number] | null;
+  items: PrintItem[];
+  skipped: number;
+}
+
+/** What Rust says about the PDF it wrote. */
+export interface PrintResult {
+  /** Inside the project, so the asset server can serve it. */
+  path: string;
+  bytes: number;
+  width: number;
+  height: number;
+  dpi: number;
+  drawn: number;
+  /** Sprites with no full-resolution twin, printed from the screen copy. */
+  screenOnly: string[];
+  skipped: number;
+  /** A PNG of the page inside the project, for a file a webview cannot
+   *  show — a PSD's. Null for a PDF. */
+  preview: string | null;
+}
+
+export const printing = {
+  /** Write the PDF for a page a print project's game sent. */
+  exportPdf: (id: string, page: PrintPage) =>
+    invoke<PrintResult>("export_print_pdf", { id, page }),
+  /** Write the same page as a layered PSD at the project's DPI. */
+  exportPsd: (id: string, page: PrintPage) =>
+    invoke<PrintResult>("export_print_psd", { id, page }),
+  /** Copy the last PDF or PSD to where the save dialog said. */
+  saveFile: (id: string, format: "pdf" | "psd", path: string) =>
+    invoke<void>("save_print_file", { id, format, path }),
+};

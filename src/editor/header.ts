@@ -63,6 +63,12 @@ export interface HeaderCallbacks {
    * is where the scaffold is known.
    */
   onPageSetup?: () => void;
+  /**
+   * What the third section is called. Play on a game; **Export** on a print
+   * project, where the same section runs the project's code until
+   * `ExportForPrint()` and then shows the PDF it made — see `print-export.ts`.
+   */
+  playLabel?: string;
 }
 
 /** The three sections, in the order the header offers them. */
@@ -118,7 +124,7 @@ export class EditorHeader {
     for (const { value, label } of MODES) {
       const button = h("button", {
         class: "mode-btn",
-        text: label,
+        text: value === "play" ? (callbacks.playLabel ?? label) : label,
         "aria-pressed": String(value === "draw"),
         onClick: () => callbacks.onMode(value),
       }) as HTMLButtonElement;
