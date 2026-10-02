@@ -40,6 +40,7 @@ mod project_create;
 mod pdf_writer;
 mod print_files;
 mod print_pdf;
+mod print_png;
 mod print_psd;
 mod psd_downsample;
 mod psd_resolution;
@@ -575,11 +576,12 @@ pub fn run() {
             projects::create_project,
             projects::set_project_options,
             projects::set_project_presentation,
-            projects::set_project_paper,
+            projects::set_project_page,
             print_pdf::export_print_pdf,
             print_files::save_print_file,
             print_files::save_print_files,
             print_psd::export_print_psd,
+            print_png::export_print_png,
             projects::rename_project,
             projects::delete_project,
             projects::duplicate_project,

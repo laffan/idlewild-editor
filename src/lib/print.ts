@@ -22,25 +22,39 @@ export const DPIS = [300, 600] as const;
 export type Dpi = (typeof DPIS)[number];
 
 /**
- * What Export writes: the page as a PDF, the same page as a layered PSD at the
- * project's DPI, or both. See `print_psd.rs` for what the PSD is.
+ * What a page is written as: a PDF, the same page as a layered PSD at the
+ * project's DPI, or the page as one PNG at that DPI. See `print_pdf.rs`,
+ * `print_psd.rs` and `print_png.rs`.
  */
-export type PrintFormats = "pdf" | "psd" | "both";
+export type PrintFormat = "pdf" | "psd" | "png";
+/** The name the project's default goes by — one format. */
+export type PrintFormats = PrintFormat;
 
-export const FORMATS: ReadonlyArray<{ value: PrintFormats; label: string }> = [
+export const FORMATS: ReadonlyArray<{ value: PrintFormat; label: string }> = [
   { value: "pdf", label: "PDF" },
   { value: "psd", label: "PSD" },
-  { value: "both", label: "PDF + PSD" },
+  { value: "png", label: "PNG" },
 ];
+
+/** The units a custom size is typed in. Only how it reads — sizes are points. */
+export type PageUnit = "in" | "cm";
 
 /** Mirrored by `Output` in src-tauri/src/print.rs. */
 export interface Output {
   kind: OutputKind;
   dpi: number;
-  /** One of `PAPERS`' ids. */
+  /** One of `PAPERS`' ids, or `custom`. */
   paper: string;
   landscape: boolean;
-  formats: PrintFormats;
+  /** What a page is written as when the code does not say. */
+  formats: PrintFormat;
+  /** A custom sheet's size, in points. */
+  customWidth: number;
+  customHeight: number;
+  unit: PageUnit;
+  /** The page's top-left corner in the world. */
+  x: number;
+  y: number;
 }
 
 export const DEFAULT_OUTPUT: Output = {
@@ -49,14 +63,28 @@ export const DEFAULT_OUTPUT: Output = {
   paper: "letter",
   landscape: false,
   formats: "pdf",
+  customWidth: 612,
+  customHeight: 792,
+  unit: "in",
+  x: 0,
+  y: 0,
 };
 
-/** Whether Export writes a PDF, and whether it writes a PSD. */
-export function writes(output: Output): { pdf: boolean; psd: boolean } {
-  const formats = FORMATS.some((f) => f.value === output.formats)
-    ? output.formats
-    : "pdf";
-  return { pdf: formats !== "psd", psd: formats !== "pdf" };
+/** The paper id for a size somebody typed. */
+export const CUSTOM = "custom";
+
+/** Half an inch to four feet, in points — matching `MIN_PAGE`/`MAX_PAGE`. */
+export const PAGE_RANGE = { min: 36, max: 3456 } as const;
+
+/**
+ * What a page is written as: the formats the call named, or the project's
+ * default. An earlier build's `both` reads as a PDF.
+ */
+export function writes(output: Output, asked?: PrintFormat[]): PrintFormat[] {
+  const known = (f: unknown): f is PrintFormat => FORMATS.some((row) => row.value === f);
+  const list = (asked ?? []).filter(known);
+  if (list.length > 0) return [...new Set(list)];
+  return [known(output.formats) ? output.formats : "pdf"];
 }
 
 /** A sheet, portrait, in points. Mirrored by `PAPERS` in print.rs. */
@@ -95,19 +123,51 @@ export function paperOf(output: Output): Paper {
   return PAPERS.find((p) => p.id === output.paper) ?? PAPERS[0];
 }
 
-/** The sheet in points, turned for landscape. */
+export function isCustom(output: Output): boolean {
+  return output.paper === CUSTOM;
+}
+
+/**
+ * The sheet in points: a standard one turned for landscape, or the size that
+ * was typed, which is already the way round it was typed.
+ */
 export function pageSize(output: Output): { width: number; height: number } {
+  if (isCustom(output)) {
+    const clamp = (v: number) =>
+      Math.round(Math.min(PAGE_RANGE.max, Math.max(PAGE_RANGE.min, v || 612)));
+    return { width: clamp(output.customWidth), height: clamp(output.customHeight) };
+  }
   const paper = paperOf(output);
   return output.landscape
     ? { width: paper.height, height: paper.width }
     : { width: paper.width, height: paper.height };
 }
 
-/** Inches, for saying a sheet's size the way a printer would. */
+/** Points in one of a unit. */
+export function pointsPer(unit: PageUnit): number {
+  return unit === "cm" ? 72 / 2.54 : 72;
+}
+
+/** A length in points, in a unit, to two places at most. */
+export function inUnit(points: number, unit: PageUnit): number {
+  return Math.round((points / pointsPer(unit)) * 100) / 100;
+}
+
+/**
+ * What the sheet is called, the way a printer would say it: the paper's name
+ * and its size — `Letter · 8.5 × 11 in` — or, for a typed size, the size in
+ * the unit it was typed in: `Custom · 30 × 20 cm`.
+ */
 export function describePage(output: Output): string {
-  const { width, height } = pageSize(output);
-  const inches = (pt: number) => Math.round((pt / 72) * 100) / 100;
-  return `${paperOf(output).label} — ${inches(width)} × ${inches(height)} in`;
+  // A typed size is said as typed — 30 cm, not the 29.99 that whole points
+  // would round it back to.
+  const typed = (v: number) => Math.min(PAGE_RANGE.max, Math.max(PAGE_RANGE.min, v || 612));
+  const { width, height } = isCustom(output)
+    ? { width: typed(output.customWidth), height: typed(output.customHeight) }
+    : pageSize(output);
+  const unit: PageUnit = isCustom(output) ? output.unit : "in";
+  const name = isCustom(output) ? "Custom" : paperOf(output).label;
+  return `${name} · ${inUnit(width, unit)} × ${inUnit(height, unit)} ${unit}`;
 }
 
 /**
@@ -126,25 +186,52 @@ export function describePage(output: Output): string {
  * one-project-at-a-time app — see "One game at a time" in the technical docs.
  */
 let sourceScaleNow = 2;
-let pageNow: { width: number; height: number } | null = null;
+let openMeta: ProjectMeta | null = null;
+const pageListeners = new Set<() => void>();
 
 /**
  * Tell the editor which project is open: its source scale, and — on a print
- * project — the sheet, which the screen guide draws on the canvas. Page Setup
- * calls it again when the paper changes.
+ * project — the sheet, which the screen guide draws on the canvas and the
+ * Output section runs on. Called again whenever the sheet changes, and every
+ * call tells whoever is listening — see `onPageChange`.
  */
 export function setOpenProject(meta: ProjectMeta | null): void {
+  openMeta = meta;
   const output = meta ? projectOutput(meta) : DEFAULT_OUTPUT;
-  const print = output.kind === "print";
-  sourceScaleNow = print ? dpiOf(output) / 72 : 2;
-  pageNow = print ? pageSize(output) : null;
+  sourceScaleNow = output.kind === "print" ? dpiOf(output) / 72 : 2;
+  for (const listener of pageListeners) listener();
 }
 
 export function sourceScale(): number {
   return sourceScaleNow;
 }
 
-/** The open print project's sheet in points, or null for a game. */
-export function currentPage(): { width: number; height: number } | null {
-  return pageNow;
+/** The open project, while one is open — what a page change is written to. */
+export function openProject(): ProjectMeta | null {
+  return openMeta;
+}
+
+/** The open print project's sheet, or null for a game. */
+export function currentOutput(): Output | null {
+  if (!openMeta || !isPrint(openMeta)) return null;
+  return projectOutput(openMeta);
+}
+
+/**
+ * The open print project's page in the world: its corner and its size in
+ * points. Null for a game.
+ */
+export function currentPage(): { x: number; y: number; width: number; height: number } | null {
+  const output = currentOutput();
+  if (!output) return null;
+  return { x: output.x || 0, y: output.y || 0, ...pageSize(output) };
+}
+
+/**
+ * Be told when the sheet changes — a paper picked in Page Setup, the frame
+ * dragged on the canvas. Returns the way to stop being told.
+ */
+export function onPageChange(listener: () => void): () => void {
+  pageListeners.add(listener);
+  return () => pageListeners.delete(listener);
 }

@@ -22,7 +22,7 @@ fn print_project(name: &str, dpi: u32) -> crate::project::ProjectMeta {
             dpi,
             paper: "a4".into(),
             landscape: false,
-            formats: "pdf".into(),
+            ..Output::default()
         },
     )
     .expect("a print project")
@@ -76,16 +76,44 @@ fn the_scaffold_and_the_config_describe_the_sheet() {
         assert_eq!(config["presentation"]["width"], 595);
 
         // Turning the sheet is a Page Setup change, and the config follows.
-        let turned = store::set_paper(&meta.id, "letter", true, Some("both")).unwrap();
+        let patch = |json: serde_json::Value| -> crate::print::PagePatch {
+            serde_json::from_value(json).unwrap()
+        };
+        let turned = store::set_page(
+            &meta.id,
+            &patch(serde_json::json!({ "paper": "letter", "landscape": true, "formats": "png", "x": 100 })),
+        )
+        .unwrap();
         assert_eq!(turned.output.page_size(), (792, 612));
         let config: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(game.join("js/game.config.json")).unwrap(),
         )
         .unwrap();
         assert_eq!(config["print"]["width"], 792);
-        assert!(store::set_paper(&meta.id, "napkin", false, None).is_err());
-        assert!(store::set_paper(&meta.id, "letter", false, Some("tiff")).is_err());
-        assert_eq!(turned.output.formats(), "both");
+        assert_eq!(config["print"]["x"], 100.0);
+        assert!(
+            store::set_page(&meta.id, &patch(serde_json::json!({ "paper": "napkin" }))).is_err()
+        );
+        assert!(
+            store::set_page(&meta.id, &patch(serde_json::json!({ "formats": "tiff" }))).is_err()
+        );
+        assert_eq!(turned.output.formats(), "png");
+
+        // A typed size, in centimetres, and the config carries it.
+        let custom = store::set_page(
+            &meta.id,
+            &patch(serde_json::json!({
+                "paper": "custom", "customWidth": 850.39, "customHeight": 566.93, "unit": "cm"
+            })),
+        )
+        .unwrap();
+        assert_eq!(custom.output.page_size(), (850, 567));
+        let config: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(game.join("js/game.config.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(config["print"]["paper"], "custom");
+        assert_eq!(config["presentation"]["width"], 850);
     });
     let _ = store::delete_project(&meta.id);
     if let Err(panic) = result {
@@ -108,7 +136,7 @@ fn a_code_project_has_no_sheet() {
         assert!(!game.join("js/shared/print.js").exists());
         let main = std::fs::read_to_string(game.join("js/main.js")).unwrap();
         assert!(!main.contains("installPrint"));
-        assert!(store::set_paper(&meta.id, "a4", false, None).is_err());
+        assert!(store::set_page(&meta.id, &crate::print::PagePatch::default()).is_err());
     });
     let _ = store::delete_project(&meta.id);
     if let Err(panic) = result {
@@ -213,7 +241,14 @@ fn a_print_psd_is_processed_twice_and_prints_from_the_full_one() {
             }]
         }))
         .unwrap();
-        let layered = crate::print_psd::export_print_psd(meta.id.clone(), page).unwrap();
+        let layered = crate::print_psd::export_print_psd(meta.id.clone(), page.clone()).unwrap();
+
+        // And as one PNG at 600 DPI that says so.
+        let png = crate::print_png::export_print_png(meta.id.clone(), page).unwrap();
+        assert_eq!(png.path, "exports/page.png");
+        let bytes = std::fs::read(store::project_dir(&meta.id).unwrap().join(&png.path)).unwrap();
+        assert_eq!(image::load_from_memory(&bytes).unwrap().width(), 4958);
+        assert!(bytes.windows(4).any(|w| w == b"pHYs"));
         assert_eq!(layered.drawn, 1);
         let dir = store::project_dir(&meta.id).unwrap();
         let psd = psd::Psd::from_bytes(&std::fs::read(dir.join(&layered.path)).unwrap()).unwrap();

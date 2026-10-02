@@ -3,7 +3,7 @@
 A project can be for a page as well as for a game. This is how one is put
 together: two resolutions and which part of the app sees which, the sheet as a
 rectangle of world, `ExportForPrint()`, and the PDF and PSD written from what
-it reads.
+it reads — as a PDF, a PSD or a PNG.
 
 Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 
@@ -18,9 +18,12 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 | --- | --- |
 | `kind` | `code` (a game, which every project made before this is) or `print` |
 | `dpi` | 300 or 600, read as the nearer of the two |
-| `paper` | `letter`, `legal`, `tabloid`, `a5`, `a4`, `a3`, `a2` — portrait, in points |
-| `landscape` | turns the sheet |
-| `formats` | what a page is written as when the call does not say: `pdf`, `psd` or `both` |
+| `paper` | `letter`, `legal`, `tabloid`, `a5`, `a4`, `a3`, `a2` — portrait, in points — or `custom` |
+| `landscape` | turns a standard sheet; a custom one is the way round it was typed |
+| `customWidth`, `customHeight` | a custom sheet, in points, half an inch to four feet |
+| `unit` | `in` or `cm` — only how a custom size is typed and shown |
+| `x`, `y` | the page's top-left corner in the world; the origin until it is dragged |
+| `formats` | what a page is written as when the call does not say: `pdf`, `psd` or `png` |
 
 Flat and every field defaulting, the way `PublishTarget` is, so a `meta.json`
 written before it existed reads as a code project. It travels in a
@@ -28,15 +31,23 @@ written before it existed reads as a code project. It travels in a
 archive were written at that DPI, and a print project opened as a game would
 place every one of them at the wrong size.
 
-**The kind and the DPI are fixed at creation; the paper and the formats are
-not.** Every PSD
+**The kind and the DPI are fixed at creation; everything else is not.** Every PSD
 the project writes is written at its DPI, and a file made at 300 has no 600's
 worth of pixels to give. The paper decides where the page falls and how big
-the PDF is, and changes nothing that was drawn, so Page Setup has it
-(`set_project_paper` → `store::set_paper`, which refuses on a code project).
-`formats` rides on the same command as an optional field: the preview's bar
-is what changes it, and a second command for one more field of the same record
-would be two writers for one row.
+the PDF is, and changes nothing that was drawn. Every later change goes
+through one command, `set_project_page`, with a `PagePatch` of only the fields
+that change — Page Setup's dimensions, the frame dragged on the canvas, the
+preview bar's format — which `print::PagePatch::apply` checks (known paper and
+format, sizes clamped to `MIN_PAGE`/`MAX_PAGE`, the origin to a million points
+either way and rounded to whole points) and `project_create::set_page` writes,
+refusing on a code project.
+
+On the frontend all three go through `editor/print-page.ts`'s `changePage`,
+which queues the writes, brings the editor's meta level and calls
+`setOpenProject`, which tells every `onPageChange` listener: the screen guide
+redraws, and a running Output restarts if the sheet's size or position — not
+its format — changed. The dimension rows themselves are
+`lib/print-dimensions.ts`, shared by the New Project sheet and Page Setup.
 
 **A print project is Blank PSD to Phaser.** `ExportForPrint()` reads the page
 off a running Phaser scene, and a character or gravity is a game's, so the New
@@ -125,17 +136,23 @@ one-project-at-a-time app; see *One game at a time* in
 
 ## The sheet, in the world
 
-The page's top-left corner is the world's origin. `game_config::presentation_of`
+The page is a rectangle of world: its corner at `output.x, output.y` — the
+origin for a new project — and its size in points. `game_config::presentation_of`
 turns a print project's page into a fixed box the size of the sheet, so the
 existing `main.js` layout — Phaser `FIT` against a fixed width and height —
 frames it with no second layout written. `config.print` carries the sheet in
-points and the DPI, and `shared/canvas.js`'s `applyCamera` holds the camera at
-zoom 1 and scroll 0 when it is there.
+points, its corner and the DPI, and `shared/canvas.js`'s `applyCamera` holds the
+camera at zoom 1 with its scroll on the corner.
 
-On the canvas, `screen-guide.ts`'s `pageBox` draws the sheet: hung from the
-origin rather than centred on it, scaled by the camera alone, and solid rather
-than dashed, because it is the page edge for edge rather than *about this much
-world*.
+On the canvas, `screen-guide.ts`'s `pageBox` draws the sheet: hung from its
+corner rather than centred on the origin, scaled by the camera alone, and
+solid rather than dashed, because it is the page edge for edge rather than
+*about this much world*. A **label** sits on its top-left corner —
+`describePage`: the paper's name and size in inches, or `Custom` and the size
+as typed in its own unit — and the label is the handle the page is dragged by.
+It is a sibling of the guide rather than a child, at the rail's layer above the
+ink, because the guide takes no pointer and sits under the ink's sheet; the
+frame follows the drag at once and the corner is written once, on release.
 
 ## ExportForPrint()
 
@@ -149,7 +166,7 @@ ExportForPrint({ name, folder, formats, stop })   // → Promise<{ files }>
 ```
 
 Every option is optional: `name` and `folder` say where the files go inside
-`exports/`, `formats` is `"pdf"`, `"psd"`, `"both"` or an array, and `stop`
+`exports/`, `formats` is `"pdf"`, `"psd"`, `"png"` or a list of them, and `stop`
 (default true) pauses every scene once the page is read. The promise settles
 once the editor has written the files, with their paths — so a sequence of
 pages, one per frame of an animation, is a loop with an `await` in it.
@@ -265,34 +282,51 @@ Checked with psd-tools as well as the fork: the layers, their boxes, their
 opacity and the ResolutionInfo resource all read back, and the flattened copy
 of the Chromium page matches the PDF's rendering.
 
-## Code, Run and the preview
 
-A print project has two sections. The header leaves Play out
-(`HeaderCallbacks.withoutPlay`), and Code is where pages are made: the panel
-as usual, and over the canvas `GameFrame` lays out the game on the left and a
-`PrintExport` pane (`editor/print-export.ts`) on the right, its bar across the
-pane's own top.
+## The PNG
 
-**The game runs when Run is pressed, and not otherwise.** A page can be
-seconds of work at full resolution, or a loop writing a hundred files, so a
-save that set it off again would be a save nobody could afford. `GameFrame`
-implements `CodeRunner` — `run`, `halt`, `isRunning`, `onRunningChange` —
-and `CodePanel` puts a Run button at the head of the file bar's right-hand
-cluster through `CodeBar.addControl`; Run saves the open file, flushes the
-document and starts the game, and the button is Stop while it is up.
-`GameFrame.reload` returns false on a print project, so the code save, a PSD
-changing, Project Options and Page Setup all leave it alone, and the mode
-switch shows the frame on the way into Code without starting it.
+`print_png.rs`: the page flattened into one picture at the project's DPI by the
+same `print_psd::flatten` the PSD's flattened copy comes from — the PSD builder
+was split into `render`, which draws and composites and hands each layer to a
+callback, and the two writers over it. Clear where nothing was drawn. The
+`image` crate's encoder writes no `pHYs` chunk, so `with_resolution` splices
+one in after the header — pixels per metre on both axes — or every viewer
+opens a 300 DPI page at four times the size of the paper. The file is its own
+preview.
+
+## Output
+
+A print project has two sections: the header leaves Play out
+(`HeaderCallbacks.withoutPlay`) and calls Code **Output** (`codeLabel`). Output
+is the code panel and, over the canvas, the `PrintExport` pane
+(`editor/print-export.ts`) — the preview and its bar — and nothing beside it.
+The game runs underneath the pane, full size and covered: a frame that is
+`display: none` or off screen is one the browser stops drawing, and a game
+that never reaches the end of a frame never prints.
+
+**The game starts as Output opens, and otherwise only when asked.** The mode
+switch calls `GameFrame.run` on the way in. `GameFrame` implements
+`CodeRunner` — `run`, `restart`, `halt`, `isRunning`, `onRunningChange` — and
+`CodePanel` puts Stop and Restart (running) or Run (stopped) at the head of the
+file bar's right-hand cluster through `CodeBar.addControl`; Run and Restart save
+the open file first. `GameFrame.reload` returns false on a print project, so a
+code save, a PSD changing and Project Options all leave it alone — a page can
+be seconds of work at full resolution, or a loop writing a hundred files. A
+change to the sheet does restart it: `GameFrame` listens on `onPageChange`,
+compares the page's size and corner with the last it saw, and restarts a
+running game 350 ms after the last change, so a size typed a digit at a time is
+one restart.
 
 Pages are written one at a time in the order they arrive, in the formats the
-page asked for or the bar's, and each is answered when its files are on disk.
-The bar carries the format switch — which, changed after a page, writes the
-other format from the page the game is holding — **Export now**, a Save for
-each of the last page's files and **Save all** once a run has written more
-than one page. Stop, or a fresh Run, drops whatever was still queued.
+page asked for or the bar's one, and each is answered when its files are on
+disk. The bar carries the format switch — PDF, PSD, PNG; changed after a page,
+that page is written in the new format too — **Export now**, a Save per format
+the last page was written in, and **Save all** once a run has written more than
+the last page's files. Stop keeps the last page in the preview and drops
+whatever was still queued.
 
-Page Setup on a print project is `editor/print-setup.ts`: the paper, the
-orientation, and the resolution reported rather than offered.
+Page Setup on a print project is `editor/print-setup.ts`: the dimension rows,
+and the resolution reported rather than offered.
 
 ## What it does not do yet
 

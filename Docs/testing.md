@@ -10,7 +10,7 @@ Print projects have their own file, `tests/print.rs`: a vanilla print project
 refused, the scaffold's print `main.js` and scene hint, the sheet in the
 config and Page Setup turning it, a PSD processed twice — full resolution into
 `print/`, downsampled into `assets/` with the same sprite at the same path in
-both — and the PDF and the PSD drawn from the full-resolution half. The
+both — and the PDF, the PSD and the PNG drawn from the full-resolution half. The
 writers' own tests sit beside them in `print_pdf.rs`, `print_psd.rs`,
 `psd_downsample.rs` and `psd_resolution.rs`; `lib/__tests__/print.test.ts`
 pins the source-scale round trip on the frontend. `render_a_captured_page` is

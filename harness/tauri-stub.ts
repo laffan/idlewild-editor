@@ -664,20 +664,24 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     // A print project's two commands. The PDF is whatever the test server
     // has at `print-out/page.pdf`; there is no Rust here to draw one.
     case "export_print_pdf":
-    case "export_print_psd": {
+    case "export_print_psd":
+    case "export_print_png": {
       const page = (args as any)?.page;
-      const psd = cmd === "export_print_psd";
+      const ext = cmd.slice("export_print_".length);
+      const psd = ext === "psd";
       return {
-        path: `exports/${page?.out ?? "page"}.${psd ? "psd" : "pdf"}`, bytes: 2048,
+        path: `exports/${page?.out ?? "page"}.${ext}`, bytes: 2048,
         width: page?.page?.width ?? 612, height: page?.page?.height ?? 792,
         dpi: page?.page?.dpi ?? 300, drawn: page?.items?.length ?? 0,
         screenOnly: [], skipped: page?.skipped ?? 0,
-        preview: psd ? "print-out/preview.png" : null,
+        preview: psd ? "print-out/preview.png" : ext === "png" ? `exports/${page?.out ?? "page"}.png` : null,
       };
     }
-    case "set_project_paper":
-      return { id: "demo", output: { kind: "print", dpi: 300, paper: (args as any)?.paper,
-        landscape: Boolean((args as any)?.landscape), formats: (args as any)?.formats ?? "pdf" } };
+    case "set_project_page": {
+      const w = window as any;
+      w.__output = { ...(w.__output ?? {}), ...((args as any)?.patch ?? {}) };
+      return { id: "demo", output: w.__output };
+    }
     case "save_print_file":
     case "save_print_files":
       return undefined;

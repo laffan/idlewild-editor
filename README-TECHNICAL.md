@@ -54,6 +54,8 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  print.rs        game or page: the DPI, the sheet, the formats │
 │  print_pdf.rs    ExportForPrint()'s page, as a PDF             │
 │  print_psd.rs    the same page, as a layered PSD at the DPI    │
+│  print_png.rs    the same page, as one PNG at the DPI          │
+│  print_files.rs  where exports land, and saving them out       │
 │  pdf_writer.rs   the objects of a one-page PDF                 │
 │  project_create.rs making a project, and the sheet of paper    │
 │  clipboard.rs    the system pasteboard, which WebKit hides     │
@@ -211,6 +213,8 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Testing | [`Docs/testing.md`](Docs/testing.md) |
 | The PDF | [`Docs/printing.md`](Docs/printing.md) |
 | The PSD | [`Docs/printing.md`](Docs/printing.md) |
+| The PNG | [`Docs/printing.md`](Docs/printing.md) |
+| Output | [`Docs/printing.md`](Docs/printing.md) |
 | The source scale, on the frontend | [`Docs/printing.md`](Docs/printing.md) |
 | Two resolutions | [`Docs/printing.md`](Docs/printing.md) |
 | The column is the site, not just `game/` | [`Docs/code-panel.md`](Docs/code-panel.md) |

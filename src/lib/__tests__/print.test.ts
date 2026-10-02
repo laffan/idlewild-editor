@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_OUTPUT,
   currentPage,
+  inUnit,
+  onPageChange,
   describePage,
   dpiOf,
   isPrint,
@@ -28,11 +31,11 @@ const meta = (output?: Output): ProjectMeta => ({
 });
 
 const print = (dpi: number, paper = "letter", landscape = false): Output => ({
+  ...DEFAULT_OUTPUT,
   kind: "print",
   dpi,
   paper,
   landscape,
-  formats: "pdf",
 });
 
 describe("a project's output", () => {
@@ -52,7 +55,7 @@ describe("a project's output", () => {
     expect(pageSize(print(300, "a4"))).toEqual({ width: 595, height: 842 });
     expect(pageSize(print(300, "a4", true))).toEqual({ width: 842, height: 595 });
     expect(pageSize(print(300, "napkin"))).toEqual({ width: 612, height: 792 });
-    expect(describePage(print(300))).toBe("Letter — 8.5 × 11 in");
+    expect(describePage(print(300))).toBe("Letter · 8.5 × 11 in");
   });
 
   it("matches the papers Rust knows, which are the ones on the sheet", () => {
@@ -68,19 +71,47 @@ describe("a project's output", () => {
   });
 });
 
-describe("what Export writes", () => {
-  it("is a PDF, a PSD or both, and a PDF for anything else", () => {
-    expect(writes({ ...print(300), formats: "pdf" })).toEqual({ pdf: true, psd: false });
-    expect(writes({ ...print(300), formats: "psd" })).toEqual({ pdf: false, psd: true });
-    expect(writes({ ...print(300), formats: "both" })).toEqual({ pdf: true, psd: true });
+describe("a custom sheet", () => {
+  it("is the size typed, in the unit it was typed in, whatever the orientation", () => {
+    const custom: Output = {
+      ...print(300, "custom", true),
+      customWidth: (30 / 2.54) * 72,
+      customHeight: (20 / 2.54) * 72,
+      unit: "cm",
+    };
+    expect(pageSize(custom)).toEqual({ width: 850, height: 567 });
+    expect(describePage(custom)).toBe("Custom · 30 × 20 cm");
+    expect(inUnit(612, "in")).toBe(8.5);
+  });
+
+  it("is kept between half an inch and four feet", () => {
+    const tiny: Output = { ...print(300, "custom"), customWidth: 1, customHeight: 99999 };
+    expect(pageSize(tiny)).toEqual({ width: 36, height: 3456 });
+  });
+});
+
+describe("what a page is written as", () => {
+  it("is what the call asked for, or the project's one format", () => {
+    expect(writes({ ...print(300), formats: "png" })).toEqual(["png"]);
+    expect(writes(print(300), ["pdf", "png", "pdf"])).toEqual(["pdf", "png"]);
+    // An earlier build's `both`, or anything else, is a PDF.
     expect(
-      writes({ ...print(300), formats: "tiff" as unknown as Output["formats"] }),
-    ).toEqual({ pdf: true, psd: false });
-    // A project made before the choice existed writes what it always did.
-    expect(writes(projectOutput(meta({ ...print(300) } as Output)))).toEqual({
-      pdf: true,
-      psd: false,
-    });
+      writes({ ...print(300), formats: "both" as unknown as Output["formats"] }),
+    ).toEqual(["pdf"]);
+  });
+});
+
+describe("the open sheet", () => {
+  it("is where the page is in the world, and says when it changes", () => {
+    let heard = 0;
+    const stop = onPageChange(() => (heard += 1));
+    setOpenProject(meta({ ...print(300, "a4"), x: 120, y: -40 }));
+    expect(currentPage()).toEqual({ x: 120, y: -40, width: 595, height: 842 });
+    setOpenProject(null);
+    expect(currentPage()).toBeNull();
+    stop();
+    setOpenProject(null);
+    expect(heard).toBe(2);
   });
 });
 
@@ -94,7 +125,7 @@ describe("the source scale", () => {
   it("is the DPI over 72 on a print project, and the sheet is known", () => {
     setOpenProject(meta(print(600, "a4")));
     expect(sourceScale()).toBeCloseTo(600 / 72);
-    expect(currentPage()).toEqual({ width: 595, height: 842 });
+    expect(currentPage()).toEqual({ x: 0, y: 0, width: 595, height: 842 });
     setOpenProject(null);
     expect(sourceScale()).toBe(EXPORT_SCALE);
   });

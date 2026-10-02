@@ -76,13 +76,70 @@ pub fn build(
     read: &dyn Fn(&str) -> Result<(RgbaImage, bool), String>,
     report: &mut Report,
 ) -> Result<BuiltPsd, String> {
+    let mut builder: Option<PsdBuilder> = None;
+    let mut names: Vec<String> = Vec::new();
+    let (flattened, layers) = render(page, dpi, read, report, &mut |layer: Layer| {
+        let psd = builder.get_or_insert_with(|| PsdBuilder::new(layer.canvas.0, layer.canvas.1));
+        psd.add_layer(
+            LayerBuilder::new(unique(&mut names, &layer.name))
+                .rgba(layer.width, layer.height, layer.pixels)
+                .at(layer.left as i32, layer.top as i32)
+                .opacity(layer.opacity)
+                .blend_mode(blend_mode(layer.blend)),
+        );
+    });
+    let mut builder =
+        builder.unwrap_or_else(|| PsdBuilder::new(flattened.width(), flattened.height()));
+    builder.flattened_image(flattened.as_raw().clone());
+    let bytes = builder
+        .to_bytes()
+        .map_err(|e| format!("Cannot write the PSD: {e:?}"))?;
+    let bytes = crate::psd_resolution::stamp(&bytes, dpi).unwrap_or(bytes);
+    Ok(BuiltPsd {
+        bytes,
+        flattened,
+        layers,
+    })
+}
+
+/// The page as one picture at the project's DPI, straight alpha — what a PNG
+/// export is, and what the PSD's flattened copy is.
+pub fn flatten(
+    page: &PrintPage,
+    dpi: u32,
+    read: &dyn Fn(&str) -> Result<(RgbaImage, bool), String>,
+    report: &mut Report,
+) -> RgbaImage {
+    render(page, dpi, read, report, &mut |_| {}).0
+}
+
+/// One drawn layer, handed to whoever is building something out of them.
+pub struct Layer {
+    pub canvas: (u32, u32),
+    pub name: String,
+    pub left: u32,
+    pub top: u32,
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u8>,
+    pub opacity: u8,
+    pub blend: &'static str,
+}
+
+/// Draw every item onto the page's pixel grid, composite them, and hand each
+/// one to `on_layer` as it is drawn. Returns the composite and the count.
+fn render(
+    page: &PrintPage,
+    dpi: u32,
+    read: &dyn Fn(&str) -> Result<(RgbaImage, bool), String>,
+    report: &mut Report,
+    on_layer: &mut dyn FnMut(Layer),
+) -> (RgbaImage, usize) {
     let scale = dpi as f64 / 72.0;
     let width = ((page.page.width.max(1.0)) * scale).round() as u32;
     let height = ((page.page.height.max(1.0)) * scale).round() as u32;
     // Premultiplied, so drawing one layer over another is one multiply-add.
     let mut flat = vec![0u8; (width as usize) * (height as usize) * 4];
-    let mut builder = PsdBuilder::new(width, height);
-    let mut names: Vec<String> = Vec::new();
     let mut layers = 0usize;
 
     if let Some([r, g, b, a]) = page.background {
@@ -91,7 +148,17 @@ pub fn build(
             let px = [r as u8, g as u8, b as u8, 255];
             let fill: Vec<u8> = px.iter().copied().cycle().take(flat.len()).collect();
             over(&mut flat, width, 0, 0, width, height, &fill, 255);
-            builder.add_layer(LayerBuilder::new("Background").rgba(width, height, fill));
+            on_layer(Layer {
+                canvas: (width, height),
+                name: "Background".into(),
+                left: 0,
+                top: 0,
+                width,
+                height,
+                pixels: fill,
+                opacity: 255,
+                blend: "Normal",
+            });
             layers += 1;
         }
     }
@@ -103,29 +170,22 @@ pub fn build(
         };
         let opacity = (item.alpha * 255.0).round() as u8;
         over(&mut flat, width, left, top, w, h, &pixels, opacity);
-        let name = unique(&mut names, &item.name);
-        builder.add_layer(
-            LayerBuilder::new(name)
-                .rgba(w, h, pixels)
-                .at(left as i32, top as i32)
-                .opacity(opacity)
-                .blend_mode(blend_mode(item.blend)),
-        );
+        on_layer(Layer {
+            canvas: (width, height),
+            name: item.name.clone(),
+            left,
+            top,
+            width: w,
+            height: h,
+            pixels,
+            opacity,
+            blend: item.blend,
+        });
         layers += 1;
         report.drawn += 1;
     }
 
-    let flattened = unpremultiply(flat, width, height);
-    builder.flattened_image(flattened.as_raw().clone());
-    let bytes = builder
-        .to_bytes()
-        .map_err(|e| format!("Cannot write the PSD: {e:?}"))?;
-    let bytes = crate::psd_resolution::stamp(&bytes, dpi).unwrap_or(bytes);
-    Ok(BuiltPsd {
-        bytes,
-        flattened,
-        layers,
-    })
+    (unpremultiply(flat, width, height), layers)
 }
 
 /// One image drawn through a matrix onto the document's pixel grid, cropped to

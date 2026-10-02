@@ -92,12 +92,13 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
     // A print project's page is a sheet of paper rather than a layout, so its
     // Page Setup is the paper and its orientation — see `print-setup.ts`.
     ...(isPrint(meta)
-      ? { onPageSetup: () => openPrintSetup(meta, deps.reloadGame) }
+      ? { onPageSetup: () => openPrintSetup(meta) }
       : isPhaserScaffold(meta.genre)
         ? { onPageSetup: () => openPageSetup(meta, deps.reloadGame) }
         : {}),
     // A print project has Draw and Code: its game runs from Code's Run
     // button, beside the page it prints.
     withoutPlay: isPrint(meta),
+    codeLabel: isPrint(meta) ? "Output" : "Code",
   };
 }

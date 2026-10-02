@@ -148,10 +148,14 @@ export function updateCanvas(scene) {
 // idlewild:begin applyCamera
 export function applyCamera(scene) {
   const camera = scene.cameras.main;
-  // A print project's screen is the sheet: its top-left corner is the world's
-  // origin and one point is one pixel, so the camera does not move or zoom.
-  if (config.print) camera.setZoom(1).setScroll(0, 0);
-  else camera.setZoom(config.zoom ?? 1);
+  // A print project's screen is the sheet: one point is one pixel, and the
+  // camera sits on the page's corner — the origin, until the frame is dragged
+  // somewhere else in the editor.
+  if (config.print) {
+    camera.setZoom(1).setScroll(config.print.x ?? 0, config.print.y ?? 0);
+  } else {
+    camera.setZoom(config.zoom ?? 1);
+  }
   camera.roundPixels = config.roundPixels === true;
 }
 // idlewild:end applyCamera

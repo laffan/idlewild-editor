@@ -34,7 +34,8 @@
  */
 
 import { h } from "../lib/dom";
-import { currentPage } from "../lib/print";
+import { currentOutput, currentPage, describePage, onPageChange } from "../lib/print";
+import { changePage } from "./print-page";
 import type { Viewport } from "../drawing";
 
 /** A box in CSS pixels. */
@@ -91,13 +92,21 @@ export function guideBox(
  * world pixel — and the game that prints it looks at it at 1×. So the dashes
  * are the sheet itself, and the crosshair sits on its corner.
  */
-export function pageBox(view: Viewport, page: Size): GuideBox {
+export function pageBox(
+  view: Viewport,
+  page: Size & { x?: number; y?: number },
+): GuideBox {
   const x = -view.originX * view.zoom;
   const y = -view.originY * view.zoom;
   return {
     x,
     y,
-    frame: { x, y, width: page.width * view.zoom, height: page.height * view.zoom },
+    frame: {
+      x: ((page.x ?? 0) - view.originX) * view.zoom,
+      y: ((page.y ?? 0) - view.originY) * view.zoom,
+      width: page.width * view.zoom,
+      height: page.height * view.zoom,
+    },
   };
 }
 
@@ -126,12 +135,33 @@ export class ScreenGuide {
   private view: Viewport | null = null;
   /** False once both marks are switched off — see `setMarksVisible`. */
   private showing = true;
+  /**
+   * A print project's label on the sheet — its name and size — which is also
+   * how the sheet is moved: drag it and the page moves over the world.
+   *
+   * Its own element beside the guide rather than inside it. The guide is a
+   * mark that takes no pointer and sits under the ink's sheet, and a handle
+   * has to be reachable; so the label goes over the ink, where the floating
+   * bars are, and only it takes the pointer.
+   */
+  private readonly label: HTMLElement;
+  /** World pixels the sheet has been dragged by, while a drag is going on. */
+  private drag: { dx: number; dy: number } | null = null;
+  private readonly stopListening: () => void;
 
   constructor(config: ScreenGuideConfig) {
     this.config = config;
     this.frame = h("div", { class: "screen-guide-frame" });
     this.cross = h("div", { class: "screen-guide-cross" });
     this.root = h("div", { class: "screen-guide" }, this.frame, this.cross);
+    this.label = h("div", {
+      class: "screen-guide-label hidden",
+      title: "Drag to move the page",
+    });
+    this.label.addEventListener("pointerdown", this.onLabelDown);
+    // The sheet changes from Page Setup, and from this label's own drag once
+    // it is written: either way, draw what is there now.
+    this.stopListening = onPageChange(() => this.draw());
 
     // The content box, which is what `contentRect` already is: the row pads
     // itself out of the iPad's side safe areas, and a game does not get those.
@@ -181,8 +211,55 @@ export class ScreenGuide {
 
   destroy(): void {
     this.observer.disconnect();
+    this.stopListening();
+    this.label.remove();
     this.root.remove();
   }
+
+  /**
+   * Drag the sheet by its label. The frame follows the finger at once; the
+   * page is written when it is let go — one write, not one per move — and
+   * lands on whole points.
+   */
+  private readonly onLabelDown = (event: PointerEvent): void => {
+    const view = this.view;
+    const page = currentPage();
+    if (!view || !page) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const zoom = view.zoom || 1;
+    this.label.setPointerCapture(event.pointerId);
+    this.label.classList.add("dragging");
+    this.drag = { dx: 0, dy: 0 };
+
+    const move = (e: PointerEvent) => {
+      this.drag = {
+        dx: Math.round((e.clientX - startX) / zoom),
+        dy: Math.round((e.clientY - startY) / zoom),
+      };
+      this.draw();
+    };
+    const up = () => {
+      this.label.removeEventListener("pointermove", move);
+      this.label.removeEventListener("pointerup", up);
+      this.label.removeEventListener("pointercancel", up);
+      this.label.classList.remove("dragging");
+      const moved = this.drag;
+      if (moved && (moved.dx !== 0 || moved.dy !== 0)) {
+        void changePage({ x: page.x + moved.dx, y: page.y + moved.dy }).then(() => {
+          this.drag = null;
+          this.draw();
+        });
+      } else {
+        this.drag = null;
+      }
+    };
+    this.label.addEventListener("pointermove", move);
+    this.label.addEventListener("pointerup", up);
+    this.label.addEventListener("pointercancel", up);
+  };
 
   private draw(): void {
     const view = this.view;
@@ -193,13 +270,33 @@ export class ScreenGuide {
     if (!this.showing) return;
 
     const page = currentPage();
-    const box = page
-      ? pageBox(view, page)
+    const shifted = page && this.drag
+      ? { ...page, x: page.x + this.drag.dx, y: page.y + this.drag.dy }
+      : page;
+    const box = shifted
+      ? pageBox(view, shifted)
       : guideBox(view, screen, this.config.defaultZoom());
     this.frame.classList.toggle("is-page", page !== null);
+    this.placeLabel(shifted ? box : null);
     this.cross.style.transform = `translate(${box.x}px, ${box.y}px)`;
     this.frame.style.width = `${box.frame.width}px`;
     this.frame.style.height = `${box.frame.height}px`;
     this.frame.style.transform = `translate(${box.frame.x}px, ${box.frame.y}px)`;
+  }
+
+  /** The label over the sheet's top-left corner, or gone on a game. */
+  private placeLabel(box: GuideBox | null): void {
+    const output = currentOutput();
+    if (!box || !output || !this.showing || this.frame.classList.contains("hidden")) {
+      this.label.classList.add("hidden");
+      return;
+    }
+    // Beside the guide in the canvas wrapper, once the guide is in it.
+    if (!this.label.isConnected && this.root.parentElement) {
+      this.root.parentElement.appendChild(this.label);
+    }
+    this.label.classList.remove("hidden");
+    this.label.textContent = describePage(output);
+    this.label.style.transform = `translate(${box.frame.x}px, ${box.frame.y}px)`;
   }
 }

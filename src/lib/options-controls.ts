@@ -256,13 +256,19 @@ export interface NumberOptions {
 export function optionNumber(options: NumberOptions): NumberControl {
   const { min, max, step = 1, unit, label, onChange } = options;
 
+  // A fractional step is printed to its own number of places, so 8.5 inches
+  // reads as 8.5 rather than as the float the division left behind.
+  const places = step < 1 ? Math.min(6, Math.ceil(-Math.log10(step))) : 0;
   const clamp = (value: number) =>
-    Math.min(max, Math.max(min, Math.round(value / step) * step));
+    Number(
+      Math.min(max, Math.max(min, Math.round(value / step) * step)).toFixed(places),
+    );
 
   const input = h("input", {
     class: "opt-number",
     type: "text",
-    inputmode: "numeric",
+    // The decimal keypad where a fraction is allowed: inches and centimetres.
+    inputmode: step < 1 ? "decimal" : "numeric",
     value: String(options.value),
     spellcheck: "false",
     autocomplete: "off",

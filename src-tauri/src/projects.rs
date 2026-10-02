@@ -65,17 +65,13 @@ pub fn create_project(
     )
 }
 
-/// Change the sheet a print project is laid out on: which paper, and which
-/// way round, and whether Export writes a PDF, a PSD or both. What Page Setup
-/// writes on a print project.
+/// Change a print project's sheet: its size — standard or typed — which way
+/// round, where its corner is in the world, and what a page is written as.
+/// What Page Setup, the frame on the canvas and the preview's bar write; only
+/// what the patch names changes.
 #[tauri::command]
-pub fn set_project_paper(
-    id: String,
-    paper: String,
-    landscape: bool,
-    formats: Option<String>,
-) -> Result<ProjectMeta, String> {
-    store::set_paper(&id, &paper, landscape, formats.as_deref())
+pub fn set_project_page(id: String, patch: crate::print::PagePatch) -> Result<ProjectMeta, String> {
+    store::set_page(&id, &patch)
 }
 
 /// Change how a project renders: pixel art, whole-pixel drawing, the zoom a

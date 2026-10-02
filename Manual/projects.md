@@ -78,11 +78,12 @@ Part of [the Idlewild manual](README.md).
 
 ## Web or print
 
-- **Output** is the first question on the sheet: **Web**, a game — which is
+- **Output** is the question after the name: **Web**, a game — which is
   everything on this page — or **Print**, a page. Both are code; the choice is
   where the work ends up. Print asks for a **resolution** (300 or 600 DPI,
-  fixed once the project exists) and a **paper** and orientation (changeable
-  later in Page Setup), and takes away Scaffolding and Rendering: a print
+  fixed once the project exists) and the page's **dimensions** — a standard
+  sheet and its orientation, or a custom size in inches or centimetres —
+  which Page Setup can change later, and takes away Scaffolding and Rendering: a print
   project is always Blank PSD to Phaser, because `ExportForPrint()` reads the
   page off a Phaser scene and a character or gravity is a game's, and a page is
   looked at one point to the pixel. See [Printing](printing.md)

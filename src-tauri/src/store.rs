@@ -66,7 +66,7 @@ pub fn print_dir(id: &str) -> Result<PathBuf, String> {
 }
 
 #[cfg_attr(not(test), allow(unused_imports))]
-pub use crate::project_create::{create_project, create_project_for, set_paper};
+pub use crate::project_create::{create_project, create_project_for, set_page};
 
 pub fn game_dir(id: &str) -> Result<PathBuf, String> {
     let dir = project_dir(id)?.join("game");

@@ -2,7 +2,7 @@
 
 A project can make a page instead of a game: the same canvas, the same tools
 and the same code, pointed at a sheet of paper and written out as a print-ready
-PDF, a layered PSD, or both.
+PDF, a layered PSD or a PNG.
 
 Part of [the Idlewild manual](README.md).
 
@@ -10,30 +10,37 @@ Part of [the Idlewild manual](README.md).
 
 ## Making a print project
 
-- **Web or Print** is the first question on the New Project sheet. Web is
+- After the name, the New Project sheet asks **Web or Print**. Web is
   everything the rest of this manual describes — both are code; the choice is
-  where the work ends up. Print asks three more things:
+  where the work ends up. Print asks two more things:
   - **Resolution**: 300 or 600 DPI. Every PSD the project writes is written at
     it. This is fixed once the project exists, like the template, because a
     file made at 300 DPI has no 600's worth of pixels to give
-  - **Paper**: Letter, Legal, Tabloid, A5, A4, A3 or A2
-  - **Orientation**
+  - **Dimensions**: Letter, Legal, Tabloid, A5, A4, A3 or A2 and its
+    **orientation** — or **Custom**, a width and a height in **inches** or
+    **centimetres**, from half an inch to four feet. A custom size is the way
+    round you type it, so it takes no orientation; switching the unit converts
+    what is in the boxes
 - **Scaffolding and Rendering go away under Print.** A print project is always
   **Blank PSD to Phaser** — your artwork placed and nothing written over it but
   what you write — because `ExportForPrint()` reads the page off a running
   Phaser scene, and a character or gravity is a game's. A page is looked at
   one point to the pixel, so it has no default zoom
-- What a page is written as — PDF, PSD or both — is not asked here. It is
-  asked where pages are made, in the preview's bar
+- What a page is written as — PDF, PSD or PNG — is not asked here. It is
+  asked where pages are made, in the Output preview's bar
 
 ## The page on the canvas
 
-- **One world pixel is one point**, a seventy-second of an inch, and **the
-  page's top-left corner is the world's origin**. A letter page runs from 0, 0
-  to 612, 792
-- In Draw the page is a solid red frame hung from the origin — the sheet, edge
-  for edge — where a game project has a dashed box about how much the game's
-  screen shows. It grows and shrinks with the camera
+- **One world pixel is one point**, a seventy-second of an inch. A new page's
+  top-left corner is the world's origin, so a letter page starts out running
+  from 0, 0 to 612, 792
+- In Draw the page is a solid red frame — the sheet, edge for edge — with a
+  **label** on its top-left corner naming it: `Letter · 8.5 × 11 in`, or
+  `Custom · 30 × 20 cm` for a size you typed. It grows and shrinks with the
+  camera
+- **Drag the label to move the page** over what you have drawn. The page is
+  where the game's camera looks and what prints, so moving it chooses which
+  part of the world is the page; it lands on whole points
 - **The canvas is the canvas it always was.** Draw, fill, drop images, convert
   sketches — nothing about the tools changes
 
@@ -69,7 +76,7 @@ Part of [the Idlewild manual](README.md).
   ExportForPrint({
     name: "page",     // the file's name, without an extension
     folder: "",       // a folder inside the project's exports/
-    formats: "pdf",   // "pdf", "psd", "both" — or what the bar says
+    formats: "pdf",   // "pdf", "psd", "png", or a list — or the bar's
     stop: true,       // stop every scene once the page is read
   });
   ```
@@ -103,31 +110,36 @@ Part of [the Idlewild manual](README.md).
   `ExportForPrint()` stops the scenes and the promise settles with nothing
   written
 
-## Code, Run and the preview
+## Output
 
-- A print project has **two sections, Draw and Code**. In Code the file is in
-  the panel as always, and over the canvas your game is on the left and the
-  **preview** of what it printed is on the right
-- **Your code does not run until you press Run**, beside the pin at the top of
-  the code panel, and it does not restart when you save. A page can be seconds
-  of work at full resolution, or a loop writing a hundred files, so running it
-  is something you ask for. Run saves the open file first. While the game is
-  up the button is **Stop**
+- A print project has **two sections, Draw and Output**. Output is the code
+  panel and, over the canvas, the **preview** of what your code has printed —
+  and nothing else. The game runs underneath it, covered: what you look at is
+  the page, not the game
+- **Your code runs as Output opens.** While it is running the code bar has
+  **Stop** and **Restart** beside the pin; once stopped, **Run**. Run and
+  Restart save the open file first. It does **not** restart when you save — a
+  page can be seconds of work at full resolution, or a loop writing a hundred
+  files, so running it again is something you ask for
+- **A new sheet restarts it.** Change the size or orientation in Page Setup, or
+  drag the page somewhere else in Draw, and a running Output starts again on
+  the new page straight away
 - The bar at the top of the preview:
-  - **PDF / PSD / PDF + PSD** — what a page is written as when your code does
-    not say. Switch it after a page has printed and the other file is written
-    from that same page: the game is holding it, and a generative piece would
-    not draw it again
+  - **PDF / PSD / PNG** — what a page is written as when your code does not
+    say. Switch it after a page has printed and that page is written in the new
+    format too: the game is holding it, and a generative piece would not draw
+    it again
   - **Export now** — prints the page as it stands, as if your code had called
     `ExportForPrint()`, so a project that never calls it still prints
-  - **Save PDF** and **Save PSD** — the last page's files, through a save dialog
-    on a Mac or the Files export picker on an iPad. **Save all** appears once a
-    run has written more than one page, and hands over every file the run
-    wrote as one zip
-- The PDF preview is the PDF itself. A PSD cannot be shown in a page, so a
-  PSD-only page previews the flattened image inside it
+  - **Save PDF**, **Save PSD**, **Save PNG** — the last page's files, through a
+    save dialog on a Mac or the Files export picker on an iPad. **Save all**
+    appears once a run has written more than one file, and hands over every
+    file the run wrote as one zip
+- The preview is the file itself where a page can show one — the PDF, or the
+  PNG. A PSD cannot be shown in a page, so a PSD previews the flattened image
+  inside it
 
-## The two files
+## The three files
 
 - **The PDF** is the page as it prints: one page, the size of the sheet, every
   sprite at the full resolution of its file. The same picture placed five
@@ -136,13 +148,17 @@ Part of [the Idlewild manual](README.md).
   page, in the order the scene drew them, named after the file it came from,
   at the project's DPI, with each sprite's transparency as the layer's opacity
   and its blend mode as the layer's blend mode
+- **The PNG** is the page as one picture at the project's DPI, clear where
+  nothing was drawn, and it says its resolution, so it opens at the size of the
+  paper
 
 ## Page Setup
 
-- On a print project Page Setup is the **paper** and its **orientation**, and
-  the **resolution**, which it reports but cannot change. Changing the paper
-  moves the frame on the canvas and resizes the game; it does not move anything
-  you drew
+- On a print project Page Setup is the page's **Dimensions** — the same rows as
+  the New Project sheet, Custom included — and the **resolution**, which it
+  reports but cannot change. A change takes effect at once: the frame on the
+  canvas changes, and a running Output restarts on the new page. It does not
+  move anything you drew
 
 ## Not yet
 

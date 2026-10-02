@@ -70,6 +70,12 @@ export interface HeaderCallbacks {
    * thing — see `print-export.ts`.
    */
   withoutPlay?: boolean;
+  /**
+   * What the code section is called. Code on a game; **Output** on a print
+   * project, where the section is the page being made — the code that makes
+   * it, and the pages it has printed.
+   */
+  codeLabel?: string;
 }
 
 /** The three sections, in the order the header offers them. */
@@ -126,7 +132,7 @@ export class EditorHeader {
       if (value === "play" && callbacks.withoutPlay) continue;
       const button = h("button", {
         class: "mode-btn",
-        text: label,
+        text: value === "code" ? (callbacks.codeLabel ?? label) : label,
         "aria-pressed": String(value === "draw"),
         onClick: () => callbacks.onMode(value),
       }) as HTMLButtonElement;

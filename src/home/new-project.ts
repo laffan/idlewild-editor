@@ -83,18 +83,19 @@
  * the same word spends the best line on the one thing nobody needed telling.
  * The dialog still carries the name for anything reading the page.
  *
- * ## Output, first
+ * ## Output, after the name
  *
- * The first question is what the project is *for*, because it decides which
- * of the others are asked. **Web** is everything below as it has always been:
+ * The question after the name is what the project is *for*, because it
+ * decides which of the others are asked. **Web** is everything below as it has always been:
  * a game, played and published (`code` on disk — both kinds are code, and the
  * sheet names the one that is different by where it ends up). **Print** points
  * the same canvas and the same code at a sheet of paper: the page is a fixed
  * rectangle of world, one world pixel to the point, and `ExportForPrint()` in
  * the project's own code is the moment it is written out. Print asks for the
  * **resolution**, because every PSD the project writes is written at it — 300
- * or 600 DPI, fixed once the project exists, like the template — and for the
- * paper, which Page Setup can change later.
+ * or 600 DPI, fixed once the project exists, like the template — and for its
+ * **Dimensions**: a standard sheet and its orientation, or Custom, a width and
+ * a height in inches or centimetres. Page Setup can change those later.
  *
  * Under Print the **Scaffolding** and **Rendering** groups go away. A print
  * project is always Blank PSD to Phaser: `ExportForPrint()` reads the page off
@@ -105,6 +106,7 @@
  */
 
 import { openSheet } from "../lib/sheet";
+import { dimensionRows } from "../lib/print-dimensions";
 import { h } from "../lib/dom";
 import { optionGroup, optionRow, optionsPage } from "../lib/options-list";
 import {
@@ -115,7 +117,6 @@ import {
 import {
   DEFAULT_OUTPUT,
   DPIS,
-  PAPERS,
   type Output,
   type OutputKind,
 } from "../lib/print";
@@ -187,19 +188,6 @@ export function openNewProject(
     String(output.dpi),
     (value) => (output.dpi = Number(value)),
   );
-  const paperSeg = optionSegmented(
-    PAPERS.map((paper) => ({ value: paper.id, label: paper.label })),
-    output.paper,
-    (value) => (output.paper = value),
-  );
-  const orientationSeg = optionSegmented(
-    [
-      { value: "portrait", label: "Portrait" },
-      { value: "landscape", label: "Landscape" },
-    ],
-    "portrait",
-    (value) => (output.landscape = value === "landscape"),
-  );
   const dpiRow = optionRow({
     title: "Resolution",
     hint:
@@ -209,18 +197,9 @@ export function openNewProject(
       "made at 300 has no 600's worth of pixels to give.",
     control: dpiSeg.root,
   });
-  const paperRow = optionRow({
-    title: "Paper",
-    hint:
-      "The sheet the page is laid out on. Its top-left corner is the world's " +
-      "origin and one point is one world pixel. It can be changed later in " +
-      "Page Setup.",
-    control: paperSeg.root,
-  });
-  const orientationRow = optionRow({
-    title: "Orientation",
-    control: orientationSeg.root,
-  });
+  // The sheet: a standard size and its orientation, or Custom in inches or
+  // centimetres — the same rows Page Setup shows. See `lib/print-dimensions`.
+  const dimensions = dimensionRows(output, (patch) => Object.assign(output, patch));
   const outputSeg = optionSegmented(
     [
       // "Web" on the sheet, `code` on disk: both kinds of project are code,
@@ -253,8 +232,7 @@ export function openNewProject(
   function setOutputShown(): void {
     const print = output.kind === "print";
     dpiRow.hidden = !print;
-    paperRow.hidden = !print;
-    orientationRow.hidden = !print;
+    dimensions.setShown(print);
     // The class rather than the attribute: a group is laid out with its own
     // `display`, which outranks `hidden`.
     createButton.textContent = print ? "Create Page" : "Create Game";
@@ -412,18 +390,6 @@ export function openNewProject(
   sheet.body.appendChild(
     optionsPage(
       [
-        // First, because it decides which of the questions below are asked
-        // at all: a page has no scaffolding to choose and no rendering to set.
-        optionGroup({
-          title: "Output",
-          hint: () => outputNote(output.kind),
-          rows: [
-            optionRow({ control: outputSeg.root }),
-            dpiRow,
-            paperRow,
-            orientationRow,
-          ],
-        }),
         optionGroup({
           rows: [
             optionRow({
@@ -434,6 +400,14 @@ export function openNewProject(
               control: nameInput,
             }),
           ],
+        }),
+        // Straight after the name, because it decides which of the questions
+        // below are asked at all: a page has no scaffolding to choose and no
+        // rendering to set.
+        optionGroup({
+          title: "Output",
+          hint: () => outputNote(output.kind),
+          rows: [optionRow({ control: outputSeg.root }), dpiRow, ...dimensions.rows],
         }),
         // The template and the scale it is measured in. One group, in that
         // order, because the number means nothing without the shape above it.

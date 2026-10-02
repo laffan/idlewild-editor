@@ -61,13 +61,41 @@ pub struct Paper {
 
 /// The standard sizes, portrait. Mirrored by `PAPERS` in `src/lib/print.ts`.
 pub const PAPERS: [Paper; 7] = [
-    Paper { id: "letter", width: 612, height: 792 },
-    Paper { id: "legal", width: 612, height: 1008 },
-    Paper { id: "tabloid", width: 792, height: 1224 },
-    Paper { id: "a5", width: 420, height: 595 },
-    Paper { id: "a4", width: 595, height: 842 },
-    Paper { id: "a3", width: 842, height: 1191 },
-    Paper { id: "a2", width: 1191, height: 1684 },
+    Paper {
+        id: "letter",
+        width: 612,
+        height: 792,
+    },
+    Paper {
+        id: "legal",
+        width: 612,
+        height: 1008,
+    },
+    Paper {
+        id: "tabloid",
+        width: 792,
+        height: 1224,
+    },
+    Paper {
+        id: "a5",
+        width: 420,
+        height: 595,
+    },
+    Paper {
+        id: "a4",
+        width: 595,
+        height: 842,
+    },
+    Paper {
+        id: "a3",
+        width: 842,
+        height: 1191,
+    },
+    Paper {
+        id: "a2",
+        width: 1191,
+        height: 1684,
+    },
 ];
 
 /// What a project is for, and — for a print project — the sheet and the
@@ -88,11 +116,29 @@ pub struct Output {
     pub paper: String,
     #[serde(default)]
     pub landscape: bool,
-    /// What Export writes: `pdf`, `psd`, or `both`. The PDF is the page as it
-    /// prints; the PSD is the same page as layers at the project's DPI, to
-    /// carry on with by hand — see `print_psd.rs`.
+    /// What a page is written as when the code does not say: `pdf`, `psd` or
+    /// `png`. The PDF is the page as it prints; the PSD is the same page as
+    /// layers at the project's DPI, to carry on with by hand; the PNG is the
+    /// page as one picture at that DPI. See `print_pdf.rs`, `print_psd.rs` and
+    /// `print_png.rs`.
     #[serde(default = "default_formats")]
     pub formats: String,
+    /// A `custom` sheet's size, in points. Kept while a standard size is
+    /// picked, so going back to Custom finds what was typed.
+    #[serde(default = "default_custom_width")]
+    pub custom_width: f64,
+    #[serde(default = "default_custom_height")]
+    pub custom_height: f64,
+    /// Which unit a custom size is typed and shown in: `in` or `cm`. Only how
+    /// it reads — the size itself is always points.
+    #[serde(default = "default_unit")]
+    pub unit: String,
+    /// Where the page's top-left corner is in the world. The origin until the
+    /// frame on the canvas is dragged somewhere else.
+    #[serde(default)]
+    pub x: f64,
+    #[serde(default)]
+    pub y: f64,
 }
 
 impl Default for Output {
@@ -103,6 +149,11 @@ impl Default for Output {
             paper: default_paper(),
             landscape: false,
             formats: default_formats(),
+            custom_width: default_custom_width(),
+            custom_height: default_custom_height(),
+            unit: default_unit(),
+            x: 0.0,
+            y: 0.0,
         }
     }
 }
@@ -111,8 +162,102 @@ fn default_formats() -> String {
     "pdf".to_string()
 }
 
+fn default_custom_width() -> f64 {
+    612.0
+}
+
+fn default_custom_height() -> f64 {
+    792.0
+}
+
+fn default_unit() -> String {
+    "in".to_string()
+}
+
 /// The answers `formats` can have.
-pub const FORMATS: [&str; 3] = ["pdf", "psd", "both"];
+pub const FORMATS: [&str; 3] = ["pdf", "psd", "png"];
+
+/// The paper id for a size somebody typed.
+pub const CUSTOM: &str = "custom";
+
+/// The smallest and largest custom sheet, in points: half an inch, and four
+/// feet. The ceiling is the PSD's — 48 inches at 600 DPI is 28,800 pixels,
+/// under the 30,000 a PSD can hold on a side.
+pub const MIN_PAGE: f64 = 36.0;
+pub const MAX_PAGE: f64 = 3456.0;
+
+/// How far the page's corner may be dragged from the origin, either way. A
+/// page a mile out is a typo, and the config is where it would land.
+pub const MAX_ORIGIN: f64 = 1_000_000.0;
+
+/// A change to the sheet, as Page Setup, the frame on the canvas and the
+/// preview's bar send one: only what is named changes.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PagePatch {
+    pub paper: Option<String>,
+    pub landscape: Option<bool>,
+    pub formats: Option<String>,
+    pub custom_width: Option<f64>,
+    pub custom_height: Option<f64>,
+    pub unit: Option<String>,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+}
+
+impl PagePatch {
+    /// Apply it, refusing anything this build does not know.
+    pub fn apply(&self, output: &mut Output) -> Result<(), String> {
+        if let Some(paper) = &self.paper {
+            if paper != CUSTOM && !PAPERS.iter().any(|p| p.id == paper) {
+                return Err(format!("Unknown paper size: {paper}"));
+            }
+            output.paper = paper.clone();
+        }
+        if let Some(landscape) = self.landscape {
+            output.landscape = landscape;
+        }
+        if let Some(formats) = &self.formats {
+            if !FORMATS.contains(&formats.as_str()) {
+                return Err(format!("Unknown output: {formats}"));
+            }
+            output.formats = formats.clone();
+        }
+        let size = |v: f64| {
+            if v.is_finite() {
+                Ok(v.clamp(MIN_PAGE, MAX_PAGE))
+            } else {
+                Err("A page size has to be a number".to_string())
+            }
+        };
+        if let Some(w) = self.custom_width {
+            output.custom_width = size(w)?;
+        }
+        if let Some(h) = self.custom_height {
+            output.custom_height = size(h)?;
+        }
+        if let Some(unit) = &self.unit {
+            if unit != "in" && unit != "cm" {
+                return Err(format!("Unknown unit: {unit}"));
+            }
+            output.unit = unit.clone();
+        }
+        let at = |v: f64| {
+            if v.is_finite() {
+                Ok(v.clamp(-MAX_ORIGIN, MAX_ORIGIN).round())
+            } else {
+                Err("A page position has to be a number".to_string())
+            }
+        };
+        if let Some(x) = self.x {
+            output.x = at(x)?;
+        }
+        if let Some(y) = self.y {
+            output.y = at(y)?;
+        }
+        Ok(())
+    }
+}
 
 fn default_dpi() -> u32 {
     300
@@ -147,7 +292,8 @@ impl Output {
         self.is_print().then(|| self.source_scale() / SCREEN_SCALE)
     }
 
-    /// What Export writes, falling back to a PDF for anything unknown.
+    /// What a page is written as, falling back to a PDF for anything unknown —
+    /// including `both`, which an earlier build offered.
     pub fn formats(&self) -> &'static str {
         FORMATS
             .iter()
@@ -156,7 +302,13 @@ impl Output {
             .unwrap_or("pdf")
     }
 
-    /// The sheet, falling back to Letter for a name this build does not know.
+    /// Whether the sheet is a size somebody typed.
+    pub fn is_custom(&self) -> bool {
+        self.paper == CUSTOM
+    }
+
+    /// The standard sheet, falling back to Letter for a name this build does
+    /// not know. Meaningless on a custom sheet — see `page_size`.
     pub fn paper(&self) -> &'static Paper {
         PAPERS
             .iter()
@@ -164,14 +316,35 @@ impl Output {
             .unwrap_or(&PAPERS[0])
     }
 
-    /// The page in points, turned for landscape.
+    /// The page in points: a standard sheet turned for landscape, or the size
+    /// that was typed. A typed size is already the way round it was typed, so
+    /// orientation does not turn it.
     pub fn page_size(&self) -> (u32, u32) {
+        if self.is_custom() {
+            let clamp = |v: f64| {
+                let v = if v.is_finite() { v } else { 612.0 };
+                v.clamp(MIN_PAGE, MAX_PAGE).round() as u32
+            };
+            return (clamp(self.custom_width), clamp(self.custom_height));
+        }
         let paper = self.paper();
         if self.landscape {
             (paper.height, paper.width)
         } else {
             (paper.width, paper.height)
         }
+    }
+
+    /// Where the page's corner is in the world, brought into range.
+    pub fn origin(&self) -> (f64, f64) {
+        let at = |v: f64| {
+            if v.is_finite() {
+                v.clamp(-MAX_ORIGIN, MAX_ORIGIN)
+            } else {
+                0.0
+            }
+        };
+        (at(self.x), at(self.y))
     }
 
     /// What the generated config tells the project's own code, or null for a
@@ -181,13 +354,16 @@ impl Output {
             return serde_json::Value::Null;
         }
         let (width, height) = self.page_size();
+        let (x, y) = self.origin();
         serde_json::json!({
             "dpi": self.dpi(),
-            "paper": self.paper().id,
+            "paper": if self.is_custom() { CUSTOM } else { self.paper().id },
             "landscape": self.landscape,
             "formats": self.formats(),
             "width": width,
             "height": height,
+            "x": x,
+            "y": y,
         })
     }
 }
@@ -213,6 +389,47 @@ mod tests {
         let factor = out.downsample().unwrap();
         assert!((out.source_scale() / factor - SCREEN_SCALE).abs() < 1e-9);
         assert!((factor - 600.0 / 144.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_custom_sheet_is_the_size_typed_and_kept_in_range() {
+        let mut out = Output {
+            kind: OutputKind::Print,
+            ..Output::default()
+        };
+        PagePatch {
+            paper: Some(CUSTOM.into()),
+            custom_width: Some(20.0 / 2.54 * 72.0),
+            custom_height: Some(9000.0),
+            unit: Some("cm".into()),
+            landscape: Some(true),
+            ..PagePatch::default()
+        }
+        .apply(&mut out)
+        .unwrap();
+        // 20 cm is 566.9 points; 9000 is past four feet; landscape is ignored.
+        assert_eq!(out.page_size(), (567, 3456));
+        assert!(PagePatch {
+            paper: Some("napkin".into()),
+            ..PagePatch::default()
+        }
+        .apply(&mut out)
+        .is_err());
+        assert!(PagePatch {
+            formats: Some("both".into()),
+            ..PagePatch::default()
+        }
+        .apply(&mut out)
+        .is_err());
+        PagePatch {
+            x: Some(120.4),
+            y: Some(-40.6),
+            ..PagePatch::default()
+        }
+        .apply(&mut out)
+        .unwrap();
+        assert_eq!(out.origin(), (120.0, -41.0));
+        assert_eq!(out.to_config()["x"], 120.0);
     }
 
     #[test]

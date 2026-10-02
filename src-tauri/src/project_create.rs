@@ -93,34 +93,21 @@ pub fn create_project_for(
     Ok(meta)
 }
 
-/// Change the sheet a print project is laid out on, and what Export writes
-/// from it — a PDF, a PSD, or both. What Page Setup writes
-/// for a print project, in place of the page around a game.
+/// Change the sheet a print project is laid out on: its size, which way
+/// round, where its corner is in the world, and what a page is written as.
+/// What Page Setup, the frame on the canvas and the preview's bar all write.
 ///
-/// Only the paper and its orientation: the kind and the DPI are facts about
-/// every PSD the project has already written — see `print.rs`. A code project
-/// refuses, because it has no page for a sheet to describe.
-pub fn set_paper(
-    id: &str,
-    paper: &str,
-    landscape: bool,
-    formats: Option<&str>,
-) -> Result<ProjectMeta, String> {
+/// Only what the patch names changes. The kind and the DPI are not in it: they
+/// are facts about every PSD the project has already written — see
+/// `print.rs`. A code project refuses, because it has no page.
+pub fn set_page(id: &str, patch: &crate::print::PagePatch) -> Result<ProjectMeta, String> {
     let mut meta = read_meta(id)?;
     if !meta.output.is_print() {
-        return Err("Only a print project has a sheet of paper".into());
+        return Err("Only a print project has a page".into());
     }
-    if !crate::print::PAPERS.iter().any(|p| p.id == paper) {
-        return Err(format!("Unknown paper size: {paper}"));
-    }
-    meta.output.paper = paper.to_string();
-    meta.output.landscape = landscape;
-    if let Some(formats) = formats {
-        if !crate::print::FORMATS.contains(&formats) {
-            return Err(format!("Unknown output: {formats}"));
-        }
-        meta.output.formats = formats.to_string();
-    }
+    let mut output = meta.output.clone();
+    patch.apply(&mut output)?;
+    meta.output = output;
     meta.updated_at = now_ms();
     write_meta(&meta)?;
     let _ = sync_game_config(id);

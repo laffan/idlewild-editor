@@ -107,6 +107,7 @@ export const ICONS = {
   /* Run and Stop, in the code bar of a print project. */
   play: "M8 5v14l11-7L8 5Z",
   stop: "M7 7h10v10H7z",
+  restart: ["M20 12a8 8 0 1 1-2.3-5.7", "M20 4v5h-5"],
   chevronLeft: "m14 6-6 6 6 6",
   chevronRight: "m10 6 6 6-6 6",
   chevronUp: "m6 15 6-6 6 6",

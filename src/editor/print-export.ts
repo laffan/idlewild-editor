@@ -1,55 +1,54 @@
 /**
- * The preview pane of a print project's Code section: what the project's own
- * code printed, beside the game that printed it.
+ * A print project's Output: the pages its own code has printed.
  *
- * A print project has two sections, Draw and Code. Code is where the page is
- * made: the file on one side, and over the canvas the game on the left and
- * this pane on the right. The game does not start on its own and does not
- * restart on a save — a print can be seconds of work at full resolution, or
- * a loop writing a hundred files — so it runs when **Run** in the code bar is
- * pressed and stops when Stop is (see `GameFrame`).
+ * A print project has two sections, Draw and **Output**. Output is the code
+ * panel and, over the canvas, this pane and nothing else beside it — the game
+ * runs underneath it, covered, and what is shown is what it printed. The game
+ * starts as Output opens, and from then on only when Run or Restart in the
+ * code bar says so: it does not restart on a save, because a print can be
+ * seconds of work at full resolution, or a loop writing a hundred files. A new
+ * sheet — a size picked in Page Setup, the frame dragged on the canvas — does
+ * restart it, because the page it was printing is not the page any more.
  *
  * Each `ExportForPrint(options)` the game calls arrives here as a page (see
  * `templates/print/js/shared/print.js`), and Rust writes it from the
- * full-resolution files under `print/`: as a PDF (`print_pdf.rs`), a layered
- * PSD at the project's DPI (`print_psd.rs`), or both, into
+ * full-resolution files under `print/` as a PDF (`print_pdf.rs`), a layered
+ * PSD at the project's DPI (`print_psd.rs`) or a PNG at that DPI
+ * (`print_png.rs`) — whichever the call names, or the bar's — into
  * `exports/<folder>/<name>`. Pages are written one at a time in the order
  * they came, and the game is told when each is done, which is what settles
- * the promise the call returned — so code can `await` a page before drawing
- * the next.
+ * the promise the call returned.
  *
  * The bar across the top of the pane:
  *
- * - **PDF · PSD · PDF + PSD**: what a page is written as when the call does
- *   not say. Stored on the project. Changed after a page has arrived, the
- *   other format is written from that same page, because the game is holding
- *   it and a generative piece would not draw it again.
+ * - **PDF · PSD · PNG**: what a page is written as when the call does not
+ *   say. Stored on the project. Changed after a page has arrived, that page is
+ *   written in the new format too, because the game is holding it and a
+ *   generative piece would not draw it again.
  * - **Export now**: asks the game for the page, the way a line of code does,
  *   so a project that never calls it still prints.
- * - **Save PDF / Save PSD**: the last page's files, through the platform's
- *   save dialog. **Save all** is every file this run wrote, as one zip.
+ * - **Save**: the last page's file, through the platform's save dialog — one
+ *   button per format it was written in. **Save all** is every file this run
+ *   wrote, as one zip.
  *
  * The preview is the real file wherever a webview can show one: the PDF in a
- * frame from the asset server. A PSD cannot be shown that way, so a PSD-only
- * page previews the flattened image Rust composited into it.
+ * frame, the PNG as itself. A PSD cannot be shown that way, so a PSD page
+ * previews the flattened image Rust composited into it.
  */
 
 import { h } from "../lib/dom";
 import { optionSegmented } from "../lib/options-controls";
-import {
-  printing,
-  projects,
-  type PrintPage,
-  type PrintResult,
-} from "../lib/ipc";
+import { printing, type PrintPage, type PrintResult } from "../lib/ipc";
 import * as log from "../lib/log";
 import {
+  describePage,
   dpiOf,
   FORMATS,
   projectOutput,
   writes,
-  type PrintFormats,
+  type PrintFormat,
 } from "../lib/print";
+import { changePage } from "./print-page";
 import { saveAs } from "../lib/save-as";
 import type { ProjectMeta } from "../lib/types";
 
@@ -65,7 +64,8 @@ export interface PrintExportHost {
   base: () => string | null;
 }
 
-type Format = "pdf" | "psd";
+type Format = PrintFormat;
+const ORDER: Format[] = ["pdf", "psd", "png"];
 
 /** A page and what has been written from it. */
 interface Printed {
@@ -111,7 +111,7 @@ export class PrintExport {
         hidden: "",
         onClick: () => void this.saveOne(format),
       }) as HTMLButtonElement;
-    this.saveButtons = { pdf: save("pdf"), psd: save("psd") };
+    this.saveButtons = { pdf: save("pdf"), psd: save("psd"), png: save("png") };
     this.saveAll = h("button", {
       class: "btn btn-ghost",
       hidden: "",
@@ -122,7 +122,7 @@ export class PrintExport {
     const formats = optionSegmented(
       FORMATS.map((row) => ({ value: row.value, label: row.label })),
       projectOutput(meta).formats,
-      (value) => void this.setFormats(value as PrintFormats),
+      (value) => void this.setFormats(value as PrintFormat),
     );
     formats.root.classList.add("print-export-formats");
     formats.root.title = "What a page is written as, when the code does not say";
@@ -139,30 +139,45 @@ export class PrintExport {
         this.saveAll,
         this.saveButtons.pdf,
         this.saveButtons.psd,
+        this.saveButtons.png,
       ),
     );
     this.empty = h("div", { class: "print-export-empty" });
     this.body = h("div", { class: "print-export-body" }, this.empty);
     this.root = h("div", { class: "print-export-pane" }, bar, this.body);
-    this.idle();
+    this.stopped();
   }
 
-  /** No game running: say how to start one. */
-  idle(): void {
-    this.reset();
+  /** What the sheet is, the way the status line says it. */
+  private sheet(): string {
+    const output = projectOutput(this.meta);
+    return `${describePage(output)} · ${dpiOf(output)} DPI`;
+  }
+
+  /**
+   * The game has stopped. The last page stays in the preview — it is the
+   * thing just made — and only the status says the code is no longer running.
+   */
+  stopped(): void {
+    this.run += 1;
     this.nowButton.disabled = true;
-    this.status.textContent = `Not running · ${dpiOf(projectOutput(this.meta))} DPI`;
+    if (this.last) {
+      this.show();
+      this.status.textContent = `Stopped · ${this.status.textContent}`;
+      return;
+    }
+    this.reset();
+    this.status.textContent = `Stopped · ${this.sheet()}`;
     this.empty.textContent =
       "Press Run in the code bar to start your code. Each page it prints " +
       "with ExportForPrint() appears here.";
   }
 
-  /** The game has started: nothing printed yet. */
+  /** The game has (re)started: nothing printed yet. */
   waiting(): void {
     this.reset();
     this.nowButton.disabled = false;
-    this.status.textContent =
-      `Running — waiting for ExportForPrint() · ${dpiOf(projectOutput(this.meta))} DPI`;
+    this.status.textContent = `Running · waiting for ExportForPrint() · ${this.sheet()}`;
     this.empty.textContent =
       "The page appears here when the code calls ExportForPrint(), or when " +
       "you press Export now.";
@@ -187,17 +202,11 @@ export class PrintExport {
     const run = this.run;
     this.queue = this.queue.then(async () => {
       if (run !== this.run) return;
-      const wanted = writes({
-        ...projectOutput(this.meta),
-        ...(page.formats ? { formats: page.formats } : {}),
-      });
+      const wanted = writes(projectOutput(this.meta), page.formats);
       const printed: Printed = { page, files: {} };
       let error: string | null = null;
       try {
-        for (const format of ["pdf", "psd"] as const) {
-          if (!wanted[format]) continue;
-          await this.write(printed, format, run);
-        }
+        for (const format of wanted) await this.write(printed, format, run);
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);
         log.error("Could not write the page:", err);
@@ -219,14 +228,17 @@ export class PrintExport {
 
   private async write(printed: Printed, format: Format, run: number): Promise<void> {
     const name = printed.page.out ?? "page";
-    this.status.textContent =
-      format === "pdf"
-        ? `Drawing ${name}.pdf from the full-resolution files…`
-        : `Layering ${name}.psd at full resolution…`;
+    this.status.textContent = {
+      pdf: `Drawing ${name}.pdf from the full-resolution files…`,
+      psd: `Layering ${name}.psd at full resolution…`,
+      png: `Rendering ${name}.png at full resolution…`,
+    }[format];
     const result =
       format === "pdf"
         ? await printing.exportPdf(this.meta.id, printed.page)
-        : await printing.exportPsd(this.meta.id, printed.page);
+        : format === "psd"
+          ? await printing.exportPsd(this.meta.id, printed.page)
+          : await printing.exportPng(this.meta.id, printed.page);
     if (run !== this.run) return;
     printed.files[format] = result;
     if (!this.runFiles.includes(result.path)) this.runFiles.push(result.path);
@@ -238,15 +250,21 @@ export class PrintExport {
     this.syncSaves();
     const base = this.host.base();
     const last = this.last;
-    const shown = last?.files.pdf ?? last?.files.psd;
-    if (!base || !last || !shown) return;
+    // The format the bar says, if the page has it; otherwise whatever it has.
+    const preferred = projectOutput(this.meta).formats;
+    const format = last?.files[preferred]
+      ? preferred
+      : ORDER.find((f) => last?.files[f]);
+    const shown = format ? last?.files[format] : undefined;
+    if (!base || !last || !shown || !format) return;
 
     this.view?.remove();
-    const pdf = last.files.pdf;
-    const src = `${base}/${pdf ? pdf.path : (last.files.psd?.preview ?? "")}?t=${Date.now()}`;
-    this.view = pdf
-      ? h("iframe", { class: "print-export-view", title: "PDF preview", src })
-      : h("img", { class: "print-export-image", alt: "The page, as the PSD flattens", src });
+    const file = format === "pdf" ? shown.path : (shown.preview ?? shown.path);
+    const src = `${base}/${file}?t=${Date.now()}`;
+    this.view =
+      format === "pdf"
+        ? h("iframe", { class: "print-export-view", title: "PDF preview", src })
+        : h("img", { class: "print-export-image", alt: "The printed page", src });
     this.empty.hidden = true;
     this.body.appendChild(this.view);
 
@@ -264,7 +282,7 @@ export class PrintExport {
 
   /** A Save for each file the last page has, and Save all past one page. */
   private syncSaves(): void {
-    for (const format of ["pdf", "psd"] as const) {
+    for (const format of ORDER) {
       this.saveButtons[format].hidden = !this.last?.files[format];
     }
     const lastCount = Object.keys(this.last?.files ?? {}).length;
@@ -274,40 +292,26 @@ export class PrintExport {
 
   /**
    * Change what a page is written as when the code does not say. Stored on
-   * the project, and the last page — if there is one — gets the format it has
-   * not had yet, from the page the game is holding.
+   * the project, and the last page — if there is one — is written in the new
+   * format too, from the page the game is holding.
    */
-  private async setFormats(formats: PrintFormats): Promise<void> {
-    const output = projectOutput(this.meta);
-    this.meta.output = { ...output, formats };
+  private async setFormats(formats: PrintFormat): Promise<void> {
+    this.meta.output = { ...projectOutput(this.meta), formats };
     const last = this.last;
-    if (last) {
+    if (last && !last.files[formats]) {
       const run = this.run;
-      const wanted = writes(this.meta.output);
       this.queue = this.queue.then(async () => {
         try {
-          for (const format of ["pdf", "psd"] as const) {
-            if (wanted[format] && !last.files[format]) {
-              await this.write(last, format, run);
-            }
-          }
+          await this.write(last, formats, run);
         } catch (err) {
           log.error("Could not write the page:", err);
         }
         if (run === this.run && this.last === last) this.show();
       });
+    } else if (last) {
+      this.show();
     }
-    try {
-      const written = await projects.setPaper(
-        this.meta.id,
-        output.paper,
-        output.landscape,
-        formats,
-      );
-      this.meta.output = written.output;
-    } catch (err) {
-      log.error("Could not save the output:", err);
-    }
+    await changePage({ formats });
   }
 
   private async saveOne(format: Format): Promise<void> {
@@ -316,7 +320,7 @@ export class PrintExport {
     await saveAs({
       fileName: file.path.slice(file.path.lastIndexOf("/") + 1),
       filter: {
-        name: format === "pdf" ? "PDF" : "Photoshop document",
+        name: { pdf: "PDF", psd: "Photoshop document", png: "PNG image" }[format],
         extensions: [format],
       },
       what: `Saved the ${format.toUpperCase()}`,

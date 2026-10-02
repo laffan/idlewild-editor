@@ -7,9 +7,11 @@
  * not a layout choice: it is a sheet, one point to the CSS pixel, and the game
  * is exactly that size. So the size, the placement, the margin and the corner
  * radius have nothing left to say, and what takes their place is what a print
- * dialog asks — **which paper**, and **which way round**. What a page is
- * written as — PDF, PSD or both — is asked where pages are made, in the
- * preview pane's bar.
+ * dialog asks — the **Dimensions**: a standard sheet and which way round, or
+ * Custom, a width and a height in inches or centimetres. These are the same
+ * rows the New Project sheet shows (`lib/print-dimensions.ts`). What a page is
+ * written as — PDF, PSD or PNG — is asked where pages are made, in the Output
+ * preview's bar.
  *
  * The sheet decides where the page falls on the canvas (the solid frame from
  * the origin, see `screen-guide.ts`), how big the game's screen is, and the
@@ -20,30 +22,21 @@
  * was written at it, and a file made at 300 DPI does not have 600's worth of
  * pixels to give — see `src-tauri/src/print.rs`.
  *
- * Commits as it changes, like every settings sheet here, and restarts a game
- * that is up once the config has been rewritten around the new sheet — the
- * same `onChanged` the game's Page Setup uses.
+ * Commits as it changes, like every settings sheet here, through
+ * `changePage` — which writes it, moves the frame on the canvas and restarts a
+ * running Output on the new sheet once the config has been rewritten around
+ * it. Output is never more than one change behind the sheet in front of you.
  */
 
 import { openSheet } from "../lib/sheet";
 import { optionGroup, optionRow, optionsPage } from "../lib/options-list";
-import { optionSegmented } from "../lib/options-controls";
-import { projects } from "../lib/ipc";
-import * as log from "../lib/log";
-import {
-  describePage,
-  dpiOf,
-  PAPERS,
-  projectOutput,
-  setOpenProject,
-} from "../lib/print";
+import { describePage, dpiOf, projectOutput } from "../lib/print";
+import { dimensionRows } from "../lib/print-dimensions";
 import type { ProjectMeta } from "../lib/types";
 import { h } from "../lib/dom";
+import { changePage } from "./print-page";
 
-export function openPrintSetup(
-  meta: ProjectMeta,
-  onChanged: () => void = () => {},
-): void {
+export function openPrintSetup(meta: ProjectMeta): void {
   let output = projectOutput(meta);
 
   const sheet = openSheet({
@@ -53,48 +46,21 @@ export function openPrintSetup(
   });
 
   const size = h("span", { class: "option-value", text: describePage(output) });
-
-  const commit = (paper: string, landscape: boolean): void => {
-    output = { ...output, paper, landscape };
+  const dimensions = dimensionRows(output, (patch) => {
+    output = { ...output, ...patch };
     size.textContent = describePage(output);
-    void projects
-      .setPaper(meta.id, paper, landscape)
-      .then((written) => {
-        meta.output = written.output;
-        // The screen guide draws the sheet; it reads this.
-        setOpenProject(meta);
-        onChanged();
-      })
-      .catch((err) => log.error("Could not save the paper:", err));
-  };
-
-  const paper = optionSegmented(
-    PAPERS.map((row) => ({ value: row.id, label: row.label })),
-    output.paper,
-    (value) => commit(value, output.landscape),
-  );
-  const orientation = optionSegmented(
-    [
-      { value: "portrait", label: "Portrait" },
-      { value: "landscape", label: "Landscape" },
-    ],
-    output.landscape ? "landscape" : "portrait",
-    (value) => commit(output.paper, value === "landscape"),
-  );
+    void changePage(patch);
+  });
 
   sheet.body.appendChild(
     optionsPage([
       optionGroup({
-        title: "Paper",
+        title: "Page",
         note:
-          "The sheet the page is printed on. Its top-left corner is the world's " +
-          "origin and one point is one world pixel, so the frame on the canvas " +
-          "in Draw is this sheet, edge for edge.",
-        rows: [
-          optionRow({ title: "Size", control: paper.root }),
-          optionRow({ title: "Orientation", control: orientation.root }),
-          optionRow({ title: "Page", control: size }),
-        ],
+          "The sheet the page is printed on. One point is one world pixel, and " +
+          "the frame on the canvas in Draw is this sheet, edge for edge — drag " +
+          "its label to move the page over what you have drawn.",
+        rows: [...dimensions.rows, optionRow({ title: "Size", control: size })],
       }),
       optionGroup({
         title: "Resolution",

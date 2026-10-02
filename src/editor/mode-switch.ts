@@ -66,8 +66,8 @@ export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
   deps.gameFrame.beforeRun = () => deps.store.flush();
 
   const runGame = (): void => {
-    // A print project's game is started by Run and nothing else — see
-    // `GameFrame.reload` for why.
+    // A print project's game is started by entering Output, Run and Restart,
+    // and nothing else — see `GameFrame.reload` for why.
     if (deps.gameFrame.isPrint) return;
     void deps.store.flush().then(() => {
       // The canvas may have been come back to while that was in flight.
@@ -97,11 +97,11 @@ export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
         deps.gameFrame.stop();
         return;
       }
-      // A print project's Code is the game beside the page it prints, and the
-      // game waits for Run.
+      // A print project's Output runs as it opens, and from then on only
+      // when Run or Restart says so — see `GameFrame.reload`.
       if (deps.gameFrame.isPrint) {
-        deps.gameFrame.show();
-        log.info("Code — press Run to start it; the page it prints shows beside it");
+        log.info("Output — running this project's code; Stop or Restart it from the code bar");
+        void deps.gameFrame.run();
         return;
       }
       log.info(

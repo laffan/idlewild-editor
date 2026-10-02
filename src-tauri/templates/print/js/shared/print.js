@@ -23,7 +23,7 @@
 //   ExportForPrint({
 //     name: "page",          // the file's name, without an extension
 //     folder: "",            // a folder inside the project's exports/
-//     formats: "pdf",        // "pdf", "psd", "both" — or what the bar says
+//     formats: "pdf",        // "pdf", "psd", "png", or a list — or the bar's
 //     stop: true,            // stop every scene once the page is read
 //   });
 //
@@ -148,14 +148,16 @@ function outPath(options) {
   return folder ? `${folder}/${name}` : name;
 }
 
-/** "pdf", "psd" or "both", from any of the ways it might be said. */
+/**
+ * The formats a page is written as, as a list — or undefined, for whatever
+ * the editor's bar says. One format or several: `"png"`, `["pdf", "png"]`.
+ */
 function formatsOf(formats) {
-  if (Array.isArray(formats)) {
-    const pdf = formats.includes("pdf");
-    const psd = formats.includes("psd");
-    return pdf && psd ? "both" : psd ? "psd" : pdf ? "pdf" : undefined;
-  }
-  return ["pdf", "psd", "both"].includes(formats) ? formats : undefined;
+  const known = ["pdf", "psd", "png"];
+  const list = (Array.isArray(formats) ? formats : [formats]).filter((f) =>
+    known.includes(f),
+  );
+  return list.length > 0 ? [...new Set(list)] : undefined;
 }
 
 /** What the console says about a page. */

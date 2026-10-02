@@ -25,7 +25,7 @@ import { h } from "../lib/dom";
 import { assetBase } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { LogValue } from "../lib/log-value";
-import { isPrint } from "../lib/print";
+import { currentPage, isPrint, onPageChange } from "../lib/print";
 import type { ProjectMeta } from "../lib/types";
 import { isPrintPage, PrintExport } from "./print-export";
 
@@ -44,8 +44,9 @@ export class GameFrame {
    * out of that game.
    */
   private readonly exporter: PrintExport | null;
-  /** Where a print project's game goes before Run has been pressed. */
-  private readonly idleNote: HTMLElement | null;
+  /** Stops listening for changes to the sheet. */
+  private readonly stopListening: () => void = () => {};
+  private restartTimer = 0;
   /**
    * Flushes the document before a Run, so the config the game reads is the
    * canvas as it stands. Set by the mode switch, which holds the store.
@@ -63,15 +64,27 @@ export class GameFrame {
           base: () => this.base,
         })
       : null;
-    this.idleNote = this.exporter
-      ? h("div", {
-          class: "game-frame-idle",
-          text: "Press Run to start your code.",
-        })
-      : null;
-    if (this.exporter && this.idleNote) {
+    if (this.exporter) {
+      // The preview is all a print project's Output shows: the game runs
+      // underneath it, full size and covered, because a frame that is hidden
+      // or off screen is one the browser stops drawing — and a game that is
+      // not drawn never reaches the end of a frame to print.
       this.root.classList.add("printing");
-      this.root.append(this.idleNote, this.exporter.root);
+      this.root.append(this.exporter.root);
+      // A new sheet is a new game: Page Setup or the frame dragged on the
+      // canvas restarts a running Output on it. Coalesced, because a size
+      // typed a digit at a time is several changes in a second.
+      // Only a change to the sheet itself — its size or where it is — and not
+      // one to what a page is written as, which the game never reads.
+      let sheet = JSON.stringify(currentPage());
+      this.stopListening = onPageChange(() => {
+        const now = JSON.stringify(currentPage());
+        if (now === sheet) return;
+        sheet = now;
+        if (!this.running) return;
+        window.clearTimeout(this.restartTimer);
+        this.restartTimer = window.setTimeout(() => void this.restart(), 350);
+      });
     }
     window.addEventListener("message", this.onMessage);
   }
@@ -88,10 +101,7 @@ export class GameFrame {
     return this.exporter !== null;
   }
 
-  /**
-   * Put a print project's frame up without starting the game — what entering
-   * Code does on one. The game waits for Run.
-   */
+  /** Put the frame up without starting the game. */
   show(): void {
     this.root.classList.remove("hidden");
   }
@@ -105,16 +115,26 @@ export class GameFrame {
 
   /**
    * Stop's half: the game comes down and the frame stays up, so the last page
-   * printed stays in the preview beside where the game was.
+   * printed stays in the preview.
    */
   halt(): void {
     const was = this.running;
     this.running = false;
+    window.clearTimeout(this.restartTimer);
     this.frame?.remove();
     this.frame = null;
-    this.idleNote?.classList.remove("hidden");
-    this.exporter?.idle();
+    this.exporter?.stopped();
     if (was) this.onRunningChange?.(false);
+  }
+
+  /** Restart's half: the same game from the top, against what is on disk. */
+  async restart(): Promise<void> {
+    window.clearTimeout(this.restartTimer);
+    await this.beforeRun();
+    if (!this.running) return this.run();
+    this.frame?.remove();
+    this.frame = null;
+    this.mount();
   }
 
   /**
@@ -144,10 +164,10 @@ export class GameFrame {
     // Torn down rather than hidden: a hidden game keeps stepping, holds a
     // WebGL context beside the editor's own, and goes on logging into a
     // drawer whose owner has gone back to editing.
+    window.clearTimeout(this.restartTimer);
     this.frame?.remove();
     this.frame = null;
-    this.idleNote?.classList.remove("hidden");
-    this.exporter?.idle();
+    this.exporter?.stopped();
     if (was) this.onRunningChange?.(false);
   }
 
@@ -169,6 +189,7 @@ export class GameFrame {
   }
 
   destroy(): void {
+    this.stopListening();
     window.removeEventListener("message", this.onMessage);
     this.stop();
     this.root.remove();
@@ -187,7 +208,6 @@ export class GameFrame {
     const url = `${this.base}/game/index.html?idlewild=console&t=${Date.now()}`;
     // A fresh game has printed nothing yet.
     this.exporter?.waiting();
-    this.idleNote?.classList.add("hidden");
     const frame = h("iframe", {
       class: "game-frame-view",
       src: url,

@@ -89,6 +89,13 @@ describe("the boundary", () => {
 });
 
 describe("pageBox", () => {
+  it("hangs from the page's own corner once it has been moved", () => {
+    const box = pageBox(view(), { x: 100, y: -50, width: 612, height: 792 });
+    // The origin stays where it is; the sheet is 100 right and 50 up of it.
+    expect(box.x).toBe(400);
+    expect(box.frame).toEqual({ x: 500, y: 250, width: 612, height: 792 });
+  });
+
   // A print project's sheet hangs from the origin rather than centring on it,
   // and only the camera's zoom scales it: the game looks at the page at 1×.
   it("puts the sheet's top-left corner on the origin, life size at 1×", () => {

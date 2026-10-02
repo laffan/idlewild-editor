@@ -17,7 +17,7 @@ import type {
   Projection,
   Scaffold,
 } from "./types";
-import { DEFAULT_OUTPUT, type Output, type PrintFormats } from "./print";
+import { DEFAULT_OUTPUT, type Output, type PrintFormat } from "./print";
 
 /**
  * How many bytes are encoded as one standalone piece.
@@ -223,17 +223,13 @@ export const projects = {
       output,
     }),
   /**
-   * The sheet a print project is laid out on — what Page Setup writes on one.
-   * The kind and the DPI are not here: they are facts about every PSD the
-   * project has already written. See `lib/print.ts`.
+   * Change a print project's sheet — its size, standard or typed, which way
+   * round, where its corner is, what a page is written as. Only what the
+   * patch names changes. The kind and the DPI are not here: they are facts
+   * about every PSD the project has already written. See `lib/print.ts`.
    */
-  setPaper: (
-    id: string,
-    paper: string,
-    landscape: boolean,
-    formats?: PrintFormats,
-  ) =>
-    invoke<ProjectMeta>("set_project_paper", { id, paper, landscape, formats }),
+  setPage: (id: string, patch: Partial<Omit<Output, "kind" | "dpi">>) =>
+    invoke<ProjectMeta>("set_project_page", { id, patch }),
   /**
    * Change how a project renders and what moves in it. Hands back the meta as
    * written, and rewrites the config the project's own code reads — so a game
@@ -367,7 +363,7 @@ export interface PrintPage {
   /** The folder and name it asked for, inside `exports/`, no extension. */
   out?: string;
   /** What it asked to be written, or nothing for what the bar says. */
-  formats?: PrintFormats;
+  formats?: PrintFormat[];
 }
 
 /** What Rust says about the PDF it wrote. */
@@ -394,6 +390,9 @@ export const printing = {
   /** Write the same page as a layered PSD at the project's DPI. */
   exportPsd: (id: string, page: PrintPage) =>
     invoke<PrintResult>("export_print_psd", { id, page }),
+  /** Write the same page as one PNG at the project's DPI. */
+  exportPng: (id: string, page: PrintPage) =>
+    invoke<PrintResult>("export_print_png", { id, page }),
   /** Copy one export — a path an export handed back — to where the save
    *  dialog said. */
   saveFile: (id: string, rel: string, path: string) =>

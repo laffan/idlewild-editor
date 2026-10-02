@@ -42,6 +42,7 @@ const LEGACY_PINNED_KEY = "codePinned";
 export interface CodeRunner {
   readonly isRunning: boolean;
   run(): Promise<void>;
+  restart(): Promise<void>;
   halt(): void;
   onRunningChange: ((running: boolean) => void) | null;
 }
@@ -67,9 +68,10 @@ export interface CodePanelSlots {
    */
   onClose?: () => void;
   /**
-   * A print project's game. With one, the file bar carries **Run**, which
-   * saves the open file and starts the game, and turns into **Stop** while it
-   * is up. A game project restarts on every save instead, and has no button.
+   * A print project's game. With one, the file bar carries **Stop** and
+   * **Restart** while it is up and **Run** while it is not; Run and Restart
+   * save the open file first. A game project restarts on every save instead,
+   * and has neither.
    */
   runner?: CodeRunner;
 }
@@ -116,35 +118,45 @@ export class CodePanel {
   }
 
   /**
-   * Run, or Stop. Built per showing, because the bar it sits in is.
+   * Stop and Restart while the game is up, Run while it is not. Built per
+   * showing, because the bar they sit in is.
    *
-   * Run writes the open file first: pressing it is asking to see what was
-   * just typed, and a run against the version before the last edit would
-   * look like the edit had not worked.
+   * Run and Restart write the open file first: pressing either is asking to
+   * see what was just typed, and a run against the version before the last
+   * edit would look like the edit had not worked.
    */
   private runButton(modal: CodeModal, runner: CodeRunner): HTMLElement {
-    const button = h("button", {
-      class: "code-bar-btn code-run",
-      type: "button",
-      onClick: () => {
-        if (runner.isRunning) {
-          runner.halt();
-          return;
-        }
-        void modal.save().then(() => runner.run());
-      },
-    }) as HTMLButtonElement;
+    const button = (
+      glyph: string | readonly string[],
+      text: string,
+      title: string,
+      act: () => void,
+    ) =>
+      h(
+        "button",
+        { class: "code-bar-btn code-run", type: "button", title, onClick: act },
+        icon(glyph, 13),
+        h("span", { text }),
+      ) as HTMLButtonElement;
+    const saved = (then: () => Promise<void>) => () => void modal.save().then(then);
+    const run = button(ICONS.play, "Run", "Save, and run this project's code", saved(() => runner.run()));
+    const stop = button(ICONS.stop, "Stop", "Stop the code", () => runner.halt());
+    stop.classList.add("is-stop");
+    const restart = button(
+      ICONS.restart,
+      "Restart",
+      "Save, and run this project's code again from the top",
+      saved(() => runner.restart()),
+    );
+    const group = h("div", { class: "code-run-group" }, run, stop, restart);
     const show = (running: boolean) => {
-      button.replaceChildren(
-        icon(running ? ICONS.stop : ICONS.play, 13),
-        h("span", { text: running ? "Stop" : "Run" }),
-      );
-      button.title = running ? "Stop the game" : "Save, and run this project's code";
-      button.setAttribute("aria-pressed", String(running));
+      run.hidden = running;
+      stop.hidden = !running;
+      restart.hidden = !running;
     };
     show(runner.isRunning);
     runner.onRunningChange = show;
-    return button;
+    return group;
   }
 
   /**
