@@ -439,7 +439,7 @@ See [Print projects](printing.md) for how they work.
   them in its manifest, but the PDF draws each sprite's pixels without
   psd-to-phaser's mask filter, so a masked layer prints unmasked too.
 - **A tile layer's merged palette prints from the screen copy.**
-  `psd_flatten` writes it into `assets/` only. The Export bar names every
+  `psd_flatten` writes it into `assets/` only. The preview's bar names every
   sprite that had no full-resolution twin, so this is reported rather than
   silent.
 - **The PSD's flattened copy ignores blend modes.** The layers carry them;

@@ -76,16 +76,16 @@ Part of [the Idlewild manual](README.md).
   — the config the game reads is rewritten under it, and a game that is
   running restarts on it
 
-## Code or print
+## Web or print
 
-- **Output** is the last question on the sheet: **Code**, a game — which is
-  everything above — or **Print**, a page. Print asks for a **resolution**
-  (300 or 600 DPI, fixed once the project exists), a **paper** and orientation
-  (changeable later in Page Setup), and what Export writes — **PDF**, **PSD**,
-  or both. Vanilla is greyed out under Print, because `ExportForPrint()` reads
-  the page off a Phaser scene and a vanilla page has none; Default zoom goes
-  away, because a page is looked at one point to the pixel. See
-  [Printing](printing.md)
+- **Output** is the first question on the sheet: **Web**, a game — which is
+  everything on this page — or **Print**, a page. Both are code; the choice is
+  where the work ends up. Print asks for a **resolution** (300 or 600 DPI,
+  fixed once the project exists) and a **paper** and orientation (changeable
+  later in Page Setup), and takes away Scaffolding and Rendering: a print
+  project is always Blank PSD to Phaser, because `ExportForPrint()` reads the
+  page off a Phaser scene and a character or gravity is a game's, and a page is
+  looked at one point to the pixel. See [Printing](printing.md)
 
 ## A character, or not
 

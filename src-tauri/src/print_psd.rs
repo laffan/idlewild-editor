@@ -25,9 +25,8 @@ use crate::store;
 use image::RgbaImage;
 use psd::{BlendMode, LayerBuilder, PsdBuilder};
 
-/// Where the last PSD a project printed is written, and its preview.
-pub const PSD_REL: &str = "print-out/page.psd";
-pub const PREVIEW_REL: &str = "print-out/page-preview.png";
+/// The flattened page of the last PSD a project printed, for the preview.
+pub const PREVIEW_REL: &str = "print-out/preview.png";
 
 /// Write the layered PSD for a page a print project sent, and a preview of it.
 #[tauri::command(async)]
@@ -41,17 +40,17 @@ pub fn export_print_psd(id: String, page: PrintPage) -> Result<PrintResult, Stri
     let mut report = Report::default();
     let built = build(&page, dpi, &read, &mut report)?;
 
-    let dir = store::project_dir(&id)?;
-    let dest = dir.join(PSD_REL);
-    if let Some(parent) = dest.parent() {
+    let (rel, dest) = crate::print_files::export_path(&id, page.out.as_deref(), "psd")?;
+    std::fs::write(&dest, &built.bytes).map_err(|e| format!("Cannot write the PSD: {e}"))?;
+    let preview = store::project_dir(&id)?.join(PREVIEW_REL);
+    if let Some(parent) = preview.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&dest, &built.bytes).map_err(|e| format!("Cannot write the PSD: {e}"))?;
-    std::fs::write(dir.join(PREVIEW_REL), preview_png(&built.flattened, 1600)?)
+    std::fs::write(preview, preview_png(&built.flattened, 1600)?)
         .map_err(|e| format!("Cannot write the preview: {e}"))?;
 
     Ok(PrintResult {
-        path: PSD_REL.to_string(),
+        path: rel,
         bytes: built.bytes.len(),
         width: page.page.width,
         height: page.page.height,
@@ -353,6 +352,7 @@ mod tests {
                 sprite("hut/sprites/roof.png", [6.0, 0.0, 0.0, 6.0, 30.0, 6.0], 0.5),
             ],
             skipped: 0,
+            out: None,
         };
         let mut report = Report::default();
         let built = build(&page, 300, &read, &mut report).unwrap();

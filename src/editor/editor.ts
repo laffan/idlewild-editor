@@ -397,11 +397,10 @@ export async function mountEditor(
     onClose: () => setMode("draw"),
     onSaved: (path) => {
       // Saving code applies it: a game that is up restarts against the file
-      // just written, which is the only way to tell whether the change worked.
-      if (!gameFrame.isRunning) return;
-      gameFrame.reload();
-      log.info(`Play restarted on ${path}`);
+      // just written. A print project's waits for Run — see `GameFrame.reload`.
+      if (gameFrame.reload()) log.info(`Play restarted on ${path}`);
     },
+    runner: gameFrame.isPrint ? gameFrame : undefined,
   });
 
   // The document's save is what rewrites `game/js/game.config.json`, so it is

@@ -60,7 +60,9 @@ fn the_scaffold_and_the_config_describe_the_sheet() {
         assert!(game.join("js/shared/print.js").exists());
 
         let scene = std::fs::read_to_string(game.join("js/scenes/Scene1.js")).unwrap();
-        assert!(scene.contains("// whenPsdsReady(this, () => ExportForPrint());"));
+        assert!(scene.contains(
+            "// whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"pdf\" }));"
+        ));
         assert!(scene.contains("  whenPsdsReady,\n} from"));
 
         let config: serde_json::Value = serde_json::from_str(
@@ -220,13 +222,24 @@ fn a_print_psd_is_processed_twice_and_prints_from_the_full_one() {
         // 30 points at 600 DPI, plus the column a sub-pixel position touches.
         assert!((250..=251).contains(&psd.layers()[0].width()));
         assert!(dir.join(layered.preview.unwrap()).exists());
-        print_pdf::save_print_file(
+        assert_eq!(layered.path, "exports/page.psd");
+        crate::print_files::save_print_file(
             meta.id.clone(),
-            "psd".into(),
+            layered.path.clone(),
             dir.join("copy.psd").display().to_string(),
         )
         .unwrap();
         assert!(dir.join("copy.psd").exists());
+        crate::print_files::save_print_files(
+            meta.id.clone(),
+            vec![printed.path.clone(), layered.path.clone()],
+            dir.join("all.zip").display().to_string(),
+        )
+        .unwrap();
+        let zip = zip::ZipArchive::new(std::fs::File::open(dir.join("all.zip")).unwrap()).unwrap();
+        let mut names: Vec<&str> = zip.file_names().collect();
+        names.sort();
+        assert_eq!(names, vec!["page.pdf", "page.psd"]);
     });
     let _ = store::delete_project(&meta.id);
     if let Err(panic) = result {

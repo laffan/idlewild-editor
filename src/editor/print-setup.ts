@@ -7,7 +7,9 @@
  * not a layout choice: it is a sheet, one point to the CSS pixel, and the game
  * is exactly that size. So the size, the placement, the margin and the corner
  * radius have nothing left to say, and what takes their place is what a print
- * dialog asks — **which paper**, and **which way round**.
+ * dialog asks — **which paper**, and **which way round**. What a page is
+ * written as — PDF, PSD or both — is asked where pages are made, in the
+ * preview pane's bar.
  *
  * The sheet decides where the page falls on the canvas (the solid frame from
  * the origin, see `screen-guide.ts`), how big the game's screen is, and the
@@ -31,9 +33,7 @@ import * as log from "../lib/log";
 import {
   describePage,
   dpiOf,
-  FORMATS,
   PAPERS,
-  type PrintFormats,
   projectOutput,
   setOpenProject,
 } from "../lib/print";
@@ -54,15 +54,11 @@ export function openPrintSetup(
 
   const size = h("span", { class: "option-value", text: describePage(output) });
 
-  const commit = (
-    paper: string,
-    landscape: boolean,
-    formats: PrintFormats = output.formats,
-  ): void => {
-    output = { ...output, paper, landscape, formats };
+  const commit = (paper: string, landscape: boolean): void => {
+    output = { ...output, paper, landscape };
     size.textContent = describePage(output);
     void projects
-      .setPaper(meta.id, paper, landscape, formats)
+      .setPaper(meta.id, paper, landscape)
       .then((written) => {
         meta.output = written.output;
         // The screen guide draws the sheet; it reads this.
@@ -86,12 +82,6 @@ export function openPrintSetup(
     (value) => commit(output.paper, value === "landscape"),
   );
 
-  const formats = optionSegmented(
-    FORMATS.map((row) => ({ value: row.value, label: row.label })),
-    output.formats,
-    (value) => commit(output.paper, output.landscape, value as PrintFormats),
-  );
-
   sheet.body.appendChild(
     optionsPage([
       optionGroup({
@@ -107,16 +97,8 @@ export function openPrintSetup(
         ],
       }),
       optionGroup({
-        title: "Output",
+        title: "Resolution",
         rows: [
-          optionRow({
-            title: "Export as",
-            hint:
-              "What Export writes when the page is printed: the PDF, the same " +
-              "page as a layered PSD at the print resolution — one layer per " +
-              "thing on the page, to finish by hand — or both.",
-            control: formats.root,
-          }),
           optionRow({
             title: "Print resolution",
             hint:

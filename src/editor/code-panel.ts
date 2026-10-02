@@ -28,11 +28,23 @@
  */
 
 import { CodeModal, type CodePlacement } from "../code/code-modal";
+import { h, ICONS, icon } from "../lib/dom";
 import { createResizer, type Resizer } from "./resizer";
 
 const PLACEMENT_KEY = "codePlacement";
 /** What the panel was before a placement was more than pinned or not. */
 const LEGACY_PINNED_KEY = "codePinned";
+
+/**
+ * What runs a print project's code: started by Run, stopped by Stop, and
+ * never restarted by a save. `GameFrame` is one.
+ */
+export interface CodeRunner {
+  readonly isRunning: boolean;
+  run(): Promise<void>;
+  halt(): void;
+  onRunningChange: ((running: boolean) => void) | null;
+}
 
 export interface CodePanelSlots {
   projectId: string;
@@ -54,6 +66,12 @@ export interface CodePanelSlots {
    * handler the panel simply takes itself down.
    */
   onClose?: () => void;
+  /**
+   * A print project's game. With one, the file bar carries **Run**, which
+   * saves the open file and starts the game, and turns into **Stop** while it
+   * is up. A game project restarts on every save instead, and has no button.
+   */
+  runner?: CodeRunner;
 }
 
 export class CodePanel {
@@ -93,7 +111,40 @@ export class CodePanel {
     // a column of the shell, and there has to be something to move.
     this.slots.shell.appendChild(modal.root);
     modal.setPlacement(readPlacement());
+    if (this.slots.runner) modal.addBarControl(this.runButton(modal, this.slots.runner));
     this.onHistoryChange();
+  }
+
+  /**
+   * Run, or Stop. Built per showing, because the bar it sits in is.
+   *
+   * Run writes the open file first: pressing it is asking to see what was
+   * just typed, and a run against the version before the last edit would
+   * look like the edit had not worked.
+   */
+  private runButton(modal: CodeModal, runner: CodeRunner): HTMLElement {
+    const button = h("button", {
+      class: "code-bar-btn code-run",
+      type: "button",
+      onClick: () => {
+        if (runner.isRunning) {
+          runner.halt();
+          return;
+        }
+        void modal.save().then(() => runner.run());
+      },
+    }) as HTMLButtonElement;
+    const show = (running: boolean) => {
+      button.replaceChildren(
+        icon(running ? ICONS.stop : ICONS.play, 13),
+        h("span", { text: running ? "Stop" : "Run" }),
+      );
+      button.title = running ? "Stop the game" : "Save, and run this project's code";
+      button.setAttribute("aria-pressed", String(running));
+    };
+    show(runner.isRunning);
+    runner.onRunningChange = show;
+    return button;
   }
 
   /**
@@ -106,6 +157,7 @@ export class CodePanel {
    * awaits the write, so tearing the view down straight afterwards is safe.
    */
   hide(): void {
+    if (this.slots.runner) this.slots.runner.onRunningChange = null;
     void this.modal?.save();
     this.modal?.destroy();
     this.modal = null;

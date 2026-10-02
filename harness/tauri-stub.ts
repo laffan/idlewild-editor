@@ -668,17 +668,18 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
       const page = (args as any)?.page;
       const psd = cmd === "export_print_psd";
       return {
-        path: psd ? "print-out/page.psd" : "print-out/page.pdf", bytes: 2048,
+        path: `exports/${page?.out ?? "page"}.${psd ? "psd" : "pdf"}`, bytes: 2048,
         width: page?.page?.width ?? 612, height: page?.page?.height ?? 792,
         dpi: page?.page?.dpi ?? 300, drawn: page?.items?.length ?? 0,
         screenOnly: [], skipped: page?.skipped ?? 0,
-        preview: psd ? "print-out/page-preview.png" : null,
+        preview: psd ? "print-out/preview.png" : null,
       };
     }
     case "set_project_paper":
       return { id: "demo", output: { kind: "print", dpi: 300, paper: (args as any)?.paper,
         landscape: Boolean((args as any)?.landscape), formats: (args as any)?.formats ?? "pdf" } };
     case "save_print_file":
+    case "save_print_files":
       return undefined;
     case "reimport_psd":
       return {

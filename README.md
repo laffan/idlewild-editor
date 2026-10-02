@@ -23,12 +23,13 @@ over it, and **Vanilla** is a page, a stylesheet and a script beside the
 exported assets. Drawing is identical on all four — what the choice decides is
 the program on the other side of the export, not the canvas in front of you.
 
-And a project can make a **page** instead of a game. Pick **Print** under
-Output on the New Project sheet, with a resolution — 300 or 600 DPI — and a
-sheet of paper. The canvas and the code are the same; the game's screen is the
-sheet, one point to the world pixel, and calling `ExportForPrint()` in your
-code stops everything and writes the page as a print-ready PDF, a layered PSD,
-or both. Every PSD in a print project is written at its DPI, and the canvas and
+And a project can make a **page** instead of a game. The New Project sheet's
+first question is **Web** or **Print**; Print asks for a resolution — 300 or
+600 DPI — and a sheet of paper. The canvas and the code are the same; the
+game's screen is the sheet, one point to the world pixel, and
+`ExportForPrint(options)` in your code writes the page as a print-ready PDF, a
+layered PSD, or both — once, or once per frame of an animation, under names
+your code chooses. Every PSD in a print project is written at its DPI, and the canvas and
 your code work with a downsampled copy, so creative coding against
 print-resolution artwork is as quick as against a game's. See
 [Printing](Manual/printing.md).
@@ -78,8 +79,8 @@ Then, in the app:
    and tilt, an Apple Pencil if you have one. See [Drawing](Manual/drawing.md).
 4. **Play**, from the header, to run the project's own code over what you have
    made. See [Code, Play and the page around the game](Manual/code-and-play.md).
-   On a print project it is **Export**, which runs the same code until
-   `ExportForPrint()` and shows the PDF or PSD beside it — see
+   A print project has no Play: **Run**, in the code panel, starts its code
+   beside a preview of every page it prints — see
    [Printing](Manual/printing.md).
 5. **Export** or **Publish**, from the menu, when it is worth keeping. See
    [Exporting and importing](Manual/exporting.md).

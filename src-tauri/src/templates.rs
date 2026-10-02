@@ -348,10 +348,10 @@ pub fn scene_file_for(class: &str, meta: &ProjectMeta) -> String {
     scene.replacen(
         "    placePatterns(this);\n",
         "    placePatterns(this);\n\n    \
-         // When the page is ready, print it. Everything stops where it is and\n    \
-         // the PDF is drawn from the full-resolution files. Export's own button\n    \
-         // does the same, for a page that never asks.\n    \
-         // whenPsdsReady(this, () => ExportForPrint());\n",
+         // When the page is ready, print it: the scenes stop where they are and\n    \
+         // the page is written from the full-resolution files into exports/.\n    \
+         // Every option is optional — see js/shared/print.js.\n    \
+         // whenPsdsReady(this, () => ExportForPrint({ name: \"page\", formats: \"pdf\" }));\n",
         1,
     )
 }

@@ -64,11 +64,12 @@ export interface HeaderCallbacks {
    */
   onPageSetup?: () => void;
   /**
-   * What the third section is called. Play on a game; **Export** on a print
-   * project, where the same section runs the project's code until
-   * `ExportForPrint()` and then shows the PDF it made — see `print-export.ts`.
+   * Leave Play out. A print project has two sections, not three: its game is
+   * run from the Run button in Code, beside the page it prints, and a Play
+   * that ran it again full-window would be a second place to do the same
+   * thing — see `print-export.ts`.
    */
-  playLabel?: string;
+  withoutPlay?: boolean;
 }
 
 /** The three sections, in the order the header offers them. */
@@ -122,9 +123,10 @@ export class EditorHeader {
 
     const modeToggle = h("div", { class: "mode-toggle" });
     for (const { value, label } of MODES) {
+      if (value === "play" && callbacks.withoutPlay) continue;
       const button = h("button", {
         class: "mode-btn",
-        text: value === "play" ? (callbacks.playLabel ?? label) : label,
+        text: label,
         "aria-pressed": String(value === "draw"),
         onClick: () => callbacks.onMode(value),
       }) as HTMLButtonElement;

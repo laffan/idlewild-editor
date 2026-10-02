@@ -83,23 +83,25 @@
  * the same word spends the best line on the one thing nobody needed telling.
  * The dialog still carries the name for anything reading the page.
  *
- * ## Output, last
+ * ## Output, first
  *
- * The final question is what the project is *for*. **Code** is everything
- * above as it has always been: a game, played and published. **Print** keeps
- * the same canvas and the same code and points them at a sheet of paper — the
- * page is a fixed rectangle of world, one world pixel to the point, and
- * `ExportForPrint()` in the project's own code is the moment a PDF is made of
- * it. Print asks one more thing, the **resolution**, because every PSD the
- * project writes is written at it: 300 or 600 DPI. That is fixed once the
- * project exists, like the template; the paper is not, and Page Setup has it.
- * So is what Export writes — a PDF, a layered PSD at that resolution, or both.
+ * The first question is what the project is *for*, because it decides which
+ * of the others are asked. **Web** is everything below as it has always been:
+ * a game, played and published (`code` on disk — both kinds are code, and the
+ * sheet names the one that is different by where it ends up). **Print** points
+ * the same canvas and the same code at a sheet of paper: the page is a fixed
+ * rectangle of world, one world pixel to the point, and `ExportForPrint()` in
+ * the project's own code is the moment it is written out. Print asks for the
+ * **resolution**, because every PSD the project writes is written at it — 300
+ * or 600 DPI, fixed once the project exists, like the template — and for the
+ * paper, which Page Setup can change later.
  *
- * Vanilla is greyed out under Print, the way Platformer is under Isometric:
- * `ExportForPrint()` reads the page off a running Phaser scene, and a vanilla
- * page has no scene to read. Picking Print on Vanilla moves the scaffolding to
- * Blank PSD to Phaser, which is the natural shape of a print project anyway —
- * the artwork placed, and nothing written above it but what you write.
+ * Under Print the **Scaffolding** and **Rendering** groups go away. A print
+ * project is always Blank PSD to Phaser: `ExportForPrint()` reads the page off
+ * a running Phaser scene, so Vanilla cannot print, and a character or gravity
+ * is a game's. A page is looked at one point to the pixel, so it has no
+ * default zoom. What Export writes — PDF, PSD or both — is asked where the
+ * files are made, in the Export bar.
  */
 
 import { openSheet } from "../lib/sheet";
@@ -113,9 +115,7 @@ import {
 import {
   DEFAULT_OUTPUT,
   DPIS,
-  FORMATS,
   PAPERS,
-  type PrintFormats,
   type Output,
   type OutputKind,
 } from "../lib/print";
@@ -221,23 +221,11 @@ export function openNewProject(
     title: "Orientation",
     control: orientationSeg.root,
   });
-  const formatsSeg = optionSegmented(
-    FORMATS.map((row) => ({ value: row.value, label: row.label })),
-    output.formats,
-    (value) => (output.formats = value as PrintFormats),
-  );
-  const formatsRow = optionRow({
-    title: "Export as",
-    hint:
-      "What Export writes when the page is printed. The PDF is the page as it " +
-      "prints. The PSD is the same page as layers at full resolution — one per " +
-      "thing on the page — to carry on with in Photoshop. Changeable later, in " +
-      "Page Setup or in Export itself.",
-    control: formatsSeg.root,
-  });
   const outputSeg = optionSegmented(
     [
-      { value: "code", label: "Code" },
+      // "Web" on the sheet, `code` on disk: both kinds of project are code,
+      // and what tells them apart is where the work ends up.
+      { value: "code", label: "Web" },
       { value: "print", label: "Print" },
     ],
     output.kind,
@@ -248,27 +236,41 @@ export function openNewProject(
   );
 
   /**
-   * Show the print rows under Print, and keep the scaffolding to one that can
-   * print. Vanilla is greyed rather than hidden, for the reason Platformer is
-   * under Isometric: greyed says "not with that".
+   * Show the print rows under Print, and take away the two groups a print
+   * project does not ask.
+   *
+   * **A print project is always Blank PSD to Phaser.** `ExportForPrint()`
+   * reads the page off a running Phaser scene, so Vanilla cannot print, and a
+   * character walking a page or a platformer's gravity is a game rather than a
+   * page. What is left is the artwork placed and the code you write over it,
+   * which is the whole of a print project. **Rendering goes too**: a page is
+   * looked at one point to the pixel, so it has no default zoom, and pixel
+   * snapping and a character controller are a game's questions.
+   *
+   * What was picked under Web is kept, so going to Print and back loses
+   * nothing.
    */
   function setOutputShown(): void {
     const print = output.kind === "print";
     dpiRow.hidden = !print;
     paperRow.hidden = !print;
     orientationRow.hidden = !print;
-    formatsRow.hidden = !print;
-    // A page is looked at at 1× — one point to the world pixel — so the zoom
-    // a game opens at is not a question a print project has.
-    zoomRow.hidden = print;
-    options.defaultZoom = print ? 1 : wantsZoom;
-    scaffoldSeg.setEnabled("vanilla", !print);
-    if (print && scaffold === "vanilla") {
+    // The class rather than the attribute: a group is laid out with its own
+    // `display`, which outranks `hidden`.
+    createButton.textContent = print ? "Create Page" : "Create Game";
+    scaffoldGroup.classList.toggle("hidden", print);
+    renderingGroup.classList.toggle("hidden", print);
+    if (print && !webChoice) {
+      webChoice = { scaffold, options: { ...options } };
       scaffold = "p2p";
-      scaffoldSeg.select("p2p");
-      setCharacterOffered();
+      Object.assign(options, DEFAULT_OPTIONS, { character: false });
+    } else if (!print && webChoice) {
+      scaffold = webChoice.scaffold;
+      Object.assign(options, webChoice.options);
+      webChoice = null;
     }
   }
+  let webChoice: { scaffold: Scaffold; options: GameOptions } | null = null;
 
   const templateSeg = optionSegmented(
     [
@@ -313,10 +315,7 @@ export function openNewProject(
   const zoomSeg = optionSegmented(
     ZOOMS.map((zoom) => ({ value: String(zoom), label: `${zoom}×` })),
     String(options.defaultZoom),
-    (value) => {
-      options.defaultZoom = Number(value);
-      wantsZoom = options.defaultZoom;
-    },
+    (value) => (options.defaultZoom = Number(value)),
   );
 
   const zoomRow = optionRow({
@@ -326,9 +325,6 @@ export function openNewProject(
       "wants 3× or 4×.",
     control: zoomSeg.root,
   });
-  // Kept beside `options.defaultZoom` for the reason `wantsCharacter` is:
-  // Print takes the row away, and Code should give back what was picked.
-  let wantsZoom = options.defaultZoom;
 
   // Pixel perfect is the pair of settings that go together: nearest-neighbour
   // textures, and drawing on whole pixels. One switch, because a project that
@@ -385,9 +381,49 @@ export function openNewProject(
   }
   setCharacterOffered();
 
+  // And the program the drawing is handed to, which is a separate
+  // question from the space it was drawn in.
+  //
+  // One group, one row, and the row has no title: the heading above it
+  // has already said the word, and a second copy inside would spend half
+  // the row repeating it. So the `?` is on the heading — where the
+  // question is being asked — and the four buttons take the width, which
+  // is what labels as long as "Blank PSD to Phaser" want anyway.
+  const scaffoldGroup = optionGroup({
+    title: "Scaffolding",
+    hint: () => scaffoldNote(scaffold),
+    rows: [optionRow({ control: scaffoldSeg.root })],
+  });
+  const renderingGroup = optionGroup({
+    title: "Rendering",
+    rows: [
+      zoomRow,
+      optionRow({
+        title: "Pixel perfect",
+        hint:
+          "Nearest-neighbour textures and whole-pixel drawing. Both can be " +
+          "toggled separately later, in Project Options.",
+        control: pixelPerfect.root,
+      }),
+      characterRow,
+    ],
+  });
+
   sheet.body.appendChild(
     optionsPage(
       [
+        // First, because it decides which of the questions below are asked
+        // at all: a page has no scaffolding to choose and no rendering to set.
+        optionGroup({
+          title: "Output",
+          hint: () => outputNote(output.kind),
+          rows: [
+            optionRow({ control: outputSeg.root }),
+            dpiRow,
+            paperRow,
+            orientationRow,
+          ],
+        }),
         optionGroup({
           rows: [
             optionRow({
@@ -421,52 +457,12 @@ export function openNewProject(
             }),
           ],
         }),
-        // And the program the drawing is handed to, which is a separate
-        // question from the space it was drawn in.
-        //
-        // One group, one row, and the row has no title: the heading above it
-        // has already said the word, and a second copy inside would spend half
-        // the row repeating it. So the `?` is on the heading — where the
-        // question is being asked — and the four buttons take the width, which
-        // is what labels as long as "Blank PSD to Phaser" want anyway.
-        optionGroup({
-          title: "Scaffolding",
-          hint: () => scaffoldNote(scaffold),
-          rows: [optionRow({ control: scaffoldSeg.root })],
-        }),
-        optionGroup({
-          title: "Rendering",
-          rows: [
-            zoomRow,
-            optionRow({
-              title: "Pixel perfect",
-              hint:
-                "Nearest-neighbour textures and whole-pixel drawing. Both can be " +
-                "toggled separately later, in Project Options.",
-              control: pixelPerfect.root,
-            }),
-            characterRow,
-          ],
-        }),
-        // Last, because it is the one question about where the work goes
-        // rather than how it is made.
-        optionGroup({
-          title: "Output",
-          hint: () => outputNote(output.kind),
-          rows: [
-            optionRow({ control: outputSeg.root }),
-            dpiRow,
-            paperRow,
-            orientationRow,
-            formatsRow,
-          ],
-        }),
+        scaffoldGroup,
+        renderingGroup,
       ],
       true,
     ),
   );
-  setOutputShown();
-
   const create = () => {
     sheet.close();
     onCreate({
@@ -483,9 +479,21 @@ export function openNewProject(
     if (event.key === "Enter") create();
   });
 
+  // A page is not a game, and the button that makes one should not say so.
+  const createButton = h("button", {
+    class: "btn btn-primary",
+    text: "Create Game",
+    onClick: create,
+  });
+  setOutputShown();
+
   sheet.actions.append(
-    h("button", { class: "btn btn-primary", text: "Create Game", onClick: create }),
-    h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
+    createButton,
+    h("button", {
+      class: "btn btn-ghost",
+      text: "Cancel",
+      onClick: sheet.close,
+    }),
   );
 
   nameInput.focus();
@@ -566,9 +574,10 @@ function outputNote(kind: OutputKind): string {
     ? "A page rather than a game. The canvas, the tools and the code are the " +
         "same; the game's screen is the sheet, one point to the world pixel " +
         "from the origin, and calling ExportForPrint() in your code stops " +
-        "everything and prints the page as a PDF at the resolution below. " +
-        "Every PSD is written at that resolution, and the canvas and your code " +
-        "work with a lighter copy. Play becomes Export, with the PDF beside it."
-    : "A game: played in the editor, published as a site. What every project " +
-        "has always been.";
+        "everything and writes the page out — a PDF, a layered PSD or both — at " +
+        "the resolution below. Every PSD is written at that resolution, and the " +
+        "canvas and your code work with a lighter copy. Code runs it, with the " +
+        "page previewed beside the game. Always Blank PSD to Phaser."
+    : "A game for the web: played in the editor, published as a site. What " +
+        "every project has always been.";
 }

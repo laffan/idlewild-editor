@@ -1,34 +1,55 @@
-/* The Export section of a print project — editor/print-export.ts.
+/* A print project's Code section — editor/print-export.ts and the print half
+   of editor/game-frame.ts.
 
-   The game frame becomes a grid while it is up: a strip across the top, the
-   project's own game on the left and the PDF it printed on the right, so the
-   page and the code that made it are compared at a glance. Narrow, they
-   stack. Its own stylesheet for the reason guides.css is one: editor.css is at
-   the line limit. */
+   Over the canvas: the project's own game on the left and the preview pane on
+   the right, the pane carrying its bar across its own top rather than across
+   both — the bar is about what was printed, not about the game. Narrow, they
+   stack. Its own stylesheet for the reason guides.css is one: editor.css is
+   at the line limit. */
 
-.game-frame.exporting {
+.game-frame.printing {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   background: var(--chrome-panel);
 }
-.game-frame.exporting.hidden { display: none; }
+.game-frame.printing.hidden { display: none; }
 
-.game-frame.exporting .game-frame-view {
-  grid-row: 2;
+.game-frame.printing .game-frame-view,
+.game-frame.printing .game-frame-idle {
+  grid-row: 1;
   grid-column: 1;
   min-width: 0;
 }
 
-.print-export-bar,
-.print-export-preview { display: none; }
-
-.game-frame.exporting .print-export-bar {
-  grid-row: 1;
-  grid-column: 1 / -1;
+/* Where the game goes before Run. */
+.game-frame-idle {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  padding: 24px;
+  color: var(--chrome-dim);
+  font-size: 13px;
+  text-align: center;
+}
+.game-frame-idle.hidden { display: none; }
+
+.print-export-pane {
+  grid-row: 1;
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--chrome-rule);
+  background: var(--color-neutral-700);
+}
+
+.print-export-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   min-height: 44px;
   padding: 6px 12px;
   box-sizing: border-box;
@@ -38,10 +59,8 @@
   font-size: 13px;
 }
 
-.print-export-title { font-weight: 600; }
-
 .print-export-status {
-  flex: 1;
+  flex: 1 1 160px;
   min-width: 0;
   color: var(--chrome-dim);
   overflow: hidden;
@@ -49,16 +68,26 @@
   white-space: nowrap;
 }
 
-.print-export-actions { display: flex; gap: 8px; }
+.print-export-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 .print-export-actions .btn {
   min-height: 30px;
   padding: 0 12px;
   font-size: 13px;
 }
+.print-export-actions .btn[disabled] {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.print-export-actions .btn[hidden] { display: none; }
 
-/* The two secondary buttons sit on the dark strip, where the light theme's
-   ghost button would be dark text on a dark ground. */
+/* The secondary buttons sit on the dark strip, where the light theme's ghost
+   button would be dark text on a dark ground. */
 .print-export-actions .btn-ghost {
   color: var(--chrome-text);
   background: transparent;
@@ -66,54 +95,8 @@
 }
 .print-export-actions .btn-ghost:hover { background: var(--chrome-panel); }
 
-.print-export-actions .btn[disabled] {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-.game-frame.exporting .print-export-preview {
-  grid-row: 2;
-  grid-column: 2;
-  display: flex;
-  min-width: 0;
-  border-left: 1px solid var(--chrome-rule);
-  background: var(--color-neutral-700);
-}
-
-.print-export-view {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: var(--color-neutral-700);
-}
-
-.print-export-empty {
-  margin: auto;
-  max-width: 320px;
-  padding: 24px;
-  color: var(--chrome-dim);
-  font-size: 13px;
-  line-height: 1.5;
-  text-align: center;
-}
-.print-export-empty[hidden] { display: none; }
-
-@media (max-width: 760px) {
-  .game-frame.exporting {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .game-frame.exporting .print-export-preview {
-    grid-row: 3;
-    grid-column: 1;
-    border-left: 0;
-    border-top: 1px solid var(--chrome-rule);
-  }
-}
-
-/* What Export writes, in the bar: the settings vocabulary's segmented
-   control, redrawn for the dark strip it sits on here. */
+/* What a page is written as: the settings vocabulary's segmented control,
+   redrawn for the dark strip. */
 .print-export-formats { flex: 0 0 auto; border-color: var(--chrome-rule); }
 .print-export-formats .opt-seg-btn {
   color: var(--chrome-dim);
@@ -128,13 +111,62 @@
   background: var(--chrome-rule);
 }
 
-.print-export-actions .btn[hidden] { display: none; }
+.print-export-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
 
-/* A PSD-only export: the flattened page, fitted and centred like a sheet. */
+.print-export-view {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--color-neutral-700);
+}
+
+/* A PSD-only page: the flattened image, fitted and centred like a sheet. */
 .print-export-image {
   margin: auto;
   max-width: calc(100% - 32px);
   max-height: calc(100% - 32px);
   box-shadow: 0 2px 12px rgb(0 0 0 / 0.35);
   background: #fff;
+}
+
+.print-export-empty {
+  margin: auto;
+  max-width: 320px;
+  padding: 24px;
+  color: var(--chrome-dim);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+.print-export-empty[hidden] { display: none; }
+
+/* Run and Stop in the code bar: a word beside the glyph, because it is the
+   one button there that does something to the project rather than to the
+   panel, and a lone triangle among the panel's own icons reads as one of
+   them. Lit while the game is up. */
+.code-bar-btn.code-run {
+  width: auto;
+  gap: 6px;
+  padding: 0 10px;
+  font: 600 12px var(--font-body);
+  color: var(--chrome-text);
+}
+.code-bar-btn.code-run[aria-pressed="true"] { color: var(--color-accent-400); }
+
+@media (max-width: 760px) {
+  .game-frame.printing {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .print-export-pane {
+    grid-row: 2;
+    grid-column: 1;
+    border-left: 0;
+    border-top: 1px solid var(--chrome-rule);
+  }
 }

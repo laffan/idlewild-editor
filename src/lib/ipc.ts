@@ -362,6 +362,12 @@ export interface PrintPage {
   background: [number, number, number, number] | null;
   items: PrintItem[];
   skipped: number;
+  /** Which call this answers — the game is waiting on a promise for it. */
+  id?: number;
+  /** The folder and name it asked for, inside `exports/`, no extension. */
+  out?: string;
+  /** What it asked to be written, or nothing for what the bar says. */
+  formats?: PrintFormats;
 }
 
 /** What Rust says about the PDF it wrote. */
@@ -388,7 +394,11 @@ export const printing = {
   /** Write the same page as a layered PSD at the project's DPI. */
   exportPsd: (id: string, page: PrintPage) =>
     invoke<PrintResult>("export_print_psd", { id, page }),
-  /** Copy the last PDF or PSD to where the save dialog said. */
-  saveFile: (id: string, format: "pdf" | "psd", path: string) =>
-    invoke<void>("save_print_file", { id, format, path }),
+  /** Copy one export — a path an export handed back — to where the save
+   *  dialog said. */
+  saveFile: (id: string, rel: string, path: string) =>
+    invoke<void>("save_print_file", { id, rel, path }),
+  /** Several exports as one zip, laid out as they are under `exports/`. */
+  saveFiles: (id: string, rels: string[], path: string) =>
+    invoke<void>("save_print_files", { id, rels, path }),
 };

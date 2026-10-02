@@ -66,6 +66,8 @@ export class CodeBar {
   /** The pin, which opens the three. Its tooltip says which is in force. */
   private readonly pinButton: HTMLButtonElement;
   private readonly docsButton: HTMLButtonElement;
+  /** The right-hand cluster, which a caller can put a control at the head of. */
+  private readonly right: HTMLElement;
   private noteTimer: number | null = null;
   private placement: CodePlacement | null = null;
 
@@ -138,7 +140,7 @@ export class CodeBar {
       this.filename,
       this.dirtyFlag,
       this.note,
-      h(
+      (this.right = h(
         "div",
         { class: "code-bar-right" },
         this.pinButton,
@@ -153,7 +155,7 @@ export class CodeBar {
           },
           icon(ICONS.close, 16),
         ),
-      ),
+      )),
     );
 
     this.setFilename(null);
@@ -194,6 +196,15 @@ export class CodeBar {
       this.note.textContent = "";
       this.noteTimer = null;
     }, clearAfterMs);
+  }
+
+  /**
+   * A control at the head of the right-hand cluster, before the pin — where a
+   * print project's Run and Stop go. The bar does not know what it does; the
+   * panel that asked does.
+   */
+  addControl(control: HTMLElement): void {
+    this.right.insertBefore(control, this.right.firstChild);
   }
 
   setFilesShown(shown: boolean): void {

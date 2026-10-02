@@ -39,13 +39,20 @@ export class GameFrame {
   private base: string | null = null;
   private running = false;
   /**
-   * The Export section's bar and PDF preview, on a print project — see
-   * `print-export.ts`. They live in this frame's root because they are about
-   * the game in it: the page comes out of that game, and Run again restarts
-   * it.
+   * A print project's preview pane — see `print-export.ts`. It lives in this
+   * frame's root because it is about the game in it: every page it shows came
+   * out of that game.
    */
   private readonly exporter: PrintExport | null;
-  private exporting = false;
+  /** Where a print project's game goes before Run has been pressed. */
+  private readonly idleNote: HTMLElement | null;
+  /**
+   * Flushes the document before a Run, so the config the game reads is the
+   * canvas as it stands. Set by the mode switch, which holds the store.
+   */
+  beforeRun: () => Promise<void> = async () => {};
+  /** Told whenever the game starts or stops — the code bar's Run button. */
+  onRunningChange: ((running: boolean) => void) | null = null;
 
   constructor(meta: ProjectMeta) {
     this.projectId = meta.id;
@@ -53,32 +60,61 @@ export class GameFrame {
     this.exporter = isPrint(meta)
       ? new PrintExport(meta, {
           post: (message) => this.frame?.contentWindow?.postMessage(message, "*"),
-          reload: () => this.reload(),
           base: () => this.base,
         })
       : null;
-    if (this.exporter) this.root.append(this.exporter.bar, this.exporter.preview);
+    this.idleNote = this.exporter
+      ? h("div", {
+          class: "game-frame-idle",
+          text: "Press Run to start your code.",
+        })
+      : null;
+    if (this.exporter && this.idleNote) {
+      this.root.classList.add("printing");
+      this.root.append(this.idleNote, this.exporter.root);
+    }
     window.addEventListener("message", this.onMessage);
-  }
-
-  /**
-   * Whether the frame is the Export section — the game beside the PDF it
-   * prints — or the plain game Code shows. Only a print project has the
-   * former; on a game this does nothing.
-   */
-  setExporting(on: boolean): void {
-    if (!this.exporter) return;
-    this.exporting = on;
-    this.root.classList.toggle("exporting", on);
   }
 
   get isRunning(): boolean {
     return this.running;
   }
 
-  /** Whether this is a print project's frame, with an Export section. */
+  /**
+   * Whether this is a print project's frame: the game beside the preview,
+   * started by Run and never restarted on its own.
+   */
   get isPrint(): boolean {
     return this.exporter !== null;
+  }
+
+  /**
+   * Put a print project's frame up without starting the game — what entering
+   * Code does on one. The game waits for Run.
+   */
+  show(): void {
+    this.root.classList.remove("hidden");
+  }
+
+  /** Run's half: flush, then start. A print project's way to start. */
+  async run(): Promise<void> {
+    await this.beforeRun();
+    this.show();
+    await this.start();
+  }
+
+  /**
+   * Stop's half: the game comes down and the frame stays up, so the last page
+   * printed stays in the preview beside where the game was.
+   */
+  halt(): void {
+    const was = this.running;
+    this.running = false;
+    this.frame?.remove();
+    this.frame = null;
+    this.idleNote?.classList.remove("hidden");
+    this.exporter?.idle();
+    if (was) this.onRunningChange?.(false);
   }
 
   /**
@@ -90,6 +126,7 @@ export class GameFrame {
    */
   async start(): Promise<void> {
     this.running = true;
+    this.onRunningChange?.(true);
     this.root.classList.remove("hidden");
     try {
       this.base ??= await assetBase(this.projectId);
@@ -101,6 +138,7 @@ export class GameFrame {
   }
 
   stop(): void {
+    const was = this.running;
     this.running = false;
     this.root.classList.add("hidden");
     // Torn down rather than hidden: a hidden game keeps stepping, holds a
@@ -108,6 +146,9 @@ export class GameFrame {
     // drawer whose owner has gone back to editing.
     this.frame?.remove();
     this.frame = null;
+    this.idleNote?.classList.remove("hidden");
+    this.exporter?.idle();
+    if (was) this.onRunningChange?.(false);
   }
 
   /**
@@ -115,11 +156,16 @@ export class GameFrame {
    * which is what "saving applies it" means for code: the program restarts
    * against the file you just wrote.
    */
-  reload(): void {
-    if (!this.running) return;
+  reload(): boolean {
+    // A print project runs when Run is pressed and not otherwise: a page can
+    // be seconds of work at full resolution, or a loop writing a hundred
+    // files, and a save that set that off again would be a save nobody
+    // could afford to make.
+    if (!this.running || this.exporter) return false;
     this.frame?.remove();
     this.frame = null;
     this.mount();
+    return true;
   }
 
   destroy(): void {
@@ -141,6 +187,7 @@ export class GameFrame {
     const url = `${this.base}/game/index.html?idlewild=console&t=${Date.now()}`;
     // A fresh game has printed nothing yet.
     this.exporter?.waiting();
+    this.idleNote?.classList.add("hidden");
     const frame = h("iframe", {
       class: "game-frame-view",
       src: url,
@@ -167,10 +214,7 @@ export class GameFrame {
     // A page from `ExportForPrint()` — only from the game this frame started.
     if (this.exporter && isPrintPage(event.data)) {
       if (event.source !== this.frame?.contentWindow) return;
-      // In Code the game stops where it is — which is what the call means —
-      // and the PDF is Export's to make, where there is somewhere to show it.
-      if (this.exporting) void this.exporter.receive(event.data);
-      else log.info("ExportForPrint() — the page is held; open Export to print it");
+      this.exporter.receive(event.data);
       return;
     }
     const data = event.data as

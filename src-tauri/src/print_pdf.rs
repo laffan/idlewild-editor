@@ -25,9 +25,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::rc::Rc;
 
-/// Where the last PDF a project printed is written, inside the project.
-pub const PDF_REL: &str = "print-out/page.pdf";
-
 /// The page, as `ExportForPrint()` sends it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PrintPage {
@@ -40,6 +37,10 @@ pub struct PrintPage {
     pub items: Vec<PrintItem>,
     #[serde(default)]
     pub skipped: u32,
+    /// Where the files go inside `exports/`, without an extension — the
+    /// `folder` and `name` `ExportForPrint()` was given. See `print_files`.
+    #[serde(default)]
+    pub out: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -114,14 +115,11 @@ pub fn export_print_pdf(id: String, page: PrintPage) -> Result<PrintResult, Stri
     let dpi = meta.output.dpi();
     let read = project_reader(&id)?;
     let (bytes, report) = build(&page, dpi, &read)?;
-    let dest = store::project_dir(&id)?.join(PDF_REL);
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
+    let (rel, dest) = crate::print_files::export_path(&id, page.out.as_deref(), "pdf")?;
     std::fs::write(&dest, &bytes).map_err(|e| format!("Cannot write the PDF: {e}"))?;
 
     Ok(PrintResult {
-        path: PDF_REL.to_string(),
+        path: rel,
         bytes: bytes.len(),
         width: page.page.width,
         height: page.page.height,
@@ -154,24 +152,6 @@ pub(crate) fn project_reader(
             .to_rgba8();
         Ok((image, full_res))
     })
-}
-
-/// Copy the last PDF or PSD a project printed to where the save dialog said.
-#[tauri::command]
-pub fn save_print_file(id: String, format: String, path: String) -> Result<(), String> {
-    let rel = match format.as_str() {
-        "pdf" => PDF_REL,
-        "psd" => crate::print_psd::PSD_REL,
-        other => return Err(format!("Not a print format: {other}")),
-    };
-    let from = store::project_dir(&id)?.join(rel);
-    let dest = crate::psd_write::source_path(&path);
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::copy(&from, &dest)
-        .map(|_| ())
-        .map_err(|e| format!("Cannot save the {}: {e}", format.to_uppercase()))
 }
 
 #[derive(Default)]
@@ -532,6 +512,7 @@ mod tests {
             background: None,
             items,
             skipped: 0,
+            out: None,
         }
     }
 

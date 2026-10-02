@@ -61,8 +61,14 @@ export interface ModeSwitch {
 
 export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
   let mode: EditorMode = "draw";
+  // A print project's Run flushes the document first, for the same reason
+  // every start here does.
+  deps.gameFrame.beforeRun = () => deps.store.flush();
 
   const runGame = (): void => {
+    // A print project's game is started by Run and nothing else — see
+    // `GameFrame.reload` for why.
+    if (deps.gameFrame.isPrint) return;
     void deps.store.flush().then(() => {
       // The canvas may have been come back to while that was in flight.
       if (mode !== "draw") void deps.gameFrame.start();
@@ -77,9 +83,6 @@ export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
       deps.header.setMode(next);
       deps.shell.classList.toggle("play-mode", next === "play");
       deps.shell.classList.toggle("code-mode", next === "code");
-      // On a print project the third section is Export: the game beside the
-      // PDF it prints. Code keeps the plain game.
-      deps.gameFrame.setExporting(next === "play");
       deps.scene()?.setMode(next);
       // Code keeps the left sidebar, and turns it into a directory: the game
       // is over the canvas, so there is nothing in that column to act on, and
@@ -94,11 +97,16 @@ export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
         deps.gameFrame.stop();
         return;
       }
+      // A print project's Code is the game beside the page it prints, and the
+      // game waits for Run.
+      if (deps.gameFrame.isPrint) {
+        deps.gameFrame.show();
+        log.info("Code — press Run to start it; the page it prints shows beside it");
+        return;
+      }
       log.info(
         next === "play"
-          ? deps.gameFrame.isPrint
-            ? "Export — running this project's code until ExportForPrint()"
-            : "Play — running this project's own code"
+          ? "Play — running this project's own code"
           : "Code — the game is running beside it; a save restarts it",
       );
       runGame();

@@ -104,6 +104,9 @@ export const ICONS = {
      add or take out depending on the colour in hand, and the pair has to read
      as one button in two states rather than as two buttons. */
   minus: "M5 12h14",
+  /* Run and Stop, in the code bar of a print project. */
+  play: "M8 5v14l11-7L8 5Z",
+  stop: "M7 7h10v10H7z",
   chevronLeft: "m14 6-6 6 6 6",
   chevronRight: "m10 6 6 6-6 6",
   chevronUp: "m6 15 6-6 6 6",

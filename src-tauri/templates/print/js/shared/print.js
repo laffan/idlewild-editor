@@ -7,27 +7,50 @@
 // is what keeps code that moves five hundred sprites about quick to write and
 // quick to run.
 //
-// `ExportForPrint()` is the moment the page is printed. It stops the game —
-// every tween, every animation, every update — so what is on screen stays
-// exactly as it was, and then it reads the page off the running scenes:
+// `ExportForPrint(options)` is the moment the page is printed. It reads the
+// page off the running scenes, at the end of the next frame drawn:
 //
 // - an image or sprite drawn from a file in `assets/` is sent as *that file*
 //   and where it stands — position, rotation, scale, flip, alpha, tint and
-//   blend mode — so the PDF can draw the full-resolution twin of the same
+//   blend mode — so the export can draw the full-resolution twin of the same
 //   file in the same place, from `print/` beside it;
 // - anything else that draws — Graphics, shapes, text, particles — has no
 //   file behind it, so it is rendered here, at the project's DPI, and sent as
 //   pixels.
 //
-// Inside the editor's Export section the page goes to the editor, which
-// writes the PDF and previews it. Anywhere else — a published site, a file
-// opened from disk — there is no editor to send it to, and the game simply
-// stops where it is. This file is the editor's; it is written into every
+// Every option is optional:
+//
+//   ExportForPrint({
+//     name: "page",          // the file's name, without an extension
+//     folder: "",            // a folder inside the project's exports/
+//     formats: "pdf",        // "pdf", "psd", "both" — or what the bar says
+//     stop: true,            // stop every scene once the page is read
+//   });
+//
+// It returns a promise that settles once the files are written, with the
+// paths it wrote, so a sequence of pages is a loop with an `await` in it —
+// one file per frame of an animation, say:
+//
+//   for (let i = 0; i < 24; i++) {
+//     setFrame(i);
+//     await ExportForPrint({ folder: "frames", name: `frame-${i}`, stop: false });
+//   }
+//
+// `stop` pauses the scenes rather than the game: nothing updates, so tweens,
+// timers, physics and animations hold still, but the page goes on being drawn,
+// so what was printed stays on screen.
+//
+// Inside the editor the page goes to the editor, which writes the files and
+// previews the last. Anywhere else — a published site, a file opened from
+// disk — there is no editor to send it to, and the promise settles at once
+// with nothing written. This file is the editor's; it is written into every
 // print project and read by `js/main.js`.
 
-/** What the editor listens for, and what it sends to ask for a page. */
+/** What the editor listens for, what it sends to ask for a page, and what it
+ *  answers with once a page's files are written. */
 const PAGE_MESSAGE = "idlewild-print";
 const REQUEST_MESSAGE = "idlewild-print-request";
+const DONE_MESSAGE = "idlewild-print-done";
 
 /** PDF's names for Phaser's blend modes, where PDF has one. */
 const BLENDS = {
@@ -56,35 +79,98 @@ const BLENDS = {
  */
 export function installPrint(game, config) {
   const sheet = config.print ?? { width: 612, height: 792, dpi: 300 };
-  let printed = false;
+  const inEditor = window.parent && window.parent !== window;
+  const waiting = new Map();
+  let next = 0;
   rememberSources();
 
-  window.ExportForPrint = (options = {}) => {
-    if (printed) return;
-    printed = true;
-    freeze(game);
-    const page = readPage(game, sheet, options);
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ source: PAGE_MESSAGE, ...page }, "*");
-    }
-    console.info(
-      `ExportForPrint(): the page is printed — ${page.items.length} ` +
-        `item${page.items.length === 1 ? "" : "s"} on a ` +
-        `${sheet.width} × ${sheet.height} pt sheet at ${sheet.dpi} DPI.`,
-    );
-    if (page.skipped > 0) {
-      console.warn(
-        `ExportForPrint(): ${page.skipped} object${page.skipped === 1 ? "" : "s"} ` +
-          "could not be read and were left off the page.",
-      );
-    }
-  };
+  window.ExportForPrint = (options = {}) =>
+    new Promise((resolve, reject) => {
+      // At the end of the next frame drawn: whatever the code that called
+      // this has just changed has been through a render, and every object
+      // the document placed is standing where it will be drawn.
+      game.events.once(Phaser.Core.Events.POST_RENDER, async () => {
+        if (options.stop !== false) freeze(game);
+        let page;
+        try {
+          page = await readPage(game, sheet, options);
+        } catch (err) {
+          reject(err);
+          return;
+        }
+        report(page, sheet);
+        if (!inEditor) {
+          resolve({ files: [] });
+          return;
+        }
+        const id = ++next;
+        waiting.set(id, { resolve, reject });
+        window.parent.postMessage(
+          {
+            source: PAGE_MESSAGE,
+            id,
+            out: outPath(options),
+            formats: formatsOf(options.formats),
+            ...page,
+          },
+          "*",
+        );
+      });
+    });
 
-  // The Export section's own button asks for the page the same way a line of
-  // code does, so a project that never calls it can still be printed.
   window.addEventListener("message", (event) => {
-    if (event.data?.source === REQUEST_MESSAGE) window.ExportForPrint();
+    const data = event.data;
+    // The editor's own Export button asks for the page the same way a line
+    // of code does, so a project that never calls it can still be printed.
+    if (data?.source === REQUEST_MESSAGE) {
+      void window.ExportForPrint(data.options ?? {});
+      return;
+    }
+    if (data?.source !== DONE_MESSAGE) return;
+    const held = waiting.get(data.id);
+    if (!held) return;
+    waiting.delete(data.id);
+    if (data.error) held.reject(new Error(data.error));
+    else held.resolve({ files: data.files ?? [] });
   });
+}
+
+/** Where the files go, inside exports/, without an extension. */
+function outPath(options) {
+  const clean = (part) =>
+    String(part ?? "")
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter((segment) => segment && segment !== "." && segment !== "..")
+      .join("/");
+  const folder = clean(options.folder);
+  const name = clean(options.name) || "page";
+  return folder ? `${folder}/${name}` : name;
+}
+
+/** "pdf", "psd" or "both", from any of the ways it might be said. */
+function formatsOf(formats) {
+  if (Array.isArray(formats)) {
+    const pdf = formats.includes("pdf");
+    const psd = formats.includes("psd");
+    return pdf && psd ? "both" : psd ? "psd" : pdf ? "pdf" : undefined;
+  }
+  return ["pdf", "psd", "both"].includes(formats) ? formats : undefined;
+}
+
+/** What the console says about a page. */
+function report(page, sheet) {
+  console.info(
+    `ExportForPrint(): ${page.items.length} ` +
+      `item${page.items.length === 1 ? "" : "s"} on a ` +
+      `${sheet.width} × ${sheet.height} pt sheet at ${sheet.dpi} DPI.`,
+  );
+  if (page.skipped > 0) {
+    console.warn(
+      `ExportForPrint(): ${page.skipped} object${page.skipped === 1 ? "" : "s"} ` +
+        "could not be read and were left off the page.",
+    );
+  }
 }
 
 /**
@@ -112,39 +198,50 @@ function rememberSources() {
   proto.__idlewildPrint = true;
 }
 
-/** Stop everything that moves, so the page on screen is the page printed. */
+/**
+ * Stop everything that moves, so the page on screen is the page printed.
+ *
+ * The scenes are paused rather than the game. A paused scene does not update
+ * — its tweens, timers, physics and animations hold still — but it is still
+ * drawn, so the page stays on screen. Stopping the game's loop instead stops
+ * the drawing too, and a page printed before its first frame is a blank
+ * canvas from then on.
+ */
 function freeze(game) {
-  for (const scene of game.scene.getScenes(true)) {
-    scene.tweens?.pauseAll();
-    scene.time && (scene.time.paused = true);
-    scene.physics?.pause?.();
-    scene.matter?.pause?.();
-  }
-  game.anims?.pauseAll();
+  for (const scene of game.scene.getScenes(true)) scene.scene.pause();
   game.sound?.pauseAll?.();
-  if (typeof game.pause === "function") game.pause();
-  else game.loop.sleep();
 }
 
 /** Every visible thing on the page, back to front, as the editor wants it. */
-function readPage(game, sheet, options) {
-  const scale = Math.max(1, (options.dpi ?? sheet.dpi) / 72);
+async function readPage(game, sheet) {
+  const scale = Math.max(1, sheet.dpi / 72);
   const items = [];
   let skipped = 0;
   // Consecutive things with no file behind them are rendered together, in
   // order, so a fill under a sprite under a line of text stays in that order.
   let run = [];
 
+  // A run is rendered now, in its place, and read back later: the readback
+  // is asynchronous, and the order of `items` is the order on the page.
   const flush = (scene, camera) => {
     if (run.length === 0) return;
-    const raster = rasterise(scene, camera, run, sheet, scale);
-    if (raster === null) skipped += run.length;
-    else if (raster) items.push(raster);
+    const count = run.length;
+    items.push(
+      rasterise(scene, camera, run, sheet, scale).then((raster) => {
+        if (raster === null) skipped += count;
+        return raster;
+      }),
+    );
     run = [];
   };
 
   let background = null;
-  for (const scene of game.scene.getScenes(true)) {
+  // Running and paused alike: a page printed after another that stopped
+  // everything is still a page of the scenes on screen.
+  const onScreen = game.scene
+    .getScenes(false)
+    .filter((scene) => scene.sys.isActive() || scene.sys.isPaused());
+  for (const scene of onScreen) {
     if (!scene.sys.settings.visible) continue;
     const camera = scene.cameras.main;
     if (!background && camera.backgroundColor?.alpha > 0) {
@@ -164,10 +261,11 @@ function readPage(game, sheet, options) {
     flush(scene, camera);
   }
 
+  const settled = (await Promise.all(items)).filter(Boolean);
   return {
     page: { width: sheet.width, height: sheet.height, dpi: sheet.dpi },
     background,
-    items,
+    items: settled,
     skipped,
   };
 }
@@ -292,20 +390,26 @@ function tintOf(object) {
 /**
  * Render a run of objects with no file behind them, at print resolution.
  *
- * Null when it could not be done, undefined when it drew nothing at all.
+ * Resolves to the raster, or to null when it could not be done. A raster
+ * with nothing drawn on it — an empty Graphics, a shape off the page — is
+ * trimmed away on the far side.
  *
  * One page-sized texture per run, drawn at `scale` pixels to the point — less
- * when the device cannot hold a texture that big — and read back as a PNG.
- * Text is re-rendered at the same resolution first, because a line of text
- * drawn at screen resolution and scaled up is a blurred line of text.
+ * when the device cannot hold a texture that big — and read back with
+ * Phaser's own snapshot, which keeps the renderer's state its own: reaching
+ * past it to the WebGL context is what left the game's canvas blank. Text is
+ * re-rendered at the same resolution for the capture and put back after,
+ * because a line of text drawn at screen resolution and scaled up is a
+ * blurred line of text.
  */
-function rasterise(scene, camera, objects, sheet, scale) {
+async function rasterise(scene, camera, objects, sheet, scale) {
   const max = scene.renderer.getMaxTextureSize?.() ?? 4096;
   const fit = Math.min(scale, max / sheet.width, max / sheet.height);
   const width = Math.max(1, Math.floor(sheet.width * fit));
   const height = Math.max(1, Math.floor(sheet.height * fit));
 
   let texture;
+  const texts = [];
   try {
     texture = scene.textures.addDynamicTexture(
       `__print-${Date.now()}-${Math.random()}`,
@@ -314,6 +418,7 @@ function rasterise(scene, camera, objects, sheet, scale) {
     );
     for (const object of objects) {
       if (typeof object.setResolution === "function" && object.style) {
+        texts.push([object, object.style.resolution ?? 1]);
         object.setResolution(fit);
       }
       const transform = new Phaser.GameObjects.Components.TransformMatrix();
@@ -343,69 +448,27 @@ function rasterise(scene, camera, objects, sheet, scale) {
     console.warn("ExportForPrint(): could not render part of the page:", err);
     texture?.destroy();
     return null;
+  } finally {
+    for (const [text, resolution] of texts) text.setResolution(resolution);
   }
 
-  const pixels = readPixels(scene.renderer, texture, width, height);
+  const data = await new Promise((resolve) => {
+    try {
+      texture.snapshot((image) => resolve(image?.src ?? null));
+    } catch {
+      resolve(null);
+    }
+  });
   texture.destroy();
-  // Nothing drawn at all — an empty Graphics, a shape off the page — is not
-  // a failure, and there is nothing to send.
-  if (pixels === "") return undefined;
-  if (!pixels) return null;
+  if (typeof data !== "string" || !data.startsWith("data:image")) return null;
 
   return {
     kind: "raster",
-    data: pixels,
+    data,
     width,
     height,
     matrix: [sheet.width, 0, 0, sheet.height, 0, 0],
     alpha: 1,
     blend: "Normal",
   };
-}
-
-/**
- * A dynamic texture's pixels, as a PNG data URL, read synchronously — or an
- * empty string when every pixel is clear, and null when it cannot be read.
- */
-function readPixels(renderer, texture, width, height) {
-  const gl = renderer.gl;
-  const framebuffer = texture.drawingContext?.framebuffer;
-  if (!gl || !framebuffer) return null;
-  const raw = new Uint8Array(width * height * 4);
-  gl.bindFramebuffer(
-    gl.FRAMEBUFFER,
-    framebuffer.webGLFramebuffer ?? framebuffer,
-  );
-  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, raw);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-  // WebGL reads bottom-up, and premultiplied.
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  const out = ctx.createImageData(width, height);
-  let any = false;
-  for (let row = 0; row < height; row++) {
-    const from = (height - 1 - row) * width * 4;
-    const into = row * width * 4;
-    for (let i = 0; i < width * 4; i += 4) {
-      const a = raw[from + i + 3];
-      if (a === 0) continue;
-      any = true;
-      out.data[into + i] = Math.min(255, Math.round((raw[from + i] * 255) / a));
-      out.data[into + i + 1] = Math.min(
-        255,
-        Math.round((raw[from + i + 1] * 255) / a),
-      );
-      out.data[into + i + 2] = Math.min(
-        255,
-        Math.round((raw[from + i + 2] * 255) / a),
-      );
-      out.data[into + i + 3] = a;
-    }
-  }
-  if (!any) return "";
-  ctx.putImageData(out, 0, 0);
-  return canvas.toDataURL("image/png");
 }

@@ -96,8 +96,8 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
       : isPhaserScaffold(meta.genre)
         ? { onPageSetup: () => openPageSetup(meta, deps.reloadGame) }
         : {}),
-    // Play is Export on a print project: the same game, run until
-    // `ExportForPrint()` and then shown as the PDF it printed.
-    playLabel: isPrint(meta) ? "Export" : "Play",
+    // A print project has Draw and Code: its game runs from Code's Run
+    // button, beside the page it prints.
+    withoutPlay: isPrint(meta),
   };
 }

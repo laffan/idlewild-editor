@@ -10,22 +10,21 @@ Part of [the Idlewild manual](README.md).
 
 ## Making a print project
 
-- **Output** is the last section of the New Project sheet: **Code** or
-  **Print**. Code is everything the rest of this manual describes. Print asks
-  four more things:
+- **Web or Print** is the first question on the New Project sheet. Web is
+  everything the rest of this manual describes — both are code; the choice is
+  where the work ends up. Print asks three more things:
   - **Resolution**: 300 or 600 DPI. Every PSD the project writes is written at
     it. This is fixed once the project exists, like the template, because a
     file made at 300 DPI has no 600's worth of pixels to give
-  - **Paper**: Letter, Legal, Tabloid, A5, A4, A3 or A2, and its
-    **orientation**
-  - **Export as**: PDF, PSD, or PDF + PSD
-- **Vanilla is greyed out under Print.** `ExportForPrint()` reads the page off
-  a running Phaser scene, and a vanilla page has none. **Blank PSD to Phaser**
-  is the natural scaffolding for a print project — your artwork placed and
-  nothing written over it but what you write — and Print moves you to it from
-  Vanilla. Top Down and Platformer still work
-- **Default zoom goes away under Print**, because a page is looked at one
-  point to the pixel
+  - **Paper**: Letter, Legal, Tabloid, A5, A4, A3 or A2
+  - **Orientation**
+- **Scaffolding and Rendering go away under Print.** A print project is always
+  **Blank PSD to Phaser** — your artwork placed and nothing written over it but
+  what you write — because `ExportForPrint()` reads the page off a running
+  Phaser scene, and a character or gravity is a game's. A page is looked at
+  one point to the pixel, so it has no default zoom
+- What a page is written as — PDF, PSD or both — is not asked here. It is
+  asked where pages are made, in the preview's bar
 
 ## The page on the canvas
 
@@ -54,43 +53,79 @@ Part of [the Idlewild manual](README.md).
 
 ## ExportForPrint()
 
-- Call `ExportForPrint()` from anywhere in your code and **everything stops** —
-  tweens, timers, physics, animation — and the page as it is on screen at that
-  moment is the page that is printed
+- Call `ExportForPrint()` from anywhere in your code and the page as it is on
+  screen at the end of the next frame is written out. By default **every
+  scene stops** — tweens, timers, physics, animation — and the page stays on
+  screen as it was printed
 - What prints is what your code made of the scene, not the document as you
   drew it. Move, rotate, scale, flip, fade, tint or clone sprites — a sprite
   drawn from one of your PSDs prints from the **full-resolution** file, in
   exactly the place, angle and size your code left it
 - Anything you draw in code with no file behind it — Graphics, shapes, text —
   is rendered by the game at the project's DPI and printed as pixels
+- **It takes options**, all of them optional:
+
+  ```js
+  ExportForPrint({
+    name: "page",     // the file's name, without an extension
+    folder: "",       // a folder inside the project's exports/
+    formats: "pdf",   // "pdf", "psd", "both" — or what the bar says
+    stop: true,       // stop every scene once the page is read
+  });
+  ```
+
+- **It returns a promise** that settles when the files are written, with the
+  paths it wrote. So a series of pages is a loop with an `await` in it — every
+  frame of an animation as its own file, say:
+
+  ```js
+  async function printFrames(scene) {
+    for (let i = 0; i < 24; i++) {
+      setFrame(scene, i);
+      await ExportForPrint({ folder: "frames", name: `frame-${i}`, stop: false });
+    }
+    scene.scene.pause();
+  }
+  ```
+
+- Files go into the project's `exports/` folder, under the folder and name you
+  gave — letters, digits, `-` and `_`, anything else becomes `_` — and nowhere
+  else: code running in a page does not get to write wherever it likes on your
+  disk. **Save** in the preview's bar hands them over
 - The scaffold leaves one line in each scene, commented out, that prints once
   the artwork has loaded:
 
   ```js
-  // whenPsdsReady(this, () => ExportForPrint());
+  // whenPsdsReady(this, () => ExportForPrint({ name: "page", formats: "pdf" }));
   ```
 
 - In a published site there is no editor to send the page to, so
-  `ExportForPrint()` simply stops the game where it is
+  `ExportForPrint()` stops the scenes and the promise settles with nothing
+  written
 
-## The Export section
+## Code, Run and the preview
 
-- On a print project, **Play is called Export**. It runs your code exactly as
-  Play would, on the left, and shows what it printed on the right
-- **Export now** prints the page as it stands, as if your code had called
-  `ExportForPrint()` — so a project that never calls it still prints
-- **Run again** restarts your code for another go. A generative piece draws a
-  different page every run; run it until you like one
-- The **PDF / PSD / PDF + PSD** switch in the bar is the same setting as on the
-  New Project sheet and in Page Setup. Switch it after a page has printed and
-  the other file is written from the same page — the game is holding it, and a
-  generative piece would not draw it again
-- **Save PDF** and **Save PSD** hand the files over: a save dialog on a Mac,
-  the Files export picker on an iPad
+- A print project has **two sections, Draw and Code**. In Code the file is in
+  the panel as always, and over the canvas your game is on the left and the
+  **preview** of what it printed is on the right
+- **Your code does not run until you press Run**, beside the pin at the top of
+  the code panel, and it does not restart when you save. A page can be seconds
+  of work at full resolution, or a loop writing a hundred files, so running it
+  is something you ask for. Run saves the open file first. While the game is
+  up the button is **Stop**
+- The bar at the top of the preview:
+  - **PDF / PSD / PDF + PSD** — what a page is written as when your code does
+    not say. Switch it after a page has printed and the other file is written
+    from that same page: the game is holding it, and a generative piece would
+    not draw it again
+  - **Export now** — prints the page as it stands, as if your code had called
+    `ExportForPrint()`, so a project that never calls it still prints
+  - **Save PDF** and **Save PSD** — the last page's files, through a save dialog
+    on a Mac or the Files export picker on an iPad. **Save all** appears once a
+    run has written more than one page, and hands over every file the run
+    wrote as one zip
 - The PDF preview is the PDF itself. A PSD cannot be shown in a page, so a
-  PSD-only export previews the flattened image inside it
-- In **Code**, calling `ExportForPrint()` stops the game too — that is what the
-  call means — and the console says to open Export for the files
+  PSD-only page previews the flattened image inside it
 
 ## The two files
 
@@ -104,10 +139,10 @@ Part of [the Idlewild manual](README.md).
 
 ## Page Setup
 
-- On a print project Page Setup is the **paper** and its **orientation**,
-  **Export as**, and the **resolution**, which it reports but cannot change.
-  Changing the paper moves the frame on the canvas and resizes the game; it does
-  not move anything you drew
+- On a print project Page Setup is the **paper** and its **orientation**, and
+  the **resolution**, which it reports but cannot change. Changing the paper
+  moves the frame on the canvas and resizes the game; it does not move anything
+  you drew
 
 ## Not yet
 

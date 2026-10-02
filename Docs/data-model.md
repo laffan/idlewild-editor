@@ -19,7 +19,8 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   psd/             source PSDs, imported or converted
   assets/<key>/    psd-to-json output: data.json + sprites/tiles
   print/<key>/     a print project's full-resolution output — see printing.md
-  print-out/       the last page a print project exported: page.pdf, page.psd
+  exports/         what a print project's ExportForPrint() wrote, by folder and name
+  print-out/       the preview of the last PSD it wrote
   game/            the runnable project the code modal edits and Publish zips
 ```
 

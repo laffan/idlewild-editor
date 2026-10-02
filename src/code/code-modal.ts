@@ -79,6 +79,11 @@ export class CodeModal {
   private readonly tree: FileTree;
   /** The one row of chrome: the file on the left, the panel's own on the right. */
   private readonly bar: CodeBar;
+
+  /** Put a control in the file bar, before the pin. See `CodeBar.addControl`. */
+  addBarControl(control: HTMLElement): void {
+    this.bar.addControl(control);
+  }
   /** The template has blocks this file lacks, and an offer to put them in. */
   private readonly repair: HTMLElement;
   private readonly editorHost: HTMLElement;
