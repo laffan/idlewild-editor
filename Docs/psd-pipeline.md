@@ -98,10 +98,23 @@ builds it in one copy (17 ms for the same 27 MB) and `src-tauri/src/ipc_bytes.rs
 reads it; a test sends one through Tauri's own dispatch on the mock runtime.
 `toBase64` is still how a file is *saved*, which is not this path.
 
-The other is somebody else's file: a sketch writes a PSD whose layer is mostly
-nothing, and every stage after it decodes that layer into a buffer the size of
-the whole canvas. That is `PsdLayer::rgba` in the [`psd` fork](https://github.com/laffan/psd),
-not this repository.
+The other was somebody else's file, and the [`psd` fork](https://github.com/laffan/psd)
+now has it: a layer wholly inside the canvas decodes a row at a time instead
+of a byte at a time through a division and a remainder, and the writer
+composites a row at a time and PackBits-encodes every channel on its own
+thread. Both write and read the same bytes as before. Through the whole
+conversion, in the dev profile, medians of three runs on one desktop:
+
+| | before | after |
+|---|---|---|
+| 300 DPI sketch | 1.13 s | 0.79 s |
+| 300 DPI painting | 1.42 s | 0.99 s |
+| 600 DPI sketch | 3.66 s | 2.41 s |
+| 600 DPI painting | 4.55 s | 3.72 s |
+
+What is left in a dense file is psd-to-json encoding PNGs and the downsample's
+resize. A layer still decodes into a buffer the size of the whole canvas,
+which is the next thing to take out of the fork.
 
 **And it says so while it happens.** `editor/psd-progress.ts` already had the
 sheet — an undismissable panel with a sliding bar and the pipeline's own
