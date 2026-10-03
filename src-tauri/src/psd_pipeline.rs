@@ -239,22 +239,35 @@ pub(crate) fn process_held(
         ),
         ..options.clone()
     };
-    run_psd_to_json(&source, &print_root, &print_options, &emit_log)?;
-
+    // The full-resolution parse and the screen copy are independent — both
+    // start from the bytes read above — so they run side by side: the screen
+    // copy on a second thread, since it is the longer of the two, and the
+    // print run here, where it can narrate through `emit_log`.
+    let screen_dir = store::project_dir(project_id)?.join(".screen");
+    let screen = screen_dir.join(format!("{}.psd", safe_key(key)?));
     emit_log(&format!("Downsampling {key} for the screen (÷{factor:.2})"));
-    let (small, warning) = crate::psd_downsample::downsample(&bytes, factor)?;
-    if let Some(reason) = warning {
+    let (printed, screened) = std::thread::scope(|scope| {
+        let screened = scope.spawn(|| -> Result<Option<String>, String> {
+            let (small, warning) = crate::psd_downsample::downsample(&bytes, factor)?;
+            std::fs::create_dir_all(&screen_dir).map_err(|e| e.to_string())?;
+            std::fs::write(&screen, small)
+                .map_err(|e| format!("Cannot write the screen copy: {e}"))?;
+            let processed = run_psd_to_json(&screen, &assets_root, options, &|_: &str| {});
+            let _ = std::fs::remove_file(&screen);
+            processed.map(|()| warning)
+        });
+        let printed = run_psd_to_json(&source, &print_root, &print_options, &emit_log);
+        let screened = screened
+            .join()
+            .unwrap_or_else(|_| Err("The screen copy could not be made".to_string()));
+        (printed, screened)
+    });
+    printed?;
+    if let Some(reason) = screened? {
         emit_log(&format!(
             "{key}: {reason} The screen copy shows it without; the print keeps it."
         ));
     }
-    let screen_dir = store::project_dir(project_id)?.join(".screen");
-    std::fs::create_dir_all(&screen_dir).map_err(|e| e.to_string())?;
-    let screen = screen_dir.join(format!("{}.psd", safe_key(key)?));
-    std::fs::write(&screen, small).map_err(|e| format!("Cannot write the screen copy: {e}"))?;
-    let processed = run_psd_to_json(&screen, &assets_root, options, &|_: &str| {});
-    let _ = std::fs::remove_file(&screen);
-    processed?;
     emit_log(&format!("Wrote assets/{key}/data.json"));
     // The directory this run cleared may have held the merged picture a tile
     // palette is cut from, and that picture is made of the file that has just

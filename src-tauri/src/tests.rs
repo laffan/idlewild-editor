@@ -27,6 +27,7 @@ mod marks;
 mod merging;
 mod options;
 mod painting;
+mod perf;
 mod palette;
 mod presentation;
 mod print;
@@ -45,7 +46,7 @@ use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{psd_pipeline, psd_write, publish, store};
 
 /// Solid-colour RGBA, so a round trip can be checked pixel by pixel.
-pub(super) fn swatch(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+pub(crate) fn swatch(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
     let mut out = Vec::with_capacity((width * height * 4) as usize);
     for _ in 0..width * height {
         out.extend_from_slice(&rgba);

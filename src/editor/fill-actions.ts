@@ -25,7 +25,7 @@
 import { sourceScale } from "../lib/print";
 import type { DocStore } from "../lib/doc-store";
 import { Grid, cellsBounds as cellsRange, describeRange, fillShape } from "../lib/grid";
-import { psd, toBase64 } from "../lib/ipc";
+import { psd } from "../lib/ipc";
 import type { AnchorMarks } from "../lib/ipc";
 import type { Cell, FillPatch, Point, Rect, Selection } from "../lib/types";
 import type { Paint } from "../lib/paint";
@@ -99,7 +99,7 @@ export async function convertFillToPsd(
       name,
       raster.width,
       raster.height,
-      toBase64(raster.rgba),
+      raster.rgba,
       // Marks and pixels are both in the file's own space, so both are taken
       // up together — and the placement scales back down by the same factor.
       scaleMarks(
@@ -212,7 +212,7 @@ export async function generatePsdForRegion(
       name,
       width,
       height,
-      toBase64(rgba),
+      rgba,
       scaleMarks(
         {
           ...marksForSelection(grid, from, to),

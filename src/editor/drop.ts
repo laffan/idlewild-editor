@@ -21,7 +21,7 @@
  * that is a known Tauri limitation and not worth working around.)
  */
 
-import { droppedFile, fromBase64, psd, toBase64 } from "../lib/ipc";
+import { droppedFile, fromBase64, psd } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { Cell } from "../lib/types";
 import { chooseSheet } from "../lib/sheet";
@@ -223,7 +223,7 @@ async function replace(
       : await psd.importBytes(
           projectId,
           key,
-          toBase64(new Uint8Array(await (await incoming.file()).arrayBuffer())),
+          new Uint8Array(await (await incoming.file()).arrayBuffer()),
         );
     await host.reloadPsd(key, result.manifest);
     log.info(`${key}.psd is now ${incoming.name} (${result.width}×${result.height})`);

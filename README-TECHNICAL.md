@@ -129,7 +129,7 @@ a Mac, that is usually why. See [`Docs/ipad.md`](Docs/ipad.md),
 
 | Seam | What crosses it | Where |
 |---|---|---|
-| Tauri IPC | `invoke` commands and events; bytes as base64 | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
+| Tauri IPC | `invoke` commands and events; pixels inward as a raw body, other bytes as base64 | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
 | The asset server | psd-to-phaser reading the project store over HTTP on `127.0.0.1`, because it concatenates onto a base path and lazy-loads | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
 | The game frame | Play and a published export load the project's own `game/` tree; the editor's Phaser never runs the user's code | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | The drawing stage | Hush's stroke engine on its own canvas, over Phaser's, moved by one CSS transform | [`Docs/drawing.md`](Docs/drawing.md) |

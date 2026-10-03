@@ -29,10 +29,11 @@ pub fn downsample(bytes: &[u8], factor: f64) -> Result<(Vec<u8>, Option<String>)
     let width = scaled(doc.width(), factor);
     let height = scaled(doc.height(), factor);
     let mut builder = PsdBuilder::new(width, height);
+    let mut shrunk = shrink_all(&doc, factor);
 
     // `items` reads top-first and `add_*` stacks bottom-up.
     for item in items(&doc, None).into_iter().rev() {
-        match built(&doc, item, factor) {
+        match built(&doc, item, &mut shrunk) {
             Some(Built::Layer(layer)) => {
                 builder.add_layer(layer);
             }
@@ -59,30 +60,66 @@ enum Built {
     Group(GroupBuilder),
 }
 
-fn built(doc: &Psd, item: Item, factor: f64) -> Option<Built> {
-    match item {
-        Item::Layer(index) => {
-            let layer = doc.layer_by_idx(index);
-            let (left, top, width, height, pixels) = crop(layer, doc.width(), doc.height());
-            let out = if width == 0 || height == 0 {
-                // An empty layer is still a layer somebody named; keep it as one
-                // clear pixel so the stack is the same shape.
-                LayerBuilder::new(layer.name().to_string()).rgba(1, 1, vec![0; 4])
-            } else {
-                let (w, h, rgba) = shrink(width, height, pixels, factor)?;
-                LayerBuilder::new(layer.name().to_string())
-                    .rgba(w, h, rgba)
-                    .at(
-                        ((left as f64) / factor).round() as i32,
-                        ((top as f64) / factor).round() as i32,
-                    )
-            };
-            Some(Built::Layer(
-                out.opacity(layer.opacity())
-                    .visible(layer.visible())
-                    .blend_mode(layer.blend_mode()),
-            ))
+/// How many layers are shrunk at once.
+///
+/// Two, not one per core. Each one in flight holds its layer's pixels twice
+/// over — and, because `crop` reads through `PsdLayer::rgba`, a buffer the
+/// size of the whole canvas besides: 112 MB for a letter page at 600 DPI. A
+/// sketch is two big layers, the artwork and the grid mark, so two at a time
+/// is the whole of the win for the commonest file, at a memory cost an iPad
+/// can carry.
+const AT_ONCE: usize = 2;
+
+/// Every layer of the file, shrunk, by its index — worked out up front and
+/// side by side, since no layer's pixels depend on another's.
+fn shrink_all(doc: &Psd, factor: f64) -> Vec<Option<LayerBuilder>> {
+    let count = doc.layers().len();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let done: Vec<std::sync::Mutex<Option<LayerBuilder>>> =
+        (0..count).map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..AT_ONCE.min(count) {
+            scope.spawn(|| loop {
+                let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if index >= count {
+                    break;
+                }
+                let layer = shrink_layer(doc, index, factor);
+                *done[index].lock().unwrap_or_else(|e| e.into_inner()) = layer;
+            });
         }
+    });
+    done.into_iter()
+        .map(|slot| slot.into_inner().unwrap_or_else(|e| e.into_inner()))
+        .collect()
+}
+
+fn shrink_layer(doc: &Psd, index: usize, factor: f64) -> Option<LayerBuilder> {
+    let layer = doc.layer_by_idx(index);
+    let (left, top, width, height, pixels) = crop(layer, doc.width(), doc.height());
+    let out = if width == 0 || height == 0 {
+        // An empty layer is still a layer somebody named; keep it as one
+        // clear pixel so the stack is the same shape.
+        LayerBuilder::new(layer.name().to_string()).rgba(1, 1, vec![0; 4])
+    } else {
+        let (w, h, rgba) = shrink(width, height, pixels, factor)?;
+        LayerBuilder::new(layer.name().to_string())
+            .rgba(w, h, rgba)
+            .at(
+                ((left as f64) / factor).round() as i32,
+                ((top as f64) / factor).round() as i32,
+            )
+    };
+    Some(
+        out.opacity(layer.opacity())
+            .visible(layer.visible())
+            .blend_mode(layer.blend_mode()),
+    )
+}
+
+fn built(doc: &Psd, item: Item, shrunk: &mut [Option<LayerBuilder>]) -> Option<Built> {
+    match item {
+        Item::Layer(index) => shrunk.get_mut(index)?.take().map(Built::Layer),
         Item::Group(id) => {
             let group = doc.groups().get(&id)?;
             let mut out = GroupBuilder::new(group.name().to_string())
@@ -90,7 +127,7 @@ fn built(doc: &Psd, item: Item, factor: f64) -> Option<Built> {
                 .visible(group.visible())
                 .blend_mode(group.blend_mode());
             for child in items(doc, Some(id)).into_iter().rev() {
-                match built(doc, child, factor) {
+                match built(doc, child, shrunk) {
                     Some(Built::Layer(layer)) => out = out.add_layer(layer),
                     Some(Built::Group(inner)) => out = out.add_group(inner),
                     None => {}
@@ -117,27 +154,74 @@ fn shrink(
     if w == width && h == height {
         return Some((w, h, pixels));
     }
-    for px in pixels.chunks_exact_mut(4) {
-        let a = px[3] as u32;
-        for c in &mut px[..3] {
-            *c = ((*c as u32 * a + 127) / 255) as u8;
-        }
-    }
+    premultiply(&mut pixels);
     let image = RgbaImage::from_raw(width, height, pixels)?;
     let mut out = image::imageops::resize(&image, w, h, FilterType::CatmullRom).into_raw();
-    for px in out.chunks_exact_mut(4) {
-        let a = px[3] as u32;
-        if a == 0 {
-            px[0] = 0;
-            px[1] = 0;
-            px[2] = 0;
-            continue;
+    unpremultiply(&mut out);
+    Some((w, h, out))
+}
+
+/// `c * a / 255`, rounded, for every colour and alpha: a table rather than
+/// the arithmetic, because this runs over every pixel of every layer of a
+/// print file — seven million of them for one 300 DPI sketch — and a lookup
+/// is the same answer for a fraction of the work.
+fn premultiplied() -> &'static [[u8; 256]; 256] {
+    static TABLE: std::sync::OnceLock<Box<[[u8; 256]; 256]>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table = Box::new([[0u8; 256]; 256]);
+        for a in 0..256u32 {
+            for c in 0..256u32 {
+                table[a as usize][c as usize] = ((c * a + 127) / 255) as u8;
+            }
         }
-        for c in &mut px[..3] {
-            *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+        table
+    })
+}
+
+/// And back: `c * 255 / a`, rounded and capped, where `a` is not zero.
+fn unpremultiplied() -> &'static [[u8; 256]; 256] {
+    static TABLE: std::sync::OnceLock<Box<[[u8; 256]; 256]>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table = Box::new([[0u8; 256]; 256]);
+        for a in 1..256u32 {
+            for c in 0..256u32 {
+                table[a as usize][c as usize] = ((c * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+        table
+    })
+}
+
+fn premultiply(pixels: &mut [u8]) {
+    let table = premultiplied();
+    for px in pixels.chunks_exact_mut(4) {
+        match px[3] {
+            255 => {}
+            // Most of a sketch, and the reason a fringe was ever possible.
+            0 => px[..3].fill(0),
+            a => {
+                let row = &table[a as usize];
+                for c in &mut px[..3] {
+                    *c = row[*c as usize];
+                }
+            }
         }
     }
-    Some((w, h, out))
+}
+
+fn unpremultiply(pixels: &mut [u8]) {
+    let table = unpremultiplied();
+    for px in pixels.chunks_exact_mut(4) {
+        match px[3] {
+            0 => px[..3].fill(0),
+            a => {
+                let row = &table[a as usize];
+                for c in &mut px[..3] {
+                    *c = row[*c as usize];
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -200,5 +284,41 @@ mod tests {
                 assert!(px[0] > 240, "edge pixel darkened: {px:?}");
             }
         }
+    }
+
+    /// The tables are the arithmetic they replaced, for every input.
+    #[test]
+    fn the_tables_are_the_arithmetic() {
+        let mut every: Vec<u8> = Vec::with_capacity(256 * 256 * 4);
+        for a in 0..=255u8 {
+            for c in 0..=255u8 {
+                every.extend_from_slice(&[c, c / 2, 255 - c, a]);
+            }
+        }
+        let mut by_table = every.clone();
+        premultiply(&mut by_table);
+        let mut by_hand = every.clone();
+        for px in by_hand.chunks_exact_mut(4) {
+            let a = px[3] as u32;
+            for c in &mut px[..3] {
+                *c = ((*c as u32 * a + 127) / 255) as u8;
+            }
+        }
+        assert_eq!(by_table, by_hand);
+
+        let mut by_table = every.clone();
+        unpremultiply(&mut by_table);
+        let mut by_hand = every;
+        for px in by_hand.chunks_exact_mut(4) {
+            let a = px[3] as u32;
+            if a == 0 {
+                px[..3].fill(0);
+                continue;
+            }
+            for c in &mut px[..3] {
+                *c = ((*c as u32 * 255 + a / 2) / a).min(255) as u8;
+            }
+        }
+        assert_eq!(by_table, by_hand);
     }
 }

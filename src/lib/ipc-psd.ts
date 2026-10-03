@@ -17,6 +17,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+import { invokeBytes } from "./ipc-bytes";
 
 export interface OutputFile {
   absolutePath: string;
@@ -139,8 +140,8 @@ export interface PsdPaint {
   y: number;
   width: number;
   height: number;
-  /** RGBA8, `width * height * 4` bytes. */
-  rgbaBase64: string;
+  /** RGBA8, `width * height * 4` bytes. Sent raw — see `lib/ipc-bytes.ts`. */
+  rgba: PixelBytes;
   /**
    * The coverage a turned-round brush takes *out* of the layer, over the same
    * rectangle and in the same format — only its alpha is read.
@@ -149,7 +150,7 @@ export interface PsdPaint {
    * out when nothing in the session erased anything, which is the ordinary
    * case and saves sending a buffer of zeroes.
    */
-  eraseBase64?: string;
+  erase?: PixelBytes;
 }
 
 /**
@@ -173,10 +174,13 @@ export interface PsdPaletteSync {
   skipped: string | null;
 }
 
+/** Bytes that cross the bridge as they are — see `lib/ipc-bytes.ts`. */
+export type PixelBytes = Uint8Array | Uint8ClampedArray;
+
 /** One raster layer of a generated group. The name is the exported one. */
 export interface PsdPart {
   name: string;
-  rgbaBase64: string;
+  rgba: PixelBytes;
 }
 
 export interface ImportResult {
@@ -216,24 +220,24 @@ export const psd = {
   importBytes: (
     id: string,
     name: string,
-    dataBase64: string,
+    data: PixelBytes,
     marks?: AnchorMarks,
-  ) => invoke<ImportResult>("import_image_bytes", { id, name, dataBase64, marks }),
+  ) => invokeBytes<ImportResult>("import_image_bytes", { id, name, data, marks }),
   /** Build a PSD straight from pixels — the route drawn strokes take. */
   fromRgba: (
     id: string,
     name: string,
     width: number,
     height: number,
-    rgbaBase64: string,
+    rgba: PixelBytes,
     marks?: AnchorMarks,
   ) =>
-    invoke<ImportResult>("create_psd_from_rgba", {
+    invokeBytes<ImportResult>("create_psd_from_rgba", {
       id,
       name,
       width,
       height,
-      rgbaBase64,
+      rgba,
       marks,
     }),
   /**
@@ -293,7 +297,7 @@ export const psd = {
     parts: PsdPart[],
     marks: AnchorMarks,
   ) =>
-    invoke<ImportResult>("create_psd_group_from_rgba", {
+    invokeBytes<ImportResult>("create_psd_group_from_rgba", {
       id,
       name,
       width,
@@ -347,7 +351,7 @@ export const psd = {
     parts: PsdPart[],
     marks: AnchorMarks,
   ) =>
-    invoke<ImportResult>("rewrite_psd_group_from_rgba", {
+    invokeBytes<ImportResult>("rewrite_psd_group_from_rgba", {
       id,
       key,
       width,
@@ -403,7 +407,7 @@ export const psd = {
     index: number,
     name: string,
     paint: PsdPaint,
-  ) => invoke<string>("paint_psd_layer", { id, key, index, name, paint }),
+  ) => invokeBytes<string>("paint_psd_layer", { id, key, index, name, paint }),
   reprocess: (id: string, key: string, options?: Record<string, unknown>) =>
     invoke<string>("reprocess_psd", { id, key, options }),
   /** Overwrite `<key>.psd` with another file and run the pipeline again. */

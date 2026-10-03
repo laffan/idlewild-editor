@@ -27,7 +27,6 @@
 //!   leave every layer drawn into from scratch carrying a transparent margin
 //!   back to the corner of the canvas.
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde::Deserialize;
 
 /// A rectangle of RGBA8 pixels, placed on the PSD's canvas.
@@ -52,40 +51,48 @@ impl Patch {
 }
 
 /// Ink as the editor sends it: where it goes on the canvas, and the pixels.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+///
+/// The rectangle crosses the bridge as JSON and the pixels as raw bytes beside
+/// it — see `ipc_bytes.rs` — so this is put together on this side rather than
+/// deserialised whole.
+#[derive(Debug, Clone)]
 pub struct Paint {
     pub x: i32,
     pub y: i32,
     pub width: u32,
     pub height: u32,
-    /// RGBA8, `width * height * 4` bytes, base64 over the bridge.
-    pub rgba_base64: String,
+    /// RGBA8, `width * height * 4` bytes.
+    pub rgba: Vec<u8>,
     /// What a turned-round brush is taking *out* of the layer, over the same
     /// rectangle and in the same format. Only its alpha is read: erasing has
     /// no colour. Absent when nothing in the session erased anything, which
     /// is the ordinary case and saves sending a buffer of zeroes.
-    #[serde(default)]
-    pub erase_base64: Option<String>,
+    pub erase: Option<Vec<u8>>,
+}
+
+/// The rectangle half of a `Paint`, as the editor sends it.
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct PaintBox {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Paint {
     pub fn decode(&self) -> Result<Patch, String> {
-        self.buffer(&self.rgba_base64, "ink")
+        self.buffer(&self.rgba, "ink")
     }
 
     /// The erase coverage, when the session had any.
     pub fn decode_erase(&self) -> Result<Option<Patch>, String> {
-        match &self.erase_base64 {
-            Some(b64) => self.buffer(b64, "erase mask").map(Some),
+        match &self.erase {
+            Some(erase) => self.buffer(erase, "erase mask").map(Some),
             None => Ok(None),
         }
     }
 
-    fn buffer(&self, base64: &str, what: &str) -> Result<Patch, String> {
-        let rgba = STANDARD
-            .decode(base64)
-            .map_err(|e| format!("Cannot read the {what}: {e}"))?;
+    fn buffer(&self, rgba: &[u8], what: &str) -> Result<Patch, String> {
         let expected = (self.width as usize) * (self.height as usize) * 4;
         if rgba.len() != expected {
             return Err(format!(
@@ -100,28 +107,23 @@ impl Paint {
             top: self.y,
             width: self.width,
             height: self.height,
-            rgba,
+            rgba: rgba.to_vec(),
         })
     }
 
     /// Ink built on this side of the bridge, as a `Paint`.
     ///
-    /// `Paint` is the wire form — base64 because the editor's ink crosses
-    /// Tauri's IPC as JSON — and `psd_palette` has no wire to cross: it draws
-    /// its strip here and wants it in one layer of a rebuild. Going out
-    /// through base64 and straight back in costs an encode and a decode of a
-    /// few kilobytes, once per share, and it is worth that: the alternative
-    /// is a second shape of ink for `LayerEdit` to carry and for
-    /// `psd_rebuild::painted` to handle, which is a fork in the one path
-    /// every write to a PSD goes down.
+    /// `psd_palette` draws its strip here and wants it in one layer of a
+    /// rebuild, which is the one path every write to a PSD goes down — so it
+    /// is handed over in the same shape the editor's ink is.
     pub fn from_patch(patch: &Patch) -> Paint {
         Paint {
             x: patch.left,
             y: patch.top,
             width: patch.width,
             height: patch.height,
-            rgba_base64: STANDARD.encode(&patch.rgba),
-            erase_base64: None,
+            rgba: patch.rgba.clone(),
+            erase: None,
         }
     }
 }

@@ -13,7 +13,6 @@ use super::swatch;
 use crate::psd_paint::{self, Paint, Patch};
 use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{psd_layers, psd_write, store};
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 /// A patch of one colour, at a place on the canvas.
 fn patch(left: i32, top: i32, width: u32, height: u32, rgba: [u8; 4]) -> Patch {
@@ -32,8 +31,8 @@ fn ink(left: i32, top: i32, width: u32, height: u32, rgba: [u8; 4]) -> Paint {
         y: top,
         width,
         height,
-        rgba_base64: STANDARD.encode(swatch(width, height, rgba)),
-        erase_base64: None,
+        rgba: swatch(width, height, rgba),
+        erase: None,
     }
 }
 
@@ -49,7 +48,7 @@ fn rubbed(
     taken: u8,
 ) -> Paint {
     Paint {
-        erase_base64: Some(STANDARD.encode(swatch(width, height, [0, 0, 0, taken]))),
+        erase: Some(swatch(width, height, [0, 0, 0, taken])),
         ..ink(left, top, width, height, rgba)
     }
 }
@@ -327,7 +326,7 @@ fn rubbing_in_psd_edit_mode_thins_the_layer_that_was_there() {
         // Now rub a 4 x 4 hole out of the middle of it, with no ink at all —
         // which is exactly the gesture that used to do nothing whatever.
         let clear = Paint {
-            rgba_base64: STANDARD.encode(swatch(4, 4, [0, 0, 0, 0])),
+            rgba: swatch(4, 4, [0, 0, 0, 0]),
             ..rubbed(6, 6, 4, 4, [0, 0, 0, 0], 255)
         };
         psd_layers::paint(id, "wall", 0, "S | wall", clear, |_| {})
@@ -395,7 +394,7 @@ fn a_rub_outside_a_layer_leaves_its_rectangle_alone() {
 
         // Rub the far corner, where this layer has nothing at all.
         let nowhere = Paint {
-            rgba_base64: STANDARD.encode(swatch(6, 6, [0, 0, 0, 0])),
+            rgba: swatch(6, 6, [0, 0, 0, 0]),
             ..rubbed(20, 20, 6, 6, [0, 0, 0, 0], 255)
         };
         psd_layers::paint(id, "shed", 0, "S | layer-1", nowhere, |_| {})
@@ -486,11 +485,8 @@ fn applying_ink_re_parses_and_writes_the_sprite() {
                 y: 1,
                 width: 4,
                 height: 4,
-                rgba_base64: {
-                    use base64::Engine;
-                    base64::engine::general_purpose::STANDARD.encode(vec![255u8; 4 * 4 * 4])
-                },
-                erase_base64: None,
+                rgba: vec![255u8; 4 * 4 * 4],
+                erase: None,
             },
             |_| {},
         )

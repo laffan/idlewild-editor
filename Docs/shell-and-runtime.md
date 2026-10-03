@@ -166,6 +166,15 @@ anchor-relative polygon plus the divisions inside it.
 The editor computes it because the editor owns the projection; Rust only ever
 sees a polygon. See **The marks an import writes** below.
 
+The commands that carry pixels inward — `import_image_bytes`,
+`create_psd_from_rgba`, `create_psd_group_from_rgba`,
+`rewrite_psd_group_from_rgba` and `paint_psd_layer` — take one raw request
+body rather than JSON arguments: the arguments as JSON with every buffer
+replaced by `{"$bytes": n}`, then the buffers. `lib/ipc-bytes.ts` packs it and
+`src-tauri/src/ipc_bytes.rs` reads it; see
+[Where Convert to PSD's ten seconds went](psd-pipeline.md#where-convert-to-psds-ten-seconds-went)
+for what the base64 it replaced cost.
+
 `psd-log-line` is emitted as an event during processing so the console drawer
 can stream psd-to-json's layer tree as it appears.
 

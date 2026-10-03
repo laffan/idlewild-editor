@@ -240,15 +240,29 @@ fn zone_pixels(layout: &Layout, marks: &AnchorMarks) -> Option<Vec<u8>> {
         .map(|l| ((l.a.x - ox, l.a.y - oy), (l.b.x - ox, l.b.y - oy)))
         .collect();
 
+    let edges: Vec<Segment> = (0..poly.len())
+        .map(|i| (poly[(i + poly.len() - 1) % poly.len()], poly[i]))
+        .collect();
+
     let (w, h) = (layout.zone_width, layout.zone_height);
     let mut out = Vec::with_capacity((w * h * 4) as usize);
+    let mut near_edges: Vec<Segment> = Vec::with_capacity(edges.len());
+    let mut near_divisions: Vec<Segment> = Vec::with_capacity(divisions.len());
     for y in 0..h {
+        let py = y as f32 + 0.5;
+        // Only the lines that pass close to this row can be close to a pixel
+        // in it. A footprint is a few lines over seven million pixels at
+        // print resolution, so asking each pixel about every line was most of
+        // the cost of writing a sketch.
+        near_edges.clear();
+        near_edges.extend(edges.iter().filter(|s| reaches_row(s, py, LINE_HALF * 2.0)));
+        near_divisions.clear();
+        near_divisions.extend(divisions.iter().filter(|s| reaches_row(s, py, LINE_HALF)));
         for x in 0..w {
             let px = x as f32 + 0.5;
-            let py = y as f32 + 0.5;
-            let alpha = if distance_to_outline(px, py, &poly) <= LINE_HALF * 2.0 {
+            let alpha = if near_any_within(px, py, &near_edges, LINE_HALF * 2.0) {
                 OUTLINE_ALPHA
-            } else if near_any(px, py, &divisions) {
+            } else if near_any_within(px, py, &near_divisions, LINE_HALF) {
                 DIVISION_ALPHA
             } else if point_in_polygon(px, py, &poly) {
                 WASH_ALPHA
@@ -261,10 +275,25 @@ fn zone_pixels(layout: &Layout, marks: &AnchorMarks) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn near_any(x: f32, y: f32, lines: &[Segment]) -> bool {
-    lines
-        .iter()
-        .any(|(a, b)| point_to_segment(x, y, *a, *b) <= LINE_HALF)
+/// Slack on the box tests below: a whole pixel more than the line's reach, so
+/// a point the box test rules out is one the exact distance would have ruled
+/// out too, rounding and all. What is drawn is decided by `point_to_segment`
+/// alone; the boxes only decide whom to ask.
+const SLACK: f32 = 1.0;
+
+/// Whether a segment comes within `reach` of a horizontal line at `y`.
+fn reaches_row(segment: &Segment, y: f32, reach: f32) -> bool {
+    let ((_, ay), (_, by)) = *segment;
+    y >= ay.min(by) - reach - SLACK && y <= ay.max(by) + reach + SLACK
+}
+
+/// Whether a point is within `reach` of any of these segments.
+fn near_any_within(x: f32, y: f32, lines: &[Segment], reach: f32) -> bool {
+    lines.iter().any(|(a, b)| {
+        x >= a.0.min(b.0) - reach - SLACK
+            && x <= a.0.max(b.0) + reach + SLACK
+            && point_to_segment(x, y, *a, *b) <= reach
+    })
 }
 
 fn point_in_polygon(x: f32, y: f32, poly: &[Px]) -> bool {
@@ -281,15 +310,6 @@ fn point_in_polygon(x: f32, y: f32, poly: &[Px]) -> bool {
     inside
 }
 
-fn distance_to_outline(x: f32, y: f32, poly: &[Px]) -> f32 {
-    let mut best = f32::MAX;
-    let mut j = poly.len() - 1;
-    for i in 0..poly.len() {
-        best = best.min(point_to_segment(x, y, poly[j], poly[i]));
-        j = i;
-    }
-    best
-}
 
 fn point_to_segment(px: f32, py: f32, a: Px, b: Px) -> f32 {
     let (vx, vy) = (b.0 - a.0, b.1 - a.1);
@@ -302,4 +322,86 @@ fn point_to_segment(px: f32, py: f32, a: Px, b: Px) -> f32 {
     let dx = px - (a.0 + vx * t);
     let dy = py - (a.1 + vy * t);
     (dx * dx + dy * dy).sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::psd_write::{MarkLine, MarkPoint};
+
+    fn at(x: f32, y: f32) -> MarkPoint {
+        MarkPoint { x, y }
+    }
+
+    /// The footprint as it was drawn before rows were narrowed down: every
+    /// pixel asked about every line.
+    fn every_pixel_every_line(layout: &Layout, marks: &AnchorMarks) -> Vec<u8> {
+        let (ox, oy, _, _) = outline_box(marks).unwrap();
+        let poly: Vec<Px> = marks.outline.iter().map(|p| (p.x - ox, p.y - oy)).collect();
+        let divisions: Vec<Segment> = marks
+            .lines
+            .iter()
+            .map(|l| ((l.a.x - ox, l.a.y - oy), (l.b.x - ox, l.b.y - oy)))
+            .collect();
+        let mut out = vec![];
+        for y in 0..layout.zone_height {
+            for x in 0..layout.zone_width {
+                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                let alpha = if distance_to_outline(px, py, &poly) <= LINE_HALF * 2.0 {
+                    OUTLINE_ALPHA
+                } else if divisions
+                    .iter()
+                    .any(|(a, b)| point_to_segment(px, py, *a, *b) <= LINE_HALF)
+                {
+                    DIVISION_ALPHA
+                } else if point_in_polygon(px, py, &poly) {
+                    WASH_ALPHA
+                } else {
+                    0
+                };
+                out.extend_from_slice(&[ACCENT[0], ACCENT[1], ACCENT[2], alpha]);
+            }
+        }
+        out
+    }
+
+    fn distance_to_outline(x: f32, y: f32, poly: &[Px]) -> f32 {
+        let mut best = f32::MAX;
+        let mut j = poly.len() - 1;
+        for i in 0..poly.len() {
+            best = best.min(point_to_segment(x, y, poly[j], poly[i]));
+            j = i;
+        }
+        best
+    }
+
+    #[test]
+    fn narrowing_the_lines_down_draws_the_same_footprint() {
+        let diamond = AnchorMarks {
+            outline: vec![at(0.0, -40.5), at(80.25, 0.0), at(0.0, 40.5), at(-80.25, 0.0)],
+            lines: vec![
+                MarkLine { a: at(-40.1, -20.2), b: at(40.1, 20.2) },
+                MarkLine { a: at(40.1, -20.2), b: at(-40.1, 20.2) },
+            ],
+            art: None,
+            margin: Some(at(3.0, 3.0)),
+            cols: 2,
+            rows: 2,
+        };
+        let square = AnchorMarks {
+            outline: vec![at(-10.0, -10.0), at(54.0, -10.0), at(54.0, 30.0), at(-10.0, 30.0)],
+            lines: vec![MarkLine { a: at(22.0, -10.0), b: at(22.0, 30.0) }],
+            art: Some(at(-12.0, -12.0)),
+            margin: None,
+            cols: 2,
+            rows: 1,
+        };
+        for marks in [diamond, square] {
+            let layout = layout(70, 50, &marks);
+            assert_eq!(
+                zone_pixels(&layout, &marks).unwrap(),
+                every_pixel_every_line(&layout, &marks)
+            );
+        }
+    }
 }

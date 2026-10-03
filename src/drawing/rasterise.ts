@@ -11,7 +11,7 @@
  * the ink that was on screen, brush texture and pressure taper included.
  */
 
-import { psd, toBase64 } from "../lib/ipc";
+import { psd } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import type { Stroke } from "../lib/types";
 import { createAtlasCache, type AtlasCache } from "./atlas";
@@ -159,13 +159,14 @@ export async function strokesToPsd(
     /** Built from `raster.bounds`, so ask for those first. */
     marks?: (raster: Raster) => AnchorMarks;
     /**
-     * Called before each of the two long synchronous steps, and awaited.
+     * Called before each stage, and awaited.
      *
-     * Both of them block this thread for as long as they take — a sketch of
-     * two megapixels is a few hundred milliseconds of stamping and as much
-     * again of encoding, and several times that on an iPad — so a caller
-     * putting words on screen has to be given the chance to paint them
-     * *first*. Hence awaited rather than called: see `editor/psd-progress.ts`.
+     * Drawing the strokes blocks this thread for as long as it takes — a
+     * sketch of two megapixels is a few hundred milliseconds of stamping, and
+     * several times that on an iPad — so a caller putting words on screen has
+     * to be given the chance to paint them *first*. Hence awaited rather than
+     * called: see `editor/psd-progress.ts`. The pixels then cross to Rust as
+     * they are, with no encoding step of their own: see `lib/ipc-bytes.ts`.
      */
     stage?: (line: string) => Promise<void> | void;
   } = {},
@@ -173,15 +174,13 @@ export async function strokesToPsd(
   await options.stage?.("Drawing the strokes…");
   const raster = rasteriseStrokes(strokes, options.atlas, options.scale);
   if (!raster) return null;
-  await options.stage?.("Packing the pixels…");
-  const rgbaBase64 = toBase64(raster.rgba);
   await options.stage?.("Writing the PSD…");
   return psd.fromRgba(
     projectId,
     name,
     raster.width,
     raster.height,
-    rgbaBase64,
+    raster.rgba,
     options.marks?.(raster),
   );
 }

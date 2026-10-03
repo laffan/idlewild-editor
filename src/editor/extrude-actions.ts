@@ -33,7 +33,7 @@ import type { DocStore } from "../lib/doc-store";
 import { setExtrusion } from "../lib/extrusions";
 import type { Grid } from "../lib/grid";
 import { cellsBounds } from "../lib/grid";
-import { psd, toBase64, type PsdPart } from "../lib/ipc";
+import { psd, type PsdPart } from "../lib/ipc";
 import {
   EXTRUSION_PARTS,
   extrusionPartName,
@@ -121,9 +121,7 @@ export async function applyExtrusion(
     }
     parts.push({
       name: extrusionPartName(key, part),
-      rgbaBase64: toBase64(
-        new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength),
-      ),
+      rgba,
     });
   }
 

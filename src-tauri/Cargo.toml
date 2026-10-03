@@ -81,15 +81,16 @@ ureq = { version = "3", default-features = false, features = [
 # The PSD pipeline, shared with Phaser Bench.
 #
 # TEMPORARILY PINNED AHEAD OF MAIN, and meant to come off. The branch carries
-# the fix for composited groups exporting their children twice: an atlas whose
-# frames are named the way this editor names layers — `S | purple` — wrote a
-# PNG per frame, hung a `children` array off a single-image layer, and keyed
-# its frames `"S | purple"`, which is a frame no game code can ask for. Without
-# it an atlas built here still comes out wrong, however right the rest of the
-# chain is. Drop the `branch` once that lands on psd-to-json-rust's main, and
+# two things main does not yet have. The fix for composited groups exporting
+# their children twice: an atlas whose frames are named the way this editor
+# names layers — `S | purple` — wrote a PNG per frame, hung a `children` array
+# off a single-image layer, and keyed its frames `"S | purple"`, which is a
+# frame no game code can ask for. And the crop that copies a layer's pixels a
+# row at a time rather than one `put_pixel` at a time, which matters at print
+# resolution. Drop the `branch` once both land on psd-to-json-rust's main, and
 # run `cargo update -p psd-to-json` — the lockfile holds an exact commit, so
 # merging alone does not move it.
-psd-to-json = { git = "https://github.com/laffan/psd-to-json-rust", branch = "claude/focused-einstein-ie5qey" }
+psd-to-json = { git = "https://github.com/laffan/psd-to-json-rust", branch = "claude/confident-gates-3rykz9" }
 psd = { git = "https://github.com/laffan/psd", branch = "master" }
 # TIFF and GIF are here for the clipboard rather than for the file pickers:
 # a macOS pasteboard offers TIFF where it offers anything, and an image the
@@ -114,10 +115,8 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 #
 # The iPad runs `tauri ios build --debug` — see `build:ios` in package.json —
 # so without this, every crate in this tree is compiled at `opt-level = 0` on
-# the device somebody actually draws on. That is fine for *this* crate, which
-# is glue. It is not fine for the PSD pipeline, which is entirely dependency
-# code: the `psd` fork writes the file and psd-to-json parses and slices it,
-# and both were unoptimised.
+# the device somebody actually draws on. The `psd` fork writes the file and
+# psd-to-json parses and slices it, and both were unoptimised.
 #
 # Measured on one 1826 x 1412 sketch — a 14.6 MB PSD, the size a lassoed
 # scribble actually makes — on the same machine, unoptimised then optimised:
@@ -125,11 +124,38 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 # 2.34 s -> 0.13 s. Four and a half seconds becomes one, and that is most of
 # "Convert to PSD takes ten seconds on an iPad".
 #
-# This crate stays at `opt-level = 0`, so a debug build still steps through
-# app code and still compiles as quickly as it did; only the dependencies
-# below it are built once, optimised, and cached.
+# The dependencies below it are built once, optimised, and cached.
 [profile.dev.package."*"]
 opt-level = 3
+
+# And this crate is optimised a little too, because it stopped being glue.
+#
+# It used to stay at `opt-level = 0` on the grounds that the pixel work was
+# all in the dependencies. Print projects moved a good deal of it here: the
+# downsample that makes a print file's screen copy premultiplies, crops and
+# unpremultiplies every layer (`psd_downsample.rs`), the grid mark is drawn a
+# pixel at a time over the whole sketch (`psd_marks.rs`), and PSD Edit mode,
+# the merged palette and the print writers all walk pixels in this crate.
+# At 300 DPI that is millions of pixels per file, through unoptimised loops.
+#
+# Measured on a 2333 x 3000 sketch at 300 DPI — most of a letter page, five
+# percent ink — in `tests/perf.rs`, on the same machine:
+#
+#   opt-level 0:  write 1.68 s, downsample 7.64 s, whole conversion 9.6 s
+#   opt-level 1:  write 0.47 s, downsample 1.02 s, whole conversion 1.7 s
+#
+# An iPad is slower than the desktop that was measured on, which is how one
+# sketch came to take forty seconds there. Level 1 keeps variables and line
+# stepping usable in a debugger, and an incremental rebuild of this crate took
+# the same three seconds at either level; 2 is a little faster again
+# (downsample 0.76 s) at the cost of more of both.
+[profile.dev]
+opt-level = 1
+
+# Tauri's mock runtime, so a test can send a command a raw request body the
+# way the webview does and see it arrive — see `ipc_bytes.rs`.
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

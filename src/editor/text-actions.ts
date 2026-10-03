@@ -22,7 +22,7 @@
 import { sourceScale } from "../lib/print";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
-import { psd, toBase64 } from "../lib/ipc";
+import { psd } from "../lib/ipc";
 import { planeFor, rasteriseText, removeText, textById } from "../lib/text-items";
 import { plainText } from "../lib/text-markdown";
 import type { Selection, TextItem } from "../lib/types";
@@ -87,7 +87,7 @@ export async function convertTextToPsd(
       textName(item),
       raster.width,
       raster.height,
-      toBase64(raster.rgba),
+      raster.rgba,
       scaleMarks(
         {
           ...(grid.snaps

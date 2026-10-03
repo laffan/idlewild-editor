@@ -155,7 +155,9 @@ pub struct LayerEdit {
     #[serde(default)]
     pub visible: Option<bool>,
     /// Ink to lay over whatever this row already holds. See `psd_paint`.
-    #[serde(default)]
+    /// Never sent by the editor in a list of edits — ink arrives through
+    /// `paint_psd_layer`, with its pixels as raw bytes — so never read here.
+    #[serde(skip)]
     pub paint: Option<Paint>,
 }
 

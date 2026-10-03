@@ -62,14 +62,51 @@ pub fn add_psd_layer(app: tauri::AppHandle, id: String, key: String) -> Result<S
 /// `index` and `name` together name the row, and both are checked: a paint
 /// against an index the file has since renumbered would put a drawing in the
 /// wrong layer, and nothing about the result would say so.
+///
+/// The pixels arrive as raw bytes beside the arguments — see `ipc_bytes.rs`.
 #[tauri::command(async)]
 pub fn paint_psd_layer(
     app: tauri::AppHandle,
+    request: tauri::ipc::Request<'_>,
+) -> Result<String, String> {
+    let mut packed = crate::ipc_bytes::unpack::<PaintArgs>(&request)?;
+    let rgba = packed.take(packed.args.paint.rgba)?;
+    let erase = match packed.args.paint.erase {
+        Some(erase) => Some(packed.take(erase)?),
+        None => None,
+    };
+    let PaintArgs {
+        id,
+        key,
+        index,
+        name,
+        paint,
+    } = packed.args;
+    let paint = psd_paint::Paint {
+        x: paint.rect.x,
+        y: paint.rect.y,
+        width: paint.rect.width,
+        height: paint.rect.height,
+        rgba,
+        erase,
+    };
+    psd_layers::paint(&id, &key, index, &name, paint, logger(&app))
+}
+
+#[derive(serde::Deserialize)]
+struct PaintArgs {
     id: String,
     key: String,
     index: usize,
     name: String,
-    paint: psd_paint::Paint,
-) -> Result<String, String> {
-    psd_layers::paint(&id, &key, index, &name, paint, logger(&app))
+    paint: PaintWire,
+}
+
+#[derive(serde::Deserialize)]
+struct PaintWire {
+    #[serde(flatten)]
+    rect: psd_paint::PaintBox,
+    rgba: crate::ipc_bytes::Bytes,
+    #[serde(default)]
+    erase: Option<crate::ipc_bytes::Bytes>,
 }

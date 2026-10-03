@@ -6,7 +6,7 @@
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { h } from "../lib/dom";
 import { openSheet } from "../lib/sheet";
-import { psd, publish, toBase64 } from "../lib/ipc";
+import { psd, publish } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import {
   hasCharacter,
@@ -611,5 +611,5 @@ async function importClipboard(
   const read = await clipboardImage();
   const file = key ? read : (await trimTransparent(read)).file;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  return psd.importBytes(projectId, key ?? pasteName(read), toBase64(bytes), marks);
+  return psd.importBytes(projectId, key ?? pasteName(read), bytes, marks);
 }

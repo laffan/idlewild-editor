@@ -21,6 +21,7 @@ mod game_files;
 mod game_search;
 mod github_api;
 mod import_assets;
+mod ipc_bytes;
 mod project;
 mod projects;
 mod psd_background;
@@ -140,7 +141,7 @@ struct DroppedFile {
 /// The pipeline's commentary, as an event. It is what the console drawer
 /// shows and, since the PSD commands stopped running on the main thread, what
 /// the pen bar shows as progress — see `psd-progress.ts`.
-pub(crate) fn logger(app: &tauri::AppHandle) -> impl Fn(&str) + '_ {
+pub(crate) fn logger<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> impl Fn(&str) + '_ {
     move |line: &str| {
         let _ = app.emit("psd-log-line", line.to_string());
     }
@@ -161,136 +162,6 @@ fn import_image(
         marks.as_ref(),
         logger(&app),
     )
-}
-
-/// Import from bytes the frontend already holds — a clipboard paste, a photo
-/// picked on iPad, or a rasterised selection of drawn strokes.
-#[tauri::command(async)]
-fn import_image_bytes(
-    app: tauri::AppHandle,
-    id: String,
-    name: String,
-    data_base64: String,
-    marks: Option<AnchorMarks>,
-) -> Result<ImportResult, String> {
-    use base64::Engine;
-    let payload = data_base64
-        .split_once(",")
-        .map(|(_, rest)| rest)
-        .unwrap_or(&data_base64);
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(payload)
-        .map_err(|e| format!("Bad image data: {e}"))?;
-
-    let key = psd_write::sanitise_stem(&name);
-    let psd_bytes = psd_write::psd_from_image_bytes_marked(&key, &bytes, marks.as_ref())?;
-    let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
-    std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
-
-    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
-    // Measured from the PSD that was written rather than by decoding the
-    // input again: the input may already *be* a PSD, which the image decoder
-    // cannot read — and the file on disk is the thing being described.
-    let (width, height) = psd_pipeline::psd_dimensions(&dest)?;
-    Ok(ImportResult {
-        key,
-        width,
-        height,
-        manifest,
-    })
-}
-
-/// Build a PSD directly from an RGBA buffer — the path drawn strokes take.
-#[tauri::command(async)]
-fn create_psd_from_rgba(
-    app: tauri::AppHandle,
-    id: String,
-    name: String,
-    width: u32,
-    height: u32,
-    rgba_base64: String,
-    marks: Option<AnchorMarks>,
-) -> Result<ImportResult, String> {
-    use base64::Engine;
-    let rgba = base64::engine::general_purpose::STANDARD
-        .decode(&rgba_base64)
-        .map_err(|e| format!("Bad pixel data: {e}"))?;
-
-    let key = psd_write::sanitise_stem(&name);
-    let psd_bytes = psd_write::psd_from_rgba_marked(&key, width, height, rgba, marks.as_ref())?;
-    let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
-    std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
-
-    // The file's own size rather than the buffer's, as every import path
-    // already reports: `psd_marks::layout` grows the canvas to hold the grid
-    // footprint beside the artwork, and a conversion's margin again around
-    // both, so the raster handed in stopped describing the file the moment
-    // marks existed.
-    let (width, height) = psd_pipeline::psd_dimensions(&dest)?;
-    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
-    Ok(ImportResult {
-        key,
-        width,
-        height,
-        manifest,
-    })
-}
-
-/// One raster layer of a generated group, as it crosses the bridge.
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PartPayload {
-    name: String,
-    rgba_base64: String,
-}
-
-fn decode_parts(parts: Vec<PartPayload>) -> Result<Vec<psd_write::Part>, String> {
-    use base64::Engine;
-    parts
-        .into_iter()
-        .map(|part| {
-            base64::engine::general_purpose::STANDARD
-                .decode(&part.rgba_base64)
-                .map(|rgba| psd_write::Part {
-                    name: part.name,
-                    rgba,
-                })
-                .map_err(|e| format!("Bad pixel data: {e}"))
-        })
-        .collect()
-}
-
-/// A PSD whose artwork is a group of raster layers rather than one sprite.
-///
-/// What an extrusion writes: a silhouette, its shading and the lines between
-/// its spaces, as three layers somebody can take apart. Parts arrive top-first,
-/// as Photoshop's panel lists them.
-#[tauri::command(async)]
-fn create_psd_group_from_rgba(
-    app: tauri::AppHandle,
-    id: String,
-    name: String,
-    width: u32,
-    height: u32,
-    parts: Vec<PartPayload>,
-    marks: AnchorMarks,
-) -> Result<ImportResult, String> {
-    let key = psd_write::sanitise_stem(&name);
-    let parts = decode_parts(parts)?;
-    let psd_bytes = psd_write::psd_from_parts_marked(&key, width, height, &parts, &marks)?;
-    let dest = store::psd_dir(&id)?.join(format!("{key}.psd"));
-    std::fs::write(&dest, psd_bytes).map_err(|e| e.to_string())?;
-
-    // The canvas, not the parts: an extrusion asks for a grid space of clear
-    // room around what it draws, so the file is a margin bigger on every side.
-    let (width, height) = psd_pipeline::psd_dimensions(&dest)?;
-    let manifest = psd_pipeline::process(&id, &key, &ProcessOptions::default(), logger(&app))?;
-    Ok(ImportResult {
-        key,
-        width,
-        height,
-        manifest,
-    })
 }
 
 /// Several placed PSDs, written back out as one.
@@ -340,34 +211,6 @@ fn merge_psds(
         height,
         manifest,
     })
-}
-
-/// Rewrite the group this editor generated in a PSD it already wrote, keeping
-/// every other layer in the file.
-///
-/// What `create_psd_group_from_rgba` cannot do. That one writes the file from
-/// nothing, which is right for an import and wrong for a second Apply: a layer
-/// painted over the greybox in Photoshop would not be preserved, it would
-/// simply not be there any more. See `psd_write::rewrite_parts_marked`.
-#[tauri::command(async)]
-fn rewrite_psd_group_from_rgba(
-    app: tauri::AppHandle,
-    id: String,
-    key: String,
-    width: u32,
-    height: u32,
-    parts: Vec<PartPayload>,
-    marks: AnchorMarks,
-) -> Result<ImportResult, String> {
-    psd_pipeline::rewrite_group_and_process(
-        &id,
-        &key,
-        width,
-        height,
-        &decode_parts(parts)?,
-        &marks,
-        logger(&app),
-    )
 }
 
 #[tauri::command(async)]
@@ -604,15 +447,15 @@ pub fn run() {
             game_files::delete_game_path,
             game_search::search_game_files,
             import_image,
-            import_image_bytes,
+            ipc_bytes::import_image_bytes,
             read_clipboard,
             copy_psd_to_clipboard,
             read_dropped_file,
-            create_psd_from_rgba,
+            ipc_bytes::create_psd_from_rgba,
             psd_background::create_background_psd,
-            create_psd_group_from_rgba,
+            ipc_bytes::create_psd_group_from_rgba,
             merge_psds,
-            rewrite_psd_group_from_rgba,
+            ipc_bytes::rewrite_psd_group_from_rgba,
             reprocess_psd,
             reimport_psd,
             duplicate_psd,

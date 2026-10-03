@@ -3,6 +3,8 @@
  * plain browser to look at. Dev harness only — never bundled by the app.
  */
 
+import { unpackBytes } from "../src/lib/ipc-bytes";
+
 const DOC = {
   version: 2,
   // Overridable so the harness can be pointed at a blank template, a
@@ -150,12 +152,11 @@ function categoryOf(name: string): string {
 }
 
 /** How many pixels of a base64 RGBA buffer are not fully transparent. */
-function countOpaque(base64: string): number {
-  if (!base64) return 0;
-  const binary = atob(base64);
+function countOpaque(rgba: Uint8Array | undefined): number {
+  if (!rgba) return 0;
   let n = 0;
-  for (let i = 3; i < binary.length; i += 4) {
-    if (binary.charCodeAt(i) !== 0) n++;
+  for (let i = 3; i < rgba.length; i += 4) {
+    if (rgba[i] !== 0) n++;
   }
   return n;
 }
@@ -278,7 +279,13 @@ function gameFile(path: string, template = false): string {
   ].join("\n");
 }
 
-export async function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
+export async function invoke(
+  cmd: string,
+  body?: Record<string, unknown> | Uint8Array,
+): Promise<unknown> {
+  // A command that carries pixels sends one packed body rather than JSON —
+  // see src/lib/ipc-bytes.ts — and Rust unpacks it, so the stand-in does too.
+  const args = body instanceof Uint8Array ? unpackBytes(body) : body;
   (window as any).__calls = [...((window as any).__calls ?? []), { cmd, args }];
   switch (cmd) {
     case "get_server_port": return 8123;
@@ -307,12 +314,12 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
     }
     case "import_image_bytes": {
       // The paste path. Keyed on the name the caller worked out, so a script
-      // can check what a screenshot ended up called, and the base64 payload
-      // is kept so it can check the bytes made it across.
+      // can check what a screenshot ended up called, and the size of the
+      // payload is kept so it can check the bytes made it across.
       const name = String((args as any)?.name ?? "pasted");
       (window as any).__lastPaste = {
         name,
-        bytes: String((args as any)?.dataBase64 ?? "").length,
+        bytes: ((args as any)?.data as Uint8Array | undefined)?.length ?? 0,
         marks: (args as any)?.marks ?? null,
       };
       return {
@@ -501,7 +508,7 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         width: a.width, height: a.height, name: a.name, marks: a.marks ?? null,
         // How much of the buffer carries ink, so a script can tell an empty
         // conversion from one the pipeline lost afterwards.
-        opaque: countOpaque(String(a.rgbaBase64 ?? "")),
+        opaque: countOpaque(a.rgba),
       };
       return {
         key: String(a.name),
@@ -599,10 +606,8 @@ export async function invoke(cmd: string, args?: Record<string, unknown>): Promi
         // taking out — the second buffer is only sent when something erased,
         // so a script can tell a rub that reached the artwork from one that
         // silently did nothing. See src-tauri/src/psd_paint.rs.
-        opaque: countOpaque(String(a.paint.rgbaBase64 ?? "")),
-        erased: a.paint.eraseBase64 === undefined
-          ? null
-          : countOpaque(String(a.paint.eraseBase64)),
+        opaque: countOpaque(a.paint.rgba),
+        erased: a.paint.erase === undefined ? null : countOpaque(a.paint.erase),
       };
       // A blank layer has no rectangle worth keeping, so the first stroke
       // replaces it outright — see src-tauri/src/psd_paint.rs.

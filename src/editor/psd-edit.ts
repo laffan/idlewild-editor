@@ -42,7 +42,7 @@ import {
 } from "../drawing";
 import type { DocStore } from "../lib/doc-store";
 import type { Grid } from "../lib/grid";
-import { psd, toBase64 } from "../lib/ipc";
+import { psd } from "../lib/ipc";
 import * as log from "../lib/log";
 import {
   parseManifest,
@@ -499,8 +499,8 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
           y: Math.round((raster.bounds.y - frame.y) / fileScale),
           width: raster.width,
           height: raster.height,
-          rgbaBase64: toBase64(raster.rgba),
-          ...(raster.erase ? { eraseBase64: toBase64(raster.erase) } : {}),
+          rgba: raster.rgba,
+          ...(raster.erase ? { erase: raster.erase } : {}),
         },
       );
 

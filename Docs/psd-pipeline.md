@@ -72,22 +72,43 @@ app code and still compiles as quickly as it did. On the same sketch, on the
 same machine: writing the file **2.16 s → 0.86 s**, and running psd-to-json
 over it **2.34 s → 0.13 s**. Four and a half seconds of Rust becomes one.
 
-Two things are left, and both are somebody else's file. The 13.7 MB base64
-string crosses the Tauri bridge as JSON; Tauri 2 can take an `ArrayBuffer` as a
-raw request body instead, which would remove the encode, the JSON serialise and
-the Rust decode together, at the cost of moving the command's named arguments
-into headers. And a 1826 × 1412 sketch — a few percent ink on a clear ground —
-writes a **14.6 MB** PSD, which says the channel data is going in uncompressed;
-RLE would shrink it and everything downstream that has to read it. That is
-`PsdBuilder` in the [`psd` fork](https://github.com/laffan/psd), not this
-repository.
+**Print projects moved pixel work into this crate, and it had stayed at 0.**
+A print project's file is at its DPI and gets a downsampled screen copy (see
+[Two resolutions](printing.md#two-resolutions)), and that downsample — crop,
+premultiply, resize, unpremultiply, per layer — is `psd_downsample.rs`, here,
+not in a dependency. So is the grid mark, drawn a pixel at a time over the
+whole sketch. A 300 DPI sketch over most of a letter page is seven megapixels,
+and on a desktop the conversion took **9.6 s** with this crate unoptimised,
+7.6 s of it in the downsample; an iPad is slower again, which is where forty
+seconds came from. `[profile.dev] opt-level = 1` brings it to **1.7 s**, with
+incremental rebuilds as quick as before. `tests/perf.rs` is the stopwatch —
+`cargo test --lib perf -- --ignored --nocapture` runs it in the profile the
+app is built with.
+
+Two things were left. **The base64 is gone now.** A print project made the
+string the slow part: a 300 DPI sketch over most of a letter page is 27 MB of
+RGBA, which took **943 ms** to encode and 193 ms to serialise into the JSON
+body in V8 on a desktop — 3.6 s to encode at 600 DPI — on the thread that
+draws the editor, before Rust parsed the JSON and decoded it all again. Tauri 2
+takes a `Uint8Array` as a request's raw body, so every command that carries
+pixels — `create_psd_from_rgba`, both extrusion commands, `paint_psd_layer`
+and `import_image_bytes` — takes one packed body: the arguments as JSON with
+each buffer replaced by a reference, then the buffers. `lib/ipc-bytes.ts`
+builds it in one copy (17 ms for the same 27 MB) and `src-tauri/src/ipc_bytes.rs`
+reads it; a test sends one through Tauri's own dispatch on the mock runtime.
+`toBase64` is still how a file is *saved*, which is not this path.
+
+The other is somebody else's file: a sketch writes a PSD whose layer is mostly
+nothing, and every stage after it decodes that layer into a buffer the size of
+the whole canvas. That is `PsdLayer::rgba` in the [`psd` fork](https://github.com/laffan/psd),
+not this repository.
 
 **And it says so while it happens.** `editor/psd-progress.ts` already had the
 sheet — an undismissable panel with a sliding bar and the pipeline's own
 `psd-log-line` events under it — for the background writer; the two conversions
 use it now. The one thing that had to be added is that `stage()` **resolves
-after a paint**, two `requestAnimationFrame`s deep: the rasterise and the
-base64 are synchronous on this thread, so setting the text and going straight
+after a paint**, two `requestAnimationFrame`s deep: the rasterise is
+synchronous on this thread, so setting the text and going straight
 into them puts the words up after the wait they describe. The sliding bar is
 CSS `translateX`, which runs on the compositor, so it keeps moving through
 those blocked stretches.

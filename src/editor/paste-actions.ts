@@ -20,7 +20,7 @@
 
 import { sourceScale } from "../lib/print";
 import { Grid } from "../lib/grid";
-import { psd, toBase64 } from "../lib/ipc";
+import { psd } from "../lib/ipc";
 import type { AnchorMarks, ImportResult } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { Cell, Rect } from "../lib/types";
@@ -84,7 +84,7 @@ export async function importPasted(
     const result = await psd.importBytes(
       projectId,
       name,
-      toBase64(bytes),
+      bytes,
       plan?.marks,
     );
     log.info(`Imported ${result.key} (${result.width}×${result.height})`);
