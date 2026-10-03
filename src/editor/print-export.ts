@@ -48,7 +48,7 @@ import {
 import { saveAs } from "../lib/save-as";
 import type { ProjectMeta } from "../lib/types";
 import { changePage } from "./print-page";
-import { drawPage } from "./print-preview";
+import { drawPage, thumbnailOf } from "./print-preview";
 
 /** What `print.js` posts with a page, what asks it for one, and the answer. */
 export const PAGE_MESSAGE = "idlewild-print";
@@ -313,6 +313,19 @@ export class PrintExport {
     this.select(shown);
     this.status.textContent = this.summary();
     this.sync();
+  }
+
+  /**
+   * The page in the preview, as the home screen's thumbnail — the one
+   * selected, framed the way the pane frames it. Empty when nothing has been
+   * captured since the project opened.
+   */
+  async thumbnailPng(): Promise<string> {
+    const capture = this.captures[this.selected];
+    const base = this.host.base();
+    if (!capture || !base) return "";
+    const ground = getComputedStyle(this.root).backgroundColor || "#404040";
+    return thumbnailOf(capture.page, base, ground);
   }
 
   // ── what the pane shows ───────────────────────────────────────────────────

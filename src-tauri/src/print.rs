@@ -9,7 +9,7 @@
 //!
 //! ## Two resolutions, and which one each part of the app sees
 //!
-//! A print project's PSDs are written at its DPI — 300 or 600 pixels to the
+//! A print project's PSDs are written at its DPI — 150, 300 or 600 pixels to the
 //! inch, which is `dpi / 72` pixels to the world pixel. A letter page at 600
 //! DPI is 5100 × 6600 pixels, and every sprite cut from it is that dense. That
 //! is the right size for paper and the wrong size for everything else: the
@@ -272,12 +272,14 @@ impl Output {
         self.kind == OutputKind::Print
     }
 
-    /// The DPI, brought onto one of the two this app writes.
+    /// The DPI, brought onto one of the three this app writes.
     pub fn dpi(&self) -> u32 {
         if self.dpi >= 450 {
             600
-        } else {
+        } else if self.dpi >= 225 {
             300
+        } else {
+            150
         }
     }
 
@@ -389,6 +391,15 @@ mod tests {
         let factor = out.downsample().unwrap();
         assert!((out.source_scale() / factor - SCREEN_SCALE).abs() < 1e-9);
         assert!((factor - 600.0 / 144.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_dpi_is_one_of_the_three_offered() {
+        let at = |dpi| Output { kind: OutputKind::Print, dpi, ..Output::default() }.dpi();
+        assert_eq!([at(72), at(150), at(240), at(300), at(600), at(1200)], [150, 150, 300, 300, 600, 600]);
+        // 150 is still finer than the screen copy, so it is shrunk — a little.
+        let out = Output { kind: OutputKind::Print, dpi: 150, ..Output::default() };
+        assert!((out.downsample().unwrap() - 150.0 / 144.0).abs() < 1e-9);
     }
 
     #[test]

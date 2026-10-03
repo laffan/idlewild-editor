@@ -92,8 +92,8 @@
  * the same canvas and the same code at a sheet of paper: the page is a fixed
  * rectangle of world, one world pixel to the point, and `ExportForPrint()` in
  * the project's own code is the moment it is written out. Print asks for the
- * **resolution**, because every PSD the project writes is written at it — 300
- * or 600 DPI, fixed once the project exists, like the template — and for its
+ * **resolution**, because every PSD the project writes is written at it — 150,
+ * 300 or 600 DPI, fixed once the project exists, like the template — and for its
  * **Dimensions**: a standard sheet and its orientation, or Custom, a width and
  * a height in inches or centimetres. Page Setup can change those later.
  *

@@ -18,7 +18,7 @@ import type { ProjectMeta } from "./project-types";
 export type OutputKind = "code" | "print";
 
 /** The resolutions offered. */
-export const DPIS = [300, 600] as const;
+export const DPIS = [150, 300, 600] as const;
 export type Dpi = (typeof DPIS)[number];
 
 /**
@@ -115,9 +115,10 @@ export function isPrint(meta: ProjectMeta): boolean {
   return projectOutput(meta).kind === "print";
 }
 
-/** The DPI, on one of the two this app writes. */
+/** The DPI, on one of the three this app writes. */
 export function dpiOf(output: Output): Dpi {
-  return output.dpi >= 450 ? 600 : 300;
+  if (output.dpi >= 450) return 600;
+  return output.dpi >= 225 ? 300 : 150;
 }
 
 export function paperOf(output: Output): Paper {

@@ -113,6 +113,10 @@ export function bootGame(
       // The canvas fills the shell and reads raw pointer events; Phaser's own
       // input plumbing would fight the gesture arbiter for them.
       input: { touch: { capture: false } },
+      // The canvas never plays a sound. An AudioContext it does not need is
+      // one that can be closed on the way out with a resume still pending —
+      // Phaser resumes on focus — and that rejects as an unhandled error.
+      audio: { noAudio: true },
       plugins: {
         global: [
           {

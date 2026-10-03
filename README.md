@@ -24,8 +24,8 @@ exported assets. Drawing is identical on all four — what the choice decides is
 the program on the other side of the export, not the canvas in front of you.
 
 And a project can make a **page** instead of a game. After its name, the New
-Project sheet asks **Web** or **Print**; Print asks for a resolution — 300 or
-600 DPI — and the page's dimensions, a standard sheet or a custom size in
+Project sheet asks **Web** or **Print**; Print asks for a resolution — 150,
+300 or 600 DPI — and the page's dimensions, a standard sheet or a custom size in
 inches or centimetres. The canvas and the code are the same; the page is a
 labelled frame on the canvas you can drag over your artwork, one point to the
 world pixel, and `ExportForPrint(options)` in your code captures it into a

@@ -15,11 +15,11 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 <app data>/com.idlewild.editor/projects/<id>/
   meta.json        ProjectMeta — what the home screen lists
   doc.json         GameDoc — layers, fills, placements, zones, strokes
-  thumbnail.png    written by the editor from the live canvas
+  thumbnail.png    written by the editor from the live canvas (a print project's: its Output preview)
   psd/             source PSDs, imported or converted
   assets/<key>/    psd-to-json output: data.json + sprites/tiles
   print/<key>/     a print project's full-resolution output — see printing.md
-  exports/         what a print project's ExportForPrint() wrote, by folder and name
+  exports/         what a print project's Save wrote, by folder and name
   print-out/       the preview of the last PSD it wrote
   game/            the runnable project the code modal edits and Publish zips
 ```

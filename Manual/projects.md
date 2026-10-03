@@ -80,7 +80,7 @@ Part of [the Idlewild manual](README.md).
 
 - **Output** is the question after the name: **Web**, a game — which is
   everything on this page — or **Print**, a page. Both are code; the choice is
-  where the work ends up. Print asks for a **resolution** (300 or 600 DPI,
+  where the work ends up. Print asks for a **resolution** (150, 300 or 600 DPI,
   fixed once the project exists) and the page's **dimensions** — a standard
   sheet and its orientation, or a custom size in inches or centimetres —
   which Page Setup can change later, and takes away Scaffolding and Rendering: a print

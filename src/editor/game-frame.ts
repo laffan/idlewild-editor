@@ -102,6 +102,11 @@ export class GameFrame {
     return this.exporter !== null;
   }
 
+  /** A print project's preview as a thumbnail, or empty — see `PrintExport`. */
+  thumbnailPng(): Promise<string> {
+    return this.exporter?.thumbnailPng() ?? Promise.resolve("");
+  }
+
   /** Put the frame up without starting the game. */
   show(): void {
     this.root.classList.remove("hidden");

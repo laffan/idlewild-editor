@@ -13,9 +13,9 @@ Part of [the Idlewild manual](README.md).
 - After the name, the New Project sheet asks **Web or Print**. Web is
   everything the rest of this manual describes — both are code; the choice is
   where the work ends up. Print asks two more things:
-  - **Resolution**: 300 or 600 DPI. Every PSD the project writes is written at
-    it. This is fixed once the project exists, like the template, because a
-    file made at 300 DPI has no 600's worth of pixels to give
+  - **Resolution**: 150, 300 or 600 DPI. Every PSD the project writes is
+    written at it. This is fixed once the project exists, like the template,
+    because a file made at 300 DPI has no 600's worth of pixels to give
   - **Dimensions**: Letter, Legal, Tabloid, A5, A4, A3 or A2 and its
     **orientation** — or **Custom**, a width and a height in **inches** or
     **centimetres**, from half an inch to four feet. A custom size is the way
@@ -141,6 +141,10 @@ Part of [the Idlewild manual](README.md).
 - **Thumbnails.** Once there is more than one page, a column of thumbnails runs
   down the right of the preview. Press one to see it large
 - Stopping keeps what was captured, ready to save
+- **The project's picture on the home screen is the preview** — the page shown
+  in it when you leave, whole, on the preview's grey. Leave without having
+  captured anything and the picture stays the last page there was; a page that
+  has never been captured shows the canvas
 
 ## The four formats
 

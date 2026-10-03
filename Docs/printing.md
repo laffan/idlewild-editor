@@ -17,7 +17,7 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 | field | what it is |
 | --- | --- |
 | `kind` | `code` (a game, which every project made before this is) or `print` |
-| `dpi` | 300 or 600, read as the nearer of the two |
+| `dpi` | 150, 300 or 600, read as the nearest of the three |
 | `paper` | `letter`, `legal`, `tabloid`, `a5`, `a4`, `a3`, `a2` — portrait, in points — or `custom` |
 | `landscape` | turns a standard sheet; a custom one is the way round it was typed |
 | `customWidth`, `customHeight` | a custom sheet, in points, half an inch to four feet |
@@ -83,6 +83,9 @@ psd/<key>.psd                     at the project's DPI
         └─ .screen/<key>.psd
              └─ psd-to-json ─────► assets/<key>/     two px to the world px
 ```
+
+At 150 DPI the factor is 150 / 144, about 1.04: the screen copy is nearly the
+file itself, and still made, so every project reads `assets/` the same way.
 
 **Why two, and not one.** Two pixels to the world pixel is the resolution every
 code project's files already have — `IMPORT_SCALE` places everything at half
@@ -328,6 +331,17 @@ game logs through the console bridge while nothing is captured replaces it
 with that error; ten seconds without a call replaces it with a note that
 `ExportForPrint()` has not fired. Stopping keeps what was captured, ready to
 save.
+
+**The home screen's thumbnail is the preview.** Leaving the project hands
+`saveThumbnail` the `GameFrame`, whose `thumbnailPng` asks `PrintExport` for
+the selected page drawn by `thumbnailOf` — the page centred on the pane's
+ground with its shadow, 800 × 600, so the 4:3 card, which fills by covering,
+shows any sheet whole. Reading the canvas back is why `print-preview.ts` loads
+with `crossOrigin = "anonymous"`; the file server sends the header on every
+answer. With nothing captured that session the thumbnail already on disk
+stays, being the last preview; a project with none gets the canvas. The wait
+for the preview times out after three seconds, for the reason the canvas
+snapshot does (see [known gaps](known-gaps.md)).
 
 Page Setup on a print project is `editor/print-setup.ts`: the dimension rows,
 and the resolution reported rather than offered.

@@ -47,7 +47,9 @@ describe("a project's output", () => {
   it("brings the DPI onto one of the two this app writes", () => {
     expect(dpiOf(print(300))).toBe(300);
     expect(dpiOf(print(600))).toBe(600);
-    expect(dpiOf(print(72))).toBe(300);
+    expect(dpiOf(print(150))).toBe(150);
+    expect(dpiOf(print(72))).toBe(150);
+    expect(dpiOf(print(240))).toBe(300);
     expect(dpiOf(print(1200))).toBe(600);
   });
 
@@ -137,7 +139,7 @@ describe("the source scale", () => {
    * exactly the world size it was drawn at.
    */
   it("round-trips through the downsampled copy at IMPORT_SCALE", () => {
-    for (const dpi of [300, 600]) {
+    for (const dpi of [150, 300, 600]) {
       setOpenProject(meta(print(dpi)));
       const world = 123;
       const filePixels = world * sourceScale();

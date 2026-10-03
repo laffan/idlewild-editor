@@ -672,9 +672,9 @@ export async function mountEditor(
     history?.destroy();
     history = null;
     intake.stop();
-    // A thumbnail is of the canvas, so the game comes down first.
+    // A thumbnail is of the canvas (a page's: its preview), so the game goes first.
     if (modeSwitch.mode() === "play") setMode("draw");
-    await saveThumbnail(handle?.game ?? null, meta.id);
+    await saveThumbnail(handle?.game ?? null, meta.id, gameFrame);
     await store.flush();
     header.destroy();
     overlays.destroy();

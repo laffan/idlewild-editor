@@ -44,10 +44,12 @@ function load(src: string): Promise<HTMLImageElement | null> {
   let held = images.get(src);
   if (!held) {
     held = new Promise((resolve) => {
-      // No `crossOrigin`: nothing reads these pixels back, so a tainted
-      // canvas costs nothing, and asking for CORS would fail on a server
-      // that does not send the header.
+      // Anonymous CORS, because the home screen's thumbnail is this canvas
+      // read back (see `PrintExport.thumbnailPng`), and a canvas drawn from
+      // another origin's images cannot be. The project's file server sends
+      // the header on every answer — see `file_server.rs`.
       const image = new Image();
+      image.crossOrigin = "anonymous";
       image.onload = () => resolve(image);
       image.onerror = () => resolve(null);
       image.src = src;
@@ -116,4 +118,51 @@ export async function drawPage(
     ctx.restore();
   });
   return canvas;
+}
+
+/**
+ * A page as the home screen shows it: the preview pane in miniature — the
+ * page centred on `ground`, shadowed, with room round it — as a PNG data URL.
+ * The card is 4:3 and fills by covering, so a portrait page drawn edge to edge
+ * would lose its top and bottom; framed like this, every sheet shows whole.
+ * Empty when the canvas cannot be read back.
+ */
+export async function thumbnailOf(
+  page: PrintPage,
+  base: string,
+  ground: string,
+  width = 800,
+  height = 600,
+): Promise<string> {
+  const margin = Math.round(Math.min(width, height) * 0.08);
+  const fit = Math.min(
+    (width - 2 * margin) / Math.max(page.page.width, 1),
+    (height - 2 * margin) / Math.max(page.page.height, 1),
+  );
+  const drawn = await drawPage(
+    page,
+    base,
+    Math.max(page.page.width, page.page.height, 1) * fit,
+  );
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.fillStyle = ground;
+  ctx.fillRect(0, 0, width, height);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 2;
+  ctx.drawImage(
+    drawn,
+    Math.round((width - drawn.width) / 2),
+    Math.round((height - drawn.height) / 2),
+  );
+  try {
+    return canvas.toDataURL("image/png");
+  } catch {
+    // Tainted: an image came from somewhere that did not allow reading.
+    return "";
+  }
 }
