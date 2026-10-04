@@ -42,6 +42,9 @@ export const fontsIpc = {
     invoke<ProjectFont>("save_dropped_font", { id, sourcePath }),
   read: (id: string, file: string) => invoke<string>("read_project_font", { id, file }),
   remove: (id: string, file: string) => invoke<void>("delete_project_font", { id, file }),
+  /** The font on the system pasteboard, if there is one — `font_clipboard.rs`. */
+  clipboard: () =>
+    invoke<{ name: string; guessed: boolean; dataBase64: string } | null>("read_clipboard_font"),
 };
 
 let fonts: ProjectFont[] = [];
@@ -138,6 +141,43 @@ export async function addFontFiles(projectId: string, files: readonly File[]): P
     }
   }
   return remember(added);
+}
+
+/**
+ * Add font → From clipboard: the font file or font bytes on the system
+ * pasteboard. A name read out of the font rather than off a file is offered
+ * for changing first, through `askName`, since it is what the menu will say.
+ */
+export async function addFontFromClipboard(
+  projectId: string,
+  askName: (suggested: string) => Promise<string | null>,
+): Promise<ProjectFont[]> {
+  let read;
+  try {
+    read = await fontsIpc.clipboard();
+  } catch (err) {
+    log.error("Could not read the clipboard:", err);
+    return [];
+  }
+  if (!read) {
+    log.info("The clipboard has no font on it — copy a TTF, OTF, WOFF or WOFF2 file first");
+    return [];
+  }
+  let name = read.name;
+  if (read.guessed) {
+    const dot = name.lastIndexOf(".");
+    const stem = await askName(name.slice(0, dot));
+    if (!stem) return [];
+    name = `${stem}${name.slice(dot)}`;
+  }
+  try {
+    const font = await fontsIpc.save(projectId, name, read.dataBase64);
+    await install(font.family, fromBase64(read.dataBase64));
+    return remember([font]);
+  } catch (err) {
+    log.error(`Could not add the font ${name}:`, err);
+    return [];
+  }
 }
 
 /** The same, for paths the macOS shell handed over. */

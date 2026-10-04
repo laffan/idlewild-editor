@@ -14,8 +14,11 @@ import { h, ICONS, icon } from "../lib/dom";
 import * as log from "../lib/log";
 import type { MenuItem } from "../lib/menu";
 import { openProject } from "../lib/print";
+import { openMenu } from "../lib/menu";
+import { promptSheet } from "../lib/sheet";
 import {
   addFontFiles,
+  addFontFromClipboard,
   onProjectFontsChange,
   projectFontChoices,
   projectFontId,
@@ -86,9 +89,28 @@ export function projectFontsRow(): HTMLElement {
         class: "panel-btn project-fonts-add",
         text: "Add font…",
         title:
-          "Keep a font file in this project — TTF, OTF, WOFF or WOFF2. You can " +
-          "also drop font files anywhere on this sidebar.",
-        onClick: () => input.click(),
+          "Keep a font file in this project — TTF, OTF, WOFF or WOFF2 — from " +
+          "Files or the clipboard. You can also drop font files on this sidebar.",
+        onClick: (event: Event) =>
+          openMenu(event.currentTarget as HTMLElement, [
+            { label: "From files…", onSelect: () => input.click() },
+            {
+              label: "From clipboard",
+              onSelect: () => {
+                const id = openProject()?.id;
+                if (!id) return;
+                void addFontFromClipboard(id, (suggested) =>
+                  promptSheet({
+                    title: "Name this font",
+                    label: "What the font menu calls it",
+                    value: suggested,
+                    confirmLabel: "Add font",
+                    light: false,
+                  }),
+                );
+              },
+            },
+          ]),
       }),
       input,
     );

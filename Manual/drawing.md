@@ -172,6 +172,8 @@ Part of [the Idlewild manual](README.md).
   cursor for a string three words long; the canvas is the preview instead, and
   it follows every keystroke. The file even comes out named after the words:
   *door to the cave* is `door-to-the-cave.psd`
+- **Putting a note down selects it and picks up Select**, so the next tap
+  moves or restyles it rather than putting down another
 - **A new note wraps.** It starts with a column 288 pixels wide and a handle
   to drag its width; turn **Wrap the words** off on one and the next note
   follows, like the rest of the style
@@ -180,8 +182,10 @@ Part of [the Idlewild manual](README.md).
   bigger keeps its tracking
 - **The project's own fonts.** Drop font files — TTF, OTF, WOFF or WOFF2 —
   anywhere on the properties sidebar, or press **Add font…** under the font
-  button and pick them (on an iPad, the button is the dependable way; a drop
-  needs Files open beside the app). They are kept in the project, travel in
+  button for **From files…** or **From clipboard** — a font file copied in
+  Finder or Files, or a font's bytes copied from another app, which are named
+  from the font itself and offered for renaming (on an iPad the button is the
+  dependable way; a drop needs Files open beside the app). They are kept in the project, travel in
   an `.idlewild`, and head the font menu marked *project*, named after the
   file: `Recoleta-Bold.otf` is *Recoleta-Bold*. The cross on a font's chip
   takes it out of the project

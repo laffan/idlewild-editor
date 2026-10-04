@@ -16,6 +16,7 @@ mod deploy_github;
 mod deploy_ssh;
 mod export_assets;
 mod file_server;
+mod font_clipboard;
 mod game_config;
 mod game_files;
 mod game_search;
@@ -430,6 +431,7 @@ pub fn run() {
             psd_pixel_scale::set_psd_pixel_scale,
             psd_pixel_scale::downsample_psd_pixels,
             project_fonts::list_project_fonts,
+            font_clipboard::read_clipboard_font,
             project_fonts::save_project_font,
             project_fonts::save_dropped_font,
             project_fonts::read_project_font,

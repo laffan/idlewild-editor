@@ -71,8 +71,7 @@ export async function mountEditor(
   await loadProjectFonts(meta.id); // before anything is measured — lib/project-fonts.ts
   const grid = new Grid(store.projection, store.gridSize);
   const base = await assetBase(meta.id);
-  // Resolved once: it decides whether a PSD's edits come back by re-parsing
-  // a file that never moved or by picking the one the share sheet sent out.
+  // Resolved once: it decides how a PSD's edits come back — see psd-actions.
   const os = await platform();
 
   let activeLayerId = store.layers[0]?.id ?? "";
@@ -114,9 +113,8 @@ export async function mountEditor(
   function psdChanged(): void {
     if (gameFrame.isRunning) gameFrame.reload();
   }
-  // The console's level chip is a link when the line came from a file the
-  // code modal can open. `code` is built further down, once there is a shell
-  // to put it in; this only runs when something is clicked.
+  // The console's level chip links to a file the code modal can open; `code`
+  // is built further down, and this only runs when something is clicked.
   const terminal = new Terminal((site) => {
     // A line in the drawer knows which file it was written in, and the shortest
     // way to say so is to show it — which means being in Code.
@@ -605,6 +603,8 @@ export async function mountEditor(
 
   function onSelection(selection: Selection): void {
     inspector.setSelection(selection);
+    // A note just put down is selected, and Select is the tool that edits it.
+    if (selection.kind === "text" && rail.tool === "text") tools?.apply("select", false);
     // Fired for a change of mode as well as of selection, which is how the
     // panel learns that the canvas has opened a PSD up.
     inspector.setAdjusting(handle?.scene.adjustingUnit ?? null);

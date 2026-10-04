@@ -84,7 +84,7 @@ const WANTED: &[(&str, &str)] = &[
 ];
 
 /// The pasteboard type a copied *file* arrives as, on both platforms.
-const FILE_URL: &str = "public.file-url";
+pub(crate) const FILE_URL: &str = "public.file-url";
 
 /// Extensions the import pipeline can take from a file on disk.
 const IMPORTABLE: &[&str] = &["psd", "png", "jpg", "jpeg", "tif", "tiff", "gif"];
@@ -275,7 +275,7 @@ fn encode(name: String, uti: &str, bytes: &[u8]) -> ClipboardFile {
 // ── the pasteboard itself ───────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
-mod platform {
+pub(crate) mod platform {
     use objc2_app_kit::NSPasteboard;
     use objc2_foundation::{NSArray, NSData, NSString};
 
@@ -325,7 +325,7 @@ mod platform {
 }
 
 #[cfg(target_os = "ios")]
-mod platform {
+pub(crate) mod platform {
     use objc2_foundation::{NSData, NSString};
     use objc2_ui_kit::UIPasteboard;
 
@@ -364,7 +364,7 @@ mod platform {
 /// pasteboard this knows how to read, and the frontend falls back to the
 /// webview's own clipboard rather than failing the paste.
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-mod platform {
+pub(crate) mod platform {
     pub fn types() -> Result<Vec<String>, String> {
         Err(format!(
             "Reading the system clipboard is not supported on {}",
