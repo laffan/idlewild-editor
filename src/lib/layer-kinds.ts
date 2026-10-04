@@ -260,7 +260,7 @@ function addPatternShape(
   const spec = patternSpec(store.layer(layerId));
   const shape: PatternShape = {
     id: makeId("shape"),
-    name: `Shape ${spec.shapes.length + 1}`,
+    name: `Mask ${spec.shapes.length + 1}`,
     ...body,
   };
   editPattern(store, layerId, (held) => ({

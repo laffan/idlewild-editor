@@ -545,7 +545,7 @@ export function renderStrokes(
       actions.patternShapeTarget()
         ? h("button", {
             class: "panel-btn",
-            text: `Convert to pattern shape — ${
+            text: `Convert to pattern mask — ${
               store.layer(actions.patternShapeTarget() ?? "")?.name ?? "pattern"
             }`,
             onClick: () => actions.onStrokesToPatternShape(),

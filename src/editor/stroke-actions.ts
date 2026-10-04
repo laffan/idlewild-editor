@@ -177,7 +177,7 @@ export function convertStrokesToPatternShape(
   const strokes = drawing.strokesById(selection.ids);
   const points = strokesToZonePoints(strokes, store.gridSize);
   if (points.length < 3) {
-    log.warn("A pattern shape needs an outline — that selection has no region");
+    log.warn("A pattern mask needs an outline — that selection has no region");
     return;
   }
 

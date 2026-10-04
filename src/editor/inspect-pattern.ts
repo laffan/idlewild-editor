@@ -161,16 +161,17 @@ function shapesSection(
     { class: "inspect-section" },
     // Counted in the heading, because the list is the subject of this
     // section rather than a footnote under the buttons.
-    sectionTitle(spec.shapes.length ? `Shapes · ${spec.shapes.length}` : "Shapes", {
-      hint: "Where the pattern is allowed to be. No shapes means everywhere.",
-    }),
+    sectionTitle(
+      spec.shapes.length ? `Pattern Masks · ${spec.shapes.length}` : "Pattern Masks",
+      { hint: "Where the pattern is allowed to be. No masks means everywhere." },
+    ),
   );
 
   if (spec.shapes.length === 0) {
     section.appendChild(
       h("div", {
         class: "field-hint",
-        text: "No shapes — the pattern goes on for ever. Add one to confine it.",
+        text: "No masks — the pattern goes on for ever. Add one to confine it.",
       }),
     );
   } else {
@@ -182,11 +183,12 @@ function shapesSection(
   section.append(
     h("button", {
       class: "panel-btn",
-      text: "Add shape",
+      text: "Add mask",
       title:
-        "Opens the shape editor: sweep the ground the pattern may use, and " +
+        "Opens the Pattern Mask editor: sweep a rectangle of grid, or Sweep " +
+        "fill a loop drawn freehand, over the ground the pattern may use, and " +
         "Remove to take spaces back out. A patch of grid you have already " +
-        "selected has Pattern Shape on the bar over it, which starts one from " +
+        "selected has Pattern Mask on the bar over it, which starts one from " +
         "those spaces.",
       onClick: () => actions.onEditShape(layer.id, null),
     }),

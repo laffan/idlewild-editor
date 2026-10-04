@@ -56,7 +56,7 @@ export class SelectionActions {
       this.size,
     );
     this.patternShape = h("button", {
-      text: "Pattern Shape",
+      text: "Pattern Mask",
       onClick: callbacks.onPatternShape,
     });
     // Inserted before the size readout, which is the row's last element.

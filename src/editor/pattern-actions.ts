@@ -86,7 +86,7 @@ export function createPatternShapes(deps: PatternShapeDeps): PatternShapes {
       const layerId = deps.activeLayerId();
       const layer = deps.store.layer(layerId);
       if (!layer || layerKind(layer) !== "pattern") {
-        log.warn("Pattern Shape needs a pattern layer to confine");
+        log.warn("Pattern Mask needs a pattern layer to confine");
         return;
       }
       deps.openMask(layerId, null, [...cellsInRange(selection.from, selection.to)]);

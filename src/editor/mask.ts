@@ -76,6 +76,10 @@ export function createMaskUi(options: MaskUiOptions): MaskUi {
       options.scene()?.modes.mask.setTool(tool);
       sync();
     },
+    onGesture: (gesture) => {
+      options.scene()?.modes.mask.setGesture(gesture);
+      sync();
+    },
     onReset: () => options.scene()?.modes.mask.reset(),
     onClear: () => options.scene()?.modes.mask.clearShape(),
   });
@@ -91,6 +95,7 @@ export function createMaskUi(options: MaskUiOptions): MaskUi {
       layer: mode?.editing?.layerName ?? "",
       summary: mode?.summary ?? "",
       tool: mode?.currentTool ?? "add",
+      gesture: mode?.currentGesture ?? "grid",
       isOriginal: mode?.isOriginal ?? true,
       canApply: (mode?.shape.length ?? 0) > 0,
     });
@@ -106,7 +111,7 @@ export function createMaskUi(options: MaskUiOptions): MaskUi {
    * the canvas and the panel that could is behind it.
    */
   function nextName(layerId: string): string {
-    return `Shape ${patternSpec(options.store.layer(layerId)).shapes.length + 1}`;
+    return `Mask ${patternSpec(options.store.layer(layerId)).shapes.length + 1}`;
   }
 
   function open(
@@ -118,7 +123,7 @@ export function createMaskUi(options: MaskUiOptions): MaskUi {
     const layer = options.store.layer(layerId);
     if (!scene || !layer) return;
     if (layerKind(layer) !== "pattern") {
-      log.warn("A pattern shape belongs to a pattern layer");
+      log.warn("A pattern mask belongs to a pattern layer");
       return;
     }
     const held = shapeId

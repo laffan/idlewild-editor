@@ -87,6 +87,35 @@ function keysOf(mode: MaskMode): string[] {
 }
 
 describe("mask mode", () => {
+  it("sweep fill takes the spaces inside a loop drawn freehand", () => {
+    const mode = new MaskMode(makeHost());
+    mode.start(target, []);
+    mode.setGesture("sweep");
+    // A loop round the middles of a 3 × 2 block, drawn corner to corner.
+    const loop: Array<[number, number]> = [
+      [10, 10], [200, 10], [200, 120], [10, 120],
+    ];
+    mode.beginSweep(...loop[0]);
+    for (const p of loop.slice(1)) mode.moveSweep(...p);
+    mode.endSweep();
+    expect(keysOf(mode)).toEqual(["0,0", "0,1", "1,0", "1,1", "2,0", "2,1"]);
+    // And Remove with the same loop takes them out again, in one step.
+    mode.setTool("remove");
+    mode.beginSweep(...loop[0]);
+    for (const p of loop.slice(1)) mode.moveSweep(...p);
+    mode.endSweep();
+    expect(mode.shape).toHaveLength(0);
+  });
+
+  it("sweep fill on a tap is the one space under the finger", () => {
+    const mode = new MaskMode(makeHost());
+    mode.start(target, []);
+    mode.setGesture("sweep");
+    mode.beginSweep(...at(5, 2));
+    mode.endSweep();
+    expect(keysOf(mode)).toEqual(["5,2"]);
+  });
+
   it("takes every space the sweep covered", () => {
     const mode = new MaskMode(makeHost());
     mode.start(target, []);

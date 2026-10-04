@@ -31,10 +31,16 @@ const ACCENT = 0xec3013;
 /** How far the screen-fixed scrim reaches; bigger than any viewport. */
 const SCRIM = 20_000;
 
-/** A rectangle of grid spaces, inclusive of both corners. */
+/**
+ * What is being dragged: a rectangle of grid spaces, inclusive of both
+ * corners — or, for a sweep fill, the loop drawn so far, whose spaces are
+ * the ones inside it.
+ */
 export interface MaskSweep {
   from: Cell;
   to: Cell;
+  /** The freehand loop, in world pixels, when the gesture is a sweep fill. */
+  path?: readonly Point[];
   /** Whether the release will add the spaces or take them away. */
   adding: boolean;
 }
@@ -97,6 +103,16 @@ export class MaskRender {
     // removing are the same box in the same colour — the bar says which, and
     // the spaces under it change the moment the finger lifts.
     s.lineStyle(2 * scale, ACCENT, sweep.adding ? 1 : 0.55);
+    if (sweep.path) {
+      // The loop as drawn, closed back to where it started — the release
+      // takes every space whose centre it encloses.
+      if (sweep.path.length >= 2) {
+        s.fillStyle(ACCENT, sweep.adding ? 0.12 : 0.06);
+        polygon(s, sweep.path);
+        if (sweep.path.length === 2) outline(s, sweep.path);
+      }
+      return;
+    }
     outline(s, this.grid.rangePolygon(sweep.from, sweep.to));
   }
 

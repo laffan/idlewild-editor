@@ -44,16 +44,19 @@ Part of [the Idlewild manual](README.md).
   pointer to name — the PSD on it is reached from the sidebar, and the layer's
   placements are the *palette* the pattern is made of rather than things
   standing anywhere, so resizing the file resizes every copy of it
-- **Shapes**, under the pattern's numbers, confine it. An empty list is the
-  default and means everywhere. **Add shape** opens the shape editor — the
-  fourth of the canvas modes, beside extrude, collider and pen: the rest of
-  the canvas dims, and a bar along the bottom offers **Add** and **Remove**,
-  **Clear**, **Reset** and the two ways out. The gesture is a sweep: press,
-  drag a rectangle over the ground the pattern may use, release. The layer's
-  other shapes are outlined behind the one in hand, and **Edit** on any row
-  reopens it. Nothing reaches the document until Apply, so Cancel means
+- **Pattern Masks**, under the pattern's numbers, confine it. An empty list is
+  the default and means everywhere. **Add mask** opens the Pattern Mask
+  editor — the fourth of the canvas modes, beside extrude, collider and pen:
+  the rest of the canvas dims, and a bar along the bottom offers **Grid** and
+  **Sweep fill**, **Add** and **Remove**, **Clear**, **Reset** and the two ways
+  out. With **Grid** the gesture is a sweep: press, drag a rectangle over the
+  ground the pattern may use, release. With **Sweep fill** it is the Fill
+  tool's: draw a loop freehand, and every space whose middle is inside it is
+  added (or, with Remove, taken out). The two can be mixed in one mask. The
+  layer's other masks are outlined behind the one in hand, and **Edit** on any
+  row reopens it. Nothing reaches the document until Apply, so Cancel means
   nothing happened. A patch of grid you have already selected has **Pattern
-  Shape** on the bar over it, which opens the editor started from those
+  Mask** on the bar over it, which opens the editor started from those
   spaces; and an outline drawn with the pencil and lassoed can still be
   handed over from the sketch panel, which is the one route that keeps the
   line you actually drew. A shape is stored as the spaces it covers, so the

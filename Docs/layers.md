@@ -312,6 +312,15 @@ four-file shape collider mode has, and mostly the same code: a set of grid
 spaces in absolute coordinates, an add tool and a remove tool, its own
 `UndoHistory`, and nothing reaching the document until Apply.
 
+**Grid or sweep fill.** The bar's first pair picks how a gesture picks spaces
+(`MaskGesture`): a rectangle across the grid, or a sweep fill — the loop the
+pointer draws, sampled every few screen pixels, baked to the spaces whose
+centres it encloses with `cellsInPolygon`, the same rule a drawn shape is
+baked with. Both feed the same add/remove and the same undo, so one mask can
+be made of both. The UI calls a shape a **Pattern Mask** (the section, the
+editor, the floating bar's button); the type is still `PatternShape`, for the
+reason the placement's `instance` field kept its name.
+
 **One shape, not the mask.** The mode edits one of a layer's shapes rather
 than the union of them. The union is simpler to hold and it would collapse a
 layer's named shapes into one anonymous blob the first time anybody opened it

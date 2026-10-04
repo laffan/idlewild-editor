@@ -48,7 +48,7 @@
  */
 
 import type Phaser from "phaser";
-import { cellKey, cellsInRange, rangeSize, type Grid } from "../lib/grid";
+import { cellKey, cellsInPolygon, cellsInRange, rangeSize, type Grid } from "../lib/grid";
 import { UndoHistory } from "../lib/history";
 import * as log from "../lib/log";
 import type { Cell, PatternShape, Point } from "../lib/types";
@@ -56,6 +56,16 @@ import { MaskRender, type MaskSweep } from "./mask-render";
 
 /** What the pointer does inside the mode. */
 export type MaskTool = "add" | "remove";
+
+/**
+ * How the spaces are picked out: a rectangle swept across the grid, or a
+ * **sweep fill** — a loop drawn freehand, taking every space whose centre is
+ * inside it, the way the Fill tool sweeps a closed shape.
+ */
+export type MaskGesture = "grid" | "sweep";
+
+/** How far, in screen pixels, a loop's pointer moves before it is a new point. */
+const LOOP_STEP = 4;
 
 /**
  * The most spaces one shape may hold.
@@ -108,8 +118,12 @@ export class MaskMode {
   /** What Reset goes back to: the shape as it was when the mode opened. */
   private opened: ReadonlySet<string> = new Set();
   private tool: MaskTool = "add";
+  private gesture: MaskGesture = "grid";
   /** The rectangle being dragged, or null between gestures. */
   private sweep: { anchor: Cell; to: Cell } | null = null;
+  /** The loop being drawn, in world pixels, for a sweep fill. */
+  private loop: Point[] = [];
+  private loopLast: { x: number; y: number } | null = null;
 
   /**
    * Undo between sweeps — this session's, and emptied at both ends of it,
@@ -142,6 +156,10 @@ export class MaskMode {
     return this.tool;
   }
 
+  get currentGesture(): MaskGesture {
+    return this.gesture;
+  }
+
   /** The spaces as they stand, in absolute grid coordinates. */
   get shape(): Cell[] {
     return [...this.cells].map(parseCell);
@@ -157,7 +175,7 @@ export class MaskMode {
   /** What the bottom bar says about it. */
   get summary(): string {
     const n = this.cells.size;
-    if (n === 0) return "no spaces yet — sweep the ground it covers";
+    if (n === 0) return "no spaces yet — sweep or sweep fill the ground it covers";
     return `${n} ${n === 1 ? "space" : "spaces"}`;
   }
 
@@ -171,7 +189,7 @@ export class MaskMode {
    */
   start(target: MaskTarget, cells: readonly Cell[]): boolean {
     if (!this.host.grid.snaps) {
-      log.warn("A pattern shape is drawn on grid spaces — this project has none");
+      log.warn("A pattern mask is drawn on grid spaces — this project has none");
       return false;
     }
     // A session starts with nothing behind it: the last one's spaces were
@@ -198,6 +216,7 @@ export class MaskMode {
     this.cells = new Set();
     this.opened = new Set();
     this.sweep = null;
+    this.loop = [];
     // Closes a sweep abandoned mid-drag, then forgets the lot: the shape is
     // gone, so the way back to earlier versions of it is a lie.
     this.history.end();
@@ -214,6 +233,12 @@ export class MaskMode {
   setTool(tool: MaskTool): void {
     if (!this.target || this.tool === tool) return;
     this.tool = tool;
+    this.host.onChange();
+  }
+
+  setGesture(gesture: MaskGesture): void {
+    if (!this.target || this.gesture === gesture) return;
+    this.gesture = gesture;
     this.host.onChange();
   }
 
@@ -248,6 +273,8 @@ export class MaskMode {
     if (!this.target) return false;
     const at = this.cellAt(screenX, screenY);
     this.sweep = { anchor: at, to: at };
+    this.loop = this.gesture === "sweep" ? [this.host.worldAt(screenX, screenY)] : [];
+    this.loopLast = { x: screenX, y: screenY };
     this.draw();
     return true;
   }
@@ -255,6 +282,12 @@ export class MaskMode {
   moveSweep(screenX: number, screenY: number): boolean {
     if (!this.sweep) return false;
     this.sweep = { anchor: this.sweep.anchor, to: this.cellAt(screenX, screenY) };
+    if (this.gesture === "sweep") {
+      const last = this.loopLast;
+      if (last && Math.hypot(screenX - last.x, screenY - last.y) < LOOP_STEP) return true;
+      this.loop.push(this.host.worldAt(screenX, screenY));
+      this.loopLast = { x: screenX, y: screenY };
+    }
     this.draw();
     return true;
   }
@@ -270,11 +303,22 @@ export class MaskMode {
     const held = this.sweep;
     if (!held || !this.target) return false;
     this.sweep = null;
+    const loop = this.loop;
+    this.loop = [];
+    this.loopLast = null;
 
     const adding = this.tool === "add";
     const next = new Set(this.cells);
     let over = false;
-    for (const cell of cellsInRange(held.anchor, held.to)) {
+    // A sweep fill takes what its loop encloses; a loop too small to enclose
+    // anything — a tap — is the one space under the finger, as on the grid.
+    const swept =
+      this.gesture === "sweep" && loop.length >= 3
+        ? cellsInPolygon(this.host.grid, loop)
+        : this.gesture === "sweep"
+          ? [held.anchor]
+          : cellsInRange(held.anchor, held.to);
+    for (const cell of swept) {
       const key = cellKey(cell);
       if (!adding) {
         next.delete(key);
@@ -287,7 +331,7 @@ export class MaskMode {
       next.add(key);
     }
     if (over) {
-      log.warn(`A pattern shape holds at most ${MAX_MASK_CELLS} spaces`);
+      log.warn(`A pattern mask holds at most ${MAX_MASK_CELLS} spaces`);
     }
 
     if (next.size !== this.cells.size) {
@@ -329,6 +373,7 @@ export class MaskMode {
       ? {
           from: this.sweep.anchor,
           to: this.sweep.to,
+          ...(this.gesture === "sweep" ? { path: this.loop } : {}),
           adding: this.tool === "add",
         }
       : null;
@@ -342,7 +387,7 @@ export class MaskMode {
 
   /** How many spaces the sweep in flight covers, for the bar. */
   get sweeping(): number {
-    if (!this.sweep) return 0;
+    if (!this.sweep || this.gesture === "sweep") return 0;
     const { w, h } = rangeSize(this.sweep.anchor, this.sweep.to);
     return w * h;
   }
