@@ -20,16 +20,34 @@ use psd::{GroupBuilder, LayerBuilder, Psd, PsdBuilder};
 
 /// The downsampled file's bytes, and a warning when something will not survive.
 pub fn downsample(bytes: &[u8], factor: f64) -> Result<(Vec<u8>, Option<String>), String> {
-    let doc = Psd::from_bytes(bytes).map_err(|e| format!("Cannot read the PSD: {e}"))?;
     let factor = if factor.is_finite() && factor > 1.0 {
         factor
     } else {
         1.0
     };
+    resample(bytes, factor, false)
+}
+
+/// The file `times` times bigger, every pixel a `times`-square block of
+/// itself — Pixel Art Rescale's copy, see `psd_pixel_scale.rs`. The same
+/// stack rebuilt the same way, so it keeps and loses what the screen copy
+/// does.
+pub fn upscale_nearest(bytes: &[u8], times: u32) -> Result<(Vec<u8>, Option<String>), String> {
+    resample(bytes, 1.0 / f64::from(times.max(1)), true)
+}
+
+/// Every layer and the canvas divided by `factor` — below one, multiplied —
+/// smoothly, or nearest neighbour.
+fn resample(
+    bytes: &[u8],
+    factor: f64,
+    nearest: bool,
+) -> Result<(Vec<u8>, Option<String>), String> {
+    let doc = Psd::from_bytes(bytes).map_err(|e| format!("Cannot read the PSD: {e}"))?;
     let width = scaled(doc.width(), factor);
     let height = scaled(doc.height(), factor);
     let mut builder = PsdBuilder::new(width, height);
-    let mut shrunk = shrink_all(&doc, factor);
+    let mut shrunk = shrink_all(&doc, factor, nearest);
 
     // `items` reads top-first and `add_*` stacks bottom-up.
     for item in items(&doc, None).into_iter().rev() {
@@ -72,7 +90,7 @@ const AT_ONCE: usize = 2;
 
 /// Every layer of the file, shrunk, by its index — worked out up front and
 /// side by side, since no layer's pixels depend on another's.
-fn shrink_all(doc: &Psd, factor: f64) -> Vec<Option<LayerBuilder>> {
+fn shrink_all(doc: &Psd, factor: f64, nearest: bool) -> Vec<Option<LayerBuilder>> {
     let count = doc.layers().len();
     let next = std::sync::atomic::AtomicUsize::new(0);
     let done: Vec<std::sync::Mutex<Option<LayerBuilder>>> =
@@ -84,7 +102,7 @@ fn shrink_all(doc: &Psd, factor: f64) -> Vec<Option<LayerBuilder>> {
                 if index >= count {
                     break;
                 }
-                let layer = shrink_layer(doc, index, factor);
+                let layer = shrink_layer(doc, index, factor, nearest);
                 *done[index].lock().unwrap_or_else(|e| e.into_inner()) = layer;
             });
         }
@@ -94,7 +112,7 @@ fn shrink_all(doc: &Psd, factor: f64) -> Vec<Option<LayerBuilder>> {
         .collect()
 }
 
-fn shrink_layer(doc: &Psd, index: usize, factor: f64) -> Option<LayerBuilder> {
+fn shrink_layer(doc: &Psd, index: usize, factor: f64, nearest: bool) -> Option<LayerBuilder> {
     let layer = doc.layer_by_idx(index);
     let (left, top, width, height, pixels) = crop(layer, doc.width(), doc.height());
     let out = if width == 0 || height == 0 {
@@ -102,7 +120,7 @@ fn shrink_layer(doc: &Psd, index: usize, factor: f64) -> Option<LayerBuilder> {
         // clear pixel so the stack is the same shape.
         LayerBuilder::new(layer.name().to_string()).rgba(1, 1, vec![0; 4])
     } else {
-        let (w, h, rgba) = shrink(width, height, pixels, factor)?;
+        let (w, h, rgba) = shrink(width, height, pixels, factor, nearest)?;
         LayerBuilder::new(layer.name().to_string())
             .rgba(w, h, rgba)
             .at(
@@ -148,11 +166,19 @@ fn shrink(
     height: u32,
     mut pixels: Vec<u8>,
     factor: f64,
+    nearest: bool,
 ) -> Option<(u32, u32, Vec<u8>)> {
     let w = scaled(width, factor);
     let h = scaled(height, factor);
     if w == width && h == height {
         return Some((w, h, pixels));
+    }
+    // Nearest neighbour copies pixels rather than blending them, so there is
+    // no edge to darken and nothing to premultiply for.
+    if nearest {
+        let image = RgbaImage::from_raw(width, height, pixels)?;
+        let out = image::imageops::resize(&image, w, h, FilterType::Nearest).into_raw();
+        return Some((w, h, out));
     }
     premultiply(&mut pixels);
     let image = RgbaImage::from_raw(width, height, pixels)?;
@@ -278,7 +304,7 @@ mod tests {
                 pixels[i..i + 4].copy_from_slice(&[255, 0, 0, 255]);
             }
         }
-        let (_, _, out) = shrink(40, 40, pixels, 3.0).unwrap();
+        let (_, _, out) = shrink(40, 40, pixels, 3.0, false).unwrap();
         for px in out.chunks_exact(4) {
             if px[3] > 8 {
                 assert!(px[0] > 240, "edge pixel darkened: {px:?}");
@@ -287,6 +313,25 @@ mod tests {
     }
 
     /// The tables are the arithmetic they replaced, for every input.
+    #[test]
+    fn nearest_upscale_makes_blocks_and_multiplies_the_geometry() {
+        // Two pixels side by side, red then blue, at 3, 1.
+        let mut pixels = solid(2, 1, [255, 0, 0, 255]);
+        pixels[4..8].copy_from_slice(&[0, 0, 255, 255]);
+        let mut builder = PsdBuilder::new(8, 4);
+        builder.add_layer(LayerBuilder::new("art".to_string()).rgba(2, 1, pixels).at(3, 1));
+        let bytes = builder.to_bytes().unwrap();
+        let (big, _) = upscale_nearest(&bytes, 4).unwrap();
+        let doc = Psd::from_bytes(&big).unwrap();
+        assert_eq!((doc.width(), doc.height()), (32, 16));
+        let (left, top, width, height, rgba) = crop(doc.layer_by_idx(0), 32, 16);
+        assert_eq!((left, top, width, height), (12, 4, 8, 4));
+        // Every pixel of the left block is the red one, untouched.
+        assert_eq!(&rgba[0..4], &[255, 0, 0, 255]);
+        assert_eq!(&rgba[12..16], &[255, 0, 0, 255]);
+        assert_eq!(&rgba[16..20], &[0, 0, 255, 255]);
+    }
+
     #[test]
     fn the_tables_are_the_arithmetic() {
         let mut every: Vec<u8> = Vec::with_capacity(256 * 256 * 4);

@@ -33,6 +33,7 @@ mod psd_merge;
 mod psd_paint;
 mod psd_palette;
 mod psd_pipeline;
+mod psd_pixel_scale;
 mod psd_stack;
 mod psd_rebuild;
 mod psd_write;
@@ -422,6 +423,7 @@ pub fn run() {
             projects::set_project_presentation,
             projects::set_project_page,
             print_pdf::export_print_pdf,
+            psd_pixel_scale::set_psd_pixel_scale,
             print_files::save_print_file,
             print_files::save_print_files,
             print_psd::export_print_psd,

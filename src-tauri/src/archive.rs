@@ -107,6 +107,10 @@ pub struct ArchivedProject {
     /// older archive, which is a game.
     #[serde(default)]
     pub output: crate::print::Output,
+    /// Pixel Art Rescale, by key — the processed output in the archive was
+    /// made at it, and a re-parse here should make the same.
+    #[serde(default, rename = "pixelScale")]
+    pub pixel_scale: std::collections::BTreeMap<String, u32>,
 }
 
 /// **Export project**: the project itself, as a `.idlewild` file — source PSDs
@@ -157,6 +161,7 @@ pub fn export(project_id: &str, dest: &Path) -> Result<(), String> {
             options: meta.options,
             presentation: meta.presentation.clone(),
             output: meta.output.clone(),
+            pixel_scale: meta.pixel_scale.clone(),
         },
     };
     zip.start_file(MANIFEST, options).map_err(|e| e.to_string())?;
@@ -344,6 +349,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
     meta.layer_count = project.layer_count;
     meta.presentation = project.presentation.clone();
     meta.output = project.output.clone();
+    meta.pixel_scale = project.pixel_scale.clone();
     store::write_meta(&meta)?;
 
     if !store::game_dir(id)?.join("index.html").exists() {

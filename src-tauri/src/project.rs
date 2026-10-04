@@ -5,6 +5,7 @@
 //! does not survive PSD-heavy projects, so Idlewild gives each project its
 //! own directory and writes the document beside its assets.
 
+use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 /// The shape of the space a project is built in.
@@ -456,6 +457,12 @@ pub struct ProjectMeta {
     /// before it existed, which reads as a code project. See `print.rs`.
     #[serde(default)]
     pub output: crate::print::Output,
+    /// Pixel Art Rescale, by PSD key: how many times bigger, nearest
+    /// neighbour, each file's processed output is than the file. Absent for
+    /// every file left at its own size, which is all of them until somebody
+    /// asks. The PSD itself never changes — see `psd_pixel_scale.rs`.
+    #[serde(default, rename = "pixelScale", skip_serializing_if = "BTreeMap::is_empty")]
+    pub pixel_scale: BTreeMap<String, u32>,
 }
 
 impl ProjectMeta {
@@ -481,6 +488,7 @@ impl ProjectMeta {
             publish: PublishTarget::default(),
             presentation: Presentation::default(),
             output: crate::print::Output::default(),
+            pixel_scale: BTreeMap::new(),
         }
     }
 }

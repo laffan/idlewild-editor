@@ -589,6 +589,29 @@ carries no key, so loads are run one at a time.
 
 ---
 
+### Pixel Art Rescale
+
+A PSD can be **processed bigger than it is**: `ProjectMeta.pixelScale` maps a
+key to a whole number from 2 to 16, and `process_held` — which every re-parse
+goes through, an edit coming home or a stack reordered as much as an import —
+first writes `.pixel/<key>.psd`, every layer and the canvas that many times
+bigger by nearest neighbour (`psd_downsample::upscale_nearest`, the screen
+copy's rebuild with `FilterType::Nearest` and no premultiply), and parses that
+instead. On a print project both runs start from the copy, so `print/` is the
+sharp one and `assets/` its downsample. **The file in `psd/` is never
+changed.** A file that would come out wider than 30,000 pixels is refused, and
+a factor that fails to process is put back.
+
+The inspector's row is `editor/psd-pixel-scale.ts`, at the foot of the PSD
+section under New layer. Because reconciliation keeps each placement's scale
+*against the manifest*, the artwork grows with the factor on its own; asked to
+**keep the size**, the row shrinks every placement of the key by the same
+ratio about the point its anchor mark stands on, which is also the point the
+next re-parse measures from. PSD Edit mode multiplies its file density by the
+factor (`pixelScaleOf`), so ink lands in the file at its own pixels. Rename and
+duplicate carry the factor to the new key on both sides of the IPC, and a
+`.idlewild` carries the map.
+
 ## Editing a PSD, and getting it back
 
 A PSD lives inside the project's own store, so there was nothing for a

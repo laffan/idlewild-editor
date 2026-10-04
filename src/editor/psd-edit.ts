@@ -34,6 +34,7 @@
 
 import { sourceScale } from "../lib/print";
 import { EXPORT_SCALE } from "./import-anchor";
+import { pixelScaleOf } from "./psd-pixel-scale";
 import {
   rasteriseStrokes,
   strokesBox,
@@ -459,7 +460,8 @@ export function createPsdEditUi(options: PsdEditUiOptions): PsdEditUi {
     // the processed manifest, which on a print project is the screen copy;
     // the file itself is `sourceScale() / EXPORT_SCALE` times denser, and the
     // ink has to land at the file's own resolution. On a game the two agree.
-    const fileScale = (mode.scale * EXPORT_SCALE) / sourceScale();
+    // Pixel Art Rescale makes the manifest that many times the file, too.
+    const fileScale = (mode.scale * EXPORT_SCALE * pixelScaleOf(target.key)) / sourceScale();
     // With the erase mask, because this is the one place in the editor whose
     // pixels land on artwork that is already there. A conversion draws on a
     // clear ground and its erasers have nothing to reach past the session's

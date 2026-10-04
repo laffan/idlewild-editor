@@ -41,6 +41,20 @@ Part of [the Idlewild manual](README.md).
   pixel, so it is a row to rename, reorder or draw into and nothing the game
   can see yet
 
+## Pixel art rescale
+
+- At the foot of the PSD section, under **New layer**: **Pixel art rescale**,
+  with **0** (the file at its own size — the default), **2×**, **3×**, **4×**
+  and **Custom** (a whole number up to 16)
+- Anything but 0 processes the PSD that many times bigger, **nearest
+  neighbour**: every pixel a hard-edged block, so pixel art is sharp on a
+  high-resolution page and on paper. **The PSD itself is not changed** —
+  open it in Photoshop or draw in it here and it is still pixel art
+- Picking a size asks whether to **keep the size** on the canvas. Say no for
+  pixel art pasted in small that should come up big; say yes for a PSD made
+  from part of the canvas that is already the size it should be and only
+  needs to be sharp
+
 ## PSD Edit mode
 
 - **PSD Edit mode**, from the pen on any sprite row of that list, the way the cube

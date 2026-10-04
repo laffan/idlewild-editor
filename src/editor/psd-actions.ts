@@ -33,6 +33,8 @@ import type { Inspector } from "./inspector";
 import { resetLayerPositions } from "./layer-positions";
 import { psdLayerOwner } from "./psd-layer-owner";
 import { PsdLayerEditor } from "./psd-layers";
+import { carryPixelScale, changePixelScale, pixelScaleRow } from "./psd-pixel-scale";
+import { h } from "../lib/dom";
 import type { PsdLayerInfo } from "../lib/ipc";
 import { openRefreshPsd } from "./sheets";
 
@@ -336,6 +338,7 @@ export function createPsdFileActions(
     try {
       const result = await psd.rename(projectId, key, name);
       if (result.key === key) return;
+      carryPixelScale(key, result.key, true);
       await scene()?.renamePsd(key, result.key);
       changed();
       log.info(`${key}.psd → ${result.key}.psd`);
@@ -357,6 +360,7 @@ export function createPsdFileActions(
   ): Promise<void> {
     try {
       const copy = await psd.duplicate(projectId, key);
+      carryPixelScale(key, copy.key, false);
       // A copy of an extruded PSD is an extrusion of its own, and carrying
       // one on must rewrite the file this placement actually draws.
       copyExtrusion(store, key, copy.key);
@@ -406,8 +410,8 @@ export function createPsdLayersFactory(
   options: PsdLayersOptions,
 ): (key: string) => PsdLayerEditor {
   const { projectId, os, store, file, scene } = options;
-  return (key: string) =>
-    new PsdLayerEditor(projectId, key, {
+  return (key: string) => {
+    const editor = new PsdLayerEditor(projectId, key, {
       onWritten: (manifest, renames) =>
         void file.applyLayers(key, manifest, renames),
       // The marks and an extrusion's artwork are the app's to name, and the
@@ -435,4 +439,26 @@ export function createPsdLayersFactory(
       openLabel: openPsdLabel(os),
       refreshLabel: refreshPsdLabel(os),
     });
+    // Pixel Art Rescale, at the foot of the section under New layer.
+    const slot = h("div", { class: "psd-pixel-scale-slot" });
+    const paint = (busy: boolean) =>
+      slot.replaceChildren(pixelScaleRow(key, busy, (factor) => void pick(factor)));
+    const pick = async (factor: number) => {
+      paint(true);
+      await changePixelScale(
+        {
+          projectId,
+          store,
+          anchorWorld: (placement) => options.grid.cellToWorld(placement.anchor),
+          applyManifest: (k, manifest) => file.applyLayers(k, manifest, new Map()),
+        },
+        key,
+        factor,
+      );
+      paint(false);
+    };
+    paint(false);
+    editor.root.appendChild(slot);
+    return editor;
+  };
 }

@@ -205,23 +205,55 @@ pub(crate) fn process_held(
     // pixels to the world pixel: so the file itself goes to `print/`, and a
     // downsampled copy of it goes to `assets/` where everything else looks.
     // See `print.rs`.
-    let output = store::read_meta(project_id)
-        .map(|meta| meta.output)
-        .unwrap_or_default();
+    let meta = store::read_meta(project_id).ok();
+    let output = meta.as_ref().map(|m| m.output.clone()).unwrap_or_default();
+    // Pixel Art Rescale: what is parsed is a copy of the file this many times
+    // bigger, nearest neighbour; the file itself stays as drawn. See
+    // `psd_pixel_scale.rs`.
+    let times = meta
+        .as_ref()
+        .map(|m| crate::psd_pixel_scale::factor_of(m, key))
+        .unwrap_or(1);
     let Some(factor) = output.downsample() else {
+        let enlarged = if times > 1 {
+            emit_log(&format!("Rescaling {key} ×{times}, nearest neighbour"));
+            let bytes = std::fs::read(&source).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+            Some(crate::psd_pixel_scale::write_copy(project_id, key, &bytes, times)?)
+        } else {
+            None
+        };
         emit_log(&format!("Parsing psd/{key}.psd"));
-        run_psd_to_json(&source, &assets_root, options, &emit_log)?;
+        let parsed = run_psd_to_json(
+            enlarged.as_deref().unwrap_or(&source),
+            &assets_root,
+            options,
+            &emit_log,
+        );
+        if let Some(copy) = &enlarged {
+            crate::psd_pixel_scale::remove_copy(copy);
+        }
+        parsed?;
         emit_log(&format!("Wrote assets/{key}/data.json"));
         crate::psd_flatten::refresh(project_id, key);
         return read_manifest(project_id, key);
     };
 
-    let bytes = std::fs::read(&source).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    let mut bytes = std::fs::read(&source).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
     // Photoshop is told the resolution the file was made at, so it opens a
     // letter page as eight and a half inches rather than seventy.
     if let Some(stamped) = crate::psd_resolution::stamp(&bytes, output.dpi()) {
         let _ = std::fs::write(&source, &stamped);
     }
+    // Rescaled pixel art: both runs below start from the bigger copy.
+    let enlarged = if times > 1 {
+        emit_log(&format!("Rescaling {key} ×{times}, nearest neighbour"));
+        let path = crate::psd_pixel_scale::write_copy(project_id, key, &bytes, times)?;
+        bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Some(path)
+    } else {
+        None
+    };
+    let source = enlarged.clone().unwrap_or(source);
 
     let print_root = store::print_dir(project_id)?;
     let print_out = print_root.join(safe_key(key)?);
@@ -262,6 +294,9 @@ pub(crate) fn process_held(
             .unwrap_or_else(|_| Err("The screen copy could not be made".to_string()));
         (printed, screened)
     });
+    if let Some(copy) = &enlarged {
+        crate::psd_pixel_scale::remove_copy(copy);
+    }
     printed?;
     if let Some(reason) = screened? {
         emit_log(&format!(
@@ -421,6 +456,7 @@ pub fn rename_and_process(
     }
 
     let (width, height) = psd_dimensions(&dest)?;
+    crate::psd_pixel_scale::carry(project_id, key, to, true);
     let mut manifest = process_held(project_id, to, &ProcessOptions::default(), &emit_log)?;
 
     // A converted image, a rasterised sketch and a generated PSD all name
@@ -465,6 +501,7 @@ pub fn duplicate_and_process(
         .map_err(|e| format!("Cannot copy {key}.psd: {e}"))?;
 
     let (width, height) = psd_dimensions(&source)?;
+    crate::psd_pixel_scale::carry(project_id, key, &copy, false);
     let manifest = process_held(project_id, &copy, &ProcessOptions::default(), emit_log)?;
     Ok(ImportResult {
         key: copy,

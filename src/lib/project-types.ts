@@ -258,4 +258,7 @@ export interface ProjectMeta {
   /** Game or page — absent on every project made before print existed,
    *  which is a game. See `lib/print.ts`. */
   output?: Output;
+  /** Pixel Art Rescale, by PSD key — absent for every file at its own size.
+   *  See `editor/psd-pixel-scale.ts`. */
+  pixelScale?: Record<string, number>;
 }
