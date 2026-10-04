@@ -45,6 +45,16 @@ mod tiles;
 use crate::project::{GameOptions, Projection, Scaffold};
 use crate::{psd_pipeline, psd_write, publish, store};
 
+/// Stand a processed manifest on disk for each key, so the generated config
+/// lists it — it only lists files the game can load.
+pub(crate) fn mark_processed(id: &str, keys: &[&str]) {
+    for key in keys {
+        let dir = store::assets_dir(id).expect("assets dir").join(key);
+        std::fs::create_dir_all(&dir).expect("output dir");
+        std::fs::write(dir.join("data.json"), "{}").expect("manifest");
+    }
+}
+
 /// Solid-colour RGBA, so a round trip can be checked pixel by pixel.
 pub(crate) fn swatch(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
     let mut out = Vec::with_capacity((width * height * 4) as usize);

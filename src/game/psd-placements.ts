@@ -39,7 +39,7 @@ import * as log from "../lib/log";
 import type { DocRenderer } from "./doc-renderer";
 import { unitMembers, unitOf } from "./unit";
 import { migrateLayerPath, repairDocument } from "./psd-migrate";
-import { evictPsd, loadPsd } from "./psd-loader";
+import { ensureProcessed, evictPsd, loadPsd } from "./psd-loader";
 import { reconcilePlacements } from "./reconcile";
 
 /** What placing a PSD needs from the scene around it. */
@@ -659,6 +659,7 @@ export class PsdPlacements {
     }
     for (const key of keys) {
       try {
+        await ensureProcessed(key);
         await this.load(key);
       } catch (err) {
         log.error(`Could not load ${key}:`, err);

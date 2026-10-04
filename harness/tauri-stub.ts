@@ -719,6 +719,7 @@ export async function invoke(
       return { id: "demo", psdSend: w.__psdSend };
     }
     case "sync_psd_context": return { changed: true };
+    case "is_psd_processed": return true;
     case "set_psd_pixel_scale":
     case "add_psd_anchor":
       return psdManifest((args as any)?.key ?? "tower");

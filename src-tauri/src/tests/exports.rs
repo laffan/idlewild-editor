@@ -26,6 +26,7 @@ fn an_export_carries_the_document_in_its_config() {
     .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
+        super::mark_processed(&meta.id, &["tower"]);
         let doc = serde_json::json!({
             "version": 1,
             "projection": "orthogonal",

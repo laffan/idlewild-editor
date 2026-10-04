@@ -138,11 +138,8 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
         .map_err(|e| format!("Cannot read this project's document: {e}"))?;
     let scenes = doc.scenes();
 
-    // Every scene's keys, not just the open one's. The scene the editor is
-    // looking at is the one the game places, but a project that switches
-    // scenes in its own code needs the textures for the one it switches to —
-    // and loading them is cheap beside finding out at the switch that they
-    // are not there.
+    // Every scene's keys, not just the open one's: a project that switches
+    // scenes in its own code needs the textures for the one it switches to.
     let mut keys: Vec<String> = Vec::new();
     for scene in &scenes {
         for layer in &scene.layers {
@@ -154,6 +151,9 @@ pub fn from_document(meta: &ProjectMeta, doc_json: &str) -> Result<Value, String
         }
     }
 
+    // Only files the game can load: one key with no processed manifest makes
+    // `loadMultiple` reject them all, so the game never reaches its first frame.
+    let keys = crate::psd_pipeline::processed_only(&meta.id, keys);
     let span = span_for(&scenes, meta.grid_size);
     // The palettes every tile layer draws from, carried whole. Beside the
     // layers rather than inside them, because that is where a Tiled map keeps

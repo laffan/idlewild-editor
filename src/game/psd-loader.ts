@@ -9,6 +9,8 @@
  * loaded again.
  */
 
+import { psd } from "../lib/ipc";
+import { openProject } from "../lib/print";
 import Phaser from "phaser";
 import type PsdToPhaser from "psd-to-phaser";
 import { maskKey, scopeKeys, textureKey, textureNeeds } from "../lib/manifest";
@@ -389,4 +391,24 @@ export function layerImage(
   const image = scene.textures.get(scoped).getSourceImage() as CanvasImageSource;
   if (!image) return null;
   return { image, smooth: scene.game.config.pixelArt !== true };
+}
+
+/**
+ * A placed file with no processed output, put right on open.
+ *
+ * It happens — an extrusion whose parse was interrupted, a project copied
+ * without its `assets/` — and the file is still in `psd/`, so the pipeline is
+ * simply run again. One with no source either is said once in the console;
+ * the generated config already leaves it out of what the game loads.
+ */
+export async function ensureProcessed(key: string): Promise<void> {
+  const projectId = openProject()?.id;
+  if (!projectId) return;
+  try {
+    if (await psd.isProcessed(projectId, key)) return;
+    log.info(`${key}.psd has no processed output — parsing it again`);
+    await psd.reprocess(projectId, key);
+  } catch (err) {
+    log.warn(`${key}.psd could not be parsed, so it is left off the canvas and out of the game:`, err);
+  }
 }

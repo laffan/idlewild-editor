@@ -98,6 +98,16 @@ pub fn is_processed(project_id: &str, key: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// The keys whose psd-to-json output is on disk — what the generated config
+/// lets the game load. Left alone for a project with no directory, which is a
+/// document being read on its own.
+pub fn processed_only(project_id: &str, keys: Vec<String>) -> Vec<String> {
+    match store::project_dir(project_id) {
+        Ok(dir) if dir.exists() => keys.into_iter().filter(|k| is_processed(project_id, k)).collect(),
+        _ => keys,
+    }
+}
+
 pub fn read_manifest(project_id: &str, key: &str) -> Result<String, String> {
     std::fs::read_to_string(manifest_path(project_id, key)?)
         .map_err(|e| format!("Cannot read manifest for {key}: {e}"))

@@ -42,6 +42,7 @@ fn saving_the_document_rewrites_the_config_the_game_reads() {
         assert_eq!(config(&meta.id)["layers"].as_array().map(Vec::len), Some(1));
         assert_eq!(config(&meta.id)["psdKeys"].as_array().map(Vec::len), Some(0));
 
+        super::mark_processed(&meta.id, &["tower"]);
         store::write_doc(
             &meta.id,
             &serde_json::json!({
@@ -121,6 +122,7 @@ fn the_config_carries_every_scene_and_places_the_open_one() {
     .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
+        super::mark_processed(&meta.id, &["tower", "stalactite"]);
         store::write_doc(
             &meta.id,
             &serde_json::json!({
@@ -221,6 +223,7 @@ fn a_document_written_before_scenes_still_reaches_the_config() {
     .expect("project should be created");
 
     let result = std::panic::catch_unwind(|| {
+        super::mark_processed(&meta.id, &["hut"]);
         store::write_doc(
             &meta.id,
             &serde_json::json!({
@@ -683,5 +686,47 @@ fn a_group_never_reaches_the_config() {
     store::delete_project(&meta.id).ok();
     if let Err(payload) = result {
         std::panic::resume_unwind(payload);
+    }
+}
+
+/// A placed file with no processed manifest — an extrusion whose parse never
+/// finished, say — is left out of what the game loads, because one missing
+/// manifest makes psd-to-phaser's `loadMultiple` refuse every file.
+#[test]
+fn a_file_with_no_processed_output_is_not_loaded() {
+    let meta = store::create_project(
+        "Missing",
+        Projection::Orthogonal,
+        Scaffold::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+    let result = std::panic::catch_unwind(|| {
+        super::mark_processed(&meta.id, &["tower"]);
+        let placement = |key: &str| serde_json::json!({
+            "id": key, "psdKey": key, "layerPath": key,
+            "x": 0.0, "y": 0.0, "width": 8.0, "height": 8.0
+        });
+        store::write_doc(
+            &meta.id,
+            &serde_json::json!({
+                "version": 1, "projection": "orthogonal", "gridSize": 32,
+                "layers": [{ "id": "l", "name": "L", "visible": true, "fills": [],
+                    "placements": [placement("tower"), placement("extrude-gone")],
+                    "zones": [], "strokes": [] }]
+            })
+            .to_string(),
+        )
+        .expect("document should save");
+        let config: serde_json::Value = serde_json::from_str(
+            &store::read_game_file(&meta.id, "js/game.config.json").expect("config should read"),
+        )
+        .expect("config should be JSON");
+        assert_eq!(config["psdKeys"], serde_json::json!(["tower"]));
+    });
+    store::delete_project(&meta.id).ok();
+    if let Err(panic) = result {
+        std::panic::resume_unwind(panic);
     }
 }
