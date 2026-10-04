@@ -21,6 +21,7 @@
 mod archive;
 mod backgrounds;
 mod config;
+mod config_keys;
 mod deploying;
 mod exports;
 mod marks;
