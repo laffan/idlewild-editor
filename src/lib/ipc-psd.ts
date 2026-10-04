@@ -471,6 +471,12 @@ export const psd = {
     invoke<string>("read_psd_bytes", { id, key }),
   manifest: (id: string, key: string) =>
     invoke<string>("read_psd_manifest", { id, key }),
+  /**
+   * Write a `P | anchor` into a file that has none, at `x, y` in its own
+   * pixels, and re-parse it. See `psd_layers::add_anchor`.
+   */
+  addAnchor: (id: string, key: string, x: number, y: number) =>
+    invoke<string>("add_psd_anchor", { id, key, x, y }),
   isProcessed: (id: string, key: string) =>
     invoke<boolean>("is_psd_processed", { id, key }),
   outputs: (id: string, key: string) =>

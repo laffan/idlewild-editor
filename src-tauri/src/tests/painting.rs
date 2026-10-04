@@ -516,3 +516,47 @@ fn applying_ink_re_parses_and_writes_the_sprite() {
     store::delete_project(&meta.id).ok();
     outcome.expect("the paint should not panic");
 }
+
+/// The "No anchor" warning's button: a pasted file with no marks gets the
+/// editor's dot, turned off, under its artwork — and only once.
+#[test]
+fn a_file_with_no_anchor_can_be_given_one() {
+    let meta = store::create_project(
+        "Anchor",
+        Projection::Orthogonal,
+        Scaffold::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            psd_write::psd_from_rgba_marked("stray", 40, 30, swatch(40, 30, [9, 9, 9, 255]), None)
+                .expect("PSD should be written");
+        std::fs::write(store::psd_dir(id).expect("psd dir").join("stray.psd"), &bytes)
+            .expect("PSD should save");
+
+        let manifest = crate::psd_anchor::add_anchor(id, "stray", 20, 15, |_| {})
+            .expect("the anchor should be added");
+        let list = psd_layers::read(id, "stray").expect("layers should read");
+        let names: Vec<&str> = list.layers.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["S | stray", "P | anchor"], "under the artwork");
+        assert!(!list.layers[1].visible, "and turned off, as an import's is");
+        let parsed: serde_json::Value = serde_json::from_str(&manifest).expect("manifest");
+        let point = parsed["layers"]
+            .as_array()
+            .expect("layers")
+            .iter()
+            .find(|l| l["name"] == "anchor")
+            .expect("psd-to-json should read the point");
+        assert_eq!((point["x"].as_f64(), point["y"].as_f64()), (Some(20.0), Some(15.0)));
+
+        assert!(crate::psd_anchor::add_anchor(id, "stray", 1, 1, |_| {}).is_err(), "only once");
+    });
+    store::delete_project(&meta.id).ok();
+    if let Err(panic) = result {
+        std::panic::resume_unwind(panic);
+    }
+}

@@ -24,6 +24,7 @@ mod import_assets;
 mod ipc_bytes;
 mod project;
 mod projects;
+mod psd_anchor;
 mod psd_background;
 mod psd_extract;
 mod psd_flatten;
@@ -476,6 +477,7 @@ pub fn run() {
             psd_stack::write_psd_layers,
             psd_stack::drop_psd_layers,
             psd_stack::add_psd_layer,
+            psd_stack::add_psd_anchor,
             psd_stack::paint_psd_layer,
             read_psd_manifest,
             is_psd_processed,

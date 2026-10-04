@@ -299,7 +299,7 @@ pub(crate) fn write_held(
 /// What `add` and `paint` start from: both are one change against a file
 /// nobody has retyped, and expressing them as edits means they go through the
 /// same rebuild a rewrite does rather than through a second one.
-fn identity_edits(doc: &Psd) -> Vec<LayerEdit> {
+pub(crate) fn identity_edits(doc: &Psd) -> Vec<LayerEdit> {
     rows(doc)
         .iter()
         .enumerate()

@@ -46,6 +46,7 @@ import {
 } from "./layer-items";
 import { pickMode, pickUnit } from "../lib/unit-select";
 import { ScenesBar } from "./scenes-bar";
+import { promptSheet } from "../lib/sheet";
 import { renderDirectory } from "./layer-directory";
 import type { ManifestLayer } from "../lib/manifest";
 
@@ -83,6 +84,11 @@ export interface LayersPanelCallbacks {
    * where they are drawn.
    */
   onImportTiled: (layerId: string) => void;
+  /**
+   * Rename a placed PSD's file. Here, beside the layer names, rather than in
+   * the inspector's heading — the left sidebar is where things are named.
+   */
+  onRenamePsd?: (key: string, name: string) => void;
 }
 
 /**
@@ -360,6 +366,9 @@ export class LayersPanel {
                       : null,
                   )
               : undefined,
+            item.psdKey && this.callbacks.onRenamePsd
+              ? () => void this.renamePsd(item.psdKey ?? "")
+              : undefined,
           ),
         );
       }
@@ -539,6 +548,18 @@ export class LayersPanel {
       },
       icon(ICONS.grip, 16),
     );
+  }
+
+  /** Ask for a PSD's new name, and hand it on. */
+  private async renamePsd(key: string): Promise<void> {
+    const name = await promptSheet({
+      title: "Rename PSD",
+      label: "The file's name, without .psd",
+      value: key,
+      confirmLabel: "Rename",
+      light: false,
+    });
+    if (name && name !== key) this.callbacks.onRenamePsd?.(key, name);
   }
 
   private row(layer: Layer, active: boolean): HTMLElement {

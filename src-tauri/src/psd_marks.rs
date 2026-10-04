@@ -31,7 +31,7 @@ use psd::LayerBuilder;
 /// The dot's diameter in pixels. psd-to-json reports a point as the centre
 /// of its layer, so this is kept even: an odd diameter puts the recorded
 /// centre half a pixel off the anchor it is meant to mark.
-const DOT: u32 = 12;
+pub(crate) const DOT: u32 = 12;
 
 const ACCENT: [u8; 3] = [236, 48, 19];
 
@@ -191,7 +191,7 @@ fn outline_box(marks: &AnchorMarks) -> Option<(f32, f32, f32, f32)> {
 
 /// A filled disc in the accent, feathered by one pixel so it does not read
 /// as a square at small sizes.
-fn dot_pixels() -> Vec<u8> {
+pub(crate) fn dot_pixels() -> Vec<u8> {
     let n = DOT as f32;
     let r = n / 2.0;
     let mut out = Vec::with_capacity((DOT * DOT * 4) as usize);

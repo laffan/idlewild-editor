@@ -52,6 +52,19 @@ pub fn drop_psd_layers(
 /// Returns the fresh manifest, as every write that touches the file does:
 /// the layer arrives with a single transparent pixel in it, which is nothing
 /// to draw but is a real row to rename, reorder or draw into.
+/// Give a PSD a `P | anchor` at `x, y` in its own pixels — the button on the
+/// "No anchor" warning. Hands back the new manifest.
+#[tauri::command(async)]
+pub fn add_psd_anchor(
+    app: tauri::AppHandle,
+    id: String,
+    key: String,
+    x: i32,
+    y: i32,
+) -> Result<String, String> {
+    crate::psd_anchor::add_anchor(&id, &key, x, y, logger(&app))
+}
+
 #[tauri::command(async)]
 pub fn add_psd_layer(app: tauri::AppHandle, id: String, key: String) -> Result<String, String> {
     psd_layers::add(&id, &key, logger(&app))

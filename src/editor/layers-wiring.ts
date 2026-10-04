@@ -31,6 +31,8 @@ export interface LayersWiringDeps {
   /** New Background's deps, and Import Tiled's — see `editor.ts`. */
   backgrounds: () => BackgroundDeps;
   tiles: () => TileDeps;
+  /** Rename a PSD's file — the same action the inspector's heading had. */
+  renamePsd?: (key: string, name: string) => void;
 }
 
 export function layersPanelCallbacks(
@@ -62,5 +64,6 @@ export function layersPanelCallbacks(
     onNewBackground: (layerId, anchor) =>
       openNewBackground(anchor, layerId, deps.backgrounds()),
     onImportTiled: (layerId) => void importTiledMap(deps.tiles(), layerId),
+    onRenamePsd: deps.renamePsd,
   };
 }

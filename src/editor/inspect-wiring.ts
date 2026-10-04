@@ -15,6 +15,7 @@
  * was assembled.
  */
 
+import { addAnchorLayer } from "./add-anchor";
 import { applyFillPaint } from "./fill-actions";
 import { exportSelectionPng } from "./export-selection";
 import { openAddImage, openExportSelection } from "./sheets";
@@ -107,6 +108,16 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
       store.updateFill(selection.layerId, selection.fillId, { walkable });
     },
     onRenamePsd: (key, name) => void deps.psdFile().rename(key, name),
+    onAddAnchor: (key) =>
+      void addAnchorLayer(
+        {
+          projectId: deps.projectId,
+          store,
+          grid: deps.grid,
+          applyManifest: (k, manifest) => deps.psdFile().applyLayers(k, manifest, new Map()),
+        },
+        key,
+      ),
     onToggleCollider: (key, blocking) => deps.collider().setBlocking(key, blocking),
     onEditCollider: () => deps.collider().open(),
     // A conversion ends with the new file selected, and what anybody wants

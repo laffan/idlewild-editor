@@ -294,6 +294,7 @@ export function renderLayerItem(
   active: boolean,
   onSelect: (selection: Selection, event: MouseEvent) => void,
   onGrip?: (event: PointerEvent) => void,
+  onRename?: () => void,
 ): HTMLElement {
   const classes = ["layer-item"];
   if (active) classes.push("active");
@@ -327,7 +328,38 @@ export function renderLayerItem(
           style: { backgroundColor: item.swatch },
         })
       : icon(item.path, 13),
-    h("span", { class: "layer-item-label", text: item.label }),
+    h("span", {
+      class: "layer-item-label",
+      text: item.label,
+      // A double-click on the name renames it, the way a layer's own name is
+      // edited where it is listed.
+      ...(onRename
+        ? {
+            onDblClick: (event: Event) => {
+              event.stopPropagation();
+              onRename();
+            },
+          }
+        : {}),
+    }),
+    // And a pencil on the row that is selected, which is the way in on an
+    // iPad, where there is no double-click to find.
+    onRename && active
+      ? h(
+          "span",
+          {
+            class: "layer-item-rename",
+            role: "button",
+            "aria-label": `Rename ${item.label}`,
+            title: "Rename this PSD",
+            onClick: (event: Event) => {
+              event.stopPropagation();
+              onRename();
+            },
+          },
+          icon(ICONS.pencil, 12),
+        )
+      : null,
     item.warning
       ? h(
           "span",

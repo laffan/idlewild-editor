@@ -45,6 +45,8 @@ export interface PlacementActions extends PatternActions {
   isAnchored: (psdKey: string) => boolean;
   /** Rename the file behind a placement. `name` is the stem, without ".psd". */
   onRenamePsd: (key: string, name: string) => void;
+  /** Write a `P | anchor` into a file that has none — see `add-anchor.ts`. */
+  onAddAnchor: (key: string) => void;
   /**
    * Give this object a copy of the PSD, so editing it stops changing the other
    * instances. **Make Unique**, which was Remove Reference.
@@ -98,12 +100,9 @@ export function renderPlacement(
     panel.body.append(...patternSection(store, layer, actions));
   }
 
-  // The title is the file's name, and the file's name is worth changing: an
-  // import arrives called `pasted-m2k9f1` and stays that way through every list
-  // that mentions it until someone can rename it here.
-  panel.editableHead("Image", placement.psdKey, ".psd", (next) =>
-    actions.onRenamePsd(placement.psdKey, next),
-  );
+  // The title is the file's name. It is renamed in the left sidebar, beside
+  // the layer names — the pencil on its row, or a double-click on it.
+  panel.head("Image", `${placement.psdKey}.psd`);
 
   // The rule an object layer enforces, said where the file is described. Not a
   // refusal: the artwork is placed and it draws. What it cannot do is come home
@@ -122,6 +121,14 @@ export function renderPlacement(
           text:
             "No anchor · this PSD has no P | anchor at the root of its " +
             "stack, so an edit to it will not come back on this space",
+        }),
+        h("button", {
+          class: "panel-btn",
+          text: "Add anchor layer",
+          title:
+            "Write the editor's anchor dot into the PSD where this object is " +
+            "already anchored. Nothing moves; edits come back on this space.",
+          onClick: () => actions.onAddAnchor(placement.psdKey),
         }),
       ),
     );
