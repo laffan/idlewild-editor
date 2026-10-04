@@ -47,6 +47,7 @@ pub fn add_anchor(
         depth: 0,
         visible: Some(false),
         paint: None,
+        opacity: None,
     };
     mark.paint = Some(crate::psd_paint::Paint {
         x: cx - half,

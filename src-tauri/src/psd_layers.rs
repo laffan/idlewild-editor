@@ -159,6 +159,11 @@ pub struct LayerEdit {
     /// `paint_psd_layer`, with its pixels as raw bytes — so never read here.
     #[serde(skip)]
     pub paint: Option<Paint>,
+    /// A new row's opacity, 0–255; None is opaque. Only a row that is not in
+    /// the file yet reads it — an existing row keeps the file's. The context
+    /// layer is the one that asks, at half. See `psd_context`.
+    #[serde(skip)]
+    pub opacity: Option<u8>,
 }
 
 impl LayerEdit {
@@ -170,6 +175,7 @@ impl LayerEdit {
             depth,
             visible: None,
             paint: None,
+            opacity: None,
         }
     }
 }
@@ -346,6 +352,7 @@ pub fn add(project_id: &str, key: &str, emit_log: impl Fn(&str)) -> Result<Strin
         // A row you asked for is a row you can see.
         visible: Some(true),
         paint: None,
+        opacity: None,
     }];
     edits.extend(identity_edits(&doc));
 

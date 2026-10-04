@@ -84,7 +84,8 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
     },
     title:
       "Write the palette into a PSD as its topmost layer whenever one goes " +
-      "out to another app, so the colours are there to sample",
+      "out to another app, so the colours are there to sample. The default " +
+      "for every PSD whose own Include palette box has not been changed.",
   });
 
   const root = h("div", { class: "cp-palette-box" }, row, browseRow, attach.root);

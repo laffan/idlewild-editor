@@ -77,6 +77,9 @@ Under the recent colours is a second row that works the other way round.
 
 ## Attach palette to PSDs
 
+- **The switch is the default; each PSD can say otherwise** with the *Include
+  palette* tick under its Open PSD button — see
+  [Getting images in](images.md#and-out-again)
 - **Turn the switch on and your palette travels inside the artwork.** With it on, every
   file sent out through **Open PSD** (or **Share PSD** on an iPad) gets the
   palette written into it as a strip of flat squares on the topmost layer — so

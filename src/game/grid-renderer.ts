@@ -6,6 +6,7 @@
  * see, and nothing else. There is no world bound to hit.
  */
 
+import { CHROME_NAME } from "./chrome";
 import type Phaser from "phaser";
 import { Grid } from "../lib/grid";
 import type { Cell } from "../lib/types";
@@ -48,6 +49,8 @@ export class GridRenderer {
     this.graphics = graphics;
     this.grid = grid;
     this.graphics.setDepth(BELOW_EVERYTHING);
+    // Chrome, not canvas: Include context's capture leaves it out.
+    this.graphics.setName(CHROME_NAME);
   }
 
   /**

@@ -226,7 +226,7 @@ export async function mountEditor(
     os,
     store,
     scene: () => handle?.scene ?? null,
-    inspector,
+    ...{ inspector, drawing: () => drawing },
     onPsdChanged: psdChanged,
   });
 

@@ -76,6 +76,23 @@ Part of [the Idlewild manual](README.md).
 
 ## And out again
 
+- **Open PSD** (Share PSD on an iPad) is one box with two ticks under the
+  button, and they decide what goes out with the file:
+  - **Include palette** writes your palette in as a strip of swatches on the
+    top layer. A file nobody has ticked or unticked follows the colour
+    picker's *Attach palette to PSDs* switch; tick or untick it here and that
+    file has its own answer
+  - **Include context** writes what is around the PSD on the canvas — inside
+    its own canvas box, everything visible except the PSD itself: other
+    artwork, fills, text, ink — into it as a layer called `context` at 50%
+    opacity, under the artwork, so the wall a door goes in is there to draw
+    against. The editor's own marks (the grid, selection outlines) are left
+    out, and so are camera-locked backdrops
+  - Ticking writes the layer straight away and every open or share writes it
+    fresh, so it always shows the canvas as it is now. **Unticking takes the
+    layer out of the file.** Neither layer reaches the game. A `context` layer
+    of your own at any opacity but 50% is never touched
+
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
   to the system editor on macOS and to the share sheet on iPadOS, and
   **Re-parse** beside it runs the pipeline over the file again. On a Mac that

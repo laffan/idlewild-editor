@@ -129,6 +129,7 @@ pub fn sync(
             // Lit, unlike the other two marks. See the module note.
             visible: Some(true),
             paint: Some(crate::psd_paint::Paint::from_patch(&patch)),
+            opacity: None,
         });
     }
     for (index, row) in rows.iter().enumerate() {

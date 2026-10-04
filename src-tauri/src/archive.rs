@@ -111,6 +111,9 @@ pub struct ArchivedProject {
     /// made at it, and a re-parse here should make the same.
     #[serde(default, rename = "pixelScale")]
     pub pixel_scale: std::collections::BTreeMap<String, u32>,
+    /// Include palette / Include context, by key.
+    #[serde(default, rename = "psdSend")]
+    pub psd_send: std::collections::BTreeMap<String, crate::psd_send::PsdSend>,
 }
 
 /// **Export project**: the project itself, as a `.idlewild` file — source PSDs
@@ -162,6 +165,7 @@ pub fn export(project_id: &str, dest: &Path) -> Result<(), String> {
             presentation: meta.presentation.clone(),
             output: meta.output.clone(),
             pixel_scale: meta.pixel_scale.clone(),
+            psd_send: meta.psd_send.clone(),
         },
     };
     zip.start_file(MANIFEST, options).map_err(|e| e.to_string())?;
@@ -350,6 +354,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
     meta.presentation = project.presentation.clone();
     meta.output = project.output.clone();
     meta.pixel_scale = project.pixel_scale.clone();
+    meta.psd_send = project.psd_send.clone();
     store::write_meta(&meta)?;
 
     if !store::game_dir(id)?.join("index.html").exists() {

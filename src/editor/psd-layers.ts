@@ -44,6 +44,7 @@ import {
   newLayerButton,
   psdHeadRow,
   resetPositionsRow,
+  type PsdIncludeCallbacks,
   type PlacedState,
   type PsdHeadState,
 } from "./psd-layer-actions";
@@ -52,7 +53,7 @@ import { asRow, psdLayerRow, type Row } from "./psd-layer-row";
 import { psd, type PsdLayerInfo, type PsdLayerList } from "../lib/ipc";
 import * as log from "../lib/log";
 
-export interface PsdLayerEditorCallbacks {
+export interface PsdLayerEditorCallbacks extends PsdIncludeCallbacks {
   /**
    * The file was rewritten and re-parsed.
    *
@@ -340,7 +341,7 @@ export class PsdLayerEditor {
         onToggleAdjust: () => this.callbacks.onToggleAdjust(),
         onOpen: () => this.callbacks.onOpen(),
         onRefresh: () => this.callbacks.onRefresh(),
-      }),
+      }, this.callbacks),
     );
     const reset = resetPositionsRow(this.placed?.displaced ?? 0, () =>
       this.callbacks.onResetPositions(),

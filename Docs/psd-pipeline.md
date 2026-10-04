@@ -612,6 +612,32 @@ factor (`pixelScaleOf`), so ink lands in the file at its own pixels. Rename and
 duplicate carry the factor to the new key on both sides of the IPC, and a
 `.idlewild` carries the map.
 
+### Include palette and Include context
+
+The Open / Share PSD control (`openControl` in `editor/psd-layer-actions.ts`)
+carries two ticks, kept per key in `ProjectMeta.psdSend` by `psd_send.rs`
+(carried by rename, duplicate and `.idlewild` like `pixelScale`). An absent
+`palette` follows the app-wide *Attach palette to PSDs*; `context` is off
+until ticked. `openPsdExternally` syncs both before the bytes leave, and
+`setInclude` syncs the one that changed at once, so unticking takes its layer
+out without waiting for a send.
+
+**Context** is a picture of the canvas inside the file's whole canvas box —
+`canvasInWorld`: the placement's corner less its layer's offset in the
+manifest, at the placement's scale — at the file's own density (the manifest
+size times `sourceScale() / EXPORT_SCALE / pixelScale`).
+`game/context-capture.ts` renders the scene's display list into a
+`DynamicTexture` under one world→texture matrix, the technique `print.js`
+uses, skipping chrome (`game/chrome.ts`: the lattice by name, anything at
+depth ≥ 800 000, anything camera-locked); the PSD's own unit is hidden with
+`suppressInstance` for the length of it, and the ink is drawn over a layer at
+a time. `psd_context.rs` writes it as a `context` layer at the bottom of the
+stack at opacity 128 (`LayerEdit.opacity`, which only a new row reads),
+scaled to the canvas if the device's texture limit made it smaller. Like the
+palette it is named outside the pipe convention, so no re-parse follows. A
+root `context` layer counts as the editor's only at half opacity, so an
+artist's own is never removed.
+
 ## Editing a PSD, and getting it back
 
 A PSD lives inside the project's own store, so there was nothing for a

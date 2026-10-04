@@ -492,6 +492,7 @@ fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
                 depth: row.depth,
                 visible: Some(keep_lit(&row.name)),
                 paint: None,
+                opacity: None,
             })
             .collect();
         let manifest =
@@ -551,6 +552,7 @@ fn an_edit_can_hide_a_layer_and_a_rewrite_leaves_it_hidden() {
                 depth: row.depth,
                 visible: Some(true),
                 paint: None,
+                opacity: None,
             })
             .collect();
         psd_layers::write(id, "extrude-abc", &show, |_| {}).expect("the rewrite should land");
@@ -610,6 +612,7 @@ fn a_second_extrude_keeps_the_eye_it_was_left_with() {
                 name,
                 depth: row.depth,
                 paint: None,
+                opacity: None,
             }
         })
         .collect();

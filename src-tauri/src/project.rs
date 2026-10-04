@@ -463,6 +463,10 @@ pub struct ProjectMeta {
     /// asks. The PSD itself never changes — see `psd_pixel_scale.rs`.
     #[serde(default, rename = "pixelScale", skip_serializing_if = "BTreeMap::is_empty")]
     pub pixel_scale: BTreeMap<String, u32>,
+    /// What goes into each PSD when it is opened or shared — Include palette
+    /// and Include context, by key. See `psd_send.rs`.
+    #[serde(default, rename = "psdSend", skip_serializing_if = "BTreeMap::is_empty")]
+    pub psd_send: BTreeMap<String, crate::psd_send::PsdSend>,
 }
 
 impl ProjectMeta {
@@ -489,6 +493,7 @@ impl ProjectMeta {
             presentation: Presentation::default(),
             output: crate::print::Output::default(),
             pixel_scale: BTreeMap::new(),
+            psd_send: BTreeMap::new(),
         }
     }
 }

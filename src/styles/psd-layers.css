@@ -216,3 +216,40 @@
   font-size: 12px;
 }
 .side-panel .psd-pixel-scale-seg .opt-seg-btn:last-child { flex: 0 0 auto; padding: 0 6px; }
+
+/* Open PSD / Share PSD with its two Include boxes, one bordered control under
+   Adjust layers and Re-parse — see `openControl` in psd-layer-actions.ts. The
+   button is the top of the box and the boxes are its foot. */
+.psd-layers-head-block { display: flex; flex-direction: column; gap: 6px; }
+.psd-open {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--chrome-rule-strong, var(--chrome-rule));
+}
+.psd-open-btn {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  font: 600 13px var(--font-heading);
+  text-align: center;
+}
+.psd-open-btn:hover { background: var(--chrome-panel); }
+.psd-open-includes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--chrome-rule);
+}
+.psd-open-include {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  font: 500 12px var(--font-body);
+  color: var(--chrome-dim);
+  cursor: pointer;
+}
+.psd-open-include input { accent-color: var(--color-accent); width: 16px; height: 16px; margin: 0; }
+.psd-open-include:has(input:checked) { color: var(--chrome-text); }

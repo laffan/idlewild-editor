@@ -20,6 +20,9 @@
  * now rather than being a thing only a Mac could do.
  */
 
+import { contextPicture, type ContextDeps } from "./psd-context";
+import { carrySendChoice, sendChoiceOf, setSendChoice, type SendChoice } from "./psd-send";
+import type { DrawingLayer } from "../drawing";
 import type { DocStore } from "../lib/doc-store";
 import { copyExtrusion, extrusionOf } from "../lib/extrusions";
 import type { Grid } from "../lib/grid";
@@ -84,8 +87,13 @@ export async function openPsdExternally(
   key: string,
   os: string,
   gridSize: number,
+  context?: ContextDeps,
 ): Promise<void> {
-  await attachPalette(projectId, key, gridSize);
+  // The two boxes on the control — see `psd-send.ts`. Each brings its layer
+  // into line with the box: written fresh when ticked, taken out when not.
+  const choice = sendChoiceOf(key);
+  await attachPalette(projectId, key, gridSize, choice.palette);
+  await attachContext(projectId, key, choice.context ? context ?? null : null, choice.context);
 
   if (!isMobile(os)) {
     await psd.openExternally(projectId, key);
@@ -141,6 +149,7 @@ async function attachPalette(
   projectId: string,
   key: string,
   gridSize: number,
+  include: boolean,
 ): Promise<void> {
   const colors = palette.list();
   // An empty palette attaches nothing whatever the toggle says — a strip of
@@ -148,7 +157,7 @@ async function attachPalette(
   // feature being on. It still goes through as `null`, so a strip written
   // when the palette had colours in it is taken out once it has not.
   const strip =
-    palette.attach && colors.length > 0
+    include && colors.length > 0
       ? { colors, cell: psdSwatchSize(gridSize) }
       : null;
 
@@ -166,6 +175,33 @@ async function attachPalette(
     }
   } catch (err) {
     log.warn(`The palette did not go into ${key}.psd:`, err);
+  }
+}
+
+/**
+ * Bring the file's `context` layer into line with Include context, before it
+ * leaves: a fresh picture of the canvas around it when ticked, the layer
+ * taken out when not. Like the palette it never stops the send, and a picture
+ * that could not be made leaves whatever was there rather than taking it out.
+ */
+async function attachContext(
+  projectId: string,
+  key: string,
+  deps: ContextDeps | null,
+  wanted: boolean,
+): Promise<void> {
+  try {
+    const picture = deps ? await contextPicture(deps, key) : null;
+    if (wanted && !picture) {
+      log.warn(`Could not picture the canvas around ${key}.psd; its context is unchanged`);
+      return;
+    }
+    const result = await psd.syncContext(projectId, key, picture);
+    if (result.skipped) log.warn(`The context did not go into ${key}.psd: ${result.skipped}`);
+    else if (result.changed && picture) log.info(`Put the canvas around ${key}.psd into it as "context"`);
+    else if (result.changed) log.info(`Took the context layer out of ${key}.psd`);
+  } catch (err) {
+    log.warn(`The context did not go into ${key}.psd:`, err);
   }
 }
 
@@ -256,6 +292,8 @@ export interface PsdFileActionsOptions {
   store: DocStore;
   scene: () => WorldScene | null;
   inspector: Inspector;
+  /** The ink, which Include context draws over the scene's own picture. */
+  drawing?: () => DrawingLayer | null;
   /**
    * A PSD on disk is not what it was.
    *
@@ -282,6 +320,11 @@ export interface PsdFileActions {
   rename: (key: string, name: string) => Promise<void>;
   /** Give one placement a copy of the file, by id. */
   detach: (layerId: string, placementId: string, key: string) => Promise<void>;
+  /**
+   * Tick or untick Include palette / Include context. The layer it controls
+   * is written or taken out at once, not only on the next send.
+   */
+  setInclude: (key: string, patch: Partial<SendChoice>) => Promise<void>;
 }
 
 export function createPsdFileActions(
@@ -292,7 +335,12 @@ export function createPsdFileActions(
 
   async function open(key: string): Promise<void> {
     try {
-      await openPsdExternally(projectId, key, os, store.gridSize);
+      await openPsdExternally(projectId, key, os, store.gridSize, {
+        projectId,
+        store,
+        scene,
+        drawing: options.drawing,
+      });
       // The palette may have put a layer in the file, so the inspector's copy
       // of its stack is out of date the same way it is after a re-parse.
       inspector.reloadPsdLayers(key);
@@ -339,6 +387,7 @@ export function createPsdFileActions(
       const result = await psd.rename(projectId, key, name);
       if (result.key === key) return;
       carryPixelScale(key, result.key, true);
+      carrySendChoice(key, result.key, true);
       await scene()?.renamePsd(key, result.key);
       changed();
       log.info(`${key}.psd → ${result.key}.psd`);
@@ -361,6 +410,7 @@ export function createPsdFileActions(
     try {
       const copy = await psd.duplicate(projectId, key);
       carryPixelScale(key, copy.key, false);
+      carrySendChoice(key, copy.key, false);
       // A copy of an extruded PSD is an extrusion of its own, and carrying
       // one on must rewrite the file this placement actually draws.
       copyExtrusion(store, key, copy.key);
@@ -379,7 +429,17 @@ export function createPsdFileActions(
     }
   }
 
-  return { open, refresh, applyLayers, rename, detach };
+  async function setInclude(key: string, patch: Partial<SendChoice>): Promise<void> {
+    await setSendChoice(projectId, key, patch);
+    if (patch.palette !== undefined) await attachPalette(projectId, key, store.gridSize, patch.palette);
+    if (patch.context !== undefined) {
+      const deps = { projectId, store, scene, drawing: options.drawing };
+      await attachContext(projectId, key, patch.context ? deps : null, patch.context);
+    }
+    inspector.reloadPsdLayers(key);
+  }
+
+  return { open, refresh, applyLayers, rename, detach, setInclude };
 }
 
 /**
@@ -438,6 +498,9 @@ export function createPsdLayersFactory(
       onEditPsd: (layer) => options.onEditPsd(key, layer),
       openLabel: openPsdLabel(os),
       refreshLabel: refreshPsdLabel(os),
+      // The two boxes inside Open / Share PSD — see `psd-send.ts`.
+      include: () => sendChoiceOf(key),
+      onInclude: (patch) => void file.setInclude(key, patch),
     });
     // Pixel Art Rescale, at the foot of the section under New layer.
     const slot = h("div", { class: "psd-pixel-scale-slot" });

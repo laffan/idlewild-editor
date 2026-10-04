@@ -18,6 +18,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { invokeBytes } from "./ipc-bytes";
+import type { ProjectMeta } from "./project-types";
 
 export interface OutputFile {
   absolutePath: string;
@@ -466,6 +467,19 @@ export const psd = {
    */
   syncPalette: (id: string, key: string, strip: PsdPaletteStrip | null) =>
     invoke<PsdPaletteSync>("sync_psd_palette", { id, key, strip }),
+  /**
+   * Include context: put the canvas around a PSD into it as a `context` layer
+   * at half opacity, or take that layer out (`null`). Sent raw — see
+   * `psd_context.rs`. Answers with the same shape as the palette's sync.
+   */
+  syncContext: (
+    id: string,
+    key: string,
+    image: { width: number; height: number; rgba: PixelBytes } | null,
+  ) => invokeBytes<PsdPaletteSync>("sync_psd_context", { id, key, image }),
+  /** Include palette / Include context for one file — see `psd_send.rs`. */
+  setSend: (id: string, key: string, patch: { palette?: boolean; context?: boolean }) =>
+    invoke<ProjectMeta>("set_psd_send", { id, key, ...patch }),
   /** The PSD's own bytes, base64 — what the iPadOS share sheet needs. */
   bytes: (id: string, key: string) =>
     invoke<string>("read_psd_bytes", { id, key }),

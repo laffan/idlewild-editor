@@ -68,6 +68,18 @@ export interface PsdHeadCallbacks {
 }
 
 /**
+ * The two boxes inside the Open / Share control: what goes into the file with
+ * it. Optional, so a list built with no opinion about them shows the plain
+ * button. See `psd-send.ts`.
+ */
+export interface PsdIncludeCallbacks {
+  /** The file's two answers as they stand. */
+  include?: () => { palette: boolean; context: boolean };
+  /** Tick or untick one — the layer it controls follows at once. */
+  onInclude?: (patch: { palette?: boolean; context?: boolean }) => void;
+}
+
+/**
  * The row above the list.
  *
  * Adjust layers first, because it is the one that changes the canvas rather
@@ -76,6 +88,7 @@ export interface PsdHeadCallbacks {
 export function psdHeadRow(
   state: PsdHeadState,
   callbacks: PsdHeadCallbacks,
+  include: PsdIncludeCallbacks = {},
 ): HTMLElement {
   const row = h("div", { class: "panel-btn-row psd-layers-head" });
   if (state.members > 1) {
@@ -94,16 +107,68 @@ export function psdHeadRow(
   row.append(
     h("button", {
       class: "panel-btn",
-      text: state.openLabel,
-      onClick: callbacks.onOpen,
-    }),
-    h("button", {
-      class: "panel-btn",
       text: state.refreshLabel,
       onClick: callbacks.onRefresh,
     }),
   );
-  return row;
+  return h("div", { class: "psd-layers-head-block" }, row, openControl(state, callbacks, include));
+}
+
+/**
+ * Open PSD (or Share PSD), with what goes out with it inside the same box.
+ *
+ * One control rather than a button and two settings somewhere else, because
+ * the boxes are about *this* send: **Include palette** puts the palette strip
+ * in the file, **Include context** a picture of the canvas around it, and
+ * each is written fresh every time the file goes out. Unticking one takes
+ * its layer out of the file. The boxes are labels beside the button rather
+ * than inside it — a control inside a button is not one a finger or a screen
+ * reader can reach — and the border round all three is what makes them one.
+ */
+function openControl(
+  state: PsdHeadState,
+  callbacks: PsdHeadCallbacks,
+  include: PsdIncludeCallbacks,
+): HTMLElement {
+  const button = h("button", {
+    class: "psd-open-btn",
+    text: state.openLabel,
+    onClick: callbacks.onOpen,
+  });
+  const choice = include.include?.();
+  if (!choice || !include.onInclude) {
+    return h("div", { class: "psd-open" }, button);
+  }
+  const box = (label: string, on: boolean, title: string, patch: (on: boolean) => object) => {
+    const input = h("input", { type: "checkbox" }) as HTMLInputElement;
+    input.checked = on;
+    input.addEventListener("change", () => include.onInclude?.(patch(input.checked)));
+    return h("label", { class: "psd-open-include", title }, input, h("span", { text: label }));
+  };
+  return h(
+    "div",
+    { class: "psd-open" },
+    button,
+    h(
+      "div",
+      { class: "psd-open-includes" },
+      box(
+        "Include palette",
+        choice.palette,
+        "Put your palette into this PSD as a strip of swatches on top, so the " +
+          "other app's eyedropper has it. Untick to take it out.",
+        (on) => ({ palette: on }),
+      ),
+      box(
+        "Include context",
+        choice.context,
+        "Put what is around this PSD on the canvas into it, as a layer called " +
+          "context at 50% opacity under the artwork — refreshed each time it " +
+          "goes out. Untick to take it out.",
+        (on) => ({ context: on }),
+      ),
+    ),
+  );
 }
 
 /**

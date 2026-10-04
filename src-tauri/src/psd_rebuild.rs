@@ -96,7 +96,9 @@ fn built(doc: &Psd, source: &[Row], node: &Node<'_>) -> Result<Option<Built>, St
         // the ink it was created with or the single transparent pixel `add`
         // describes.
         return Ok(Some(Built::Layer(
-            raster(name, blank_or(doc, node)?).visible(node.edit.visible.unwrap_or(true)),
+            raster(name, blank_or(doc, node)?)
+                .visible(node.edit.visible.unwrap_or(true))
+                .opacity(node.edit.opacity.unwrap_or(255)),
         )));
     };
     let row = source

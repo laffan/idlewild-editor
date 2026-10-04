@@ -15,7 +15,7 @@
  */
 
 import type { Manifest } from "./manifest";
-import type { Point } from "./types";
+import type { Placement, Point } from "./types";
 
 /**
  * Where a PSD's anchor sits in its canvas, falling back to the middle.
@@ -129,5 +129,21 @@ export function anchorImpliedBy(
   return {
     x: entry.x - (at.x - world.x) / (scaleX || 1),
     y: entry.y - (at.y - world.y) / (scaleY || 1),
+  };
+}
+
+/** The file's whole canvas in the world, from one placement of it. */
+export function canvasInWorld(
+  placement: Placement,
+  entry: { x: number; y: number },
+  manifest: { width: number; height: number },
+): { x: number; y: number; width: number; height: number } {
+  const sx = placement.width / (placement.naturalWidth || placement.width);
+  const sy = placement.height / (placement.naturalHeight || placement.height);
+  return {
+    x: placement.x - entry.x * sx,
+    y: placement.y - entry.y * sy,
+    width: manifest.width * sx,
+    height: manifest.height * sy,
   };
 }

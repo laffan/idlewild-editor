@@ -560,3 +560,51 @@ fn a_file_with_no_anchor_can_be_given_one() {
         std::panic::resume_unwind(panic);
     }
 }
+
+/// Include context: the canvas around a PSD goes in under it at half opacity,
+/// is replaced on the next send, and comes out when the box is unticked.
+#[test]
+fn context_goes_in_under_the_art_and_comes_out_again() {
+    use crate::psd_context::{self, ContextImage};
+    let meta = store::create_project(
+        "Context",
+        Projection::Orthogonal,
+        Scaffold::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            psd_write::psd_from_rgba_marked("door", 40, 30, swatch(40, 30, [9, 9, 9, 255]), None)
+                .expect("PSD should be written");
+        std::fs::write(store::psd_dir(id).expect("psd dir").join("door.psd"), &bytes)
+            .expect("PSD should save");
+        let picture = || ContextImage { width: 20, height: 15, rgba: swatch(20, 15, [200, 10, 10, 255]) };
+
+        let first = psd_context::sync(id, "door", Some(picture())).expect("sync");
+        assert!(first.changed);
+        let names = |list: &psd_layers::PsdLayerList| -> Vec<String> {
+            list.layers.iter().map(|l| l.name.clone()).collect()
+        };
+        let list = psd_layers::read(id, "door").expect("layers");
+        assert_eq!(names(&list), ["S | door", "context"], "at the bottom");
+
+        // A second send replaces it rather than stacking another.
+        psd_context::sync(id, "door", Some(picture())).expect("resync");
+        let list = psd_layers::read(id, "door").expect("layers");
+        assert_eq!(names(&list), ["S | door", "context"]);
+
+        // Unticked, it is taken out; and a file without one is left alone.
+        assert!(psd_context::sync(id, "door", None).expect("remove").changed);
+        let list = psd_layers::read(id, "door").expect("layers");
+        assert_eq!(names(&list), ["S | door"]);
+        assert!(!psd_context::sync(id, "door", None).expect("noop").changed);
+    });
+    store::delete_project(&meta.id).ok();
+    if let Err(panic) = result {
+        std::panic::resume_unwind(panic);
+    }
+}

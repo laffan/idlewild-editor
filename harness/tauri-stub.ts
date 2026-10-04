@@ -712,6 +712,13 @@ export async function invoke(
       return { id: "demo", output: out };
     }
     case "list_project_fonts": return (window as any).__fonts ?? [];
+    case "set_psd_send": {
+      const w = window as any;
+      const { key, palette, context } = args as any;
+      w.__psdSend = { ...(w.__psdSend ?? {}), [key]: { ...(w.__psdSend?.[key] ?? {}), ...(palette === undefined ? {} : { palette }), ...(context === undefined ? {} : { context }) } };
+      return { id: "demo", psdSend: w.__psdSend };
+    }
+    case "sync_psd_context": return { changed: true };
     case "set_psd_pixel_scale":
     case "add_psd_anchor":
       return psdManifest((args as any)?.key ?? "tower");

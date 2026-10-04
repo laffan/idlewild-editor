@@ -26,6 +26,7 @@ mod project;
 mod projects;
 mod psd_anchor;
 mod psd_background;
+mod psd_context;
 mod psd_extract;
 mod psd_flatten;
 mod psd_layers;
@@ -35,6 +36,7 @@ mod psd_paint;
 mod psd_palette;
 mod psd_pipeline;
 mod psd_pixel_scale;
+mod psd_send;
 mod psd_stack;
 mod psd_rebuild;
 mod psd_write;
@@ -473,6 +475,8 @@ pub fn run() {
             open_psd,
             read_psd_bytes,
             sync_psd_palette,
+            psd_context::sync_psd_context,
+            psd_send::set_psd_send,
             psd_stack::read_psd_layers,
             psd_stack::write_psd_layers,
             psd_stack::drop_psd_layers,

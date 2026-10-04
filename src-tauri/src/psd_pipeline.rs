@@ -457,6 +457,7 @@ pub fn rename_and_process(
 
     let (width, height) = psd_dimensions(&dest)?;
     crate::psd_pixel_scale::carry(project_id, key, to, true);
+    crate::psd_send::carry(project_id, key, to, true);
     let mut manifest = process_held(project_id, to, &ProcessOptions::default(), &emit_log)?;
 
     // A converted image, a rasterised sketch and a generated PSD all name
@@ -502,6 +503,7 @@ pub fn duplicate_and_process(
 
     let (width, height) = psd_dimensions(&source)?;
     crate::psd_pixel_scale::carry(project_id, key, &copy, false);
+    crate::psd_send::carry(project_id, key, &copy, false);
     let manifest = process_held(project_id, &copy, &ProcessOptions::default(), emit_log)?;
     Ok(ImportResult {
         key: copy,
