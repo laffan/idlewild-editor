@@ -340,6 +340,8 @@ export class Inspector {
       onErasing: (on) => this.callbacks.onErasing(this.toolId, on),
       snapToGrid: this.callbacks.snapToGrid(),
       onSnapToGrid: (on) => this.callbacks.onSnapToGrid(on),
+      autoDepth: this.callbacks.autoDepth(),
+      onAutoDepth: (on) => this.callbacks.onAutoDepth(on),
     });
     if (rows) this.zone.body.append(...rows);
     this.zone.mount(this.body);

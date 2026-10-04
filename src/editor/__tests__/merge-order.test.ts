@@ -51,6 +51,8 @@ function storeWith(placements: Placement[]): DocStore {
             visible: true,
             fills: [],
             placements,
+            // Auto depth sort on, so an isometric object layer sorts.
+            autoDepth: true,
             points: [],
             zones: [],
             strokes: [],

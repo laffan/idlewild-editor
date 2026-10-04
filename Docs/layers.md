@@ -589,9 +589,14 @@ So depth is now assigned from an explicit order. `drawOrder` sorts one
 document layer's placements back to front, and each takes the next depth up
 from the layer's base:
 
-- **Between placed PSDs**, an isometric *object* layer sorts on the **outermost
+- **Between placed PSDs**, an isometric *object* layer **with Auto depth sort
+  on** (`Layer.autoDepth`, the switch under Select's Snap to grid, off by
+  default) sorts on the **outermost
   edge of each unit's collider**: `max(cx + cy)` over the collider's spaces,
-  plus one. Everything else leaves units in the order they were placed: every
+  plus one. The config carries the flag and `canvas.js`'s `placeDocument`
+  reads it (Reset that block in an older project to pick it up). Everything
+  else leaves units in the order they were placed: an object layer with the
+  switch off, every
   layer of a flat projection, and a pattern or background layer of either.
   `drawOrder` itself takes a plain boolean; the rule that decides it is
   `ordersByHand`, above.

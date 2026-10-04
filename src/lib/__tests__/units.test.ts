@@ -32,8 +32,9 @@ function placement(id: string, instance: string, y = 0): Placement {
   };
 }
 
+/** An object layer with Auto depth sort on, which is what sorts at all. */
 function layer(...placements: Placement[]): Layer {
-  return { ...emptyLayer("Foreground"), placements };
+  return { ...emptyLayer("Foreground"), placements, autoDepth: true };
 }
 
 const names = (units: Placement[][]) => units.map((unit) => unitKey(unit[0]));
@@ -81,6 +82,15 @@ describe("the order an object layer draws in", () => {
       placement("b", "tree", 100),
     );
     expect(names(unitsInDrawOrder(shuffled, true))).toEqual(["tree", "tower"]);
+  });
+
+  it("keeps the document's order when Auto depth sort is off", () => {
+    const shuffled = {
+      ...layer(placement("a", "tower", 500), placement("b", "tree", 100)),
+      autoDepth: undefined,
+    };
+    expect(names(unitsInDrawOrder(shuffled, true))).toEqual(["tower", "tree"]);
+    expect(ordersByHand(shuffled, true)).toBe(true);
   });
 
   it("takes a unit's top edge, so a roof does not sort against its own tower", () => {

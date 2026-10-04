@@ -30,6 +30,12 @@ Part of [the Idlewild manual](README.md).
 - **Snap to grid** is a switch at the top of Select's panel, on to begin with.
   Turned off, a drag moves freely — for a sign over a doorway or a shadow out
   from under a wall, which the lattice has nothing to say about
+- **Auto depth sort**, under it, on an isometric project's object layers: on,
+  the active layer draws what stands nearer the viewer in front, by where its
+  collider meets the grid, and the layer list follows; off — the default —
+  the layer list's order is the draw order, and dragging a row is how one
+  thing goes in front of another. It is the layer's, so it is saved with the
+  project, undoes, and reaches the exported game
 - **The arrow keys nudge by one pixel**, whichever way that switch is set, as
   long as Select is the tool in hand. Drag it roughly there, then tap it into
   place. A named place and a fill drawn as a run of grid spaces are the two

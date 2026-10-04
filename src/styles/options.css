@@ -536,3 +536,20 @@
 .option.muted .option-title-row { opacity: 0.45; }
 .option.muted .opt-number { opacity: 0.45; cursor: not-allowed; }
 .option.muted .opt-number-unit { opacity: 0.45; }
+
+/* The New Project sheet's grid preview: a strip of the canvas the Template
+   and Grid scale rows above it make, attached to the foot of their group —
+   see home/grid-preview.ts. Edge to edge inside the group's frame, with the
+   choice said in words under it. */
+.grid-preview {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--opt-edge);
+}
+.grid-preview-canvas { display: block; width: 100%; height: 132px; }
+.grid-preview-caption {
+  padding: 6px 14px 8px;
+  font: 500 12px var(--font-body);
+  color: var(--opt-dim, inherit);
+  opacity: 0.8;
+}

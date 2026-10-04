@@ -27,6 +27,12 @@ Part of [the Idlewild manual](README.md).
   the exact rectangle it was dragged across, and a fill on it is one rectangle
   rather than a run of spaces. The scale sits directly under the template
   because it is a number *about* the template and means nothing on its own
+- **A strip of the canvas** closes the Template group: the lattice those two
+  choices make, in the editor's own colours, at the zoom the project will
+  open at, with the choice said under it — *Isometric · 64 px spaces*. It
+  redraws as the template, the scale or the default zoom changes, so how
+  dense 16 px is, or how few 256 px spaces fit across a window, is seen
+  before the project exists
 - The second is **Scaffolding**: how much of a project is written for you.
   **Top Down** and **Platformer** are whole games — a character that walks the
   grid over A\*, or one that runs and jumps along it under gravity. **Blank PSD

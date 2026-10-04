@@ -335,6 +335,13 @@ export interface Layer {
    */
   kind?: LayerKind;
   /**
+   * Whether an **object** layer on an isometric grid sorts what stands on it
+   * by how near the viewer it is — the collider's near edge — rather than
+   * keeping the order it is listed in. Off, which absent means, the list's
+   * order is the draw order. The switch is under Select's Snap to grid.
+   */
+  autoDepth?: boolean;
+  /**
    * How this layer scatters what is placed on it. Only meaningful on a
    * pattern layer, and absent until one is made — `patternSpec` fills in the
    * defaults, which differ by `PatternType`.

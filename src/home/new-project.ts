@@ -105,6 +105,7 @@
  * files are made, in the Export bar.
  */
 
+import { gridPreview } from "./grid-preview";
 import { openSheet } from "../lib/sheet";
 import { dimensionRows } from "../lib/print-dimensions";
 import { h } from "../lib/dom";
@@ -238,6 +239,7 @@ export function openNewProject(
     createButton.textContent = print ? "Create Page" : "Create Game";
     scaffoldGroup.classList.toggle("hidden", print);
     renderingGroup.classList.toggle("hidden", print);
+    redrawPreview();
     if (print && !webChoice) {
       webChoice = { scaffold, options: { ...options } };
       scaffold = "p2p";
@@ -259,6 +261,7 @@ export function openNewProject(
     projection,
     (value) => {
       projection = value as Projection;
+      redrawPreview();
       setPlatformerOffered();
       if (projection === "isometric" && scaffold === "platformer") {
         scaffold = "topdown";
@@ -287,13 +290,26 @@ export function openNewProject(
   const scaleSeg = optionSegmented(
     SCALES.map((scale) => ({ value: String(scale), label: String(scale) })),
     String(gridSize),
-    (value) => (gridSize = Number(value)),
+    (value) => {
+      gridSize = Number(value);
+      redrawPreview();
+    },
   );
+
+  // What the canvas will look like: the lattice this template and scale make,
+  // at the zoom the project opens at — see `grid-preview.ts`.
+  const preview = gridPreview();
+  function redrawPreview(): void {
+    preview.update(projection, gridSize, output.kind === "print" ? 1 : options.defaultZoom);
+  }
 
   const zoomSeg = optionSegmented(
     ZOOMS.map((zoom) => ({ value: String(zoom), label: `${zoom}×` })),
     String(options.defaultZoom),
-    (value) => (options.defaultZoom = Number(value)),
+    (value) => {
+      options.defaultZoom = Number(value);
+      redrawPreview();
+    },
   );
 
   const zoomRow = optionRow({
@@ -429,6 +445,7 @@ export function openNewProject(
               hint: () => scaleNote(projection),
               control: scaleSeg.root,
             }),
+            preview.root,
           ],
         }),
         scaffoldGroup,
@@ -437,6 +454,7 @@ export function openNewProject(
       true,
     ),
   );
+  redrawPreview();
   const create = () => {
     sheet.close();
     onCreate({

@@ -684,10 +684,37 @@ export async function invoke(
       };
     }
     case "set_project_page": {
+      // Artboards as `print_artboards.rs` keeps them: the patch's sheet fields
+      // land on the artboard it names, `add` appends a copy, `remove` drops
+      // one, and the first is mirrored into the flat fields.
       const w = window as any;
-      w.__output = { ...(w.__output ?? {}), ...((args as any)?.patch ?? {}) };
-      return { id: "demo", output: w.__output };
+      const { artboard, add, remove, name, ...rest } = (args as any)?.patch ?? {};
+      const out = { ...(w.__output ?? {}) };
+      const flat = ["paper", "landscape", "customWidth", "customHeight", "unit", "x", "y"];
+      const boards = (out.artboards?.length ? out.artboards : [
+        { id: "main", name: "Artboard 1", ...Object.fromEntries(flat.map((k) => [k, out[k]])) },
+      ]).map((b: any) => ({ ...b }));
+      if ("formats" in rest) out.formats = rest.formats;
+      const sheet = Object.fromEntries(Object.entries(rest).filter(([k]) => flat.includes(k)));
+      let at = Math.max(0, boards.findIndex((b: any) => b.id === artboard));
+      if (remove) {
+        if (boards.length > 1) boards.splice(at, 1);
+      } else {
+        if (add) {
+          boards.push({ ...boards[at], id: `board-${boards.length}`, name: name ?? `Artboard ${boards.length + 1}` });
+          at = boards.length - 1;
+        } else if (name) boards[at].name = name;
+        Object.assign(boards[at], sheet);
+      }
+      for (const k of flat) out[k] = boards[0][k];
+      out.artboards = boards;
+      w.__output = out;
+      return { id: "demo", output: out };
     }
+    case "list_project_fonts": return (window as any).__fonts ?? [];
+    case "set_psd_pixel_scale":
+    case "add_psd_anchor":
+      return psdManifest((args as any)?.key ?? "tower");
     case "save_staging": return null;
     case "save_print_file": case "save_print_files": return undefined;
     case "reimport_psd":

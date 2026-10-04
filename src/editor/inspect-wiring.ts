@@ -16,6 +16,7 @@
  */
 
 import { addAnchorLayer } from "./add-anchor";
+import { layerKind } from "../lib/layer-kinds";
 import { applyFillPaint } from "./fill-actions";
 import { exportSelectionPng } from "./export-selection";
 import { openAddImage, openExportSelection } from "./sheets";
@@ -229,5 +230,23 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     // tool rather than of the document, and it outlives this panel.
     snapToGrid: () => deps.tools()?.snapToGrid() ?? true,
     onSnapToGrid: (on) => deps.tools()?.onSnapToGrid(on),
+    // Auto depth sort is the layer's, so it is in the document and undoes.
+    autoDepth: () => {
+      const layer = store.layer(deps.activeLayerId());
+      const applies =
+        !!layer &&
+        layerKind(layer) === "object" &&
+        grid.projection === "isometric" &&
+        store.scaffold !== "platformer";
+      return applies ? layer.autoDepth === true : null;
+    },
+    onAutoDepth: (on) => {
+      const id = deps.activeLayerId();
+      store.editLayer(id, (layer) => {
+        const { autoDepth: _was, ...rest } = layer;
+        return on ? { ...rest, autoDepth: true } : rest;
+      });
+      deps.inspector().render();
+    },
   };
 }

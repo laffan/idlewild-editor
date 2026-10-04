@@ -69,7 +69,7 @@ export function unitsOf(placements: readonly Placement[]): Placement[][] {
  * question it has no answer to.
  */
 export function ordersByHand(layer: Layer, isometric: boolean): boolean {
-  return !isometric || layerKind(layer) !== "object";
+  return !isometric || layerKind(layer) !== "object" || layer.autoDepth !== true;
 }
 
 /**

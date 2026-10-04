@@ -66,6 +66,9 @@ export interface ToolPanelActions {
   /** Whether a drag under Select snaps to the lattice — see `selectPanel`. */
   snapToGrid: boolean;
   onSnapToGrid: (on: boolean) => void;
+  /** Auto depth sort for the active layer, or null where it does not apply. */
+  autoDepth: boolean | null;
+  onAutoDepth: (on: boolean) => void;
 }
 
 /** The name the section's heading carries after `TOOL : `. */
@@ -168,9 +171,25 @@ function selectPanel(actions: ToolPanelActions): HTMLElement[] {
       : "A drag moves freely, off the lattice — for a sign over a doorway " +
         "or a shadow under a wall. Arrow keys nudge one pixel."
   });
+  // Auto depth sort, under it: whether the active object layer draws what is
+  // nearer the viewer in front, or keeps the order its list has. Only where
+  // nearer means something — see `ordersByHand`.
+  const depth =
+    actions.autoDepth === null
+      ? null
+      : optionSwitchRow({
+          label: "Auto depth sort",
+          value: actions.autoDepth,
+          onChange: (next) => actions.onAutoDepth(next),
+          title: actions.autoDepth
+            ? "This layer draws what stands nearer the viewer in front, by " +
+              "where its collider meets the grid. The list follows."
+            : "This layer draws in the order of its list. Drag a row in the " +
+              "layer list to put one thing in front of another.",
+        }).root;
   // No `set`, for the reason the eraser row gives: the panel is rebuilt whole
   // whenever the tool or its state changes.
-  return [h("div", { class: "inspect-section" }, row.root)];
+  return [h("div", { class: "inspect-section" }, row.root, depth)];
 }
 
 /**

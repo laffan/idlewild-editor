@@ -439,6 +439,9 @@ struct Layer {
     /// means object, which is what a layer has always been.
     #[serde(default)]
     kind: Option<String>,
+    /// Auto depth sort, on an isometric object layer. Off when absent.
+    #[serde(default, rename = "autoDepth")]
+    auto_depth: bool,
     /// A pattern layer's rule. The placements on such a layer are the palette
     /// it scatters rather than things standing anywhere, so the scene reads
     /// this and generates rather than placing them where they sit.
@@ -490,6 +493,7 @@ impl Layer {
             // Absent means object, and the config says so outright rather
             // than leaving every reader of it to know that.
             "kind": self.kind.clone().unwrap_or_else(|| "object".into()),
+            "autoDepth": self.auto_depth,
             "fills": self.fills.iter().map(Fill::to_config).collect::<Vec<_>>(),
             "placements": placements,
             "points": self.points.iter().map(MapPoint::to_config).collect::<Vec<_>>(),

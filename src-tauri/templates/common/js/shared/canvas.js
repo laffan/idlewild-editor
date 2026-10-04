@@ -222,10 +222,13 @@ export function placeDocument(scene) {
     // nothing standing in the space — they are behind everything and often on
     // the same row — so both keep the order they were given. The editor lists
     // and reorders them the same way; see `ordersByHand` there.
+    // And only when the layer asks for it — Auto depth sort, under Select's
+    // Snap to grid in the editor. Off, the list's order is the draw order.
     const sortOnY =
       config.projection === "isometric" &&
       config.genre !== "platformer" &&
-      (layer.kind ?? "object") === "object";
+      (layer.kind ?? "object") === "object" &&
+      layer.autoDepth === true;
     const order = drawOrder(layer.placements ?? [], sortOnY);
     order.forEach((placement, step) => {
       const object = scene.P2P.place(

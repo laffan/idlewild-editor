@@ -102,4 +102,10 @@ export interface InspectorCallbacks
    */
   snapToGrid: () => boolean;
   onSnapToGrid: (on: boolean) => void;
+  /**
+   * Auto depth sort on the active layer, or null where it means nothing —
+   * anything but an object layer of an isometric, non-platformer project.
+   */
+  autoDepth: () => boolean | null;
+  onAutoDepth: (on: boolean) => void;
 }
