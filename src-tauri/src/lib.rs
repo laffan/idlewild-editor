@@ -428,6 +428,7 @@ pub fn run() {
             projects::set_project_page,
             print_pdf::export_print_pdf,
             psd_pixel_scale::set_psd_pixel_scale,
+            psd_pixel_scale::downsample_psd_pixels,
             project_fonts::list_project_fonts,
             project_fonts::save_project_font,
             project_fonts::save_dropped_font,

@@ -1,5 +1,5 @@
 /**
- * Pixel Art Rescale: the row at the foot of the inspector's PSD section.
+ * Pixel art upscale: the row at the foot of the inspector's PSD section.
  *
  * Pixel art is drawn small. Shown big — on a high-resolution web page, or on
  * a 300 DPI sheet — it is either tiny or, scaled up by whoever draws it,
@@ -145,6 +145,7 @@ export function pixelScaleRow(
   key: string,
   busy: boolean,
   onPick: (factor: number) => void,
+  onDownsample?: () => void,
 ): HTMLElement {
   const current = pixelScaleOf(key);
   const custom = !(PIXEL_SCALES as readonly number[]).includes(current);
@@ -158,12 +159,12 @@ export function pixelScaleRow(
       disabled: busy ? "true" : null,
       onClick: act,
     });
-  return h(
+  const row = h(
     "div",
     { class: "psd-pixel-scale" },
     h("span", {
       class: "psd-pixel-scale-name",
-      text: "Pixel art rescale",
+      text: "Pixel art upscale",
       title:
         "Process this PSD bigger, nearest neighbour, so pixel art stays sharp. " +
         "The PSD itself is not changed.",
@@ -181,7 +182,7 @@ export function pixelScaleRow(
       ),
       button(custom ? `${current}×` : "Custom", custom, () => {
         void promptSheet({
-          title: "Pixel art rescale",
+          title: "Pixel art upscale",
           label: `A whole number from 2 to ${MAX_PIXEL_SCALE}`,
           value: custom ? String(current) : "",
           confirmLabel: "Rescale",
@@ -189,10 +190,21 @@ export function pixelScaleRow(
         }).then((text) => {
           if (text === null) return;
           const n = readCustomScale(text);
-          if (n === null) log.warn(`Pixel art rescale is a whole number from 2 to ${MAX_PIXEL_SCALE}`);
+          if (n === null) log.warn(`Pixel art upscale is a whole number from 2 to ${MAX_PIXEL_SCALE}`);
           else onPick(n);
         });
       }, "Another whole number"),
     ),
   );
+  // Under it, the other direction — see `psd-downsample.ts`.
+  const down = onDownsample
+    ? h("button", {
+        class: "panel-btn psd-downsample-btn",
+        text: "Downsample…",
+        title: "Make a PSD of pixel art drawn big into the small file it really is",
+        disabled: busy ? "true" : null,
+        onClick: onDownsample,
+      })
+    : null;
+  return h("div", { class: "psd-pixel-block" }, row, down);
 }

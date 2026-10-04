@@ -608,3 +608,39 @@ fn context_goes_in_under_the_art_and_comes_out_again() {
         std::panic::resume_unwind(panic);
     }
 }
+
+/// Pixel Art Downsample: a file drawn four times too big becomes the pixel
+/// art it is, and the upscale that shows it at the old size is set with it.
+#[test]
+fn pixel_art_drawn_big_is_downsampled_and_upscaled_back() {
+    let meta = store::create_project(
+        "Downsample",
+        Projection::Orthogonal,
+        Scaffold::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+    let result = std::panic::catch_unwind(|| {
+        let id = &meta.id;
+        let bytes =
+            psd_write::psd_from_rgba_marked("big", 40, 20, swatch(40, 20, [9, 90, 9, 255]), None)
+                .expect("PSD should be written");
+        std::fs::write(store::psd_dir(id).expect("psd dir").join("big.psd"), &bytes)
+            .expect("PSD should save");
+        crate::psd_pixel_scale::downsample(id, "big", 0.25, 4, |_| {}).expect("downsample");
+        let list = psd_layers::read(id, "big").expect("layers");
+        assert_eq!((list.width, list.height), (10, 5), "the file itself is a quarter");
+        let meta = store::read_meta(id).expect("meta");
+        assert_eq!(meta.pixel_scale.get("big"), Some(&4));
+        let manifest: serde_json::Value =
+            serde_json::from_str(&crate::psd_pipeline::read_manifest(id, "big").expect("manifest"))
+                .expect("json");
+        assert_eq!(manifest["width"], 40, "and processed back at its old size");
+        assert!(crate::psd_pixel_scale::downsample(id, "big", 1.5, 1, |_| {}).is_err());
+    });
+    store::delete_project(&meta.id).ok();
+    if let Err(panic) = result {
+        std::panic::resume_unwind(panic);
+    }
+}

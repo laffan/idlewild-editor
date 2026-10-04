@@ -589,7 +589,7 @@ carries no key, so loads are run one at a time.
 
 ---
 
-### Pixel Art Rescale
+### Pixel art upscale, and Downsample
 
 A PSD can be **processed bigger than it is**: `ProjectMeta.pixelScale` maps a
 key to a whole number from 2 to 16, and `process_held` — which every re-parse
@@ -611,6 +611,15 @@ next re-parse measures from. PSD Edit mode multiplies its file density by the
 factor (`pixelScaleOf`), so ink lands in the file at its own pixels. Rename and
 duplicate carry the factor to the new key on both sides of the IPC, and a
 `.idlewild` carries the map.
+
+**Downsample** (`editor/psd-downsample.ts`, `psd_pixel_scale::downsample`)
+is the opposite and *does* rewrite the file: `psd_downsample::shrink_nearest`
+rebuilds the stack at `factor` of its size, nearest neighbour, refusing a file
+the rebuild would lose masks or clipping from, then sets the upscale and
+processes it under one lock. With **Maintain canvas size** the upscale is
+`round(1 / factor)`, and any remainder — a custom `.3` is `3.33` — is taken up
+by each placement's scale about its anchor, as the upscale's own Keep the size
+does.
 
 ### Include palette and Include context
 

@@ -8,7 +8,7 @@
  * **Include context** puts the canvas around the file into it — see
  * `psd-context.ts` — and is off until ticked.
  *
- * Kept in `meta.json` by `psd_send.rs`, beside Pixel Art Rescale's factors,
+ * Kept in `meta.json` by `psd_send.rs`, beside Pixel art upscale's factors,
  * and read here off the open project for the reason `pixelScaleOf` is.
  */
 

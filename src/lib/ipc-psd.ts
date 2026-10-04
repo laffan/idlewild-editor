@@ -449,12 +449,18 @@ export const psd = {
   rename: (id: string, key: string, name: string) =>
     invoke<ImportResult>("rename_psd", { id, key, name }),
   /**
-   * Pixel Art Rescale: process the file `factor` times bigger, nearest
+   * Pixel art upscale: process the file `factor` times bigger, nearest
    * neighbour — 1 for its own size. The PSD is not changed. Hands back the
    * new manifest. See `psd_pixel_scale.rs`.
    */
   setPixelScale: (id: string, key: string, factor: number) =>
     invoke<string>("set_psd_pixel_scale", { id, key, factor }),
+  /**
+   * Pixel Art Downsample: rewrite the PSD itself at `factor` of its size,
+   * nearest neighbour, and set its upscale. Hands back the new manifest.
+   */
+  downsamplePixels: (id: string, key: string, factor: number, upscale: number) =>
+    invoke<string>("downsample_psd_pixels", { id, key, factor, upscale }),
   /** Hand the PSD to whatever the OS opens PSDs with. */
   openExternally: (id: string, key: string) =>
     invoke<void>("open_psd", { id, key }),

@@ -79,7 +79,7 @@ pub fn set(project_id: &str, key: &str, factor: u32, emit_log: impl Fn(&str)) ->
     let key = safe_key(key)?;
     let factor = if factor <= 1 { 1 } else { factor };
     if factor > MAX_FACTOR {
-        return Err(format!("Pixel Art Rescale goes up to {MAX_FACTOR}×"));
+        return Err(format!("Pixel art upscale goes up to {MAX_FACTOR}×"));
     }
     let _job = crate::psd_pipeline::exclusive();
     let mut meta = store::read_meta(project_id)?;
@@ -105,6 +105,45 @@ pub fn set(project_id: &str, key: &str, factor: u32, emit_log: impl Fn(&str)) ->
     processed
 }
 
+/// Pixel Art Downsample: rewrite the PSD itself at `factor` (under one) of
+/// its size, nearest neighbour, set its upscale to `upscale`, and process it.
+/// Unlike the upscale this changes the file — it is for pixel art that was
+/// drawn big, which the upscale can then show sharp at the size it was.
+/// Refused on a file a rebuild would lose something from. Hands back the
+/// new manifest.
+pub fn downsample(
+    project_id: &str,
+    key: &str,
+    factor: f64,
+    upscale: u32,
+    emit_log: impl Fn(&str),
+) -> Result<String, String> {
+    let key = safe_key(key)?;
+    if !factor.is_finite() || factor <= 0.01 || factor >= 1.0 {
+        return Err("Downsample takes a size between 0.01 and 1".into());
+    }
+    if upscale > MAX_FACTOR {
+        return Err(format!("Pixel art upscale goes up to {MAX_FACTOR}×"));
+    }
+    let _job = crate::psd_pipeline::exclusive();
+    let path = crate::psd_pipeline::psd_path(project_id, key)?;
+    let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    let (small, lost) = crate::psd_downsample::shrink_nearest(&bytes, 1.0 / factor)?;
+    if let Some(reason) = lost {
+        return Err(format!("{key}.psd cannot be downsampled without losing something: {reason}"));
+    }
+    std::fs::write(&path, small).map_err(|e| format!("Cannot save {key}.psd: {e}"))?;
+    emit_log(&format!("Downsampled psd/{key}.psd to {factor:.2} of its size"));
+    let mut meta = store::read_meta(project_id)?;
+    if upscale <= 1 {
+        meta.pixel_scale.remove(key);
+    } else {
+        meta.pixel_scale.insert(key.to_string(), upscale);
+    }
+    store::write_meta(&meta)?;
+    process_held(project_id, key, &ProcessOptions::default(), &emit_log)
+}
+
 /// A file renamed or copied takes its factor with it.
 pub fn carry(project_id: &str, from: &str, to: &str, moved: bool) {
     let Ok(mut meta) = store::read_meta(project_id) else { return };
@@ -114,6 +153,18 @@ pub fn carry(project_id: &str, from: &str, to: &str, moved: bool) {
     }
     meta.pixel_scale.insert(to.to_string(), factor);
     let _ = store::write_meta(&meta);
+}
+
+/// Pixel Art Downsample, from its sheet.
+#[tauri::command(async)]
+pub fn downsample_psd_pixels(
+    app: tauri::AppHandle,
+    id: String,
+    key: String,
+    factor: f64,
+    upscale: u32,
+) -> Result<String, String> {
+    downsample(&id, &key, factor, upscale, crate::logger(&app))
 }
 
 /// Pixel Art Rescale, from the inspector's PSD section.

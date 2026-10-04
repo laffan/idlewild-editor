@@ -720,6 +720,7 @@ export async function invoke(
     }
     case "sync_psd_context": return { changed: true };
     case "is_psd_processed": return true;
+    case "downsample_psd_pixels":
     case "set_psd_pixel_scale":
     case "add_psd_anchor":
       return psdManifest((args as any)?.key ?? "tower");

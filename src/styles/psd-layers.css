@@ -253,3 +253,5 @@
 }
 .psd-open-include input { accent-color: var(--color-accent); width: 16px; height: 16px; margin: 0; }
 .psd-open-include:has(input:checked) { color: var(--chrome-text); }
+.psd-pixel-block { display: flex; flex-direction: column; gap: 6px; }
+.psd-pixel-block .psd-downsample-btn { margin-top: 0; }

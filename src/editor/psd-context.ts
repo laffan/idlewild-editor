@@ -7,7 +7,7 @@
  * placement's corner, less where its layer sits inside the canvas, at the
  * placement's scale. The picture is made at the file's own density — the
  * manifest's pixels times what makes a manifest bigger than its file (a print
- * project's screen copy, Pixel Art Rescale) — so it lines up pixel for pixel.
+ * project's screen copy, Pixel art upscale) — so it lines up pixel for pixel.
  *
  * Two halves: the scene's objects (`game/context-capture.ts`), with this
  * file's own placement hidden for the length of the capture, and the ink,

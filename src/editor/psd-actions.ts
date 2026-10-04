@@ -20,6 +20,8 @@
  * now rather than being a thing only a Mac could do.
  */
 
+import { openDownsample } from "./psd-downsample";
+import type { Placement } from "../lib/types";
 import { contextPicture, type ContextDeps } from "./psd-context";
 import { carrySendChoice, sendChoiceOf, setSendChoice, type SendChoice } from "./psd-send";
 import type { DrawingLayer } from "../drawing";
@@ -502,22 +504,23 @@ export function createPsdLayersFactory(
       include: () => sendChoiceOf(key),
       onInclude: (patch) => void file.setInclude(key, patch),
     });
-    // Pixel Art Rescale, at the foot of the section under New layer.
+    // Pixel art upscale, at the foot of the section under New layer.
     const slot = h("div", { class: "psd-pixel-scale-slot" });
+    const scaleDeps = {
+      projectId,
+      store,
+      anchorWorld: (placement: Placement) => options.grid.cellToWorld(placement.anchor),
+      applyManifest: (k: string, manifest: string) => file.applyLayers(k, manifest, new Map()),
+    };
     const paint = (busy: boolean) =>
-      slot.replaceChildren(pixelScaleRow(key, busy, (factor) => void pick(factor)));
+      slot.replaceChildren(
+        pixelScaleRow(key, busy, (factor) => void pick(factor), () =>
+          openDownsample(scaleDeps, key, () => paint(false)),
+        ),
+      );
     const pick = async (factor: number) => {
       paint(true);
-      await changePixelScale(
-        {
-          projectId,
-          store,
-          anchorWorld: (placement) => options.grid.cellToWorld(placement.anchor),
-          applyManifest: (k, manifest) => file.applyLayers(k, manifest, new Map()),
-        },
-        key,
-        factor,
-      );
+      await changePixelScale(scaleDeps, key, factor);
       paint(false);
     };
     paint(false);

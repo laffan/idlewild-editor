@@ -41,9 +41,9 @@ Part of [the Idlewild manual](README.md).
   pixel, so it is a row to rename, reorder or draw into and nothing the game
   can see yet
 
-## Pixel art rescale
+## Pixel art upscale, and Downsample
 
-- At the foot of the PSD section, under **New layer**: **Pixel art rescale**,
+- At the foot of the PSD section, under **New layer**: **Pixel art upscale**,
   with **0** (the file at its own size — the default), **2×**, **3×**, **4×**
   and **Custom** (a whole number up to 16)
 - Anything but 0 processes the PSD that many times bigger, **nearest
@@ -54,6 +54,13 @@ Part of [the Idlewild manual](README.md).
   pixel art pasted in small that should come up big; say yes for a PSD made
   from part of the canvas that is already the size it should be and only
   needs to be sharp
+- **Downsample…**, under it, goes the other way: a PSD of pixel art that was
+  *drawn* big — a patch of canvas made into a PSD, a game screenshot at 4× —
+  made into the small file it really is. Pick **.5**, **.33**, **.25** or a
+  **Custom** size. This one rewrites the PSD itself, nearest neighbour, and
+  cannot be undone. **Maintain canvas size** (on to begin with) sets Pixel art
+  upscale to match — .5 → 2×, .33 → 3×, .25 → 4× — so the artwork stays the
+  size it is on the canvas and is drawn sharp; off, it shrinks
 
 ## PSD Edit mode
 

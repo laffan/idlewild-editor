@@ -36,6 +36,13 @@ pub fn upscale_nearest(bytes: &[u8], times: u32) -> Result<(Vec<u8>, Option<Stri
     resample(bytes, 1.0 / f64::from(times.max(1)), true)
 }
 
+/// The file `times` times smaller, nearest neighbour — Pixel Art Downsample,
+/// which rewrites a PSD of pixel art that was drawn big. The warning is the
+/// same one `downsample` gives: what this file uses that a rebuild loses.
+pub fn shrink_nearest(bytes: &[u8], times: f64) -> Result<(Vec<u8>, Option<String>), String> {
+    resample(bytes, if times.is_finite() { times.max(1.0) } else { 1.0 }, true)
+}
+
 /// Every layer and the canvas divided by `factor` — below one, multiplied —
 /// smoothly, or nearest neighbour.
 fn resample(

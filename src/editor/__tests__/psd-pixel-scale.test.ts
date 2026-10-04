@@ -66,3 +66,20 @@ describe("pixel art rescale", () => {
     expect(next.x! - 8 * (16 / 128)).toBe(96);
   });
 });
+
+import { readDownsample, upscaleFor } from "../psd-downsample";
+
+describe("pixel art downsample", () => {
+  it("pairs each size with the upscale that keeps the artwork its size", () => {
+    expect([1 / 2, 1 / 3, 1 / 4].map(upscaleFor)).toEqual([2, 3, 4]);
+    expect(upscaleFor(0.3)).toBe(3);
+    expect(upscaleFor(0.01)).toBe(16);
+  });
+
+  it("reads a typed size as a fraction under one", () => {
+    expect(readDownsample(".3")).toBe(0.3);
+    expect(readDownsample("30%")).toBe(0.3);
+    expect(readDownsample("1")).toBeNull();
+    expect(readDownsample("half")).toBeNull();
+  });
+});
