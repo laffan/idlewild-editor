@@ -297,7 +297,7 @@ export function renderLayerItem(
   active: boolean,
   onSelect: (selection: Selection, event: MouseEvent) => void,
   onGrip?: (event: PointerEvent) => void,
-  onRename?: () => void,
+  onRename?: (name: string) => void,
 ): HTMLElement {
   const classes = ["layer-item"];
   if (active) classes.push("active");
@@ -309,19 +309,36 @@ export function renderLayerItem(
   // and what the row is saying is that one thing about it is missing.
   if (item.warning) classes.push("warned");
 
+  // A row with a name to type in is not a <button>: an input inside one is
+  // not one a finger can reach, so it is a button by role instead, as the
+  // layer rows are.
+  const select = (event: Event) => {
+    event.stopPropagation();
+    // The event goes with the selection because ⌘ and ⇧ change what the
+    // click *means* rather than what it lands on, and only the panel has
+    // the list a range is measured over.
+    onSelect(item.selection, event as MouseEvent);
+  };
   const row = h(
-    "button",
+    onRename ? "div" : "button",
     {
+      ...(onRename
+        ? {
+            role: "button",
+            tabindex: "0",
+            onKeyDown: (event: KeyboardEvent) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                select(event);
+              }
+            },
+          }
+        : {}),
       class: classes.join(" "),
       // What a reorder drags by, read back off the DOM as the finger passes.
       dataset: item.unit ? { unit: item.unit } : undefined,
-      onClick: (event: Event) => {
-        event.stopPropagation();
-        // The event goes with the selection because ⌘ and ⇧ change what the
-        // click *means* rather than what it lands on, and only the panel has
-        // the list a range is measured over.
-        onSelect(item.selection, event as MouseEvent);
-      },
+      onClick: select,
     },
     item.swatch
       ? h("span", {
@@ -331,38 +348,9 @@ export function renderLayerItem(
           style: { backgroundColor: item.swatch },
         })
       : icon(item.path, 13),
-    h("span", {
-      class: "layer-item-label",
-      text: item.label,
-      // A double-click on the name renames it, the way a layer's own name is
-      // edited where it is listed.
-      ...(onRename
-        ? {
-            onDblClick: (event: Event) => {
-              event.stopPropagation();
-              onRename();
-            },
-          }
-        : {}),
-    }),
-    // And a pencil on the row that is selected, which is the way in on an
-    // iPad, where there is no double-click to find.
-    onRename && active
-      ? h(
-          "span",
-          {
-            class: "layer-item-rename",
-            role: "button",
-            "aria-label": `Rename ${item.label}`,
-            title: "Rename this PSD",
-            onClick: (event: Event) => {
-              event.stopPropagation();
-              onRename();
-            },
-          },
-          icon(ICONS.pencil, 12),
-        )
-      : null,
+    onRename && item.psdKey
+      ? nameField(item.psdKey, onRename, select)
+      : h("span", { class: "layer-item-label", text: item.label }),
     item.warning
       ? h(
           "span",
@@ -394,6 +382,43 @@ export function renderLayerItem(
     );
   }
   return row;
+}
+
+/**
+ * A placed PSD's name, typed in place the way a layer's is: the file's key in
+ * a field, `.psd` after it. A tap selects the row as well as putting the caret
+ * in; the name is written on Enter or when the field is left, and Escape puts
+ * it back. Rust has the last word on the key — see `PsdFileActions.rename`.
+ */
+function nameField(
+  key: string,
+  onRename: (name: string) => void,
+  select: (event: Event) => void,
+): HTMLElement {
+  const input = h("input", {
+    class: "layer-item-name",
+    value: key,
+    spellcheck: "false",
+    autocapitalize: "off",
+    autocomplete: "off",
+    "aria-label": `Name of ${key}.psd`,
+    dataset: { psdKey: key },
+    onClick: select,
+    onKeyDown: (event: KeyboardEvent) => {
+      event.stopPropagation();
+      const field = event.target as HTMLInputElement;
+      if (event.key === "Enter") field.blur();
+      if (event.key === "Escape") {
+        field.value = key;
+        field.blur();
+      }
+    },
+    onChange: (event: Event) => {
+      const value = (event.target as HTMLInputElement).value.trim();
+      if (value && value !== key) onRename(value);
+    },
+  });
+  return h("span", { class: "layer-item-label naming" }, input, h("span", { class: "layer-item-ext", text: ".psd" }));
 }
 
 /** Whether a selection points at this item, so the row can show as current. */

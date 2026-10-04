@@ -95,7 +95,9 @@ Part of [the Idlewild manual](README.md).
 - Layers, under the scene they belong to: drag by the grip to reorder, rename,
   lock, hide, with live counts and an expandable list of what is on each one —
   selecting there selects on the canvas, and a placed PSD listed under a layer
-  has a grip of its own. The row's two handles are at its two **ends**: the
+  has a grip of its own and a name you rename the file by, typing over it the
+  way you rename a layer. **The PSDs under a layer are listed front first**:
+  the top one is drawn over the ones below it, as in a layer stack. The row's two handles are at its two **ends**: the
   arrow that opens a layer up is at the left, indented over the contents it
   reveals, and the grip that carries the layer somewhere else is at the right,
   past the eye and the lock — so the edge a finger travels down to pick a

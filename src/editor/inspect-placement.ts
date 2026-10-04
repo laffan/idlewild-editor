@@ -101,7 +101,7 @@ export function renderPlacement(
   }
 
   // The title is the file's name. It is renamed in the left sidebar, beside
-  // the layer names — the pencil on its row, or a double-click on it.
+  // the layer names, by typing over its name on its row.
   panel.head("Image", `${placement.psdKey}.psd`);
 
   // The rule an object layer enforces, said where the file is described. Not a

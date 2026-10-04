@@ -46,7 +46,6 @@ import {
 } from "./layer-items";
 import { pickMode, pickUnit } from "../lib/unit-select";
 import { ScenesBar } from "./scenes-bar";
-import { promptSheet } from "../lib/sheet";
 import { renderDirectory } from "./layer-directory";
 import type { ManifestLayer } from "../lib/manifest";
 
@@ -101,6 +100,8 @@ export interface LayersPanelCallbacks {
  */
 interface NameFocus {
   layerId: string;
+  /** Set when the field is a placed PSD's name rather than the layer's. */
+  psdKey?: string;
   /** The uncommitted text: names commit on Enter or blur, not per keystroke. */
   value: string;
   start: number;
@@ -367,7 +368,7 @@ export class LayersPanel {
                   )
               : undefined,
             item.psdKey && this.callbacks.onRenamePsd
-              ? () => void this.renamePsd(item.psdKey ?? "")
+              ? (name) => this.callbacks.onRenamePsd?.(item.psdKey ?? "", name)
               : undefined,
           ),
         );
@@ -459,6 +460,7 @@ export class LayersPanel {
     if (!layerId) return null;
     return {
       layerId,
+      psdKey: el.dataset.psdKey,
       value: el.value,
       start: el.selectionStart ?? el.value.length,
       end: el.selectionEnd ?? el.value.length,
@@ -468,7 +470,9 @@ export class LayersPanel {
   private restoreName(memo: NameFocus | null): void {
     if (!memo) return;
     const input = this.body.querySelector(
-      `.layer-group[data-layer-id="${memo.layerId}"] .layer-name`,
+      memo.psdKey
+        ? `.layer-group[data-layer-id="${memo.layerId}"] .layer-item-name[data-psd-key="${CSS.escape(memo.psdKey)}"]`
+        : `.layer-group[data-layer-id="${memo.layerId}"] .layer-name`,
     );
     if (!(input instanceof HTMLInputElement)) return;
     input.value = memo.value;
@@ -548,18 +552,6 @@ export class LayersPanel {
       },
       icon(ICONS.grip, 16),
     );
-  }
-
-  /** Ask for a PSD's new name, and hand it on. */
-  private async renamePsd(key: string): Promise<void> {
-    const name = await promptSheet({
-      title: "Rename PSD",
-      label: "The file's name, without .psd",
-      value: key,
-      confirmLabel: "Rename",
-      light: false,
-    });
-    if (name && name !== key) this.callbacks.onRenamePsd?.(key, name);
   }
 
   private row(layer: Layer, active: boolean): HTMLElement {

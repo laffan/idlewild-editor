@@ -456,18 +456,24 @@
   touch-action: none;
 }
 .layer-item:hover .layer-item-grip { color: var(--chrome-text); }
-/* Rename, on the selected PSD's row — see `renderLayerItem`. A finger-sized
-   target with a small pencil in it, beside the name it changes. */
-.layer-item-rename {
-  flex: none;
-  width: 28px;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--chrome-dim);
+/* A placed PSD's name, typed in place like a layer's — see `nameField` in
+   editor/layer-items.ts. The field is the key; `.psd` sits after it. */
+.layer-item-label.naming { display: flex; align-items: center; overflow: visible; }
+.layer-item-name {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
 }
-.layer-item-rename:hover { color: var(--chrome-text); }
+.layer-item-name:focus { background: var(--chrome-bg); color: var(--chrome-text); }
+.layer-item-ext { flex: none; color: var(--color-neutral-600); }
 
 /* Carrying one. The rows do not move as the finger travels — there is one
    legal drop per layer rather than a position in a list — so the destination
