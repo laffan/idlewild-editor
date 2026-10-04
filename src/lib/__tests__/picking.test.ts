@@ -237,7 +237,8 @@ describe("layerItems", () => {
         ],
       }),
     );
-    expect(items.map((i) => i.members)).toEqual([["a"], ["b"]]);
+    // Front first: `b` was placed last, so it is drawn on top and listed so.
+    expect(items.map((i) => i.members)).toEqual([["b"], ["a"]]);
   });
 
   it("lights the row for whichever layer of the file the canvas selected", () => {

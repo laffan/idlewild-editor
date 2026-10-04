@@ -319,12 +319,15 @@ export class LayerDrags {
     // its layer draws in — see `reorderUnit`, and `drawOrder`, which reads
     // that order on every projection that does not sort on screen Y.
     if (drag.unit && drag.reordered && (!target || target === drag.layerId)) {
-      const index = [...drag.row.parentElement!.children]
-        .filter((el) => el instanceof HTMLElement && el.dataset.unit)
-        .indexOf(drag.row);
+      const rows = [...drag.row.parentElement!.children].filter(
+        (el) => el instanceof HTMLElement && el.dataset.unit,
+      );
+      const index = rows.indexOf(drag.row);
+      // The list is front first, the way a layer stack reads, and the
+      // document is back first, the way it draws: the top row is the last.
       if (index >= 0) {
         this.host.store.editLayer(drag.layerId, (layer) =>
-          reorderUnit(layer, drag.unit as string, index),
+          reorderUnit(layer, drag.unit as string, rows.length - 1 - index),
         );
       }
       this.host.render();

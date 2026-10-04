@@ -148,7 +148,10 @@ export function layerItems(
   // its front-most member does. A group has no mark on the canvas — the
   // outline round it is the outline any multi-selection gets — so this list is
   // where the relationship is actually visible. See `lib/groups.ts`.
-  const units = unitsInDrawOrder(layer, context.isometric ?? false);
+  // Front first, the way a layer stack reads: the row at the top is the file
+  // drawn over the others. The document holds them back first, which is the
+  // order they are drawn in — so the list is that order turned over.
+  const units = unitsInDrawOrder(layer, context.isometric ?? false).reverse();
   const groups = liveGroups(layer);
   const drawn = new Set<string>();
 
