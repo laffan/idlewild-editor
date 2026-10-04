@@ -193,7 +193,9 @@
 .psd-layers-reset .panel-btn { margin-top: 0; justify-content: center; }
 
 /* Pixel Art Rescale, at the foot of the PSD section: its name on the left and
-   the five sizes on the right. See editor/psd-pixel-scale.ts. */
+   the five sizes on the right. See editor/psd-pixel-scale.ts. The column is
+   narrow, so the name breaks onto two lines and the numbers share what is
+   left evenly while Custom takes the width its word needs. */
 .psd-pixel-scale {
   display: flex;
   align-items: center;
@@ -201,9 +203,16 @@
   margin-top: 10px;
 }
 .psd-pixel-scale-name {
-  flex: none;
-  font: 600 12px var(--font-heading);
+  flex: 0 1 64px;
+  font: 600 12px/1.2 var(--font-heading);
   color: var(--chrome-text);
 }
 .side-panel .psd-pixel-scale .psd-pixel-scale-seg { flex: 1; width: auto; min-width: 0; }
-.psd-pixel-scale-seg .opt-seg-btn { flex: 1; min-width: 0; padding: 0 4px; }
+.side-panel .psd-pixel-scale-seg .opt-seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 2px;
+  font-size: 12px;
+}
+.side-panel .psd-pixel-scale-seg .opt-seg-btn:last-child { flex: 0 0 auto; padding: 0 6px; }

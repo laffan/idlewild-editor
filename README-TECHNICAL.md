@@ -51,7 +51,11 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  psd_flatten.rs  one PSD as one picture: a merged tile palette │
 │  psd_downsample.rs a print PSD at screen resolution            │
 │  psd_resolution.rs the DPI a print PSD says it was made at     │
+│  psd_pixel_scale.rs Pixel Art Rescale: parsed bigger, nearest  │
+│  psd_anchor.rs   a P | anchor for a file that came without one │
+│  project_fonts.rs a project's own font files                   │
 │  print.rs        game or page: the DPI, the sheet, the formats │
+│  print_artboards.rs the sheets on a print project's canvas     │
 │  print_pdf.rs    ExportForPrint()'s page, as a PDF             │
 │  print_psd.rs    the same page, as a layered PSD at the DPI    │
 │  print_png.rs    the same page, as one PNG or JPG at the DPI   │
