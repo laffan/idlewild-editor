@@ -30,37 +30,65 @@
 
 import { openSheet } from "../lib/sheet";
 import { optionGroup, optionRow, optionsPage } from "../lib/options-list";
-import { describePage, dpiOf, projectOutput } from "../lib/print";
+import { artboardsOf, describePage, dpiOf, projectOutput } from "../lib/print";
+import { optionText } from "../lib/options-controls";
 import { dimensionRows } from "../lib/print-dimensions";
 import type { ProjectMeta } from "../lib/types";
 import { h } from "../lib/dom";
 import { changePage } from "./print-page";
 
-export function openPrintSetup(meta: ProjectMeta): void {
-  let output = projectOutput(meta);
+export function openPrintSetup(meta: ProjectMeta, artboardId?: string): void {
+  const output = projectOutput(meta);
+  const boards = artboardsOf(output);
+  let board = boards.find((b) => b.id === artboardId) ?? boards[0];
+  const artboard = board.id;
 
   const sheet = openSheet({
     title: "Page Setup",
-    subtitle: meta.name,
+    subtitle: boards.length > 1 ? `${meta.name} · ${board.name}` : meta.name,
     width: 620,
   });
 
-  const size = h("span", { class: "option-value", text: describePage(output) });
-  const dimensions = dimensionRows(output, (patch) => {
-    output = { ...output, ...patch };
-    size.textContent = describePage(output);
-    void changePage(patch);
+  const size = h("span", { class: "option-value", text: describePage(board) });
+  const dimensions = dimensionRows({ ...output, ...board }, (patch) => {
+    board = { ...board, ...patch };
+    size.textContent = describePage(board);
+    void changePage({ ...patch, artboard });
   });
+  // Written as it is typed, like every other row here; the name that lands is
+  // the one the project keeps, which may have a number on it if another
+  // artboard is already called that.
+  let renaming = 0;
+  const name = optionText(
+    board.name,
+    (value) => {
+      window.clearTimeout(renaming);
+      renaming = window.setTimeout(() => {
+        if (value.trim()) void changePage({ artboard, name: value });
+      }, 300);
+    },
+    { label: "Artboard name", placeholder: "Artboard 1" },
+  );
 
   sheet.body.appendChild(
     optionsPage([
       optionGroup({
-        title: "Page",
+        title: "Artboard",
         note:
           "The sheet the page is printed on. One point is one world pixel, and " +
           "the frame on the canvas in Draw is this sheet, edge for edge — drag " +
-          "its label to move the page over what you have drawn.",
-        rows: [...dimensions.rows, optionRow({ title: "Size", control: size })],
+          "its label to move it over what you have drawn.",
+        rows: [
+          optionRow({
+            title: "Name",
+            hint:
+              "What ExportForPrint() calls this artboard's page: with more than " +
+              "one artboard, each is saved as the page's name, a dash, and this.",
+            control: name,
+          }),
+          ...dimensions.rows,
+          optionRow({ title: "Size", control: size }),
+        ],
       }),
       optionGroup({
         title: "Resolution",

@@ -111,5 +111,25 @@ pub fn set_page(id: &str, patch: &crate::print::PagePatch) -> Result<ProjectMeta
     meta.updated_at = now_ms();
     write_meta(&meta)?;
     let _ = sync_game_config(id);
+    if meta.output.boards().len() > 1 {
+        refresh_print_js(id);
+    }
     Ok(meta)
+}
+
+/// Bring a print project's `js/shared/print.js` up to this build's, so one
+/// made before artboards captures every artboard rather than the first.
+///
+/// The file is the editor's — it says so at its top — and nothing in a
+/// project's own code is expected to live in it. One whose first line is no
+/// longer the editor's has been rewritten by hand, and is left alone.
+fn refresh_print_js(id: &str) {
+    let Ok(game) = crate::store::game_dir(id) else { return };
+    let path = game.join("js/shared/print.js");
+    let Ok(current) = std::fs::read_to_string(&path) else { return };
+    let ours = crate::templates::print_js();
+    let header = ours.lines().next().unwrap_or_default();
+    if current != ours && current.lines().next() == Some(header) {
+        let _ = std::fs::write(&path, ours);
+    }
 }

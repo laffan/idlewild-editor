@@ -37,6 +37,7 @@ mod psd_stack;
 mod psd_rebuild;
 mod psd_write;
 mod print;
+mod print_artboards;
 mod project_create;
 mod pdf_writer;
 mod print_files;

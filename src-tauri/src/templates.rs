@@ -285,6 +285,11 @@ pub fn template_files(meta: &ProjectMeta) -> Result<Vec<(&'static str, String)>,
     Ok(files)
 }
 
+/// `js/shared/print.js` as this build writes it.
+pub(crate) fn print_js() -> &'static str {
+    PRINT_JS
+}
+
 /// `js/main.js` for a print project: the same file, with the paper behind the
 /// scenes rather than the sky, and `ExportForPrint()` installed on the game it
 /// starts.

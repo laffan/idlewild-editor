@@ -38,6 +38,7 @@ import { optionSegmented } from "../lib/options-controls";
 import { printing, type PrintPage, type PrintResult } from "../lib/ipc";
 import * as log from "../lib/log";
 import {
+  artboardsOf,
   describePage,
   dpiOf,
   FORMATS,
@@ -450,7 +451,9 @@ export class PrintExport {
 
   private sheet(): string {
     const output = projectOutput(this.meta);
-    return `${describePage(output)} · ${dpiOf(output)} DPI`;
+    const boards = artboardsOf(output).length;
+    const what = boards > 1 ? `${boards} artboards` : describePage(output);
+    return `${what} · ${dpiOf(output)} DPI`;
   }
 
   private summary(): string {

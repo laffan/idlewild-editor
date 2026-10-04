@@ -34,9 +34,10 @@
  */
 
 import { h } from "../lib/dom";
-import { currentOutput, currentPage, describePage, onPageChange } from "../lib/print";
+import { currentArtboards, describePage, onPageChange, type PlacedArtboard } from "../lib/print";
 import { changePage } from "./print-page";
 import type { Viewport } from "../drawing";
+import type { Presentation } from "../lib/types";
 
 /** A box in CSS pixels. */
 export interface Size {
@@ -122,6 +123,34 @@ export interface ScreenGuideConfig {
    * over: Project Options changes it under a running editor.
    */
   defaultZoom: () => number;
+  /**
+   * The page around the game — Page Setup. A fixed size makes the game's
+   * screen that box, whatever the row is; a margin takes that much off each
+   * side of the row. Read through, like the zoom, because Page Setup changes
+   * it under a running editor.
+   */
+  presentation?: () => Presentation;
+  /** An artboard's label was tapped rather than dragged. */
+  onPickArtboard?: (id: string) => void;
+}
+
+/**
+ * The game's screen, from the row it would fill and the page around it.
+ *
+ * A fixed-size game is FIT against its own width and height
+ * (`templates/common/js/main.js`), so the world it shows is that box however
+ * big the window is. A game filling the window is RESIZE in whatever the
+ * margin leaves of the row.
+ */
+export function gameScreen(row: Size, page?: Presentation): Size {
+  if (page?.fixed && page.width > 0 && page.height > 0) {
+    return { width: page.width, height: page.height };
+  }
+  const margin = Math.max(0, page?.margin ?? 0);
+  return {
+    width: Math.max(1, row.width - margin * 2),
+    height: Math.max(1, row.height - margin * 2),
+  };
 }
 
 export class ScreenGuide {
@@ -135,32 +164,38 @@ export class ScreenGuide {
   private view: Viewport | null = null;
   /** False once both marks are switched off — see `setMarksVisible`. */
   private showing = true;
+  /** Whether the frames themselves are wanted — the Boundary switch. */
+  private framesOn = true;
+  /** A print project's artboards, one frame each, inside the guide. */
+  private readonly boards: HTMLElement;
   /**
-   * A print project's label on the sheet — its name and size — which is also
-   * how the sheet is moved: drag it and the page moves over the world.
+   * A print project's labels — each artboard's name and size, and the handle
+   * it is dragged by.
    *
-   * Its own element beside the guide rather than inside it. The guide is a
-   * mark that takes no pointer and sits under the ink's sheet, and a handle
-   * has to be reachable; so the label goes over the ink, where the floating
-   * bars are, and only it takes the pointer.
+   * A layer of their own beside the guide rather than inside it. The guide is
+   * a mark that takes no pointer and sits under the ink's sheet, and a handle
+   * has to be reachable; so the labels go over the ink — but **under** the
+   * tool rail and the floating bars. The layer shares the rail's z-index and
+   * is the canvas wrapper's *first* child, so the tie goes to the rail, which
+   * comes later: a label dragged into the corner slides under the tools
+   * rather than over them.
    */
-  private readonly label: HTMLElement;
-  /** World pixels the sheet has been dragged by, while a drag is going on. */
-  private drag: { dx: number; dy: number } | null = null;
+  private readonly labels: HTMLElement;
+  /** The artboard being dragged, and by how many world pixels. */
+  private drag: { id: string; dx: number; dy: number } | null = null;
+  /** The artboard picked in the Artboards list, drawn a little stronger. */
+  private active: string | null = null;
   private readonly stopListening: () => void;
 
   constructor(config: ScreenGuideConfig) {
     this.config = config;
     this.frame = h("div", { class: "screen-guide-frame" });
     this.cross = h("div", { class: "screen-guide-cross" });
-    this.root = h("div", { class: "screen-guide" }, this.frame, this.cross);
-    this.label = h("div", {
-      class: "screen-guide-label hidden",
-      title: "Drag to move the page",
-    });
-    this.label.addEventListener("pointerdown", this.onLabelDown);
-    // The sheet changes from Page Setup, and from this label's own drag once
-    // it is written: either way, draw what is there now.
+    this.boards = h("div", { class: "screen-guide-boards" });
+    this.root = h("div", { class: "screen-guide" }, this.frame, this.boards, this.cross);
+    this.labels = h("div", { class: "screen-guide-labels" });
+    // The sheet changes from Page Setup, the Artboards list and a label's own
+    // drag once it is written: either way, draw what is there now.
     this.stopListening = onPageChange(() => this.draw());
 
     // The content box, which is what `contentRect` already is: the row pads
@@ -184,9 +219,17 @@ export class ScreenGuide {
    * both are off, which is worth the line: it runs on every camera move.
    */
   setMarksVisible(frame: boolean, cross: boolean): void {
+    this.framesOn = frame;
     this.frame.classList.toggle("hidden", !frame);
+    this.boards.classList.toggle("hidden", !frame);
     this.cross.classList.toggle("hidden", !cross);
     this.showing = frame || cross;
+    this.draw();
+  }
+
+  /** Draw one artboard a little stronger — the one picked in the list. */
+  setActive(id: string | null): void {
+    this.active = id;
     this.draw();
   }
 
@@ -204,6 +247,7 @@ export class ScreenGuide {
    * already happens to be at changes how big the game's screen is without
    * moving anything, and the boundary would keep its old size until the next
    * pan. Changing nothing but pixel art lands here too, and costs one redraw.
+   * Page Setup's size and margin land here as well.
    */
   refresh(): void {
     this.draw();
@@ -212,54 +256,59 @@ export class ScreenGuide {
   destroy(): void {
     this.observer.disconnect();
     this.stopListening();
-    this.label.remove();
+    this.labels.remove();
     this.root.remove();
   }
 
   /**
-   * Drag the sheet by its label. The frame follows the finger at once; the
-   * page is written when it is let go — one write, not one per move — and
-   * lands on whole points.
+   * Drag an artboard by its label. The frame follows the finger at once; the
+   * artboard is written when it is let go — one write, not one per move —
+   * and lands on whole points.
    */
-  private readonly onLabelDown = (event: PointerEvent): void => {
+  private onLabelDown(event: PointerEvent, board: PlacedArtboard, label: HTMLElement): void {
     const view = this.view;
-    const page = currentPage();
-    if (!view || !page) return;
+    if (!view) return;
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
     const startY = event.clientY;
     const zoom = view.zoom || 1;
-    this.label.setPointerCapture(event.pointerId);
-    this.label.classList.add("dragging");
-    this.drag = { dx: 0, dy: 0 };
+    label.setPointerCapture(event.pointerId);
+    label.classList.add("dragging");
+    this.drag = { id: board.id, dx: 0, dy: 0 };
 
     const move = (e: PointerEvent) => {
       this.drag = {
+        id: board.id,
         dx: Math.round((e.clientX - startX) / zoom),
         dy: Math.round((e.clientY - startY) / zoom),
       };
       this.draw();
     };
     const up = () => {
-      this.label.removeEventListener("pointermove", move);
-      this.label.removeEventListener("pointerup", up);
-      this.label.removeEventListener("pointercancel", up);
-      this.label.classList.remove("dragging");
+      label.removeEventListener("pointermove", move);
+      label.removeEventListener("pointerup", up);
+      label.removeEventListener("pointercancel", up);
+      label.classList.remove("dragging");
       const moved = this.drag;
       if (moved && (moved.dx !== 0 || moved.dy !== 0)) {
-        void changePage({ x: page.x + moved.dx, y: page.y + moved.dy }).then(() => {
+        void changePage({
+          artboard: board.id,
+          x: board.x + moved.dx,
+          y: board.y + moved.dy,
+        }).then(() => {
           this.drag = null;
           this.draw();
         });
       } else {
         this.drag = null;
+        this.config.onPickArtboard?.(board.id);
       }
     };
-    this.label.addEventListener("pointermove", move);
-    this.label.addEventListener("pointerup", up);
-    this.label.addEventListener("pointercancel", up);
-  };
+    label.addEventListener("pointermove", move);
+    label.addEventListener("pointerup", up);
+    label.addEventListener("pointercancel", up);
+  }
 
   private draw(): void {
     const view = this.view;
@@ -267,36 +316,73 @@ export class ScreenGuide {
     // Nothing to say yet: the observer fires before the first camera push, and
     // a collapsed row has no viewport to describe.
     if (!view || !screen || screen.width <= 0 || screen.height <= 0) return;
-    if (!this.showing) return;
+    if (!this.showing) {
+      this.labels.classList.add("hidden");
+      return;
+    }
 
-    const page = currentPage();
-    const shifted = page && this.drag
-      ? { ...page, x: page.x + this.drag.dx, y: page.y + this.drag.dy }
-      : page;
-    const box = shifted
-      ? pageBox(view, shifted)
-      : guideBox(view, screen, this.config.defaultZoom());
-    this.frame.classList.toggle("is-page", page !== null);
-    this.placeLabel(shifted ? box : null);
+    const boards = currentArtboards().map((board) =>
+      this.drag && this.drag.id === board.id
+        ? { ...board, x: board.x + this.drag.dx, y: board.y + this.drag.dy }
+        : board,
+    );
+    if (boards.length > 0) {
+      this.frame.classList.add("hidden");
+      this.drawBoards(view, boards);
+      const origin = pageBox(view, boards[0]);
+      this.cross.style.transform = `translate(${origin.x}px, ${origin.y}px)`;
+      return;
+    }
+
+    this.boards.replaceChildren();
+    this.labels.replaceChildren();
+    this.frame.classList.toggle("hidden", !this.framesOn);
+    const box = guideBox(
+      view,
+      gameScreen(screen, this.config.presentation?.()),
+      this.config.defaultZoom(),
+    );
     this.cross.style.transform = `translate(${box.x}px, ${box.y}px)`;
     this.frame.style.width = `${box.frame.width}px`;
     this.frame.style.height = `${box.frame.height}px`;
     this.frame.style.transform = `translate(${box.frame.x}px, ${box.frame.y}px)`;
   }
 
-  /** The label over the sheet's top-left corner, or gone on a game. */
-  private placeLabel(box: GuideBox | null): void {
-    const output = currentOutput();
-    if (!box || !output || !this.showing || this.frame.classList.contains("hidden")) {
-      this.label.classList.add("hidden");
-      return;
+  /** One solid frame and one label per artboard, reusing what is there. */
+  private drawBoards(view: Viewport, boards: PlacedArtboard[]): void {
+    // Under the rail, once the guide is in the wrapper — see `labels`.
+    const wrap = this.root.parentElement;
+    if (!this.labels.isConnected && wrap) wrap.prepend(this.labels);
+    this.labels.classList.toggle("hidden", !this.framesOn);
+
+    while (this.boards.children.length > boards.length) this.boards.lastElementChild?.remove();
+    while (this.labels.children.length > boards.length) this.labels.lastElementChild?.remove();
+    for (const [i, board] of boards.entries()) {
+      let frame = this.boards.children[i] as HTMLElement | undefined;
+      if (!frame) {
+        frame = h("div", { class: "screen-guide-frame is-page" });
+        this.boards.appendChild(frame);
+      }
+      let label = this.labels.children[i] as HTMLElement | undefined;
+      if (!label) {
+        label = h("div", { class: "screen-guide-label", title: "Drag to move the artboard" });
+        this.labels.appendChild(label);
+      }
+      const at = label;
+      // Rebound every draw: the artboard behind a slot changes as the list does.
+      at.onpointerdown = (event) => {
+        const placed = currentArtboards().find((b) => b.id === board.id);
+        if (placed) this.onLabelDown(event, placed, at);
+      };
+      const box = pageBox(view, board).frame;
+      const active = boards.length > 1 && board.id === this.active;
+      frame.classList.toggle("active", active);
+      label.classList.toggle("active", active);
+      frame.style.width = `${box.width}px`;
+      frame.style.height = `${box.height}px`;
+      frame.style.transform = `translate(${box.x}px, ${box.y}px)`;
+      label.textContent = `${board.name} · ${describePage(board)}`;
+      label.style.transform = `translate(${box.x}px, ${box.y}px)`;
     }
-    // Beside the guide in the canvas wrapper, once the guide is in it.
-    if (!this.label.isConnected && this.root.parentElement) {
-      this.root.parentElement.appendChild(this.label);
-    }
-    this.label.classList.remove("hidden");
-    this.label.textContent = describePage(output);
-    this.label.style.transform = `translate(${box.frame.x}px, ${box.frame.y}px)`;
   }
 }

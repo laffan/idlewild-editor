@@ -26,7 +26,14 @@
 //     formats: "png",        // "pdf", "psd", "png" or "jpg" — what Save offers
 //     snapshot: false,       // true: add this page and keep going
 //     stop: true,            // stop every scene once the page is read
+//     artboard: undefined,   // one artboard's name, or a list — default: all
 //   });
+//
+// **Artboards.** A print project can lay several sheets out on its canvas.
+// One call captures every one of them — the camera is moved onto each in
+// turn, by how far that artboard is from the first — and with more than one,
+// each page is called `<name>-<artboard>`: `page-Cover`, `page-Back`. The
+// game's screen is the first artboard, which is where the camera stands.
 //
 // A call **captures** the page — it is drawn in the editor's preview at once —
 // and nothing is written until Save in the Output bar is pressed, which writes
@@ -89,6 +96,10 @@ const BLENDS = {
  */
 export function installPrint(game, config) {
   const sheet = config.print ?? { width: 612, height: 792, dpi: 300 };
+  const boards =
+    Array.isArray(sheet.artboards) && sheet.artboards.length > 0
+      ? sheet.artboards
+      : [{ name: "", width: sheet.width, height: sheet.height, x: sheet.x ?? 0, y: sheet.y ?? 0 }];
   const inEditor = window.parent && window.parent !== window;
   const waiting = new Map();
   let next = 0;
@@ -102,31 +113,39 @@ export function installPrint(game, config) {
       game.events.once(Phaser.Core.Events.POST_RENDER, async () => {
         const snapshot = options.snapshot === true;
         if (options.stop ?? !snapshot) freeze(game);
-        let page;
+        const chosen = pickBoards(boards, options.artboard);
+        let pages;
         try {
-          page = await readPage(game, sheet, options);
+          pages = await readBoards(game, sheet, boards[0], chosen);
         } catch (err) {
           reject(err);
           return;
         }
-        report(page, sheet);
-        if (!inEditor) {
+        for (const { page, board } of pages) report(page, board, sheet.dpi);
+        if (!inEditor || pages.length === 0) {
           resolve({ page: 0, pages: 0 });
           return;
         }
-        const id = ++next;
-        waiting.set(id, { resolve, reject });
-        window.parent.postMessage(
-          {
-            source: PAGE_MESSAGE,
-            id,
-            out: outPath(options),
-            formats: formatsOf(options.formats),
-            snapshot,
-            ...page,
-          },
-          "*",
-        );
+        // Every artboard but the last goes as a snapshot, so the run the
+        // editor is collecting ends where this call says it does.
+        const answers = pages.map(({ page, board }, i) => {
+          const id = ++next;
+          const done = new Promise((ok, fail) => waiting.set(id, { resolve: ok, reject: fail }));
+          window.parent.postMessage(
+            {
+              source: PAGE_MESSAGE,
+              id,
+              out: boards.length > 1 ? boardPath(options, board) : outPath(options),
+              artboard: board.name || undefined,
+              formats: formatsOf(options.formats),
+              snapshot: snapshot || i < pages.length - 1,
+              ...page,
+            },
+            "*",
+          );
+          return done;
+        });
+        Promise.all(answers).then((all) => resolve(all[all.length - 1]), reject);
       });
     });
 
@@ -145,6 +164,53 @@ export function installPrint(game, config) {
     if (data.error) held.reject(new Error(data.error));
     else held.resolve({ page: data.page ?? 0, pages: data.pages ?? 0 });
   });
+}
+
+/** The artboards a call asked for, by name — all of them when it named none. */
+function pickBoards(boards, asked) {
+  if (asked === undefined || asked === null) return boards;
+  const names = (Array.isArray(asked) ? asked : [asked]).map((n) => String(n).toLowerCase());
+  const chosen = boards.filter((b) => names.includes(String(b.name).toLowerCase()));
+  if (chosen.length === 0) {
+    console.warn(`ExportForPrint(): no artboard called ${names.join(", ")}.`);
+  }
+  return chosen;
+}
+
+/**
+ * Each artboard, read in turn: every scene's camera is moved by how far the
+ * artboard is from the first — the one the game's screen is — the page is
+ * read, and the cameras are put back before anything is awaited, so the
+ * running game never draws a frame from anywhere else.
+ */
+async function readBoards(game, sheet, first, chosen) {
+  const cameras = game.scene
+    .getScenes(false)
+    .map((scene) => scene.cameras?.main)
+    .filter(Boolean);
+  const reads = [];
+  for (const board of chosen) {
+    const dx = (board.x ?? 0) - (first.x ?? 0);
+    const dy = (board.y ?? 0) - (first.y ?? 0);
+    const saved = cameras.map((camera) => [camera, camera.scrollX, camera.scrollY]);
+    for (const [camera, x, y] of saved) camera.setScroll(x + dx, y + dy);
+    // The synchronous half of the read — every matrix and every capture —
+    // runs inside this call; only the readbacks are left to await.
+    const page = readPage(game, { width: board.width, height: board.height, dpi: sheet.dpi });
+    for (const [camera, x, y] of saved) camera.setScroll(x, y);
+    reads.push(page.then((p) => ({ page: p, board })));
+  }
+  return Promise.all(reads);
+}
+
+/** `<name>-<artboard>`, for a project with more than one artboard. */
+function boardPath(options, board) {
+  const base = outPath(options) ?? "page";
+  const slug = String(board.name ?? "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9_-]/g, "");
+  return slug ? `${base}-${slug}` : base;
 }
 
 /** What the page is called when it is saved — a folder and a name. */
@@ -176,11 +242,12 @@ function formatsOf(formats) {
 }
 
 /** What the console says about a page. */
-function report(page, sheet) {
+function report(page, board, dpi) {
+  const named = board.name ? `${board.name}, ` : "";
   console.info(
     `ExportForPrint(): ${page.items.length} ` +
-      `item${page.items.length === 1 ? "" : "s"} on a ` +
-      `${sheet.width} × ${sheet.height} pt sheet at ${sheet.dpi} DPI.`,
+      `item${page.items.length === 1 ? "" : "s"} on ${named}a ` +
+      `${board.width} × ${board.height} pt sheet at ${dpi} DPI.`,
   );
   if (page.skipped > 0) {
     console.warn(

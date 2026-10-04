@@ -17,7 +17,7 @@ import type {
   Projection,
   Scaffold,
 } from "./types";
-import { DEFAULT_OUTPUT, type Output, type PrintFormat } from "./print";
+import { DEFAULT_OUTPUT, type Output, type PagePatch, type PrintFormat } from "./print";
 
 /**
  * How many bytes are encoded as one standalone piece.
@@ -228,7 +228,7 @@ export const projects = {
    * patch names changes. The kind and the DPI are not here: they are facts
    * about every PSD the project has already written. See `lib/print.ts`.
    */
-  setPage: (id: string, patch: Partial<Omit<Output, "kind" | "dpi">>) =>
+  setPage: (id: string, patch: PagePatch) =>
     invoke<ProjectMeta>("set_project_page", { id, patch }),
   /**
    * Change how a project renders and what moves in it. Hands back the meta as
@@ -366,6 +366,8 @@ export interface PrintPage {
   formats?: PrintFormat[];
   /** One of several: the run carries on, and Save writes them all. */
   snapshot?: boolean;
+  /** The artboard it was read from, on a project with names for them. */
+  artboard?: string;
 }
 
 /** What Rust says about the PDF it wrote. */

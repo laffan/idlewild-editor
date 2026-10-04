@@ -47,15 +47,33 @@
   box-shadow: 0 0 0 1px rgb(255 255 255 / 0.6), 0 2px 10px rgb(0 0 0 / 0.18);
 }
 
-/* A print project's label on the sheet: its name and size, sat on the frame's
-   top-left corner, and the handle the sheet is dragged by. A sibling of the
-   guide rather than a child, over the ink's sheet at 4 and level with the
-   rail at 5, because the guide takes no pointer and this has to. */
+/* A print project's artboards: one solid frame each, inside the guide. */
+.screen-guide-boards { position: absolute; inset: 0; }
+.screen-guide-boards.hidden { display: none; }
+.screen-guide-frame.is-page.active { border-width: 2px; }
+
+/* The artboards' labels: each one's name and size, sat on its frame's top-left
+   corner, and the handle it is dragged by. A layer beside the guide rather
+   than inside it, over the ink's sheet at 4 — because the guide takes no
+   pointer and these have to — and level with the tool rail at 5. The layer is
+   the canvas wrapper's FIRST child, so that tie goes to the rail and the
+   floating bars above it: a label pushed into a corner slides under the
+   toolbars instead of over them. The layer takes no pointer; its labels do. */
+.screen-guide-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+.screen-guide-labels.hidden { display: none; }
+.editor.code-mode .screen-guide-labels,
+.editor.play-mode .screen-guide-labels { display: none; }
+
 .screen-guide-label {
   position: absolute;
   left: 0;
   top: 0;
-  z-index: 5;
   margin-top: -22px;
   height: 20px;
   padding: 0 8px;
@@ -70,11 +88,10 @@
   touch-action: none;
   user-select: none;
   will-change: transform;
+  pointer-events: auto;
 }
+.screen-guide-label.active { box-shadow: 0 0 0 2px rgb(255 255 255 / 0.8); }
 .screen-guide-label.dragging { cursor: grabbing; }
-.screen-guide-label.hidden { display: none; }
-.editor.code-mode .screen-guide-label,
-.editor.play-mode .screen-guide-label { display: none; }
 
 /* The origin: two hairlines crossing on it, at a fixed size on screen, so it
    stays findable at any zoom and never grows into a mark of its own. */

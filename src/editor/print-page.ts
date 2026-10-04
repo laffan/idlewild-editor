@@ -15,11 +15,11 @@
 
 import { projects } from "../lib/ipc";
 import * as log from "../lib/log";
-import { openProject, setOpenProject, type Output } from "../lib/print";
+import { openProject, setOpenProject, type PagePatch } from "../lib/print";
 
 let queue: Promise<void> = Promise.resolve();
 
-export function changePage(patch: Partial<Omit<Output, "kind" | "dpi">>): Promise<void> {
+export function changePage(patch: PagePatch): Promise<void> {
   const meta = openProject();
   if (!meta) return Promise.resolve();
   queue = queue.then(async () => {

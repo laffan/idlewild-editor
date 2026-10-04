@@ -44,6 +44,25 @@ Part of [the Idlewild manual](README.md).
 - **The canvas is the canvas it always was.** Draw, fill, drop images, convert
   sketches — nothing about the tools changes
 
+## Artboards
+
+- The page is an **artboard**, and a print project can have several — sheets
+  laid out side by side on the one canvas. Each has its own frame, its own
+  label (its name, then its size) and its own paper
+- **Artboards**, at the foot of the left sidebar above Overlays, lists them.
+  Tap a row to pick it and bring the camera to it; its frame is drawn
+  stronger. The pencil opens Page Setup for it — its **name**, its paper and
+  which way round. The cross removes it, after asking; the last one stays.
+  **Add artboard** puts a copy of the picked one to the right of the rest
+- **Drag a label to move that artboard.** Tapping a label picks its row
+- **The first artboard is the game's screen**: the running game is its size,
+  and the camera stands on its corner. Removing the first makes the next one
+  first
+- **One `ExportForPrint()` captures every artboard.** The camera is moved onto
+  each in turn — by how far it is from the first — and with more than one
+  artboard each page is saved as `<name>-<artboard>`: `page-Cover`,
+  `page-Back`. `artboard: "Cover"` (or a list of names) captures only those
+
 ## Two resolutions
 
 - Every PSD in a print project is written at its DPI: a letter-sized fill at
@@ -92,6 +111,7 @@ Part of [the Idlewild manual](README.md).
     formats: "png",    // "pdf", "psd", "png" or "jpg" — what Save is set to
     snapshot: false,   // true: add this page and keep going
     stop: true,        // stop the scenes once the page is captured
+    artboard: "Cover", // only these artboards — default: every one
   });
   ```
 
@@ -164,9 +184,10 @@ Part of [the Idlewild manual](README.md).
 
 ## Page Setup
 
-- On a print project Page Setup is the page's **Dimensions** — the same rows as
-  the New Project sheet, Custom included — and the **resolution**, which it
-  reports but cannot change. A change takes effect at once: the frame on the
+- On a print project Page Setup is an artboard's **Name** and **Dimensions** —
+  the same rows as the New Project sheet, Custom included — and the
+  **resolution**, which it reports but cannot change. From the menu it is the
+  first artboard; from the Artboards list, the one whose pencil was pressed. A change takes effect at once: the frame on the
   canvas changes, and a running Output restarts on the new page. It does not
   move anything you drew
 

@@ -53,7 +53,7 @@ import { Minimap } from "./minimap";
 import { OverlaysPanel } from "./overlays-panel";
 import { addSweptZone } from "./zone-actions";
 import { createFillBarUi } from "./fill-bar";
-import { ScreenGuide } from "./screen-guide";
+import { createCanvasGuides } from "./canvas-guides";
 import { setOpenProject } from "../lib/print";
 
 export interface EditorCallbacks {
@@ -341,7 +341,8 @@ export async function mountEditor(
       intake: () => intake,
       scene: () => handle?.scene ?? null,
       openOptions: () => render.open(store.layers.length),
-      reloadGame: () => gameFrame.isRunning && gameFrame.reload(),
+      // Page Setup's size is the game's screen, which the guide draws.
+      reloadGame: () => (guide.refresh(), gameFrame.isRunning && gameFrame.reload()),
     }),
   );
 
@@ -462,14 +463,13 @@ export async function mountEditor(
   });
   layout.restore();
 
-  // Where the game's screen falls on this canvas: a crosshair on world 0,0,
-  // and a dashed boundary around what it opens showing — `screen-guide.ts`.
-  const guide = new ScreenGuide({
-    main: layout.main,
+  // The screen guide, and a print project's artboards — `canvas-guides.ts`.
+  const guides = createCanvasGuides({
+    ...{ meta, main: layout.main, canvasWrap, overlays },
     defaultZoom: () => render.options.defaultZoom,
+    centreOn: (x, y) => handle?.scene.centreOn(x, y),
   });
-  canvasWrap.appendChild(guide.root);
-  overlays.setGuide(guide);
+  const guide = guides.guide;
 
   handle = await bootGame(
     canvasWrap,
@@ -678,7 +678,7 @@ export async function mountEditor(
     await store.flush();
     header.destroy();
     overlays.destroy();
-    guide.destroy();
+    guides.destroy();
     layers.destroy();
     inspector.destroy();
     gameFrame.destroy();

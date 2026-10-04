@@ -25,7 +25,7 @@ import { h } from "../lib/dom";
 import { assetBase } from "../lib/ipc";
 import * as log from "../lib/log";
 import type { LogValue } from "../lib/log-value";
-import { currentPage, isPrint, onPageChange } from "../lib/print";
+import { currentArtboards, isPrint, onPageChange } from "../lib/print";
 import type { ProjectMeta } from "../lib/types";
 import { isPrintPage, PrintExport } from "./print-export";
 
@@ -75,11 +75,11 @@ export class GameFrame {
       // A new sheet is a new game: Page Setup or the frame dragged on the
       // canvas restarts a running Output on it. Coalesced, because a size
       // typed a digit at a time is several changes in a second.
-      // Only a change to the sheet itself — its size or where it is — and not
+      // Only a change to the artboards — a size, a corner, a name — and not
       // one to what a page is written as, which the game never reads.
-      let sheet = JSON.stringify(currentPage());
+      let sheet = JSON.stringify(currentArtboards());
       this.stopListening = onPageChange(() => {
-        const now = JSON.stringify(currentPage());
+        const now = JSON.stringify(currentArtboards());
         if (now === sheet) return;
         sheet = now;
         if (!this.running) return;

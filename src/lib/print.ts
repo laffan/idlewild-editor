@@ -56,6 +56,58 @@ export interface Output {
   /** The page's top-left corner in the world. */
   x: number;
   y: number;
+  /**
+   * Every artboard, the first mirrored into the fields above. Absent or
+   * empty on a project made before artboards — it has one, made of those
+   * fields. Mirrored by `print_artboards.rs`.
+   */
+  artboards?: Artboard[];
+}
+
+/** What a sheet's size is made of — an `Output`'s or an `Artboard`'s. */
+export type Sheet = Pick<Output, "paper" | "landscape" | "customWidth" | "customHeight" | "unit">;
+
+/** One sheet on a print project's canvas. */
+export interface Artboard extends Sheet {
+  id: string;
+  name: string;
+  /** Its top-left corner in the world. */
+  x: number;
+  y: number;
+}
+
+/** The id of the artboard a project's flat fields describe. */
+export const FIRST_ARTBOARD = "main";
+
+/** A change to the sheet: its fields, and which artboard they land on. */
+export type PagePatch = Partial<Omit<Output, "kind" | "dpi" | "artboards">> & {
+  /** The artboard changed, by id — the first when absent. */
+  artboard?: string;
+  /** Make a new artboard (a copy of `artboard`'s) and change that. */
+  add?: boolean;
+  /** Take `artboard` away. */
+  remove?: boolean;
+  /** Rename `artboard`, or name the one added. */
+  name?: string;
+};
+
+/** Every artboard, first to last. Never empty. */
+export function artboardsOf(output: Output): Artboard[] {
+  if (output.artboards && output.artboards.length > 0) return output.artboards;
+  const { paper, landscape, customWidth, customHeight, unit, x, y } = output;
+  return [
+    {
+      id: FIRST_ARTBOARD,
+      name: "Artboard 1",
+      paper,
+      landscape,
+      customWidth,
+      customHeight,
+      unit,
+      x: x || 0,
+      y: y || 0,
+    },
+  ];
 }
 
 export const DEFAULT_OUTPUT: Output = {
@@ -121,11 +173,11 @@ export function dpiOf(output: Output): Dpi {
   return output.dpi >= 225 ? 300 : 150;
 }
 
-export function paperOf(output: Output): Paper {
+export function paperOf(output: Sheet): Paper {
   return PAPERS.find((p) => p.id === output.paper) ?? PAPERS[0];
 }
 
-export function isCustom(output: Output): boolean {
+export function isCustom(output: Sheet): boolean {
   return output.paper === CUSTOM;
 }
 
@@ -133,7 +185,7 @@ export function isCustom(output: Output): boolean {
  * The sheet in points: a standard one turned for landscape, or the size that
  * was typed, which is already the way round it was typed.
  */
-export function pageSize(output: Output): { width: number; height: number } {
+export function pageSize(output: Sheet): { width: number; height: number } {
   if (isCustom(output)) {
     const clamp = (v: number) =>
       Math.round(Math.min(PAGE_RANGE.max, Math.max(PAGE_RANGE.min, v || 612)));
@@ -160,7 +212,7 @@ export function inUnit(points: number, unit: PageUnit): number {
  * and its size — `Letter · 8.5 × 11 in` — or, for a typed size, the size in
  * the unit it was typed in: `Custom · 30 × 20 cm`.
  */
-export function describePage(output: Output): string {
+export function describePage(output: Sheet): string {
   // A typed size is said as typed — 30 cm, not the 29.99 that whole points
   // would round it back to.
   const typed = (v: number) => Math.min(PAGE_RANGE.max, Math.max(PAGE_RANGE.min, v || 612));
@@ -227,6 +279,21 @@ export function currentPage(): { x: number; y: number; width: number; height: nu
   const output = currentOutput();
   if (!output) return null;
   return { x: output.x || 0, y: output.y || 0, ...pageSize(output) };
+}
+
+/** A placed artboard: its sheet, and its corner and size in the world. */
+export type PlacedArtboard = Artboard & { width: number; height: number };
+
+/** The open print project's artboards, placed. Empty for a game. */
+export function currentArtboards(): PlacedArtboard[] {
+  const output = currentOutput();
+  if (!output) return [];
+  return artboardsOf(output).map((board) => ({
+    ...board,
+    x: board.x || 0,
+    y: board.y || 0,
+    ...pageSize(board),
+  }));
 }
 
 /**

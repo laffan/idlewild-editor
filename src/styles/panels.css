@@ -231,6 +231,46 @@
 }
 .overlays-picker { padding: 2px 0 6px; }
 
+/* A print project's artboards, above Overlays and in its vocabulary: the
+   same heading, the same full-width rows. A row is the artboard — tap to pick
+   it and go to it — with its size under its name, and two small buttons on
+   the end. See editor/artboards-panel.ts. */
+.artboards-row { padding-left: 30px; padding-right: 4px; cursor: pointer; }
+.artboards-row.picked { background: var(--chrome-panel); }
+.artboards-row.picked .overlays-name { color: var(--color-accent); }
+.artboards-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 0;
+}
+.artboards-text .overlays-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artboards-size {
+  font: 500 10px var(--font-label);
+  color: var(--chrome-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.artboards-action {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.artboards-action:hover:not(:disabled) { color: var(--chrome-text); }
+.artboards-action:disabled { opacity: 0.35; }
+.artboards-add { color: var(--chrome-dim); }
+.artboards-add-icon { display: flex; margin-left: -20px; width: 14px; }
+
 /* Switched off from the row above it. `display: none` also stops the paint:
    the body has no box to fit anything into, `Minimap.paint` returns on that,
    and the ResizeObserver brings it back the moment there is one again — the

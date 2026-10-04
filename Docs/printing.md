@@ -157,6 +157,36 @@ It is a sibling of the guide rather than a child, at the rail's layer above the
 ink, because the guide takes no pointer and sits under the ink's sheet; the
 frame follows the drag at once and the corner is written once, on release.
 
+### Artboards
+
+`Output.artboards` — `Artboard` in `src-tauri/src/print_artboards.rs`,
+mirrored in `lib/print.ts` — is the list of sheets on the canvas, each with an
+id, a name, its own paper and its own corner. **The first is mirrored into
+`Output`'s flat fields** every time the list changes, so everything that read
+the one page before — `presentation_of`'s fixed box, `applyCamera`'s corner,
+an archive from an earlier build — reads the first artboard and is right. A
+meta with no list reads as one artboard made of those fields (`boards()`,
+`artboardsOf`), id `main`.
+
+`PagePatch` grew four fields: `artboard` (which one the sheet fields land on —
+the first when absent), `add` (a copy of that one, appended with an id of its
+own, `board-N`, and the fields applied to the copy), `remove` (refused on the
+last) and `name` (trimmed, at most sixty characters, made distinct with a
+number — names end up in file names). `config.print.artboards` carries each
+one's id, name, size and corner to the game.
+
+On the canvas, `ScreenGuide` draws one solid frame per artboard inside the
+guide and one label per artboard on a layer of its own. That layer is the
+canvas wrapper's **first** child at z-index 5 — level with the tool rail, and
+before it in the document, so the tie goes to the rail and a label dragged into
+a corner slides under the toolbars rather than over them. The list is
+`editor/artboards-panel.ts`, wired with the guide in `canvas-guides.ts`; Page
+Setup (`print-setup.ts`) takes the artboard it edits.
+
+`set_page` brings an older project's `js/shared/print.js` up to this build's
+once it has more than one artboard — the file is the editor's, and one whose
+first line has been rewritten is left alone.
+
 ## ExportForPrint()
 
 `templates/print/js/shared/print.js`, written into every print project and
@@ -178,6 +208,15 @@ code carry on, and `stop` — default true, except on a snapshot — pauses ever
 scene once the page is read. The promise settles once the editor has the page,
 with its index and the count so far, so a run of snapshots is a loop with an
 `await` in it; the run ends at the first call without `snapshot`.
+
+**Every artboard, one call.** `readBoards` moves every scene's main camera by
+how far each artboard's corner is from the first's, reads the page at that
+artboard's size, and puts the cameras back before anything is awaited — the
+matrices and the captures are all synchronous, and only the readbacks are
+left to settle — so the running game never draws a frame from anywhere else.
+Every page but the last is posted as a snapshot, so the editor's run ends where
+the call says it does; with more than one artboard each is named
+`<name>-<artboard>`, and `options.artboard` narrows the list by name.
 
 **The page is read at the end of the next frame drawn** — on Phaser's
 `POST_RENDER` — so whatever the calling code just changed has been through a

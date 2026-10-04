@@ -139,6 +139,11 @@ pub struct Output {
     pub x: f64,
     #[serde(default)]
     pub y: f64,
+    /// Every artboard on the canvas, the first mirrored into the fields above.
+    /// Empty on a project made before artboards: it has one, made of those
+    /// fields — see `print_artboards.rs`.
+    #[serde(default)]
+    pub artboards: Vec<crate::print_artboards::Artboard>,
 }
 
 impl Default for Output {
@@ -154,6 +159,7 @@ impl Default for Output {
             unit: default_unit(),
             x: 0.0,
             y: 0.0,
+            artboards: Vec::new(),
         }
     }
 }
@@ -203,19 +209,25 @@ pub struct PagePatch {
     pub unit: Option<String>,
     pub x: Option<f64>,
     pub y: Option<f64>,
+    /// Which artboard the sheet fields above change, by id — the first when
+    /// none is named. See `print_artboards.rs`.
+    pub artboard: Option<String>,
+    /// Make a new artboard, a copy of the one named, and change that instead.
+    pub add: Option<bool>,
+    /// Take the artboard named away.
+    pub remove: Option<bool>,
+    /// Rename the artboard named — or name the one being added.
+    pub name: Option<String>,
 }
 
 impl PagePatch {
     /// Apply it, refusing anything this build does not know.
     pub fn apply(&self, output: &mut Output) -> Result<(), String> {
+        let mut clean = self.clone();
         if let Some(paper) = &self.paper {
             if paper != CUSTOM && !PAPERS.iter().any(|p| p.id == paper) {
                 return Err(format!("Unknown paper size: {paper}"));
             }
-            output.paper = paper.clone();
-        }
-        if let Some(landscape) = self.landscape {
-            output.landscape = landscape;
         }
         if let Some(formats) = &self.formats {
             if !FORMATS.contains(&formats.as_str()) {
@@ -231,16 +243,15 @@ impl PagePatch {
             }
         };
         if let Some(w) = self.custom_width {
-            output.custom_width = size(w)?;
+            clean.custom_width = Some(size(w)?);
         }
         if let Some(h) = self.custom_height {
-            output.custom_height = size(h)?;
+            clean.custom_height = Some(size(h)?);
         }
         if let Some(unit) = &self.unit {
             if unit != "in" && unit != "cm" {
                 return Err(format!("Unknown unit: {unit}"));
             }
-            output.unit = unit.clone();
         }
         let at = |v: f64| {
             if v.is_finite() {
@@ -250,12 +261,12 @@ impl PagePatch {
             }
         };
         if let Some(x) = self.x {
-            output.x = at(x)?;
+            clean.x = Some(at(x)?);
         }
         if let Some(y) = self.y {
-            output.y = at(y)?;
+            clean.y = Some(at(y)?);
         }
-        Ok(())
+        crate::print_artboards::apply_boards(&clean, output)
     }
 }
 
@@ -366,6 +377,7 @@ impl Output {
             "height": height,
             "x": x,
             "y": y,
+            "artboards": self.boards().iter().map(|b| b.to_config()).collect::<Vec<_>>(),
         })
     }
 }
