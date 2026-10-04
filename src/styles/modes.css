@@ -132,3 +132,12 @@
 .editor-canvas-wrap.colliding .draw-bar,
 .editor-canvas-wrap.masking .draw-bar { display: none; }
 .editor-canvas-wrap.psd-editing .draw-bar { bottom: 68px; }
+
+/* The Pattern Mask editor's bar is two rows — the name, what it holds and the
+   two ways out; then the tools — see editor/mask-bar.ts. */
+.mode-bar.mask-bar { flex-direction: column; }
+.mask-bar-row { display: flex; align-items: stretch; min-height: 48px; }
+.mask-bar-row.tools { min-height: 44px; border-top: var(--rule-chrome); }
+.mask-bar-row.tools .bar-toggle { padding: 0 14px; display: inline-flex; align-items: center; gap: 4px; }
+.mask-bar-row.tools .bar-toggle:first-child { border-left: 0; }
+.mask-bar-gap { width: 12px; border-left: var(--rule-chrome); }

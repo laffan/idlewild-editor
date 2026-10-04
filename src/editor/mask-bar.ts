@@ -113,20 +113,32 @@ export class MaskBar {
       onClick: callbacks.onApply,
     });
 
+    // Two rows: what this is and the two ways out on top, and the tools
+    // under them — eight buttons on one row crowded the name off the bar.
     this.root = h(
       "div",
       { class: "mode-bar mask-bar hidden" },
-      this.title,
-      this.size,
-      h("div", { class: "mode-spacer" }),
-      this.grid,
-      this.sweep,
-      this.add,
-      this.remove,
-      this.clear,
-      this.reset,
-      h("button", { text: "Cancel", onClick: callbacks.onCancel }),
-      this.apply,
+      h(
+        "div",
+        { class: "mask-bar-row" },
+        this.title,
+        this.size,
+        h("div", { class: "mode-spacer" }),
+        h("button", { text: "Cancel", onClick: callbacks.onCancel }),
+        this.apply,
+      ),
+      h(
+        "div",
+        { class: "mask-bar-row tools" },
+        this.grid,
+        this.sweep,
+        h("div", { class: "mask-bar-gap" }),
+        this.add,
+        this.remove,
+        h("div", { class: "mode-spacer" }),
+        this.clear,
+        this.reset,
+      ),
     );
   }
 
