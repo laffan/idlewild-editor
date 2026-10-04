@@ -55,6 +55,7 @@ import { addSweptZone } from "./zone-actions";
 import { createFillBarUi } from "./fill-bar";
 import { createCanvasGuides } from "./canvas-guides";
 import { setOpenProject } from "../lib/print";
+import { loadProjectFonts } from "../lib/project-fonts";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
@@ -67,6 +68,7 @@ export async function mountEditor(
 ): Promise<() => Promise<void>> {
   const store = await DocStore.load(meta.id);
   setOpenProject(meta); // a print project's source scale and sheet — lib/print.ts
+  await loadProjectFonts(meta.id); // before anything is measured — lib/project-fonts.ts
   const grid = new Grid(store.projection, store.gridSize);
   const base = await assetBase(meta.id);
   // Resolved once: it decides whether a PSD's edits come back by re-parsing
@@ -76,8 +78,7 @@ export async function mountEditor(
   let activeLayerId = store.layers[0]?.id ?? "";
   let handle: GameHandle | null = null;
   let drawing: DrawingLayer | null = null;
-  // Built once the scene is up — see below. The header's two buttons and the
-  // keyboard both reach it through closures, which run long after.
+  // Built once the scene is up; the header and the keyboard reach it later.
   let history: HistoryUi | null = null;
   /**
    * What a tool means to the pointer: declared here, built far below, and
@@ -433,7 +434,7 @@ export async function mountEditor(
     grid,
     store,
     os,
-    canvas: canvasWrap,
+    ...{ canvas: canvasWrap, sidebar: inspector.root },
     scene: () => handle?.scene ?? null,
     enabled: () => modeSwitch.mode() === "draw",
     onPsdReplaced: async (key, manifest) => {

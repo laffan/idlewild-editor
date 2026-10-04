@@ -632,3 +632,34 @@
 /* The value takes the slack, so the caret sits at the button's own edge rather
    than trailing a short number across a wide button. */
 .inspect-pick > span { flex: 1; text-align: right; }
+
+/* The project's own fonts, under the font button: a chip per family, set in
+   itself, with a cross to take it out — then Add font…. See
+   editor/inspect-fonts.ts. The sidebar lights up while a file is dragged
+   over it, because that is where a font file is dropped. */
+.project-fonts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.project-font-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 2px 2px 8px;
+  border: 1px solid var(--chrome-rule);
+  font-size: 13px;
+  color: var(--chrome-text);
+}
+.project-font-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-font-remove {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+}
+.project-font-remove:hover { color: var(--chrome-text); }
+.project-fonts .project-fonts-add { flex: 1 1 100%; }
+.side-panel.font-drop-active { box-shadow: inset 0 0 0 2px var(--color-accent); }

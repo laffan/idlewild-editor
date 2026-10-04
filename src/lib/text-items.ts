@@ -80,6 +80,12 @@ export interface TextItem {
    */
   lineHeight?: number;
   /**
+   * Extra space after every character, against the size — `0.1` is a tenth
+   * of the size. Absent is none. Against the size for the reason the leading
+   * is: a note retyped twice as big keeps its tracking.
+   */
+  letterSpacing?: number;
+  /**
    * The column the words are broken into, in world pixels.
    *
    * Absent means no wrapping at all, which is what a label usually wants: a
@@ -150,6 +156,7 @@ export type TextStyleFields = Pick<
   | "font"
   | "align"
   | "lineHeight"
+  | "letterSpacing"
   | "wrapWidth"
   | "tracksGrid"
   | "runs"
@@ -285,7 +292,7 @@ export function fontString(
  * screen, rather than around the font's own ascent and descent.
  */
 export function measure(
-  item: Layable & Pick<TextItem, "font">,
+  item: Layable & Pick<TextItem, "font" | "letterSpacing">,
   plane: TextPlane | null = null,
 ): { width: number; height: number } {
   const flat = laidOut(item);
@@ -306,7 +313,7 @@ export function measure(
  * again rather than being passed one, because a texture is rebuilt far less
  * often than a box is read.
  */
-export function laidOut(item: Layable & Pick<TextItem, "font">): Laid {
+export function laidOut(item: Layable & Pick<TextItem, "font" | "letterSpacing">): Laid {
   return layout(item, ruler(item));
 }
 
@@ -319,18 +326,60 @@ export function laidOut(item: Layable & Pick<TextItem, "font">): Laid {
  * neighbour. So every measurement and every `fillText` go through the same
  * shorthand — which is what `fontString` takes those two flags for.
  */
-function ruler(item: Pick<TextItem, "size" | "font">, scale = 1): Ruler {
+function ruler(item: Pick<TextItem, "size" | "font" | "letterSpacing">, scale = 1): Ruler {
   const context = measuringContext();
+  const tracking = trackingOf(item) * scale;
   if (!context) {
     // No canvas — a test environment. Half the size per character is close
     // enough to keep a box from being zero, and the first edit on a real
     // canvas replaces it.
-    return (text) => text.length * item.size * scale * 0.5;
+    return (text) => text.length * (item.size * scale * 0.5 + tracking);
   }
   return (text, bold, italic) => {
     context.font = fontString(item, scale, bold, italic);
-    return context.measureText(text).width;
+    return context.measureText(text).width + tracking * characters(text).length;
   };
+}
+
+/**
+ * The letter spacing in world pixels: the extra after every character.
+ *
+ * Applied by hand rather than through the 2D context's own `letterSpacing`,
+ * which the WebKit this runs in on an older iPad does not have — and a box
+ * measured one way and drawn another is a note that overflows its outline.
+ */
+export function trackingOf(item: Pick<TextItem, "size" | "letterSpacing">): number {
+  const em = item.letterSpacing ?? 0;
+  return Number.isFinite(em) ? em * item.size : 0;
+}
+
+/** Characters as a reader counts them — a surrogate pair is one. */
+function characters(text: string): string[] {
+  return Array.from(text);
+}
+
+/**
+ * Draw a run of text with tracking: each character where the run up to it
+ * ends, plus the spacing so far. Measured by prefix rather than by summing
+ * single characters, so the face's own kerning survives.
+ */
+function fillTracked(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  tracking: number,
+): void {
+  if (tracking === 0) {
+    ctx.fillText(text, x, y);
+    return;
+  }
+  const chars = characters(text);
+  let prefix = "";
+  chars.forEach((char, i) => {
+    ctx.fillText(char, x + ctx.measureText(prefix).width + tracking * i, y);
+    prefix += char;
+  });
 }
 
 /**
@@ -419,6 +468,7 @@ export function updateText(
         patch.size !== undefined ||
         patch.font !== undefined ||
         patch.lineHeight !== undefined ||
+        "letterSpacing" in patch ||
         patch.wrapWidth !== undefined ||
         // The plane changes the box without changing a word of the text.
         patch.tracksGrid !== undefined ||
@@ -456,6 +506,7 @@ export function styleOf(item: TextItem): TextStyleFields {
     font: item.font,
     align: item.align,
     lineHeight: item.lineHeight,
+    letterSpacing: item.letterSpacing,
     wrapWidth: item.wrapWidth,
     tracksGrid: item.tracksGrid,
     runs: item.runs,
@@ -627,7 +678,7 @@ export function rasteriseText(
     const left = lineOffset({ align: item.align, width: laid.width }, line.width);
     for (const span of line.spans) {
       ctx.font = fontString(item, 1, span.bold, span.italic);
-      ctx.fillText(span.text, left + span.x, baseline);
+      fillTracked(ctx, span.text, left + span.x, baseline, trackingOf(item));
       if (!span.underline) continue;
       // Drawn rather than asked for: a 2D canvas has no text decoration, and
       // the two numbers a rule needs — how far under the baseline, how thick —

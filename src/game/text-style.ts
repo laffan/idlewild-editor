@@ -48,4 +48,9 @@ export const DEFAULT_TEXT_STYLE: TextStyle = {
   // device turns out to have installed.
   font: GENERIC_FONTS[0].id,
   align: "left",
+  // Wrapped from the start: a column the words break into, with a handle on
+  // the canvas to drag its width. Twelve times the size is a short paragraph's
+  // measure. Turning wrapping off on a note carries over to the next one, like
+  // every other part of the style.
+  wrapWidth: 288,
 };

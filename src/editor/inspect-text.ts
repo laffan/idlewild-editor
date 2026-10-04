@@ -54,7 +54,8 @@ import {
   updateText,
   type TextStyleFields,
 } from "../lib/text-items";
-import { fontLabel, systemFonts } from "../lib/system-fonts";
+import { fontLabel } from "../lib/system-fonts";
+import { fontMenuItems, isProjectFont, projectFontsRow } from "./inspect-fonts";
 import { openMenu } from "../lib/menu";
 import { plainText } from "../lib/text-markdown";
 import type { Selection, TextItem } from "../lib/types";
@@ -174,6 +175,8 @@ export function renderText(
         (align) => write({ align: align as TextItem["align"] }),
       ).root,
       fontButton(item, (font) => write({ font })),
+      // The project's own fonts — added here, or dropped on this sidebar.
+      projectFontsRow(),
       ...sizeRows(item, textId, (size) => write({ size })),
       // Against the size rather than in pixels, which is what a leading *is*:
       // a note retyped twice as big keeps its spacing without anybody
@@ -186,6 +189,17 @@ export function renderText(
         4,
         (lineHeight) => write({ lineHeight }),
         0.05,
+      ),
+      // Against the size too, for the same reason: tracking set on a heading
+      // stays the same tracking when the heading is made bigger.
+      numberRow(
+        "Letter spacing",
+        "em",
+        item.letterSpacing ?? 0,
+        -0.5,
+        2,
+        (letterSpacing) => write({ letterSpacing: letterSpacing || undefined }),
+        0.01,
       ),
       // Wrapping used to be a section of its own, which made a heading out of
       // a switch: it is one of the four or five decisions about how the words
@@ -437,22 +451,14 @@ function fontButton(item: TextItem, onPick: (font: string) => void): HTMLElement
     "button",
     {
       class: "panel-btn font-btn",
-      title: "The typeface, from the ones installed on this device",
+      title: "The typeface: this project's own fonts, then the ones on this device",
       onClick: (event: Event) => {
         const anchor = event.currentTarget as HTMLElement;
-        openMenu(
-          anchor,
-          systemFonts().map((font) => ({
-            label: font.name,
-            font: font.id,
-            current: font.id === item.font,
-            onSelect: () => onPick(font.id),
-          })),
-        );
+        openMenu(anchor, fontMenuItems(item.font, onPick));
       },
     },
     h("span", {
-      text: fontLabel(item.font),
+      text: isProjectFont(item.font) ? `${fontLabel(item.font)} · project` : fontLabel(item.font),
       style: { fontFamily: item.font },
     }),
   );

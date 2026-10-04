@@ -40,6 +40,7 @@ mod psd_write;
 mod print;
 mod print_artboards;
 mod project_create;
+mod project_fonts;
 mod pdf_writer;
 mod print_files;
 mod print_pdf;
@@ -424,6 +425,11 @@ pub fn run() {
             projects::set_project_page,
             print_pdf::export_print_pdf,
             psd_pixel_scale::set_psd_pixel_scale,
+            project_fonts::list_project_fonts,
+            project_fonts::save_project_font,
+            project_fonts::save_dropped_font,
+            project_fonts::read_project_font,
+            project_fonts::delete_project_font,
             print_files::save_print_file,
             print_files::save_print_files,
             print_psd::export_print_psd,

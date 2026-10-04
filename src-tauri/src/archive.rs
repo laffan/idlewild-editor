@@ -55,7 +55,7 @@ const FORMAT: u32 = 1;
 /// One list, read in both directions: an export puts nothing else in, and an
 /// import takes nothing else out. That second half is the guard — a `.idlewild`
 /// is an untrusted zip, and this is what stops one writing where it likes.
-const CARRIED_DIRS: [&str; 4] = ["psd/", "assets/", "print/", "game/"];
+const CARRIED_DIRS: [&str; 5] = ["psd/", "assets/", "print/", "game/", "fonts/"];
 const CARRIED_FILES: [&str; 2] = ["doc.json", "thumbnail.png"];
 
 /// Ceilings on what an import will unpack, so a hostile or broken file cannot

@@ -118,6 +118,9 @@ export function listenForDrop(
   const onDrop = (event: DragEvent) => {
     if (!carriesFiles(event.dataTransfer)) return;
     event.preventDefault();
+    // Somewhere else on the page — the sidebar takes fonts — is not a drop
+    // on the canvas, and not one to explain as a missing image.
+    if (!inside(canvas, event.clientX, event.clientY)) return clear();
     const file = imageFrom(event.dataTransfer);
     if (!file) {
       refuse(Array.from(event.dataTransfer?.files ?? []).map((f) => f.name));
@@ -137,6 +140,7 @@ export function listenForDrop(
     over: (x, y) => track(x, y),
     leave: () => clear(),
     drop: (paths, x, y) => {
+      if (!inside(canvas, x, y)) return clear();
       const incoming = fromPaths(paths);
       if (!incoming) {
         refuse(paths.map((path) => path.split(/[\\/]/).pop() ?? path));

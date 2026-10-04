@@ -641,3 +641,31 @@ pair off and `alphaOf` reads it, and a gradient gets **per-corner** alpha,
 because a sky fading to nothing over the horizon is two stops where only the
 opacity moves. An existing project picks that up with Reset on `paintFill` and
 `gradientCorners`.
+
+### The project's own fonts
+
+`src-tauri/src/project_fonts.rs` keeps font files in `<project>/fonts/` (in
+`archive::CARRIED_DIRS`, so an `.idlewild` carries them), and
+`lib/project-fonts.ts` loads them with the `FontFace` API from their bytes —
+read over IPC as base64, no URL and no network, so the offline rule that keeps
+webfonts out still holds. `mountEditor` awaits the load before the scene
+boots, so every note is measured in its face. A family is the file's stem and
+is stored on a note as `"Family", sans-serif`, the shape a system family has.
+
+Two ways in, for the reason `drop.ts` has two: `editor/font-drop.ts` takes the
+webview's HTML5 drop on the properties sidebar (iPadOS) and the shell's
+drag-drop paths (macOS, through `save_dropped_font`, which refuses anything
+that is not a font). `drop.ts` now ignores a drop that is not over the canvas
+rather than explaining that a font is not an image. **Add font…** in the Text
+section is a file picker with no `accept` list on iOS, where a list of
+extensions can grey a font out of the Files sheet.
+
+### Letter spacing
+
+`TextItem.letterSpacing`, in ems, is applied **by hand** in the one ruler and
+the one rasteriser: a run measures `measureText + spacing × characters`, and
+is drawn a character at a time at the width of the run up to it plus the
+spacing so far, which keeps the face's kerning. The 2D context's own
+`letterSpacing` is not used because the WebKit on an older iPad has none, and
+a box measured one way and drawn another is a note that spills out of its
+outline.

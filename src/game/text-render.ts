@@ -94,6 +94,7 @@ export class TextRender {
       item.font,
       item.align,
       item.lineHeight ?? null,
+      item.letterSpacing ?? null,
       item.wrapWidth ?? null,
       // How a note is laid into the grid's plane is part of what the texture
       // *is* — the same words flat, on the other diagonal, or standing up are

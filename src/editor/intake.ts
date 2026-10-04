@@ -41,6 +41,7 @@ import {
   type PasteTarget,
 } from "./paste-actions";
 import { listenForDrop } from "./drop";
+import { listenForFontDrop } from "./font-drop";
 
 export interface IntakeConfig {
   projectId: string;
@@ -51,6 +52,8 @@ export interface IntakeConfig {
   os: string;
   /** The canvas area. A drop anywhere else is not a drop on the game. */
   canvas: HTMLElement;
+  /** The properties sidebar, which takes dropped font files. */
+  sidebar?: HTMLElement;
   /** The live scene, or null before it has booted. */
   scene: () => WorldScene | null;
   /** Whether anything should be taken at all — false in play mode. */
@@ -176,6 +179,8 @@ export function startIntake(config: IntakeConfig): Intake {
     onCopy: () => copy(false),
   });
 
+  // Font files on the properties sidebar — see `font-drop.ts`.
+  const stopFonts = config.sidebar ? listenForFontDrop(config.projectId, config.sidebar) : () => {};
   const stopDrop = listenForDrop(config.projectId, config.canvas, {
     enabled: () => config.enabled() && !!config.scene(),
     paste: target,
@@ -189,6 +194,7 @@ export function startIntake(config: IntakeConfig): Intake {
     paste,
     copy: () => void copy(true),
     stop: () => {
+      stopFonts();
       stopPaste();
       stopShortcut();
       stopCopy();
