@@ -298,8 +298,8 @@ fn open_psd(app: tauri::AppHandle, id: String, key: String) -> Result<(), String
 ///
 /// Called just before the file goes out to another app — Open PSD on a
 /// desktop, the share sheet on an iPad — so what leaves carries the colours
-/// the project is being drawn in. `strip` is absent when **Attach palette to PSDs**
-/// is off, which is a request to take out a strip left by an earlier send
+/// the project is being drawn in. `strip` is absent when the file's **Include
+/// palette** box is off, which is a request to take out a strip left by an earlier send
 /// rather than a request to do nothing. See `psd_palette`.
 #[tauri::command]
 fn sync_psd_palette(

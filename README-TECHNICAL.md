@@ -178,7 +178,6 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 |---|---|
 | A colour carries its own opacity | [`Docs/drawing.md`](Docs/drawing.md) |
 | A platformer moves in spaces, not pixels | [`Docs/exported-game.md`](Docs/exported-game.md) |
-| Attach palette to PSDs | [`Docs/colour.md`](Docs/colour.md) |
 | Adding a layer, and the empty one | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Browse Palettes | [`Docs/colour.md`](Docs/colour.md) |
 | Carrying a palette off a tile layer | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
@@ -195,6 +194,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | It reads a patch, not a pixel | [`Docs/colour.md`](Docs/colour.md) |
 | Gesture routing | [`Docs/gestures.md`](Docs/gestures.md) |
 | Import Assets, which is that door inward | [`Docs/exports.md`](Docs/exports.md) |
+| Include palette | [`Docs/colour.md`](Docs/colour.md) |
 | IPC surface | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
 | Known gaps | [`Docs/known-gaps.md`](Docs/known-gaps.md) |
 | Layer visibility | [`Docs/psd-layers.md`](Docs/psd-layers.md) |

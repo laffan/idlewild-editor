@@ -217,30 +217,25 @@
 }
 .side-panel .psd-pixel-scale-seg .opt-seg-btn:last-child { flex: 0 0 auto; padding: 0 6px; }
 
-/* Open PSD / Share PSD with its two Include boxes, one bordered control under
-   Adjust layers and Re-parse — see `openControl` in psd-layer-actions.ts. The
-   button is the top of the box and the boxes are its foot. */
-.psd-layers-head-block { display: flex; flex-direction: column; gap: 6px; }
-.psd-open {
+/* Open PSD / Share PSD with its two Include boxes under Adjust layers and
+   Re-parse — see `openControl` in psd-layer-actions.ts. The button is an
+   ordinary `.panel-btn`, the same size and hover as the two above it, and the
+   boxes sit directly under it as its options. The block keeps clear of the
+   layer list beneath, so the ticks do not read as the list's first rows. */
+.psd-layers-head-block {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--chrome-rule-strong, var(--chrome-rule));
+  gap: 6px;
+  margin-bottom: 14px;
 }
-.psd-open-btn {
-  min-height: 36px;
-  border: 0;
-  background: transparent;
-  color: var(--chrome-text);
-  font: 600 13px var(--font-heading);
-  text-align: center;
-}
-.psd-open-btn:hover { background: var(--chrome-panel); }
+.psd-layers-head-block .psd-layers-head { margin-bottom: 0; }
+.psd-open { display: flex; flex-direction: column; gap: 2px; }
+.psd-open .psd-open-btn { margin-top: 0; justify-content: center; text-align: center; }
 .psd-open-includes {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 12px;
-  padding: 6px 10px 8px;
-  border-top: 1px solid var(--chrome-rule);
+  gap: 0 12px;
+  padding: 0 2px;
 }
 .psd-open-include {
   display: inline-flex;
@@ -251,7 +246,31 @@
   color: var(--chrome-dim);
   cursor: pointer;
 }
+.psd-open-include:hover { color: var(--chrome-text); }
 .psd-open-include input { accent-color: var(--color-accent); width: 16px; height: 16px; margin: 0; }
 .psd-open-include:has(input:checked) { color: var(--chrome-text); }
 .psd-pixel-block { display: flex; flex-direction: column; gap: 6px; }
 .psd-pixel-block .psd-downsample-btn { margin-top: 0; }
+
+/* The Downsample sheet — see editor/psd-downsample.ts. Each preset carries
+   the pixel size it makes under its fraction, and the once-per-PSD warning
+   sits under the group in the accent, where it is read before the press. */
+.downsample-sizes .opt-seg-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px 11px;
+}
+.downsample-dim {
+  font: 500 10px var(--font-mono);
+  opacity: 0.75;
+}
+.downsample-dim:empty { display: none; }
+.options-group-note.downsample-once {
+  padding: 8px 10px;
+  border-left: 2px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent-300);
+}

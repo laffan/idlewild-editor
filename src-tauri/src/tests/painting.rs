@@ -628,7 +628,7 @@ fn pixel_art_drawn_big_is_downsampled_and_upscaled_back() {
                 .expect("PSD should be written");
         std::fs::write(store::psd_dir(id).expect("psd dir").join("big.psd"), &bytes)
             .expect("PSD should save");
-        crate::psd_pixel_scale::downsample(id, "big", 0.25, 4, |_| {}).expect("downsample");
+        crate::psd_pixel_scale::downsample(id, "big", 0.25, 4, true, |_| {}).expect("downsample");
         let list = psd_layers::read(id, "big").expect("layers");
         assert_eq!((list.width, list.height), (10, 5), "the file itself is a quarter");
         let meta = store::read_meta(id).expect("meta");
@@ -637,7 +637,20 @@ fn pixel_art_drawn_big_is_downsampled_and_upscaled_back() {
             serde_json::from_str(&crate::psd_pipeline::read_manifest(id, "big").expect("manifest"))
                 .expect("json");
         assert_eq!(manifest["width"], 40, "and processed back at its old size");
-        assert!(crate::psd_pixel_scale::downsample(id, "big", 1.5, 1, |_| {}).is_err());
+        assert!(crate::psd_pixel_scale::downsample(id, "big", 1.5, 1, false, |_| {}).is_err());
+        // Maintain canvas size is once per file — a second is refused before
+        // the file is touched — and a rename takes that with it.
+        assert!(meta.downsample_kept.contains("big"));
+        assert!(crate::psd_pixel_scale::downsample(id, "big", 0.5, 2, true, |_| {}).is_err());
+        let list = psd_layers::read(id, "big").expect("layers");
+        assert_eq!((list.width, list.height), (10, 5), "the refusal changed nothing");
+        // Without it, the file can still be shrunk further.
+        crate::psd_pixel_scale::downsample(id, "big", 0.5, 4, false, |_| {}).expect("again");
+        let list = psd_layers::read(id, "big").expect("layers");
+        assert_eq!((list.width, list.height), (5, 3));
+        crate::psd_pixel_scale::carry(id, "big", "small", true);
+        let meta = store::read_meta(id).expect("meta");
+        assert!(meta.downsample_kept.contains("small") && !meta.downsample_kept.contains("big"));
     });
     store::delete_project(&meta.id).ok();
     if let Err(panic) = result {

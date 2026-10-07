@@ -143,6 +143,9 @@ export function renderFill(
   if (!fill) return panel.empty();
 
   panel.head("Filled space", describeFill(fill));
+  // A fill is a fast way to block a shape out on the grid; this is what turns
+  // the block-out into something an artist can paint.
+  convertSection(panel, "panel-btn", () => actions.onFillToPsd());
   panel.section("Info");
   // What it is *made of*, which is the library's answer when it has one and
   // falls back to the two the document already had: a PSD texture, or a
@@ -171,17 +174,39 @@ export function renderFill(
     h(
       "div",
       { class: "inspect-section" },
-      // A fill is a fast way to block a shape out on the grid; this is
-      // what turns the block-out into something an artist can paint.
-      h("button", {
-        class: "panel-btn",
-        text: "Convert to PSD",
-        onClick: () => actions.onFillToPsd(),
-      }),
       h("button", {
         class: "panel-btn",
         text: "Delete fill",
         onClick: () => actions.onDeleteSelection(),
+      }),
+    ),
+  );
+}
+
+/**
+ * **Convert to PSD**, directly under the title.
+ *
+ * The one exit that makes a fill, a sketch or a note into a file — and the
+ * thing somebody selected it to do more often than not — so it is the first
+ * control in the panel rather than the last, under everything it does not
+ * change. A section of its own, which the head's rule already sits over; see
+ * `.inspect-head + .inspect-section`.
+ */
+export function convertSection(
+  panel: PanelSurface,
+  className: string,
+  onConvert: () => void,
+  title?: string,
+): void {
+  panel.body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("button", {
+        class: className,
+        text: "Convert to PSD",
+        title: title ?? null,
+        onClick: onConvert,
       }),
     ),
   );
@@ -520,6 +545,7 @@ export function renderStrokes(
   if (strokes.length === 0) return panel.empty();
 
   panel.head("Sketch", count(strokes.length, "stroke"));
+  convertSection(panel, "panel-btn primary", () => actions.onStrokesToPsd());
   panel.section("Info");
   panel.row("Layer", layer.name);
   const box = strokesBox(strokes);
@@ -532,11 +558,6 @@ export function renderStrokes(
     h(
       "div",
       { class: "inspect-section" },
-      h("button", {
-        class: "panel-btn primary",
-        text: "Convert to PSD",
-        onClick: () => actions.onStrokesToPsd(),
-      }),
       h("button", {
         class: "panel-btn",
         text: "Convert to boundary",

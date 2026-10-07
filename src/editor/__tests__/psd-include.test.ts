@@ -3,7 +3,6 @@ import { canvasInWorld } from "../../lib/placing";
 import { CHROME_DEPTH, CHROME_NAME, isMaterial } from "../../game/chrome";
 import { carrySendChoice, sendChoiceOf } from "../psd-send";
 import { setOpenProject } from "../../lib/print";
-import { palette } from "../../lib/palette";
 import type { Placement, ProjectMeta } from "../../lib/types";
 
 describe("Include context's box", () => {
@@ -32,9 +31,10 @@ describe("what goes into a PSD", () => {
     createdAt: 0, updatedAt: 0, layerCount: 1, ...(psdSend ? { psdSend } : {}),
   });
 
-  it("follows the app-wide palette switch until the file has its own answer", () => {
-    setOpenProject(meta({ door: { palette: false, context: true } }));
-    expect(sendChoiceOf("tree")).toEqual({ palette: palette.attach, context: false });
+  it("is off until the file has its own answer", () => {
+    setOpenProject(meta({ door: { palette: false, context: true }, roof: { palette: true } }));
+    expect(sendChoiceOf("tree")).toEqual({ palette: false, context: false });
+    expect(sendChoiceOf("roof")).toEqual({ palette: true, context: false });
     expect(sendChoiceOf("door")).toEqual({ palette: false, context: true });
     carrySendChoice("door", "gate", true);
     expect(sendChoiceOf("gate")).toEqual({ palette: false, context: true });

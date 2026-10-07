@@ -5,7 +5,7 @@
 //! does not survive PSD-heavy projects, so Idlewild gives each project its
 //! own directory and writes the document beside its assets.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 /// The shape of the space a project is built in.
@@ -467,6 +467,11 @@ pub struct ProjectMeta {
     /// and Include context, by key. See `psd_send.rs`.
     #[serde(default, rename = "psdSend", skip_serializing_if = "BTreeMap::is_empty")]
     pub psd_send: BTreeMap<String, crate::psd_send::PsdSend>,
+    /// The PSDs that have been through Pixel Art Downsample with **Maintain
+    /// canvas size**, which a file can only do once — see
+    /// `psd_pixel_scale::downsample`.
+    #[serde(default, rename = "downsampleKept", skip_serializing_if = "BTreeSet::is_empty")]
+    pub downsample_kept: BTreeSet<String>,
 }
 
 impl ProjectMeta {
@@ -494,6 +499,7 @@ impl ProjectMeta {
             output: crate::print::Output::default(),
             pixel_scale: BTreeMap::new(),
             psd_send: BTreeMap::new(),
+            downsample_kept: BTreeSet::new(),
         }
     }
 }

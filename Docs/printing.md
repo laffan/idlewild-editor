@@ -49,6 +49,14 @@ redraws, and a running Output restarts if the sheet's size or position — not
 its format — changed. The dimension rows themselves are
 `lib/print-dimensions.ts`, shared by the New Project sheet and Page Setup.
 
+**Clipboard**, a row under Custom, sizes the sheet to the image on the
+clipboard: `pageFromPixels` turns its pixels into points at the DPI (`px × 72 /
+dpi`), clamped to the page range, which is the world size `planFor` gives the
+same image pasted onto the canvas — so a page made from a screenshot is the
+screenshot, edge for edge. The reading is the caller's (`clipboardImage` and
+`lib/image-size.ts`, which reads a PSD's header and hands anything else to
+`createImageBitmap`), so the rows stay free of the shell.
+
 **A print project is Blank PSD to Phaser.** `ExportForPrint()` reads the page
 off a running Phaser scene, and a character or gravity is a game's, so the New
 Project sheet — whose first question is now Web or Print — takes the

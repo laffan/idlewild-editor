@@ -58,9 +58,19 @@ Part of [the Idlewild manual](README.md).
   *drawn* big — a patch of canvas made into a PSD, a game screenshot at 4× —
   made into the small file it really is. Pick **.5**, **.33**, **.25** or a
   **Custom** size. This one rewrites the PSD itself, nearest neighbour, and
-  cannot be undone. **Maintain canvas size** (on to begin with) sets Pixel art
-  upscale to match — .5 → 2×, .33 → 3×, .25 → 4× — so the artwork stays the
-  size it is on the canvas and is drawn sharp; off, it shrinks
+  cannot be undone. Each size shows the pixel dimensions the file will have
+  under it, and **Now** says what it is before. **Maintain canvas size** (on
+  to begin with) sets Pixel art upscale to match — .5 → 2×, .33 → 3×, .25 →
+  4× — so the artwork stays the size it is on the canvas and is drawn sharp;
+  off, it shrinks
+- **Maintain canvas size can be used once per PSD**, and the sheet says so
+  before you press it. After the first time, the file holds the pixel art's
+  real pixels and the upscale keeps it its size. A second downsample would
+  throw some of those real pixels away, and its upscale replaces the first
+  rather than multiplying it — so keeping the size would mean stretching the
+  artwork by a fraction, and a pixel stretched by a fraction is smoothed: the
+  hard edges go fuzzy. On a file that has used it the box is greyed out; the
+  file can still be downsampled further without it, and it shrinks
 
 ## PSD Edit mode
 

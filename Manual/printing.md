@@ -20,7 +20,11 @@ Part of [the Idlewild manual](README.md).
     **orientation** — or **Custom**, a width and a height in **inches** or
     **centimetres**, from half an inch to four feet. A custom size is the way
     round you type it, so it takes no orientation; switching the unit converts
-    what is in the boxes
+    what is in the boxes. **Clipboard**, under Custom, sizes the page to the
+    image on the clipboard: its pixels at the resolution picked above, which
+    is the size that same image comes in at when you paste it onto the canvas —
+    a 1920 × 1080 screenshot at 300 DPI is a 6.4 × 3.6 inch page. Page Setup
+    has the same row
 - **Scaffolding and Rendering go away under Print.** A print project is always
   **Blank PSD to Phaser** — your artwork placed and nothing written over it but
   what you write — because `ExportForPrint()` reads the page off a running

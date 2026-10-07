@@ -1,9 +1,9 @@
 //! What goes into a PSD with it when it leaves: the two boxes on the Open PSD
 //! / Share PSD control, kept per file in `ProjectMeta::psd_send`.
 //!
-//! **Include palette** is the app-wide *Attach palette to PSDs* made per
-//! file: absent means "whatever the app-wide switch says", which is how every
-//! PSD behaved before, and ticked or unticked is that file's own answer.
+//! **Include palette** writes the working palette into the file. Absent means
+//! it has never been ticked, which is off; there is no app-wide switch for it
+//! to follow any more.
 //! **Include context** writes the canvas around the file into it — see
 //! `psd_context.rs` — and is off until it is ticked.
 //!
@@ -18,7 +18,7 @@ use crate::store;
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PsdSend {
-    /// None follows the app-wide *Attach palette to PSDs*.
+    /// None has never been ticked, and reads as off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

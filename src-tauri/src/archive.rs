@@ -114,6 +114,10 @@ pub struct ArchivedProject {
     /// Include palette / Include context, by key.
     #[serde(default, rename = "psdSend")]
     pub psd_send: std::collections::BTreeMap<String, crate::psd_send::PsdSend>,
+    /// The files already downsampled with Maintain canvas size, which may not
+    /// be again.
+    #[serde(default, rename = "downsampleKept")]
+    pub downsample_kept: std::collections::BTreeSet<String>,
 }
 
 /// **Export project**: the project itself, as a `.idlewild` file — source PSDs
@@ -166,6 +170,7 @@ pub fn export(project_id: &str, dest: &Path) -> Result<(), String> {
             output: meta.output.clone(),
             pixel_scale: meta.pixel_scale.clone(),
             psd_send: meta.psd_send.clone(),
+            downsample_kept: meta.downsample_kept.clone(),
         },
     };
     zip.start_file(MANIFEST, options).map_err(|e| e.to_string())?;
@@ -355,6 +360,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
     meta.output = project.output.clone();
     meta.pixel_scale = project.pixel_scale.clone();
     meta.psd_send = project.psd_send.clone();
+    meta.downsample_kept = project.downsample_kept.clone();
     store::write_meta(&meta)?;
 
     if !store::game_dir(id)?.join("index.html").exists() {

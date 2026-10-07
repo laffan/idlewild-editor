@@ -122,7 +122,7 @@ export function readColliders(scene) {
   scene.blockedCells = new Set();
   scene.colliderBoxes = [];
   for (const layer of layersOf(scene)) {
-    if (layer.visible === false) continue;
+    if (layer.visible === false || !standsOn(layer)) continue;
     for (const placement of layer.placements ?? []) {
       const collider = placement.collider;
       if (!collider || !collider.blocking) continue;
@@ -152,6 +152,7 @@ export function isWalkable(scene, cx, cy) {
     if (contains(box, centre)) return false;
   }
   for (const layer of layersOf(scene)) {
+    if (!standsOn(layer)) continue;
     for (const fill of layer.fills ?? []) {
       if (fill.walkable) continue;
       for (const box of scene.grid.fillBoxes(fill)) {
@@ -160,6 +161,15 @@ export function isWalkable(scene, cx, cy) {
     }
   }
   return true;
+}
+
+/**
+ * Whether the character can collide with what is on a layer. A background
+ * layer is scenery behind the game — a sky, a horizon, a painted backdrop —
+ * so a fill or a collider on one is never something to walk around.
+ */
+function standsOn(layer) {
+  return layer.kind !== "background";
 }
 
 function contains(box, p) {

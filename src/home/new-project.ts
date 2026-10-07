@@ -108,6 +108,8 @@
 import { gridPreview } from "./grid-preview";
 import { openSheet } from "../lib/sheet";
 import { dimensionRows } from "../lib/print-dimensions";
+import { imageSize } from "../lib/image-size";
+import { clipboardImage } from "../editor/clipboard";
 import { h } from "../lib/dom";
 import { optionGroup, optionRow, optionsPage } from "../lib/options-list";
 import {
@@ -200,7 +202,12 @@ export function openNewProject(
   });
   // The sheet: a standard size and its orientation, or Custom in inches or
   // centimetres — the same rows Page Setup shows. See `lib/print-dimensions`.
-  const dimensions = dimensionRows(output, (patch) => Object.assign(output, patch));
+  // Under Custom, Clipboard sizes the page to the image on the clipboard at
+  // the DPI picked above.
+  const dimensions = dimensionRows(output, (patch) => Object.assign(output, patch), {
+    dpi: () => output.dpi,
+    read: async () => imageSize(await clipboardImage()),
+  });
   const outputSeg = optionSegmented(
     [
       // "Web" on the sheet, `code` on disk: both kinds of project are code,

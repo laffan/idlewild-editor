@@ -105,11 +105,9 @@ describe("the working palette", () => {
   it("comes back as it was left", () => {
     const first = new PaletteStore();
     first.addMany(["#111111", "#222222"]);
-    first.attach = true;
 
     const second = new PaletteStore();
     expect(second.list()).toEqual(["#111111", "#222222"]);
-    expect(second.attach).toBe(true);
   });
 
   it("starts fresh rather than throwing on a store it cannot read", () => {
@@ -129,10 +127,6 @@ describe("the working palette", () => {
     // A refusal is not a change.
     palette.add("#111111");
     expect(heard).toBe(1);
-    palette.attach = true;
-    expect(heard).toBe(2);
-    palette.attach = true;
-    expect(heard).toBe(2);
   });
 });
 

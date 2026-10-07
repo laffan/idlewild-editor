@@ -75,7 +75,10 @@ Part of [the Idlewild manual](README.md).
   It is the longest wait in the editor, so the sheet stays up and says what
   the pipeline is doing while it happens. That file is a placement like any
   other, so it drags, exports and stacks the way everything else does; what
-  makes it a background is the layer it is on
+  makes it a background is the layer it is on. **The character never collides
+  with a background layer**: a fill, a collider or a boundary on one is
+  scenery, so the top-down character walks over it and the platformer's does
+  not stand on it
 - A **tile layer** is a [Tiled](https://www.mapeditor.org/) map, and it is the
   one kind not offered on a blank project. A PSD dropped on one is not placed
   on the canvas: it is cut into a palette along the same boundaries as the

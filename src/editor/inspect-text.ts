@@ -59,7 +59,7 @@ import { fontMenuItems, isProjectFont, projectFontsRow } from "./inspect-fonts";
 import { openMenu } from "../lib/menu";
 import { plainText } from "../lib/text-markdown";
 import type { Selection, TextItem } from "../lib/types";
-import type { PanelSurface } from "./inspect-panels";
+import { convertSection, type PanelSurface } from "./inspect-panels";
 
 /** What this panel needs from the shell around it. */
 export interface TextActions {
@@ -132,6 +132,13 @@ export function renderText(
   };
 
   panel.head("Text", firstLine(item));
+  convertSection(
+    panel,
+    "panel-btn primary",
+    () => actions.onTextToPsd(),
+    "The words become pixels in a file of their own, placed where they " +
+      "are standing. The game never sees a font.",
+  );
   panel.section("Info");
   panel.row("Layer", layer.name);
   panel.row("Size", `${Math.round(item.width)} × ${Math.round(item.height)}`);
@@ -287,14 +294,6 @@ export function renderText(
     h(
       "div",
       { class: "inspect-section" },
-      h("button", {
-        class: "panel-btn primary",
-        text: "Convert to PSD",
-        title:
-          "The words become pixels in a file of their own, placed where they " +
-          "are standing. The game never sees a font.",
-        onClick: () => actions.onTextToPsd(),
-      }),
       h("button", {
         class: "panel-btn",
         text: "Delete text",

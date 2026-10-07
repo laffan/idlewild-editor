@@ -12,8 +12,15 @@
  * The rows report every change as a patch to `Output`; what happens to it —
  * held until Create on the sheet, written at once in Page Setup — is the
  * caller's.
+ *
+ * **Clipboard**, under Custom, sizes the page to the image on the clipboard:
+ * its pixels at the project's DPI, which is the size that same image arrives
+ * at when it is pasted onto the canvas — so a page made from a screenshot is
+ * the screenshot, edge for edge. Only where the caller can read a clipboard;
+ * the reading is the caller's, so these rows stay free of the shell.
  */
 
+import { h } from "./dom";
 import { optionRow } from "./options-list";
 import { optionNumber, optionSegmented } from "./options-controls";
 import {
@@ -26,17 +33,44 @@ import {
   type Output,
   type PageUnit,
 } from "./print";
+import type { PixelSize } from "./image-size";
 
 export interface DimensionRows {
-  /** In order: Dimensions, Orientation, Width, Height, Unit. */
+  /** In order: Dimensions, Orientation, Clipboard, Unit, Width, Height. */
   rows: HTMLElement[];
   /** Show or hide the lot — the New Project sheet does under Web. */
   setShown: (shown: boolean) => void;
 }
 
+/** What the Clipboard row needs from whoever shows it. */
+export interface ClipboardSizing {
+  /** The pixels to the inch the page is printed at, read when pressed. */
+  dpi: () => number;
+  /** The image on the clipboard's size, or a rejection saying why not. */
+  read: () => Promise<PixelSize>;
+}
+
+/**
+ * A clipboard image's pixels as a page size in points, at `dpi` — clamped to
+ * what a page may be, with `clamped` saying whether it had to be.
+ */
+export function pageFromPixels(
+  size: PixelSize,
+  dpi: number,
+): { width: number; height: number; clamped: boolean } {
+  const fit = (px: number) =>
+    Math.min(PAGE_RANGE.max, Math.max(PAGE_RANGE.min, (px * 72) / dpi));
+  const width = fit(size.width);
+  const height = fit(size.height);
+  const clamped =
+    width !== (size.width * 72) / dpi || height !== (size.height * 72) / dpi;
+  return { width, height, clamped };
+}
+
 export function dimensionRows(
   initial: Output,
   onChange: (patch: Partial<Output>) => void,
+  clipboard?: ClipboardSizing,
 ): DimensionRows {
   const output: Output = { ...initial };
   let shown = true;
@@ -96,16 +130,55 @@ export function dimensionRows(
     (value) => {
       output.unit = value as PageUnit;
       onChange({ unit: output.unit });
-      // New boxes rather than relabelled ones: the range and the unit beside
-      // the number both change, and the size is re-read in the new unit.
-      const freshWidth = box("customWidth", "Page width");
-      const freshHeight = box("customHeight", "Page height");
-      width.root.replaceWith(freshWidth.root);
-      height.root.replaceWith(freshHeight.root);
-      width = freshWidth;
-      height = freshHeight;
+      refreshBoxes();
     },
   );
+
+  // New boxes rather than relabelled ones: the range and the unit beside the
+  // number both change, and the size is re-read in the new unit.
+  function refreshBoxes(): void {
+    const freshWidth = box("customWidth", "Page width");
+    const freshHeight = box("customHeight", "Page height");
+    width.root.replaceWith(freshWidth.root);
+    height.root.replaceWith(freshHeight.root);
+    width = freshWidth;
+    height = freshHeight;
+  }
+
+  const clipboardNote = h("span", { class: "option-value" });
+  const clipboardRow = clipboard
+    ? optionRow({
+        title: "Clipboard",
+        sub: "The size of the image on the clipboard, at the page's DPI.",
+        control: clipboardNote,
+        actions: [
+          {
+            label: "Use image size",
+            onSelect: () => void fromClipboard(clipboard),
+          },
+        ],
+      })
+    : null;
+
+  async function fromClipboard(source: ClipboardSizing): Promise<void> {
+    clipboardNote.textContent = "Reading…";
+    let size: PixelSize;
+    try {
+      size = await source.read();
+    } catch (err) {
+      clipboardNote.textContent =
+        err instanceof Error ? err.message : String(err);
+      return;
+    }
+    const page = pageFromPixels(size, source.dpi());
+    output.customWidth = page.width;
+    output.customHeight = page.height;
+    onChange({ customWidth: page.width, customHeight: page.height });
+    refreshBoxes();
+    clipboardNote.textContent =
+      `${size.width} \u00d7 ${size.height} px` +
+      (page.clamped ? " — fitted to the sizes a page can be" : "");
+  }
 
   const dimensionsRow = optionRow({
     title: "Dimensions",
@@ -125,11 +198,19 @@ export function dimensionRows(
     widthRow.hidden = !shown || !custom;
     heightRow.hidden = !shown || !custom;
     unitRow.hidden = !shown || !custom;
+    if (clipboardRow) clipboardRow.hidden = !shown || !custom;
   }
   sync();
 
   return {
-    rows: [dimensionsRow, orientationRow, unitRow, widthRow, heightRow],
+    rows: [
+      dimensionsRow,
+      orientationRow,
+      ...(clipboardRow ? [clipboardRow] : []),
+      unitRow,
+      widthRow,
+      heightRow,
+    ],
     setShown: (on) => {
       shown = on;
       sync();

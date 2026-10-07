@@ -621,13 +621,28 @@ processes it under one lock. With **Maintain canvas size** the upscale is
 by each placement's scale about its anchor, as the upscale's own Keep the size
 does.
 
+**Maintain canvas size is once per file.** `ProjectMeta.downsampleKept` names
+the keys that have used it — carried by rename, duplicate and `.idlewild` like
+`pixelScale` — and `downsample` refuses a second before it touches the file;
+the sheet greys the box out and says why. The reason is the upscale: the
+first pass leaves the file at the art's real pixels with `round(1 / factor)`
+making up the size, and a second sets the upscale to its *own* factor rather
+than the product of the two, so keeping the size would hand the remainder to
+the placement's scale — a fractional, smoothed stretch of hard-edged pixels.
+Without the box a file can be shrunk again, and simply shrinks.
+
+The sheet reads the file's size with `read_psd_layers` and shows what each
+preset and a custom size will write, with the same rounding as
+`psd_downsample::scaled` (`downsampledLength`).
+
 ### Include palette and Include context
 
 The Open / Share PSD control (`openControl` in `editor/psd-layer-actions.ts`)
 carries two ticks, kept per key in `ProjectMeta.psdSend` by `psd_send.rs`
-(carried by rename, duplicate and `.idlewild` like `pixelScale`). An absent
-`palette` follows the app-wide *Attach palette to PSDs*; `context` is off
-until ticked. `openPsdExternally` syncs both before the bytes leave, and
+(carried by rename, duplicate and `.idlewild` like `pixelScale`). Both are off
+until ticked — there used to be an app-wide *Attach palette to PSDs* switch
+under the colour picker that an absent `palette` followed, and it was taken
+out as a second control for the same strip. `openPsdExternally` syncs both before the bytes leave, and
 `setInclude` syncs the one that changed at once, so unticking takes its layer
 out without waiting for a send.
 

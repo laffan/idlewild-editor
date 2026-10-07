@@ -123,7 +123,9 @@ export function psdHeadRow(
  * each is written fresh every time the file goes out. Unticking one takes
  * its layer out of the file. The boxes are labels beside the button rather
  * than inside it — a control inside a button is not one a finger or a screen
- * reader can reach — and the border round all three is what makes them one.
+ * reader can reach. The button is an ordinary `panel-btn`, like Re-parse
+ * above it: a box drawn round all three made it read as a panel rather than
+ * as something to press.
  */
 function openControl(
   state: PsdHeadState,
@@ -131,7 +133,7 @@ function openControl(
   include: PsdIncludeCallbacks,
 ): HTMLElement {
   const button = h("button", {
-    class: "psd-open-btn",
+    class: "panel-btn psd-open-btn",
     text: state.openLabel,
     onClick: callbacks.onOpen,
   });

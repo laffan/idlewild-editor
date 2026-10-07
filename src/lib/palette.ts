@@ -1,6 +1,7 @@
 /**
  * The working palette: the colours somebody has decided this project looks
- * like, and whether they travel out with the artwork.
+ * like. Whether they travel out with a PSD is that file's own **Include
+ * palette** box on Open PSD / Share PSD — see `editor/psd-send.ts`.
  *
  * **It is one palette, not a library of them.** The pattern and shape
  * libraries are libraries because a pattern is a *mark* — you keep dozens and
@@ -27,7 +28,6 @@
 import { alphaOf, isValidHex, normaliseHex } from "./color";
 
 const KEY = "idlewild.palette";
-const ATTACH_KEY = "idlewild.palette.attach";
 
 /**
  * As many colours as the row will hold.
@@ -67,7 +67,6 @@ export function psdSwatchSize(gridSize: number): number {
  */
 export class PaletteStore extends EventTarget {
   private colors: string[] = read();
-  private attaching: boolean = readAttach();
 
   /** The palette, in the order it was built. */
   list(): string[] {
@@ -147,29 +146,6 @@ export class PaletteStore extends EventTarget {
     if (this.colors.length === 0) return;
     this.colors = [];
     this.commit();
-  }
-
-  /**
-   * Whether the palette goes out with a PSD — see `editor/psd-actions.ts`.
-   *
-   * A preference rather than a property of the palette, but stored beside it
-   * because it is meaningless apart from it: what the toggle attaches is
-   * *this* list, and a project with an empty palette attaches nothing whatever
-   * the flag says.
-   */
-  get attach(): boolean {
-    return this.attaching;
-  }
-
-  set attach(on: boolean) {
-    if (this.attaching === on) return;
-    this.attaching = on;
-    try {
-      localStorage.setItem(ATTACH_KEY, on ? "1" : "0");
-    } catch {
-      // Blocked site data — it just does not persist. See `read`.
-    }
-    this.dispatchEvent(new Event("change"));
   }
 
   private commit(): void {
@@ -271,13 +247,5 @@ function read(): string[] {
     return out;
   } catch {
     return [];
-  }
-}
-
-function readAttach(): boolean {
-  try {
-    return localStorage.getItem(ATTACH_KEY) === "1";
-  } catch {
-    return false;
   }
 }

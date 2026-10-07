@@ -6,6 +6,13 @@ import {
   rememberPixelScale,
   rescaledAbout,
 } from "../psd-pixel-scale";
+import {
+  carryDownsampleKept,
+  describeSize,
+  downsampleKept,
+  downsampledLength,
+  rememberDownsampleKept,
+} from "../psd-downsample";
 import { setOpenProject } from "../../lib/print";
 import type { Placement, ProjectMeta } from "../../lib/types";
 
@@ -81,5 +88,26 @@ describe("pixel art downsample", () => {
     expect(readDownsample("30%")).toBe(0.3);
     expect(readDownsample("1")).toBeNull();
     expect(readDownsample("half")).toBeNull();
+  });
+});
+
+describe("pixel art downsample", () => {
+  it("says the size the file will be, as Rust will write it", () => {
+    const size = { width: 512, height: 250 };
+    expect(describeSize(size)).toBe("512 × 250 px");
+    expect(describeSize(size, 1 / 2)).toBe("256 × 125 px");
+    expect(describeSize(size, 1 / 3)).toBe("171 × 83 px");
+    expect(downsampledLength(1, 1 / 4)).toBe(1);
+  });
+
+  it("remembers a file downsampled with Maintain canvas size, and carries it", () => {
+    setOpenProject(meta());
+    expect(downsampleKept("hero")).toBe(false);
+    rememberDownsampleKept("hero");
+    expect(downsampleKept("hero")).toBe(true);
+    carryDownsampleKept("hero", "hero-copy", false);
+    carryDownsampleKept("hero", "knight", true);
+    expect(["hero", "hero-copy", "knight"].map(downsampleKept)).toEqual([false, true, true]);
+    setOpenProject(null);
   });
 });

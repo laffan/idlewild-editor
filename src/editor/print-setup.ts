@@ -33,6 +33,8 @@ import { optionGroup, optionRow, optionsPage } from "../lib/options-list";
 import { artboardsOf, describePage, dpiOf, projectOutput } from "../lib/print";
 import { optionText } from "../lib/options-controls";
 import { dimensionRows } from "../lib/print-dimensions";
+import { imageSize } from "../lib/image-size";
+import { clipboardImage } from "./clipboard";
 import type { ProjectMeta } from "../lib/types";
 import { h } from "../lib/dom";
 import { changePage } from "./print-page";
@@ -50,11 +52,15 @@ export function openPrintSetup(meta: ProjectMeta, artboardId?: string): void {
   });
 
   const size = h("span", { class: "option-value", text: describePage(board) });
-  const dimensions = dimensionRows({ ...output, ...board }, (patch) => {
-    board = { ...board, ...patch };
-    size.textContent = describePage(board);
-    void changePage({ ...patch, artboard });
-  });
+  const dimensions = dimensionRows(
+    { ...output, ...board },
+    (patch) => {
+      board = { ...board, ...patch };
+      size.textContent = describePage(board);
+      void changePage({ ...patch, artboard });
+    },
+    { dpi: () => dpiOf(output), read: async () => imageSize(await clipboardImage()) },
+  );
   // Written as it is typed, like every other row here; the name that lands is
   // the one the project keeps, which may have a number on it if another
   // artboard is already called that.

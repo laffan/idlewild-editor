@@ -38,7 +38,6 @@ Top to bottom the control is now:
 ├────────────────────────────────────┤
 │  [+] ▪ ▪ ▪ ▪ ▪                     │   ← the palette: a decision
 │  [      Browse Palettes        ]   │   ← says Close while it is open
-│  Attach palette to PSDs      (●━ ) │   ← a setting, so a switch
 └────────────────────────────────────┘
 ```
 
@@ -62,10 +61,7 @@ libraries. The reasoning is the one
 a palette built on Tuesday belongs to the person rather than to whichever
 project happened to be open.
 
-### A button, and a switch
-
-The two controls under the row are different shapes because they are different
-kinds of thing, and both are the design system's own rather than this control's.
+### Browse Palettes, and the switch that went
 
 **Browse Palettes** opens something, so it is a button — `lib-row-buttons`,
 which is what the pattern and shape palettes directly above it already use.
@@ -74,16 +70,14 @@ the *home screen's* ink, and the dark-panel override lives on
 `.side-panel .lib-row-buttons .btn`. A row that invents its own class is black
 text on the sidebar's ground.
 
-**Attach palette to PSDs** does nothing when pressed and everything the next
-time a PSD leaves. That is a setting, and a setting that takes effect as it is
-changed is a switch — the argument `options-controls.ts` already makes for the
-ones in Project Options. So it is that same switch, through `optionSwitchRow`:
-the words on the left, the switch on the right, and the whole row a hit target,
-since 44 pixels is a small thing to aim a finger at. The row exists because
-`.option` — the settings sheet's own — is 58px inside a bordered card, and a
-column where everything else is thirty pixels tall is not that page. `Use as
-Eraser`, at the top of every brush's panel, is the other one: it was a button
-carrying `aria-pressed`, which is the same bit said in the shape of an action.
+There used to be a second control under it, an **Attach palette to PSDs**
+switch: the app-wide default that every PSD's own *Include palette* tick
+followed until somebody ticked or unticked it. It was taken out once the tick
+existed. Two controls for one strip meant the answer for a file depended on a
+setting in a different panel, and a file's tick is the place somebody is
+looking when the file is about to leave. A file that has never been ticked is
+off. `palette.ts` no longer keeps the flag, and the `idlewild.palette.attach`
+key an older build wrote is simply never read.
 
 ### The one button that changes its mind
 
@@ -235,11 +229,13 @@ until they press the button.
 
 ---
 
-## Attach palette to PSDs
+## Include palette
 
-`psd_palette.rs`, reached from `editor/psd-actions.ts` on the way out.
+`psd_palette.rs`, reached from `editor/psd-actions.ts` on the way out, and
+switched per file by the *Include palette* tick on the Open / Share PSD
+control — see [The PSD pipeline](psd-pipeline.md).
 
-The toggle is a promise about **leaving**, not about the store. When a file
+The tick is a promise about **leaving**, not about the store. When a file
 goes out through **Open PSD** on a desktop or **Share PSD** on an iPad, the
 palette goes with it as a strip of flat squares on the topmost layer — so
 Photoshop, Procreate or whatever opens it has the project's colours under its
@@ -262,7 +258,7 @@ so psd-to-json ignores it; see `psd_layers::category_of` and
 [PSD layer naming](../Manual/psd-layer-naming.md). The other two marks are a
 point and a zone because the editor reads them back. Nothing reads this one,
 and a palette arriving in the running game as a sprite would be a bug in every
-project that turned the toggle on. That is pinned by
+project that ticked it. That is pinned by
 `tests::palette::the_pipeline_ignores_the_palette`, at the boundary where it is
 actually decided, because nothing in the frontend would notice: the first sign
 would be a row of swatches drawn over somebody's tileset.
@@ -272,10 +268,10 @@ an artist happened to call `palette` is never the one taken out.
 
 ### Why it syncs rather than appends
 
-Every send brings the file into line with the toggle as it stands: the strip is
+Every send brings the file into line with the tick as it stands: the strip is
 replaced when it is on and **taken out** when it is off. Appending would stack
 a second strip on the third share, and leaving a stale one behind would make
-the toggle something nobody could un-press. A file with no strip and the toggle
+the tick something nobody could un-press. A file with no strip and the tick
 off is not rewritten at all, which is every project that has never used this.
 
 The pipeline is deliberately not re-run afterwards. An ignored layer changes
@@ -322,8 +318,8 @@ store and miss the copy somebody is about to draw on.
 | | |
 |---|---|
 | `src/lib/color-picker.ts` | The field, the two sliders, the hex row, the recents |
-| `src/lib/color-palette.ts` | The palette row, its button and its switch |
-| `src/lib/palette.ts` | The palette itself, the attach flag, the browser hook |
+| `src/lib/color-palette.ts` | The palette row and its buttons |
+| `src/lib/palette.ts` | The palette itself and the browser hook |
 | `src/lib/palettes/` | The five bundled sources, and their credits |
 | `src/lib/eyedropper.ts` | Sampling a canvas, and the picking gesture |
 | `src/game/sample-pixel.ts` | How Phaser's canvas answers a sample |

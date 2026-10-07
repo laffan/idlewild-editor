@@ -79,9 +79,8 @@ Part of [the Idlewild manual](README.md).
 - **Open PSD** (Share PSD on an iPad) is one box with two ticks under the
   button, and they decide what goes out with the file:
   - **Include palette** writes your palette in as a strip of swatches on the
-    top layer. A file nobody has ticked or unticked follows the colour
-    picker's *Attach palette to PSDs* switch; tick or untick it here and that
-    file has its own answer
+    top layer. It is off until you tick it, and each file keeps its own
+    answer
   - **Include context** writes what is around the PSD on the canvas — inside
     its own canvas box, everything visible except the PSD itself: other
     artwork, fills, text, ink — into it as a layer called `context` at 50%

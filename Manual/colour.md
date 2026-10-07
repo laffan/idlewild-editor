@@ -75,12 +75,14 @@ Under the recent colours is a second row that works the other way round.
   you are filling stays on screen and nothing moves while you fill it. Escape
   closes it, as does the button in its corner
 
-## Attach palette to PSDs
+## Your palette, inside a PSD
 
-- **The switch is the default; each PSD can say otherwise** with the *Include
-  palette* tick under its Open PSD button — see
-  [Getting images in](images.md#and-out-again)
-- **Turn the switch on and your palette travels inside the artwork.** With it on, every
+- **It is the *Include palette* tick under a PSD's Open PSD button** — see
+  [Getting images in](images.md#and-out-again). It is off until you tick it,
+  and each file keeps its own answer. (There used to be an *Attach palette to
+  PSDs* switch under the colour picker as well; it is gone, and the tick is
+  the one place this is decided)
+- **Tick it and your palette travels inside the artwork.** With it on, the
   file sent out through **Open PSD** (or **Share PSD** on an iPad) gets the
   palette written into it as a strip of flat squares on the topmost layer — so
   the moment it opens in Photoshop or Procreate, the project's colours are
@@ -94,10 +96,9 @@ Under the recent colours is a second row that works the other way round.
   its name is outside the naming convention, so nothing loads it as artwork
   (see [PSD layer naming](psd-layer-naming.md))
 - **Sending the same file again replaces the strip** rather than adding a
-  second one, and **turning the toggle off takes it back out** the next time
-  that file goes anywhere. There is no way to end up with three palettes
+  second one, and **unticking takes it back out** of that file straight away. There is no way to end up with three palettes
   stacked in a file
-- **An empty palette attaches nothing**, whatever the toggle says
+- **An empty palette attaches nothing**, whatever the tick says
 - **Nothing here can stop a file going out.** If the palette cannot be written
   — a PSD that came back from Photoshop using layer masks cannot be rewritten
   at all without losing work — the file is sent as it is and the console says

@@ -1,5 +1,5 @@
 /**
- * The palette row under the picker, and the button and switch under that.
+ * The palette row under the picker, and the button under that.
  *
  * Split out of `color-picker.ts` rather than written into it because the two
  * rows above it — the field and the recents — are *the colour*, and this is
@@ -22,7 +22,6 @@
  */
 
 import { h, ICONS, icon } from "./dom";
-import { optionSwitchRow } from "./options-controls";
 import { isValidHex, normaliseHex } from "./color";
 import {
   hasPaletteBrowser,
@@ -66,29 +65,7 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
   const browseRow = h("div", { class: "lib-row-buttons" }, browse);
   if (!hasPaletteBrowser()) browseRow.hidden = true;
 
-  /**
-   * Its own line, and a switch rather than a button.
-   *
-   * It is not an action beside Browse Palettes: it does nothing when pressed
-   * and everything the next time a PSD leaves, so a row of two verbs was the
-   * wrong shape for it twice over. What it is is a **setting**, and a setting
-   * that takes effect as it is changed is a switch — which is the argument
-   * `options-controls.ts` already makes for the ones in Project Options, and
-   * this is that same control rather than a second one that looks like it.
-   */
-  const attach = optionSwitchRow({
-    label: "Attach palette to PSDs",
-    value: palette.attach,
-    onChange: (on) => {
-      palette.attach = on;
-    },
-    title:
-      "Write the palette into a PSD as its topmost layer whenever one goes " +
-      "out to another app, so the colours are there to sample. The default " +
-      "for every PSD whose own Include palette box has not been changed.",
-  });
-
-  const root = h("div", { class: "cp-palette-box" }, row, browseRow, attach.root);
+  const root = h("div", { class: "cp-palette-box" }, row, browseRow);
 
   lead.addEventListener("click", () => {
     const hex = options.current();
@@ -136,17 +113,6 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
     const open = isPaletteBrowserOpen();
     browse.textContent = open ? "Close Palettes" : "Browse Palettes";
     browse.setAttribute("aria-expanded", String(open));
-
-    // The switch keeps its own state, so it has to be told when the change
-    // came from another copy of this control rather than from a press here.
-    attach.set(palette.attach);
-    // On, with nothing to attach. The switch is telling the truth about
-    // itself and the row above it is telling the truth about the palette;
-    // this is the one saying the two do not add up to anything yet.
-    attach.root.classList.toggle(
-      "dim",
-      palette.attach && palette.list().length === 0,
-    );
   };
 
   // App-wide, so a colour added from the fill panel's copy of this control has

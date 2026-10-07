@@ -418,6 +418,17 @@ already load, place, scale and stack one. A second kind of record holding the
 same key would be two things to keep in step for nothing. What makes it a
 background is the layer it is on.
 
+**Nothing on a background layer stops the character.** The scaffolds' wiring
+skips `kind: "background"` layers outright — `readColliders` and `isWalkable`
+in the top-down `character.js` (the `standsOn` check), `solidsFromDocument` in
+the platformer's `physics.js` — so a fill, a collider or a boundary on one is
+scenery rather than ground. A picture painted as a backdrop carries a collider
+like any placed PSD, and the character tripping over the sky was the bug. A
+project made before this keeps its own copies: Reset on the top-down
+`readColliders` block in the code modal brings the check in, and a
+platformer's `physics.js` has no managed blocks, so there the one-line skip
+is the author's to add.
+
 The file is written in Rust — `psd_background.rs` — and no pixels cross the
 bridge. A backdrop is an RGBA buffer the size of the whole backdrop, and
 base64 of a big one is hundreds of megabytes of string through an IPC bridge.

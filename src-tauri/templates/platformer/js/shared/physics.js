@@ -84,11 +84,14 @@ export function createBody(x, y, width, height, scale = 1) {
  *
  * A collider rides on the first placement of each unit, so a PSD placed as
  * three layers contributes its ground once rather than three times.
+ *
+ * A background layer contributes nothing: it is scenery behind the game — a
+ * sky, a horizon, a painted backdrop — and never ground to stand on.
  */
 export function solidsFromDocument(grid, layers) {
   const solids = [];
   for (const layer of layers ?? []) {
-    if (layer.visible === false) continue;
+    if (layer.visible === false || layer.kind === "background") continue;
 
     for (const fill of layer.fills ?? []) {
       if (fill.walkable) continue;

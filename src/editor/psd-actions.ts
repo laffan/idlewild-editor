@@ -20,7 +20,7 @@
  * now rather than being a thing only a Mac could do.
  */
 
-import { openDownsample } from "./psd-downsample";
+import { carryDownsampleKept, openDownsample } from "./psd-downsample";
 import type { Placement } from "../lib/types";
 import { contextPicture, type ContextDeps } from "./psd-context";
 import { carrySendChoice, sendChoiceOf, setSendChoice, type SendChoice } from "./psd-send";
@@ -78,7 +78,7 @@ export function openPsdLabel(os: string): string {
  *
  * **The palette goes first, if it is going.** This is the one moment the
  * artwork is about to be edited somewhere that has never heard of this
- * editor, and it is the moment *Attach palette to PSDs* exists for — see
+ * editor, and it is the moment *Include palette* exists for — see
  * `attachPalette` below and `psd_palette.rs`. Before the bytes are read on
  * mobile rather than after, because those bytes are the file that gets
  * shared: a strip written afterwards would reach the store and miss the copy
@@ -389,6 +389,7 @@ export function createPsdFileActions(
       const result = await psd.rename(projectId, key, name);
       if (result.key === key) return;
       carryPixelScale(key, result.key, true);
+      carryDownsampleKept(key, result.key, true);
       carrySendChoice(key, result.key, true);
       await scene()?.renamePsd(key, result.key);
       changed();
@@ -412,6 +413,7 @@ export function createPsdFileActions(
     try {
       const copy = await psd.duplicate(projectId, key);
       carryPixelScale(key, copy.key, false);
+      carryDownsampleKept(key, copy.key, false);
       carrySendChoice(key, copy.key, false);
       // A copy of an extruded PSD is an extrusion of its own, and carrying
       // one on must rewrite the file this placement actually draws.

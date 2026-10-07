@@ -53,6 +53,10 @@ Part of [the Idlewild manual](README.md).
   on Info. The rest of the panel folds away and it scrolls to the file's own
   stack, so what is in front of you is the thing you just made and the way
   into it
+- **Convert to PSD is directly under the title.** A filled run of spaces, a
+  lassoed sketch and a note of text all offer it, and it is usually what you
+  selected the thing to do — so it is the first control in the panel rather
+  than the last, above Info. Delete stays at the foot
 - **Transform sits under Info, and Collider is last.** Between them Info and
   Transform are what the thing *is*; a collider is what it *stops*, which is a
   question you come to after the file and its layers rather than in the middle

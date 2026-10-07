@@ -111,11 +111,21 @@ pub fn set(project_id: &str, key: &str, factor: u32, emit_log: impl Fn(&str)) ->
 /// drawn big, which the upscale can then show sharp at the size it was.
 /// Refused on a file a rebuild would lose something from. Hands back the
 /// new manifest.
+///
+/// `maintain` is the sheet's **Maintain canvas size**, and a file may have it
+/// once. After the first, the file's pixels *are* the art's pixels, and the
+/// upscale set beside them is what keeps it its size on the canvas. A second
+/// pass throws away some of those real pixels, and its upscale replaces the
+/// first rather than multiplying it — so the canvas can only keep the size by
+/// stretching the placement by a factor the upscale did not account for,
+/// which is a smooth resample of hard-edged pixels: fuzzy edges. Recorded in
+/// `ProjectMeta::downsample_kept` and refused here, not only in the sheet.
 pub fn downsample(
     project_id: &str,
     key: &str,
     factor: f64,
     upscale: u32,
+    maintain: bool,
     emit_log: impl Fn(&str),
 ) -> Result<String, String> {
     let key = safe_key(key)?;
@@ -126,6 +136,12 @@ pub fn downsample(
         return Err(format!("Pixel art upscale goes up to {MAX_FACTOR}×"));
     }
     let _job = crate::psd_pipeline::exclusive();
+    if maintain && store::read_meta(project_id)?.downsample_kept.contains(key) {
+        return Err(format!(
+            "{key}.psd has already been downsampled with Maintain canvas size, \
+             which a PSD can only do once"
+        ));
+    }
     let path = crate::psd_pipeline::psd_path(project_id, key)?;
     let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
     let (small, lost) = crate::psd_downsample::shrink_nearest(&bytes, 1.0 / factor)?;
@@ -140,18 +156,33 @@ pub fn downsample(
     } else {
         meta.pixel_scale.insert(key.to_string(), upscale);
     }
+    if maintain {
+        meta.downsample_kept.insert(key.to_string());
+    }
     store::write_meta(&meta)?;
     process_held(project_id, key, &ProcessOptions::default(), &emit_log)
 }
 
-/// A file renamed or copied takes its factor with it.
+/// A file renamed or copied takes its factor with it, and whether it has
+/// already been downsampled with Maintain canvas size — a copy is the same
+/// pixels, so it has.
 pub fn carry(project_id: &str, from: &str, to: &str, moved: bool) {
     let Ok(mut meta) = store::read_meta(project_id) else { return };
-    let Some(factor) = meta.pixel_scale.get(from).copied() else { return };
+    let factor = meta.pixel_scale.get(from).copied();
+    let kept = meta.downsample_kept.contains(from);
+    if factor.is_none() && !kept {
+        return;
+    }
     if moved {
         meta.pixel_scale.remove(from);
+        meta.downsample_kept.remove(from);
     }
-    meta.pixel_scale.insert(to.to_string(), factor);
+    if let Some(factor) = factor {
+        meta.pixel_scale.insert(to.to_string(), factor);
+    }
+    if kept {
+        meta.downsample_kept.insert(to.to_string());
+    }
     let _ = store::write_meta(&meta);
 }
 
@@ -163,8 +194,9 @@ pub fn downsample_psd_pixels(
     key: String,
     factor: f64,
     upscale: u32,
+    maintain: bool,
 ) -> Result<String, String> {
-    downsample(&id, &key, factor, upscale, crate::logger(&app))
+    downsample(&id, &key, factor, upscale, maintain, crate::logger(&app))
 }
 
 /// Pixel Art Rescale, from the inspector's PSD section.

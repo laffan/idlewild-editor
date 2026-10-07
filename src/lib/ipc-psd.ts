@@ -457,10 +457,12 @@ export const psd = {
     invoke<string>("set_psd_pixel_scale", { id, key, factor }),
   /**
    * Pixel Art Downsample: rewrite the PSD itself at `factor` of its size,
-   * nearest neighbour, and set its upscale. Hands back the new manifest.
+   * nearest neighbour, and set its upscale. `maintain` is Maintain canvas
+   * size, which a file may have once — Rust refuses a second. Hands back the
+   * new manifest.
    */
-  downsamplePixels: (id: string, key: string, factor: number, upscale: number) =>
-    invoke<string>("downsample_psd_pixels", { id, key, factor, upscale }),
+  downsamplePixels: (id: string, key: string, factor: number, upscale: number, maintain: boolean) =>
+    invoke<string>("downsample_psd_pixels", { id, key, factor, upscale, maintain }),
   /** Hand the PSD to whatever the OS opens PSDs with. */
   openExternally: (id: string, key: string) =>
     invoke<void>("open_psd", { id, key }),
