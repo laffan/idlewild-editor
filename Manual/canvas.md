@@ -15,6 +15,18 @@ Part of [the Idlewild manual](README.md).
   there because an iPad has no ⌘. It insets itself out of the iPad's status bar, as the console drawer
   does out of the home indicator
 - Resizable sidebars and console drawer, persisted per install
+- **Full screen.** On a Mac the app opens in full screen (the green button
+  and ⌃⌘F take it back out). On an iPad whose window fills the screen there
+  is no status bar over it; point at the top-left corner with a trackpad or
+  mouse and the bar — and the window controls in it — comes back while the
+  pointer is there. A windowed iPad app (Stage Manager, Split View) keeps its
+  window controls in its top-left corner, and the header and the home
+  screen's bar start to the right of them, so the back arrow is never under
+  them
+- **While a project's PSDs load**, the canvas is greyed out with a bar that
+  fills as each one lands and the name of the one on its way. A project with
+  a lot of large files can take a while to open, and the canvas is not worth
+  working on until they are all there. The sidebars stay usable meanwhile
 
 ## The grid
 
@@ -104,7 +116,9 @@ Part of [the Idlewild manual](README.md).
 
 ## Undo, delete, and a PNG of what you have got
 
-- Delete removes whatever is selected
+- Delete removes whatever is selected — including after a layer's name has
+  been tapped: pressing the canvas takes the keyboard back from a field, so
+  Delete deletes the selection rather than a letter of the name
 - **Undo and redo**, from the two buttons beside Edit or from ⌘Z and ⇧⌘Z —
   the same keys on a Mac and on an iPad with a keyboard attached, and the
   buttons for an iPad without one. A step is a thing you did rather than a

@@ -12,7 +12,8 @@
  * This list is where they are made, picked, changed and taken away:
  *
  * - **a row** is an artboard, named and sized. Tapping it picks it — its frame
- *   on the canvas is drawn stronger — and brings the camera to it;
+ *   on the canvas is drawn stronger, and the inspector shows it — and brings
+ *   the camera to it;
  * - **the pencil** opens Page Setup for that artboard: its name, its paper and
  *   which way round;
  * - **the cross** removes it, after asking; the last one cannot go;
@@ -118,6 +119,22 @@ export class ArtboardsPanel {
     this.render();
   }
 
+  /** Put the picked artboard down, without telling the host — it asked. */
+  unpick(): void {
+    this.picked = null;
+    this.render();
+  }
+
+  /** Remove an artboard, after asking — the row's cross and the inspector's button. */
+  async remove(board: PlacedArtboard): Promise<void> {
+    const sure = await confirmSheet(
+      `Remove ${board.name}?`,
+      "The artboard goes; nothing drawn on the canvas does.",
+      "Remove",
+    );
+    if (sure) await changePage({ artboard: board.id, remove: true });
+  }
+
   private render(): void {
     this.root.classList.toggle("closed", !this.open);
     const boards = currentArtboards();
@@ -186,15 +203,6 @@ export class ArtboardsPanel {
     // A new artboard goes on the end of the list.
     const added = currentArtboards().at(-1);
     if (added && added.id !== from.id) this.pick(added.id);
-  }
-
-  private async remove(board: PlacedArtboard): Promise<void> {
-    const sure = await confirmSheet(
-      `Remove ${board.name}?`,
-      "The artboard goes; nothing drawn on the canvas does.",
-      "Remove",
-    );
-    if (sure) await changePage({ artboard: board.id, remove: true });
   }
 
   private setOpen(open: boolean): void {

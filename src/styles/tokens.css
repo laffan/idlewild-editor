@@ -96,4 +96,15 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+
+  /* The room an iPad's window controls take in a window's top-left corner,
+     when the window has them — see src/lib/window-chrome.ts. Nothing reports
+     it, so it is measured: three controls and their margins, from iPadOS 26.
+     Zero everywhere else. Read with `max()` against --safe-left, because
+     both are a claim on the same edge. */
+  --window-controls: 0px;
+}
+
+html.ipad-windowed {
+  --window-controls: 84px;
 }

@@ -1,5 +1,5 @@
 /**
- * Patches the generated iOS Info.plist with the three things Tauri's config
+ * Patches the generated iOS Info.plist with the four things Tauri's config
  * cannot reach.
  *
  * `UIApplicationSceneManifest` is the one the app will not launch without.
@@ -22,6 +22,10 @@
  * on macOS, so a project whose images load perfectly well on a Mac places
  * every one of them as an empty selection box on an iPad, and the only
  * symptom is one load failure per PSD.
+ *
+ * `UIViewControllerBasedStatusBarAppearance` is what lets
+ * `tauri-plugin-ipad-chrome` hide the status bar while the window fills the
+ * screen — see the note on the block below.
  *
  * Every block is inserted independently and each is skipped if its key is
  * already there, so a plist patched by an earlier build still picks up the
@@ -154,10 +158,21 @@ const SCENE_MANIFEST_XML = `\t<key>UIApplicationSceneManifest</key>
 \t\t</dict>
 \t</dict>`;
 
+// Status bar visibility decided per view controller, which is how
+// `tauri-plugin-ipad-chrome` hides the bar while the window fills the screen.
+// YES is the default, but it is the only route left: apps linked against the
+// iOS 27 SDK get no effect from UIApplication.statusBarHidden, and with this
+// key NO UIKit ignores the view controller as well, leaving no way to hide the
+// bar at all. Written rather than trusted to the default, and turned back to
+// YES below if a plist ever says NO.
+const STATUS_BAR_XML = `\t<key>UIViewControllerBasedStatusBarAppearance</key>
+\t<true/>`;
+
 const BLOCKS = [
   { key: "CFBundleDocumentTypes", xml: DOCUMENT_TYPES_XML },
   { key: "NSAppTransportSecurity", xml: ATS_XML },
   { key: "UIApplicationSceneManifest", xml: SCENE_MANIFEST_XML },
+  { key: "UIViewControllerBasedStatusBarAppearance", xml: STATUS_BAR_XML },
 ];
 
 if (!existsSync(PLIST_PATH)) {
@@ -181,6 +196,12 @@ for (const block of BLOCKS) {
   }
   plist = patched;
   added.push(block.key);
+}
+
+const statusBarOff = /(<key>UIViewControllerBasedStatusBarAppearance<\/key>\s*)<false\/>/;
+if (statusBarOff.test(plist)) {
+  plist = plist.replace(statusBarOff, "$1<true/>");
+  added.push("UIViewControllerBasedStatusBarAppearance (was NO)");
 }
 
 if (added.length === 0) process.exit(0);

@@ -144,6 +144,11 @@ pub struct Output {
     /// fields — see `print_artboards.rs`.
     #[serde(default)]
     pub artboards: Vec<crate::print_artboards::Artboard>,
+    /// Whether the canvas draws a ruler along each artboard's top and left
+    /// edges — the artboard inspector's Show Ruler. The editor's alone: the
+    /// game and the export never read it.
+    #[serde(default)]
+    pub rulers: bool,
 }
 
 impl Default for Output {
@@ -160,6 +165,7 @@ impl Default for Output {
             x: 0.0,
             y: 0.0,
             artboards: Vec::new(),
+            rulers: false,
         }
     }
 }
@@ -218,6 +224,12 @@ pub struct PagePatch {
     pub remove: Option<bool>,
     /// Rename the artboard named — or name the one being added.
     pub name: Option<String>,
+    /// Show or hide the rulers on every artboard.
+    pub rulers: Option<bool>,
+    /// Replace the artboard's vertical guides — x, in points from its corner.
+    pub guides_x: Option<Vec<f64>>,
+    /// Replace its horizontal guides — y, in points from its corner.
+    pub guides_y: Option<Vec<f64>>,
 }
 
 impl PagePatch {
@@ -265,6 +277,9 @@ impl PagePatch {
         }
         if let Some(y) = self.y {
             clean.y = Some(at(y)?);
+        }
+        if let Some(rulers) = self.rulers {
+            output.rulers = rulers;
         }
         crate::print_artboards::apply_boards(&clean, output)
     }

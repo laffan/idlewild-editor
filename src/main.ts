@@ -8,6 +8,7 @@
 import { renderHome } from "./home/home";
 import { mountEditor } from "./editor/editor";
 import { suppressPageZoom } from "./lib/gestures";
+import { watchWindowChrome } from "./lib/window-chrome";
 import * as log from "./lib/log";
 import type { ProjectMeta } from "./lib/types";
 
@@ -39,4 +40,5 @@ async function showEditor(meta: ProjectMeta): Promise<void> {
 
 log.captureConsole();
 suppressPageZoom();
+watchWindowChrome();
 void showHome();

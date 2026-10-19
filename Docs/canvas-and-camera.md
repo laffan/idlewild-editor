@@ -541,3 +541,17 @@ brushes were already the answer*, below. `tool-bars.test.ts` now asserts the
 plain thing: every `ToolId` is in a column. A tool that is in none gets no
 button anywhere and a blank label the moment something puts it in your hand,
 and nothing else would say so.
+
+## While the PSDs load
+
+Opening a project loads every PSD its scene places, one file after another
+(`PsdPlacements.loadAll`), and a project with a few dozen large files can take
+twenty seconds over it on an iPad. Everything else is up at once, so the
+canvas looked finished while it was not. `loadAll` now reports how far it has
+got through `lib/psd-load-progress.ts` — a module-level channel, because one
+editor is open at a time — and `editor/psd-veil.ts` covers the canvas wrapper
+(rail and bars included) with a bar that fills as files land and the name of
+the one on its way. It waits a quarter of a second before showing, so a quick
+open never flashes it, and it takes the pointer, which is the point. The
+sidebars stay usable. A scene switch loads its PSDs the same way and shows the
+same veil.

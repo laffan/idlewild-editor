@@ -36,6 +36,7 @@ import {
 } from "../lib/placing";
 import type { Cell, Placement, Selection } from "../lib/types";
 import * as log from "../lib/log";
+import { loadInTurn } from "../lib/psd-load-progress";
 import type { DocRenderer } from "./doc-renderer";
 import { unitMembers, unitOf } from "./unit";
 import { migrateLayerPath, repairDocument } from "./psd-migrate";
@@ -650,21 +651,22 @@ export class PsdPlacements {
     );
   }
 
-
   /** On open, bring back every placement the document already holds. */
   async loadAll(): Promise<void> {
     const keys = new Set<string>();
     for (const layer of this.host.store.layers) {
       for (const placement of layer.placements) keys.add(placement.psdKey);
     }
-    for (const key of keys) {
+    // One at a time, as before, and now saying how far it has got — see
+    // `lib/psd-load-progress.ts` for who is listening.
+    await loadInTurn([...keys], async (key) => {
       try {
         await ensureProcessed(key);
         await this.load(key);
       } catch (err) {
         log.error(`Could not load ${key}:`, err);
       }
-    }
+    });
 
     this.host.store.history.silence(() => {
       for (const layer of this.host.store.layers) {

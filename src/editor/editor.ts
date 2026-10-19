@@ -365,14 +365,8 @@ export async function mountEditor(
   // rail hanging from the top-left corner and the drawing toolbar standing on
   // the bottom-left one. The two edge toggles go in too, from `createShell` —
   // they are layout.
-  canvasWrap.append(
-    rail.root,
-    rail.drawBar,
-    rail.label,
-    actions.root,
-    fillBar.root,
-    gameFrame.root,
-  );
+  canvasWrap.append(rail.root, rail.drawBar, rail.label);
+  canvasWrap.append(actions.root, fillBar.root, gameFrame.root);
 
   // The rows and columns, and the dividers between them — see `shell.ts`.
   const layout = createShell({
@@ -464,9 +458,11 @@ export async function mountEditor(
 
   // The screen guide, and a print project's artboards — `canvas-guides.ts`.
   const guides = createCanvasGuides({
-    ...{ meta, main: layout.main, canvasWrap, overlays },
+    ...{ meta, main: layout.main, canvasWrap, overlays, inspector },
     defaultZoom: () => render.options.defaultZoom,
     centreOn: (x, y) => handle?.scene.centreOn(x, y),
+    // Picking an artboard puts down whatever the canvas had selected.
+    clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
   });
   const guide = guides.guide;
 

@@ -401,10 +401,21 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // The iPad's status bar, hidden while the window fills the screen. A
+        // no-op everywhere else — see `tauri-plugin-ipad-chrome`.
+        .plugin(tauri_plugin_ipad_chrome::init())
         .setup(|app| {
             #[cfg(desktop)]
             {
                 let _ = app.handle().plugin(tauri_plugin_deep_link::init());
+            }
+            // The editor is the whole screen on a Mac, as it is on an iPad
+            // whose window fills it. Native full screen rather than hush's
+            // simple full screen: it is a Space of its own, and the green
+            // button and ⌃⌘F still take it back out.
+            #[cfg(target_os = "macos")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_fullscreen(true);
             }
             // Block until the listener thread is up: the frontend asks for the
             // port during boot, and a port that is not yet accepting would

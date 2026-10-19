@@ -80,6 +80,7 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import type { FillPatch, Selection, ToolId } from "../lib/types";
 import type { InspectorCallbacks } from "./inspect-callbacks";
+import type { ArtboardSubject } from "./inspect-artboard";
 
 /**
  * Everything this panel can ask the shell to do — `inspect-callbacks.ts`.
@@ -140,6 +141,12 @@ export class Inspector {
   private adjusting: string | null = null;
   /** Set by `revealPsdLayers`, and cleared by the render that acts on it. */
   private revealPsd = false;
+  /**
+   * A print project's artboard, picked from its label or the Artboards list.
+   * Not a canvas `Selection` — the scene has no artboards — so it is held
+   * beside one, and put down when the canvas selects anything.
+   */
+  private artboard: ArtboardSubject | null = null;
 
   constructor(store: DocStore, grid: Grid, callbacks: InspectorCallbacks) {
     this.lastPaint.patternScale = defaultPatternScale(grid);
@@ -201,7 +208,22 @@ export class Inspector {
 
   setSelection(selection: Selection): void {
     this.selection = selection;
+    if (selection.kind !== "none") this.setArtboard(null);
     this.render();
+  }
+
+  /** Show an artboard in the OBJECT zone, or stop — see `inspect-artboard.ts`. */
+  setArtboard(subject: ArtboardSubject | null): void {
+    const was = this.artboard;
+    if (was === subject) return;
+    this.artboard = subject;
+    if (was && was.id !== subject?.id) was.onDismiss();
+    this.render();
+  }
+
+  /** The artboard showing, if one is. */
+  get artboardId(): string | null {
+    return this.artboard?.id ?? null;
   }
 
   /**
@@ -382,7 +404,8 @@ export class Inspector {
    * rule, and a **tile** layer shows its palette — see `inspect-tiles.ts`.
    */
   private renderLayerZone(): void {
-    if (!layerZoneApplies(this.selection)) return;
+    // An artboard is on the canvas rather than on a layer.
+    if (this.artboard || !layerZoneApplies(this.selection)) return;
     const layerId = layerOf(this.selection) || this.callbacks.activeLayerId();
     const layer = this.store.layer(layerId);
     if (!layer) return;
@@ -413,6 +436,11 @@ export class Inspector {
   /** OBJECT — what is selected on the canvas. False when nothing is. */
   private renderObject(): boolean {
     const selection = this.selection;
+    if (this.artboard && selection.kind === "none") {
+      this.open("OBJECT");
+      this.artboard.render(this.surface());
+      return this.zone.mount(this.body);
+    }
     if (selection.kind === "none" || selection.kind === "layer") return false;
     this.open("OBJECT");
     switch (selection.kind) {

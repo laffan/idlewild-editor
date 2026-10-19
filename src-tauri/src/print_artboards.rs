@@ -46,6 +46,26 @@ pub struct Artboard {
     pub x: f64,
     #[serde(default)]
     pub y: f64,
+    /// Ruler guides, in points from the artboard's own corner: `guides_x` are
+    /// vertical lines at those x, `guides_y` horizontal ones at those y. Only
+    /// the editor draws them; nothing prints them.
+    #[serde(default)]
+    pub guides_x: Vec<f64>,
+    #[serde(default)]
+    pub guides_y: Vec<f64>,
+}
+
+/// A guide list as stored: finite, whole points, in order, no repeats, and
+/// no further out than the largest sheet.
+fn clean_guides(guides: &[f64]) -> Vec<f64> {
+    let mut out: Vec<f64> = guides
+        .iter()
+        .filter(|v| v.is_finite())
+        .map(|v| v.round().clamp(0.0, MAX_PAGE))
+        .collect();
+    out.sort_by(|a, b| a.total_cmp(b));
+    out.dedup();
+    out
 }
 
 fn default_paper() -> String {
@@ -124,6 +144,8 @@ impl Output {
             unit: self.unit.clone(),
             x: self.x,
             y: self.y,
+            guides_x: Vec::new(),
+            guides_y: Vec::new(),
         }
     }
 
@@ -242,6 +264,12 @@ pub fn apply_boards(patch: &PagePatch, output: &mut Output) -> Result<(), String
     if let Some(y) = patch.y {
         board.y = y;
     }
+    if let Some(guides) = &patch.guides_x {
+        board.guides_x = clean_guides(guides);
+    }
+    if let Some(guides) = &patch.guides_y {
+        board.guides_y = clean_guides(guides);
+    }
     if patch.add != Some(true) {
         if let Some(name) = &patch.name {
             let name = unique_name(&boards, Some(index), name);
@@ -319,6 +347,36 @@ mod tests {
             .apply(&mut out)
             .unwrap();
         assert_eq!(out.y, -90.0);
+    }
+
+    #[test]
+    fn guides_land_on_their_artboard_tidied_and_rulers_on_the_project() {
+        let mut out = print();
+        PagePatch { add: Some(true), ..PagePatch::default() }
+            .apply(&mut out)
+            .unwrap();
+        PagePatch {
+            artboard: Some("board-1".into()),
+            guides_x: Some(vec![300.4, 72.0, f64::NAN, 72.2, -5.0]),
+            guides_y: Some(vec![144.0]),
+            rulers: Some(true),
+            ..PagePatch::default()
+        }
+        .apply(&mut out)
+        .unwrap();
+        let boards = out.boards();
+        assert_eq!(boards[1].guides_x, vec![0.0, 72.0, 300.0]);
+        assert_eq!(boards[1].guides_y, vec![144.0]);
+        assert!(boards[0].guides_x.is_empty());
+        assert!(out.rulers);
+        // A copy takes its guides with it, as it takes its sheet.
+        PagePatch { add: Some(true), artboard: Some("board-1".into()), ..PagePatch::default() }
+            .apply(&mut out)
+            .unwrap();
+        assert_eq!(out.boards()[2].guides_y, vec![144.0]);
+        // And a meta from before guides reads as none.
+        let old: Artboard = serde_json::from_str(r#"{"id":"main","name":"A"}"#).unwrap();
+        assert!(old.guides_x.is_empty() && old.guides_y.is_empty());
     }
 
     #[test]

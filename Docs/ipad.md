@@ -23,6 +23,35 @@ indicator, the home screen's bar does it at the top, and the code panel does it
 only while it is floating — docked it is a row between two rows and insets
 nothing.
 
+### No status bar while the window fills the screen
+
+`src-tauri/tauri-plugin-ipad-chrome` — a local Tauri plugin with a Swift half,
+ported from hush's pencil plugin, where the same thing is a setting. iOS has no
+app-wide switch any more (`UIApplication.statusBarHidden` does nothing for an
+app linked against the iOS 27 SDK), so the plugin sets tao's root view
+controller's `prefersStatusBarHidden` on each window that fills its screen,
+and auto-hides the home indicator. That needs
+`UIViewControllerBasedStatusBarAppearance` left at YES, which
+`patch-ios-plist.mjs` now writes. With the bar gone the window controls go
+with it, so while a trackpad or mouse pointer is in the top-left corner the
+bar comes back, drawn over the page rather than pushing it down
+(`CornerHover`, and a negative `additionalSafeAreaInsets.top` for the length
+of the peek). A windowed scene keeps its bar. On a Mac the window simply opens
+in native full screen (`lib.rs`'s setup).
+
+### Room for the window controls
+
+From iPadOS 26 a window that does not fill the screen carries the system's
+three window controls in its top-left corner, over the page. Nothing reports
+the room they take — `env(safe-area-inset-*)` does not include them, and
+UIKit's corner-adapted layout region has no web counterpart — so
+`lib/window-chrome.ts` compares the viewport with the screen (either way
+round) and sets `html.ipad-windowed`, which sets `--window-controls` in
+`tokens.css`. The editor header and the home screen's bar pad their left edge
+by the larger of that and `--safe-left`, so the back arrow is never under the
+controls. The width is measured rather than reported, and is the one number
+here worth checking against a new iPadOS.
+
 ---
 
 ## The iPad needs a scene

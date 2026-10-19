@@ -193,7 +193,39 @@ Setup (`print-setup.ts`) takes the artboard it edits.
 
 `set_page` brings an older project's `js/shared/print.js` up to this build's
 once it has more than one artboard — the file is the editor's, and one whose
-first line has been rewritten is left alone.
+first line has been rewritten is left alone. `read_document` does the same as
+a project with more than one artboard opens, so a fix to the file reaches a
+project without waiting for one of its artboards to change.
+
+### Picking one, and what it wears
+
+**An artboard picked is the inspector's subject.** Tapping its label or its
+row picks it everywhere at once — the row, the frame drawn stronger, and the
+OBJECT zone, through `Inspector.setArtboard` and `inspect-artboard.ts`. It is
+not a canvas `Selection`: the scene has no artboards, and every switch over
+selection kinds would have grown an arm for a thing only a print project has.
+So the inspector holds it beside the canvas selection, puts it down the moment
+the canvas selects anything, and `canvas-guides.ts` puts it down on a tap on
+empty canvas. Picking one clears the canvas selection first.
+
+**The shade** is an SVG in the labels' layer — over the ink, under the rail —
+masked by one black rectangle per artboard, so overlapping and scattered
+sheets are cut out correctly with no geometry of our own.
+
+**Rulers and guides** are `artboard-chrome.ts`, redrawn with the frames on
+every camera move. `Output.rulers` is the project's Show ruler switch, and
+each `Artboard` carries `guidesX` (vertical lines) and `guidesY` (horizontal
+ones) in whole points from its own corner, so a guide moves with its sheet and
+a copied artboard keeps its guides. `PagePatch` grew `rulers`, `guidesX` and
+`guidesY`; a guide list is replaced whole and tidied on the way in — finite,
+rounded, in order, without repeats (`clean_guides`). The ticks are drawn on a
+canvas covering only the part of the ruler on screen, in the artboard's unit
+(`ruler-scale.ts`). Neither the game config nor any export reads either field.
+
+**Resize** puts eight handles on the picked artboard; `ScreenGuide.previewBoard`
+draws the sheet at the size being dragged to, and one `changePage` on release
+writes it as a `custom` sheet, with the corner moved when the left or top edge
+was the one dragged (`resized` in `artboard-chrome.ts`).
 
 ## ExportForPrint()
 
@@ -219,7 +251,13 @@ with its index and the count so far, so a run of snapshots is a loop with an
 
 **Every artboard, one call.** `readBoards` moves every scene's main camera by
 how far each artboard's corner is from the first's, reads the page at that
-artboard's size, and puts the cameras back before anything is awaited — the
+artboard's size, and puts the cameras back before anything is awaited. Moving
+a camera is `aim`, not `setScroll`: Phaser 4 bakes the scroll into
+`camera.matrix` in `preRender`, and both reads — `GetCalcMatrix` for a file,
+`copyWithScrollFactorFrom` for a raster — go through that matrix, so a scroll
+set between frames moved nothing and every artboard came out as the first.
+`aim` rebuilds the matrix the way `preRender` does, without its follow or
+bounds (`src/game/__tests__/print-aim.test.ts`). The
 matrices and the captures are all synchronous, and only the readbacks are
 left to settle — so the running game never draws a frame from anywhere else.
 Every page but the last is posted as a snapshot, so the editor's run ends where

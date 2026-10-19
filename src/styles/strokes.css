@@ -1,0 +1,17 @@
+/* Loose ink, by tool, above the layer list — see editor/strokes-tray.ts. The
+   Overlays vocabulary again, with the count on the heading so a folded tray
+   still says how much will not export. Under its own scroll past a few rows:
+   it sits above the layer list, which is the thing the column is for. */
+.strokes-tray { border-top: 0; border-bottom: var(--rule-chrome); }
+.strokes-tray[hidden] { display: none; }
+.strokes-tray .overlays-body { max-height: 30vh; overflow-y: auto; }
+.strokes-total {
+  margin-left: auto;
+  font: 600 11px var(--font-label);
+  color: var(--color-accent);
+}
+.strokes-row { padding-left: 30px; }
+.strokes-row.picked { background: var(--chrome-panel); }
+.strokes-row.picked .overlays-name { color: var(--color-accent); }
+.strokes-icon { flex: none; display: flex; color: var(--chrome-dim); }
+.side-panel.left.browsing .strokes-tray { display: none; }

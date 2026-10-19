@@ -155,11 +155,13 @@ export function bindShortcuts(host: ShortcutHost): () => void {
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("keyup", onKeyUp);
   window.addEventListener("blur", onBlur);
+  document.addEventListener("pointerdown", releaseField, true);
 
   return () => {
     document.removeEventListener("keydown", onKeyDown);
     document.removeEventListener("keyup", onKeyUp);
     window.removeEventListener("blur", onBlur);
+    document.removeEventListener("pointerdown", releaseField, true);
   };
 }
 
@@ -179,14 +181,37 @@ const ARROWS: Record<string, { dx: number; dy: number } | undefined> = {
 };
 
 /**
+ * A press on the canvas takes the keyboard back from a field.
+ *
+ * Phaser prevents the default of a `mousedown` on its canvas, and the ink
+ * prevents a `pointerdown` on its own, and either one is what stops the
+ * browser moving focus off whatever had it. So a layer's name, tapped to pick
+ * the layer, kept the keyboard through every press on the canvas after it:
+ * Delete on the selection that followed was a Delete into the name, which
+ * `isTyping` rightly stood aside for, and Backspace took a letter off it.
+ * Blurring here commits the field the way leaving it any other way would.
+ */
+function releaseField(event: PointerEvent): void {
+  if (!(event.target instanceof HTMLCanvasElement)) return;
+  const field = document.activeElement;
+  if (field instanceof HTMLElement && isTyping(field)) field.blur();
+}
+
+/** The inputs a key press means nothing to but "press me". */
+const NOT_TYPED = new Set(["button", "checkbox", "color", "file", "radio", "reset", "submit"]);
+
+/**
  * Whether the keyboard belongs to something else.
  *
  * Space in a layer name is a space and Delete in the code editor deletes a
- * character, so this is asked once rather than once per shortcut.
+ * character, so this is asked once rather than once per shortcut. A range
+ * slider counts, because the arrows are its own; a checkbox does not.
  */
 export function isTyping(target: EventTarget | null): boolean {
   return (
-    target instanceof HTMLInputElement ||
+    // A switch or a swatch that was just pressed still has the focus, and
+    // Delete over it is meant for the canvas, not for it.
+    (target instanceof HTMLInputElement && !NOT_TYPED.has(target.type)) ||
     target instanceof HTMLTextAreaElement ||
     (target instanceof HTMLElement && target.isContentEditable)
   );

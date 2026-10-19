@@ -21,7 +21,7 @@
   display: flex;
   align-items: center;
   padding: var(--safe-top) calc(32px + var(--safe-right)) 0
-    calc(32px + var(--safe-left));
+    max(calc(32px + var(--safe-left)), calc(var(--window-controls) + 8px));
   gap: 18px;
 }
 

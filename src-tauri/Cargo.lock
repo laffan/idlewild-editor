@@ -2506,6 +2506,7 @@ dependencies = [
  "tauri-plugin-deep-link",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-ipad-chrome",
  "tauri-plugin-opener",
  "tiny_http",
  "tokio",
@@ -5299,6 +5300,14 @@ dependencies = [
  "thiserror 2.0.20",
  "toml 1.1.5+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-ipad-chrome"
+version = "0.1.0"
+dependencies = [
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

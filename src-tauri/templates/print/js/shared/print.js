@@ -193,14 +193,34 @@ async function readBoards(game, sheet, first, chosen) {
     const dx = (board.x ?? 0) - (first.x ?? 0);
     const dy = (board.y ?? 0) - (first.y ?? 0);
     const saved = cameras.map((camera) => [camera, camera.scrollX, camera.scrollY]);
-    for (const [camera, x, y] of saved) camera.setScroll(x + dx, y + dy);
+    for (const [camera, x, y] of saved) aim(camera, x + dx, y + dy);
     // The synchronous half of the read — every matrix and every capture —
     // runs inside this call; only the readbacks are left to await.
     const page = readPage(game, { width: board.width, height: board.height, dpi: sheet.dpi });
-    for (const [camera, x, y] of saved) camera.setScroll(x, y);
+    for (const [camera, x, y] of saved) aim(camera, x, y);
     reads.push(page.then((p) => ({ page: p, board })));
   }
   return Promise.all(reads);
+}
+
+/**
+ * Point a camera at `x, y` now, rather than at the next frame.
+ *
+ * Phaser 4 bakes the scroll into `camera.matrix` in `preRender`, and every
+ * read here — `GetCalcMatrix` for a file, `copyWithScrollFactorFrom` for a
+ * raster — takes the scroll from that matrix. `setScroll` alone moves the
+ * numbers and not the matrix, which is how every artboard after the first
+ * came out as a copy of the first. This rebuilds the two matrices the way
+ * `preRender` does, without its follow, bounds or effects: an artboard is
+ * read where it is, wherever the game's own camera rules would put it.
+ */
+function aim(camera, x, y) {
+  camera.setScroll(x, y);
+  const originX = camera.width * camera.originX;
+  const originY = camera.height * camera.originY;
+  camera.matrix.applyITRS(originX, originY, camera.rotation, camera.zoomX, camera.zoomY);
+  camera.matrix.translate(-x - originX, -y - originY);
+  camera.matrixExternal.multiply(camera.matrix, camera.matrixCombined);
 }
 
 /** `<name>-<artboard>`, for a project with more than one artboard. */

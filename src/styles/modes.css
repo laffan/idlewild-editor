@@ -141,3 +141,53 @@
 .mask-bar-row.tools .bar-toggle { padding: 0 14px; display: inline-flex; align-items: center; gap: 4px; }
 .mask-bar-row.tools .bar-toggle:first-child { border-left: 0; }
 .mask-bar-gap { width: 12px; border-left: var(--rule-chrome); }
+
+/* ── while the PSDs load ────────────────────────────────────────────────────
+
+   The canvas wrapper greyed out, rail and bars included, with a bar that
+   fills as each file lands — see editor/psd-veil.ts. Above everything in the
+   wrapper (the rail and bars top out at 9), and taking the pointer, because
+   what is under it is not finished yet. A determinate bar rather than the
+   shared indeterminate one: here the count is known. */
+.psd-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--chrome-bg) 45%, transparent);
+  cursor: progress;
+}
+.psd-veil-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(320px, calc(100% - var(--space-8)));
+  padding: var(--space-4);
+  background: var(--chrome-panel);
+  color: var(--chrome-text);
+  box-shadow: var(--shadow-lg);
+}
+.psd-veil-bar {
+  height: 4px;
+  background: var(--chrome-rule);
+  overflow: hidden;
+}
+.psd-veil-fill {
+  height: 100%;
+  width: 0;
+  background: var(--color-accent);
+  transition: width 0.2s ease-out;
+}
+.psd-veil-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--chrome-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Play and Code put the game over the canvas, and the game loads its own. */
+.editor.play-mode .psd-veil,
+.editor.code-mode .psd-veil { display: none; }

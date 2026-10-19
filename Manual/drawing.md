@@ -190,6 +190,18 @@ Part of [the Idlewild manual](README.md).
   file: `Recoleta-Bold.otf` is *Recoleta-Bold*. The cross on a font's chip
   takes it out of the project
 
+## Loose strokes
+
+- **Strokes**, at the top of the left sidebar above the layer list, lists
+  every stroke in the scene that has not been converted to a PSD, grouped by
+  the tool that drew it — Pen, Pattern, Shape, Fill and Eraser — with how
+  many there are and, when they are spread over more than one layer, which
+  layer they are on. Ink is not in what the project exports until it is a
+  PSD, so this is the list of what would be left out
+- **Tap a row to select those strokes** on the canvas, ready to convert or
+  delete. The heading keeps the total when the list is folded, and the whole
+  section goes away when there are no loose strokes left
+
 ## Handing a sketch to its layer
 
 - Hand a lassoed sketch to its layer as a PSD to flesh out elsewhere, or as

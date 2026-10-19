@@ -646,3 +646,18 @@ The unit is read out of the selection **before** the sheet goes up and acted on
 by id afterwards. A sheet is a round trip through the user and the selection is
 free to move under it; a unit that has gone in the meantime is dropped rather
 than half-reset.
+
+## Delete, and the field that kept the keyboard
+
+Delete and Backspace remove the selection (`shortcuts.ts`), and stand aside
+while the keyboard is in a field — `isTyping`. The trouble was which field.
+Phaser prevents the default of a `mousedown` on its canvas, and the ink
+prevents a `pointerdown` on its own, and either one stops the browser moving
+focus off whatever had it: a layer's name, tapped to pick the layer, kept the
+keyboard through every press on the canvas that followed, so Delete on the
+next selection was a Delete into the name, and Backspace took a letter off it.
+A press on any canvas now blurs a focused field first, which commits it the
+way leaving it any other way would. And `isTyping` no longer counts a
+checkbox, a button or a colour input: a switch just pressed still has the
+focus, and Delete over it is meant for the canvas. A range slider still
+counts, because the arrows are its own.

@@ -58,12 +58,32 @@ Part of [the Idlewild manual](README.md).
   stronger. The pencil opens Page Setup for it — its **name**, its paper and
   which way round. The cross removes it, after asking; the last one stays.
   **Add artboard** puts a copy of the picked one to the right of the rest
-- **Drag a label to move that artboard.** Tapping a label picks its row
+- **Drag a label to move that artboard.** Tapping a label picks it: its row
+  in the list, its frame drawn stronger, and the artboard in the right-hand
+  inspector like any other selected thing — its name to retype, its size and
+  corner, and **Resize**, **Page Setup…** and **Remove artboard**. Selecting
+  anything on the canvas, or tapping empty canvas, puts it down
+- **Everything outside the artboards is shaded a little darker**, the canvas
+  and any ink there alike: what prints is what is left clear
+- **Show ruler**, in the artboard's inspector, puts a ruler along the top
+  and left edges of every artboard, in the artboard's own unit. Hover a ruler
+  for a blue guide across the sheet with its position beside it; click or tap
+  to keep it, which leaves a handle on the ruler. Drag the handle to move the
+  guide; ⌘-click it, or drag it off either end of the ruler, to remove it.
+  Guides belong to their artboard, move with it, and never print. Turning the
+  ruler off hides the guides with it
+- **Resize** puts handles on the picked artboard's edges and corners until it
+  is pressed again (it reads **Done resizing** meanwhile). Dragging one makes
+  the sheet a custom size, in whole points; dragging the left or top edge
+  moves the corner too, so the opposite edge stays put
 - **The first artboard is the game's screen**: the running game is its size,
   and the camera stands on its corner. Removing the first makes the next one
   first
 - **One `ExportForPrint()` captures every artboard.** The camera is moved onto
-  each in turn — by how far it is from the first — and with more than one
+  each in turn — by how far it is from the first — and each page is read
+  where its own artboard is (an earlier build read the first artboard's
+  part of the canvas for every page; opening the project brings its
+  `print.js` up to date). With more than one
   artboard each page is saved as `<name>-<artboard>`: `page-Cover`,
   `page-Back`. `artboard: "Cover"` (or a list of names) captures only those
 

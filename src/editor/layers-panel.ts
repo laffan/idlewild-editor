@@ -47,6 +47,7 @@ import {
 import { pickMode, pickUnit } from "../lib/unit-select";
 import { ScenesBar } from "./scenes-bar";
 import { renderDirectory } from "./layer-directory";
+import { StrokesTray } from "./strokes-tray";
 import type { ManifestLayer } from "../lib/manifest";
 
 export interface LayersPanelCallbacks {
@@ -112,6 +113,7 @@ export class LayersPanel {
   readonly root: HTMLElement;
   private readonly body: HTMLElement;
   private readonly scenes: ScenesBar;
+  private readonly strokes: StrokesTray;
   private readonly store: DocStore;
   private readonly callbacks: LayersPanelCallbacks;
   private suspended = false;
@@ -167,6 +169,8 @@ export class LayersPanel {
       select: (selection) => this.callbacks.onSelectItem(selection),
     });
     this.scenes = new ScenesBar(store);
+    // Loose ink, by tool, above the list — see `strokes-tray.ts`.
+    this.strokes = new StrokesTray({ select: (s) => this.callbacks.onSelectItem(s) });
     this.title = h("div", { class: "panel-title m", text: "Layers" });
     // Four kinds of layer, so the `+` asks which — and on a blank project
     // three, because a tileset needs a lattice to be cut on. A menu rather
@@ -186,6 +190,7 @@ export class LayersPanel {
       "div",
       { class: "side-panel left" },
       this.scenes.root,
+      this.strokes.root,
       h("div", { class: "panel-head" }, this.title, this.add),
       this.body,
       footer,
@@ -302,6 +307,7 @@ export class LayersPanel {
     const active = this.callbacks.getActiveLayerId();
     const selection = this.callbacks.getSelection();
     const editing = this.captureName();
+    this.strokes.update(this.store.layers, selection);
 
     clear(this.body);
     this.store.layers.forEach((layer) => {

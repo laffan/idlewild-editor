@@ -688,14 +688,16 @@ export async function invoke(
       // land on the artboard it names, `add` appends a copy, `remove` drops
       // one, and the first is mirrored into the flat fields.
       const w = window as any;
-      const { artboard, add, remove, name, ...rest } = (args as any)?.patch ?? {};
+      const { artboard, add, remove, name, rulers, ...rest } = (args as any)?.patch ?? {};
       const out = { ...(w.__output ?? {}) };
+      if (rulers !== undefined) out.rulers = rulers;
       const flat = ["paper", "landscape", "customWidth", "customHeight", "unit", "x", "y"];
+      const own = [...flat, "guidesX", "guidesY"];
       const boards = (out.artboards?.length ? out.artboards : [
         { id: "main", name: "Artboard 1", ...Object.fromEntries(flat.map((k) => [k, out[k]])) },
       ]).map((b: any) => ({ ...b }));
       if ("formats" in rest) out.formats = rest.formats;
-      const sheet = Object.fromEntries(Object.entries(rest).filter(([k]) => flat.includes(k)));
+      const sheet = Object.fromEntries(Object.entries(rest).filter(([k]) => own.includes(k)));
       let at = Math.max(0, boards.findIndex((b: any) => b.id === artboard));
       if (remove) {
         if (boards.length > 1) boards.splice(at, 1);

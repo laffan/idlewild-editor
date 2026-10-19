@@ -62,6 +62,8 @@ export interface Output {
    * fields. Mirrored by `print_artboards.rs`.
    */
   artboards?: Artboard[];
+  /** Whether each artboard wears a ruler on its top and left edges. */
+  rulers?: boolean;
 }
 
 /** What a sheet's size is made of — an `Output`'s or an `Artboard`'s. */
@@ -74,6 +76,12 @@ export interface Artboard extends Sheet {
   /** Its top-left corner in the world. */
   x: number;
   y: number;
+  /**
+   * Ruler guides, in points from its corner: vertical lines at `guidesX`,
+   * horizontal ones at `guidesY`. Absent on a meta from before guides.
+   */
+  guidesX?: number[];
+  guidesY?: number[];
 }
 
 /** The id of the artboard a project's flat fields describe. */
@@ -89,6 +97,9 @@ export type PagePatch = Partial<Omit<Output, "kind" | "dpi" | "artboards">> & {
   remove?: boolean;
   /** Rename `artboard`, or name the one added. */
   name?: string;
+  /** Replace `artboard`'s guides — see `Artboard`. */
+  guidesX?: number[];
+  guidesY?: number[];
 };
 
 /** Every artboard, first to last. Never empty. */

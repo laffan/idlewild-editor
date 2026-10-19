@@ -74,7 +74,9 @@
      the notch. Its children stretch into what is left, which is --bar-h. */
   height: calc(var(--bar-h) + var(--safe-top));
   padding-top: var(--safe-top);
-  padding-left: var(--safe-left);
+  /* A windowed iPad's controls sit over this corner, and the back arrow is
+     the first thing in it — see --window-controls. */
+  padding-left: max(var(--safe-left), var(--window-controls));
   padding-right: var(--safe-right);
   display: flex;
   align-items: stretch;

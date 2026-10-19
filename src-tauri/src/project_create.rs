@@ -118,12 +118,14 @@ pub fn set_page(id: &str, patch: &crate::print::PagePatch) -> Result<ProjectMeta
 }
 
 /// Bring a print project's `js/shared/print.js` up to this build's, so one
-/// made before artboards captures every artboard rather than the first.
+/// made before artboards captures every artboard rather than the first — and
+/// one written before the camera fix reads each artboard where it is, rather
+/// than reading the first one over and over. Also run as a project opens.
 ///
 /// The file is the editor's — it says so at its top — and nothing in a
 /// project's own code is expected to live in it. One whose first line is no
 /// longer the editor's has been rewritten by hand, and is left alone.
-fn refresh_print_js(id: &str) {
+pub(crate) fn refresh_print_js(id: &str) {
     let Ok(game) = crate::store::game_dir(id) else { return };
     let path = game.join("js/shared/print.js");
     let Ok(current) = std::fs::read_to_string(&path) else { return };

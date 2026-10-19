@@ -185,6 +185,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Code Settings, Tidy and hints | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | Console | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | Data model | [`Docs/data-model.md`](Docs/data-model.md) |
+| Delete, and the field that kept the keyboard | [`Docs/selection.md`](Docs/selection.md) |
 | Drawing layer | [`Docs/drawing.md`](Docs/drawing.md) |
 | Editing a PSD's layer stack without leaving | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Editing a PSD, and getting it back | [`Docs/psd-pipeline.md`](Docs/psd-pipeline.md) |
@@ -200,6 +201,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Layer visibility | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
 | Leaving with a file, and the order iOS needs | [`Docs/exports.md`](Docs/exports.md) |
 | Lines the editor owns | [`Docs/exported-game.md`](Docs/exported-game.md) |
+| No status bar while the window fills the screen | [`Docs/ipad.md`](Docs/ipad.md) |
 | Merge layers: one palette, or one per layer | [`Docs/tile-layers.md`](Docs/tile-layers.md) |
 | One file per scene, named after it | [`Docs/data-model.md`](Docs/data-model.md) |
 | Four scaffolds, one document | [`Docs/data-model.md`](Docs/data-model.md) |
@@ -211,6 +213,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Publish, and what the exported game reads | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | Publishing somewhere real, and logging in once | [`Docs/publishing.md`](Docs/publishing.md) |
 | Reordering layers | [`Docs/psd-layers.md`](Docs/psd-layers.md) |
+| Room for the window controls | [`Docs/ipad.md`](Docs/ipad.md) |
 | Select, on the home screen | [`Docs/exports.md`](Docs/exports.md) |
 | Selection | [`Docs/selection.md`](Docs/selection.md) |
 | Snap to grid, and the arrow keys | [`Docs/selection.md`](Docs/selection.md) |
@@ -219,6 +222,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | The PSD | [`Docs/printing.md`](Docs/printing.md) |
 | The PNG | [`Docs/printing.md`](Docs/printing.md) |
 | Output | [`Docs/printing.md`](Docs/printing.md) |
+| Picking one, and what it wears | [`Docs/printing.md`](Docs/printing.md) |
 | The source scale, on the frontend | [`Docs/printing.md`](Docs/printing.md) |
 | Two resolutions | [`Docs/printing.md`](Docs/printing.md) |
 | The column is the site, not just `game/` | [`Docs/code-panel.md`](Docs/code-panel.md) |
@@ -246,8 +250,10 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Three sections, not two modes | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | Three zones, not one heading | [`Docs/inspector.md`](Docs/inspector.md) |
 | Undo | [`Docs/data-model.md`](Docs/data-model.md) |
+| What is still ink | [`Docs/drawing.md`](Docs/drawing.md) |
 | What Play runs | [`Docs/exported-game.md`](Docs/exported-game.md) |
 | Where the code panel sits | [`Docs/code-panel.md`](Docs/code-panel.md) |
 | Where the panel's explanations went | [`Docs/inspector.md`](Docs/inspector.md) |
+| While the PSDs load | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | Why the editor runs Phaser in-window, and the game does not | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |
 | Why there is still an HTTP server | [`Docs/shell-and-runtime.md`](Docs/shell-and-runtime.md) |

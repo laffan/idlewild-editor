@@ -17,6 +17,9 @@ dirs = "6"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tiny_http = "0.12"
+# The iPad's status bar, hidden while the window fills the screen — Swift,
+# in the plugin's own `ios/`. Ported from hush; see its `lib.rs`.
+tauri-plugin-ipad-chrome = { path = "tauri-plugin-ipad-chrome" }
 
 # Publishing somewhere real, as libraries rather than as programs.
 #

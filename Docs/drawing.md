@@ -557,6 +557,19 @@ Both consume the strokes. The PSD and the zone are the same shape in a better
 form, and leaving the ink behind means every sketch you convert is drawn
 twice, in the same place, at the same size.
 
+### What is still ink
+
+Ink that is never converted is never exported, and it is easy to lose: a
+sweep of pattern on a layer nobody has opened in a while looks like work on
+the canvas and is missing from the game. `editor/strokes-tray.ts` lists every
+loose stroke in the scene at the top of the left column, grouped by the tool
+that drew it — read off the stroke (`strokeTool`): an erasing stroke is an
+Eraser whatever brush made it, then Fill, Shape and Pattern by mode and paint,
+and Pen for the rest. A row is one tool's strokes on one layer, because a
+`strokes` selection is one layer's worth, and tapping it selects them. The
+heading keeps the total when folded, and the section is hidden when there is
+nothing in it.
+
 ### One correction to the port
 
 Hush's slice walk falls back to the *far* end of a segment when a

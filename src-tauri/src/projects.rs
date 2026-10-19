@@ -139,6 +139,11 @@ pub fn read_project_meta(id: String) -> Result<ProjectMeta, String> {
 pub fn read_document(id: String) -> Result<String, String> {
     let doc = store::read_doc(&id)?;
     let _ = store::sync_game_config(&id);
+    // A fix to the editor's own `print.js` reaches a project that already
+    // has its artboards, without waiting for one of them to change.
+    if store::read_meta(&id).is_ok_and(|meta| meta.output.boards().len() > 1) {
+        crate::project_create::refresh_print_js(&id);
+    }
     Ok(doc)
 }
 

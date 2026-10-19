@@ -36,6 +36,7 @@
 import { h } from "../lib/dom";
 import { currentArtboards, describePage, onPageChange, type PlacedArtboard } from "../lib/print";
 import { changePage } from "./print-page";
+import type { ArtboardChrome, BoardPreview } from "./artboard-chrome";
 import type { Viewport } from "../drawing";
 import type { Presentation } from "../lib/types";
 
@@ -181,6 +182,20 @@ export class ScreenGuide {
    * rather than over them.
    */
   private readonly labels: HTMLElement;
+  /** The labels themselves, inside `labels`, over the shade and the rulers. */
+  private readonly labelList: HTMLElement;
+  /**
+   * Everything outside the artboards, a shade darker: what prints is what is
+   * left clear. An SVG mask rather than four boxes round each sheet, because
+   * sheets can sit anywhere — side by side, overlapping — and a mask cut by
+   * every one of them is right in every case.
+   */
+  private readonly shade: SVGSVGElement;
+  private readonly shadeHoles: SVGGElement;
+  /** Rulers, guides and resize handles — `artboard-chrome.ts`. */
+  private chrome: ArtboardChrome | null = null;
+  /** An artboard mid-resize, drawn at the size it is being dragged to. */
+  private preview: BoardPreview | null = null;
   /** The artboard being dragged, and by how many world pixels. */
   private drag: { id: string; dx: number; dy: number } | null = null;
   /** The artboard picked in the Artboards list, drawn a little stronger. */
@@ -193,7 +208,10 @@ export class ScreenGuide {
     this.cross = h("div", { class: "screen-guide-cross" });
     this.boards = h("div", { class: "screen-guide-boards" });
     this.root = h("div", { class: "screen-guide" }, this.frame, this.boards, this.cross);
+    this.labelList = h("div", { class: "screen-guide-label-list" });
+    [this.shade, this.shadeHoles] = makeShade();
     this.labels = h("div", { class: "screen-guide-labels" });
+    this.labels.append(this.shade, this.labelList);
     // The sheet changes from Page Setup, the Artboards list and a label's own
     // drag once it is written: either way, draw what is there now.
     this.stopListening = onPageChange(() => this.draw());
@@ -224,6 +242,20 @@ export class ScreenGuide {
     this.boards.classList.toggle("hidden", !frame);
     this.cross.classList.toggle("hidden", !cross);
     this.showing = frame || cross;
+    this.draw();
+  }
+
+  /** Hang the rulers and resize handles in the labels' layer, under the labels. */
+  setChrome(chrome: ArtboardChrome | null): void {
+    this.chrome?.root.remove();
+    this.chrome = chrome;
+    if (chrome) this.labels.insertBefore(chrome.root, this.labelList);
+    this.draw();
+  }
+
+  /** Draw an artboard at a size and place it is being dragged to, or stop. */
+  previewBoard(board: BoardPreview | null): void {
+    this.preview = board;
     this.draw();
   }
 
@@ -321,11 +353,12 @@ export class ScreenGuide {
       return;
     }
 
-    const boards = currentArtboards().map((board) =>
-      this.drag && this.drag.id === board.id
+    const boards = currentArtboards().map((board) => {
+      if (this.preview?.id === board.id) return { ...board, ...this.preview };
+      return this.drag && this.drag.id === board.id
         ? { ...board, x: board.x + this.drag.dx, y: board.y + this.drag.dy }
-        : board,
-    );
+        : board;
+    });
     if (boards.length > 0) {
       this.frame.classList.add("hidden");
       this.drawBoards(view, boards);
@@ -335,7 +368,7 @@ export class ScreenGuide {
     }
 
     this.boards.replaceChildren();
-    this.labels.replaceChildren();
+    this.labelList.replaceChildren();
     this.frame.classList.toggle("hidden", !this.framesOn);
     const box = guideBox(
       view,
@@ -355,18 +388,24 @@ export class ScreenGuide {
     if (!this.labels.isConnected && wrap) wrap.prepend(this.labels);
     this.labels.classList.toggle("hidden", !this.framesOn);
 
+    const list = this.labelList;
     while (this.boards.children.length > boards.length) this.boards.lastElementChild?.remove();
-    while (this.labels.children.length > boards.length) this.labels.lastElementChild?.remove();
+    while (list.children.length > boards.length) list.lastElementChild?.remove();
+    this.drawShade(view, boards);
+    this.chrome?.draw(view, boards);
     for (const [i, board] of boards.entries()) {
       let frame = this.boards.children[i] as HTMLElement | undefined;
       if (!frame) {
         frame = h("div", { class: "screen-guide-frame is-page" });
         this.boards.appendChild(frame);
       }
-      let label = this.labels.children[i] as HTMLElement | undefined;
+      let label = list.children[i] as HTMLElement | undefined;
       if (!label) {
-        label = h("div", { class: "screen-guide-label", title: "Drag to move the artboard" });
-        this.labels.appendChild(label);
+        label = h("div", {
+          class: "screen-guide-label",
+          title: "Tap to select the artboard, drag to move it",
+        });
+        list.appendChild(label);
       }
       const at = label;
       // Rebound every draw: the artboard behind a slot changes as the list does.
@@ -375,7 +414,7 @@ export class ScreenGuide {
         if (placed) this.onLabelDown(event, placed, at);
       };
       const box = pageBox(view, board).frame;
-      const active = boards.length > 1 && board.id === this.active;
+      const active = board.id === this.active;
       frame.classList.toggle("active", active);
       label.classList.toggle("active", active);
       frame.style.width = `${box.width}px`;
@@ -385,4 +424,56 @@ export class ScreenGuide {
       label.style.transform = `translate(${box.x}px, ${box.y}px)`;
     }
   }
+
+  /** One hole in the shade per artboard, where the camera has it. */
+  private drawShade(view: Viewport, boards: PlacedArtboard[]): void {
+    const holes = this.shadeHoles;
+    while (holes.children.length > boards.length) holes.lastElementChild?.remove();
+    for (const [i, board] of boards.entries()) {
+      let hole = holes.children[i] as SVGRectElement | undefined;
+      if (!hole) {
+        hole = document.createElementNS(SVG, "rect");
+        hole.setAttribute("fill", "black");
+        holes.appendChild(hole);
+      }
+      const box = pageBox(view, board).frame;
+      hole.setAttribute("x", String(box.x));
+      hole.setAttribute("y", String(box.y));
+      hole.setAttribute("width", String(Math.max(0, box.width)));
+      hole.setAttribute("height", String(Math.max(0, box.height)));
+    }
+  }
+}
+
+const SVG = "http://www.w3.org/2000/svg";
+let shades = 0;
+
+/**
+ * The shade, and the group its holes go in: a rectangle far bigger than any
+ * canvas, masked by a white ground with a black rectangle per artboard.
+ */
+function makeShade(): [SVGSVGElement, SVGGElement] {
+  const id = `artboard-shade-${++shades}`;
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("class", "screen-guide-shade");
+  svg.setAttribute("aria-hidden", "true");
+  const mask = document.createElementNS(SVG, "mask");
+  mask.setAttribute("id", id);
+  mask.setAttribute("maskUnits", "userSpaceOnUse");
+  const far = (el: SVGRectElement) => {
+    el.setAttribute("x", "-100000");
+    el.setAttribute("y", "-100000");
+    el.setAttribute("width", "200000");
+    el.setAttribute("height", "200000");
+    return el;
+  };
+  const ground = far(document.createElementNS(SVG, "rect"));
+  ground.setAttribute("fill", "white");
+  const holes = document.createElementNS(SVG, "g");
+  mask.append(ground, holes);
+  const fill = far(document.createElementNS(SVG, "rect"));
+  fill.setAttribute("class", "screen-guide-shade-fill");
+  fill.setAttribute("mask", `url(#${id})`);
+  svg.append(mask, fill);
+  return [svg, holes];
 }

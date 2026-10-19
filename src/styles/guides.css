@@ -140,3 +140,114 @@
    boundary has gone. See editor/overlays-panel.ts. */
 .screen-guide-frame.hidden,
 .screen-guide-cross.hidden { display: none; }
+
+/* The labels themselves, over the shade and the rulers in the same layer. */
+.screen-guide-label-list { position: absolute; inset: 0; pointer-events: none; }
+/* With rulers on, a label stands on the top ruler rather than under it. */
+.screen-guide-labels.with-rulers .screen-guide-label { margin-top: -38px; }
+
+/* ── outside the artboards ───────────────────────────────────────────────────
+   A shade over everything that is not on a sheet — the canvas, and the ink
+   drawn off the page — because what prints is what is left clear. Subtle, so
+   the work outside a sheet is still work you can see and reach. */
+.screen-guide-shade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.screen-guide-shade-fill { fill: rgb(32 30 29 / 0.14); }
+
+/* ── rulers, guides and resize handles ───────────────────────────────────────
+   See editor/artboard-chrome.ts. A ruler stands outside its sheet, along the
+   top and left edges, and takes the pointer; the guides it makes cross the
+   sheet and take none. The blue is nobody else's on this canvas: red is the
+   game's marks and the accent is a selection. */
+.artboard-chrome { position: absolute; inset: 0; pointer-events: none; }
+.artboard-chrome-board {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+.artboard-ruler,
+.artboard-ruler-corner {
+  position: absolute;
+  background: rgb(243 242 242 / 0.94);
+  box-shadow: 0 0 0 1px rgb(32 30 29 / 0.18);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+.artboard-ruler.top { left: 0; top: -16px; height: 16px; cursor: col-resize; }
+.artboard-ruler.left { left: -16px; top: 0; width: 16px; cursor: row-resize; }
+.artboard-ruler-corner { left: -16px; top: -16px; width: 16px; height: 16px; pointer-events: none; }
+.artboard-ruler-ticks { position: absolute; left: 0; top: 0; pointer-events: none; }
+
+.artboard-guide {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: #1677ff;
+  pointer-events: none;
+}
+.artboard-guide.v { width: 1px; }
+.artboard-guide.h { height: 1px; }
+.artboard-guide.preview { background: #2f8cff; opacity: 0.85; }
+.artboard-guide.removing { opacity: 0.3; }
+
+.artboard-guide-tag {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 1px 4px;
+  background: #1677ff;
+  color: #fff;
+  font: 600 10px var(--font-body);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* A guide's handle, on its ruler: a blue tab across the band, wide enough to
+   take a finger without covering the ticks either side of it. */
+.artboard-guide-handle {
+  position: absolute;
+  background: #1677ff;
+  border: 1px solid #fff;
+  box-sizing: border-box;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+.artboard-guide-handle.v { left: -5px; top: -16px; width: 11px; height: 16px; }
+.artboard-guide-handle.h { left: -16px; top: -5px; width: 16px; height: 11px; }
+.artboard-guide-handle.removing { opacity: 0.4; }
+
+/* Resize: a square on each edge and corner, centred on the point. */
+.artboard-resize {
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 2px solid var(--canvas-guide);
+  pointer-events: auto;
+  touch-action: none;
+}
+.artboard-resize.n,
+.artboard-resize.s { cursor: ns-resize; }
+.artboard-resize.e,
+.artboard-resize.w { cursor: ew-resize; }
+.artboard-resize.ne,
+.artboard-resize.sw { cursor: nesw-resize; }
+.artboard-resize.nw,
+.artboard-resize.se { cursor: nwse-resize; }
+@media (pointer: coarse) {
+  .artboard-resize { left: -11px; top: -11px; width: 22px; height: 22px; }
+}
