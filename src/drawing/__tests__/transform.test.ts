@@ -84,3 +84,11 @@ describe("scaleFrom", () => {
     expect(applyPoint(flipped, 100, 50).x).toBeGreaterThan(0);
   });
 });
+
+describe("freeStampBox", () => {
+  it("is a square a grid space wide, centred on the pen — what the preview and the stroke both use", async () => {
+    const { freeStampBox } = await import("../tools-stamp");
+    const style = { stamp: { width: 64, height: 32, diamond: true } } as Parameters<typeof freeStampBox>[0];
+    expect(freeStampBox(style, 100, 50)).toEqual({ x: 68, y: 18, width: 64, height: 64 });
+  });
+});

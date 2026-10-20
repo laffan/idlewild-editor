@@ -564,6 +564,8 @@ under the pen (`stampBoxAt`), a diamond on an isometric project. Off,
 `beginShapeStamp` is given no `boxAt` and lays its own: a square a space wide
 (an isometric space's 2:1 would squash every shape), centred on the pen, and
 only once it would clear the last one, so a drag is a row rather than a smear.
+The box is `freeStampBox`, which the faded preview under the pointer asks too
+(through `DrawingLayer.stampBox`), so the preview is where the shape lands.
 The switch sits under Use as Eraser, and only where the grid snaps.
 
 ### The box a lasso selection wears

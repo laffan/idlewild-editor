@@ -49,6 +49,17 @@ export interface StampBox {
  */
 export type StampBoxAt = (x: number, y: number) => StampBox | null;
 
+/**
+ * Where a stamp goes with Use Grid off: square, a grid space wide — off the
+ * grid there is no space whose proportions to take, and an isometric space's
+ * 2:1 squashes every shape — and centred on the pen. The stroke and the
+ * preview under the pointer both ask this, so the preview is where it lands.
+ */
+export function freeStampBox(style: StrokeStyle, x: number, y: number): StampBox {
+  const side = Math.max(style.stamp.width, style.stamp.height);
+  return { x: x - side / 2, y: y - side / 2, width: side, height: side };
+}
+
 export function beginShapeStamp(
   store: StrokeStore,
   surface: Surface,
@@ -70,16 +81,14 @@ export function beginShapeStamp(
   let stamp = style.stamp;
 
   const free = (wx: number, wy: number): StampBox | null => {
-    // Square, a grid space wide: off the grid there is no space whose
-    // proportions to take, and an isometric space's 2:1 squashes every shape.
-    const side = Math.max(style.stamp.width, style.stamp.height);
-    const x = wx - side / 2;
-    const y = wy - side / 2;
+    const box = freeStampBox(style, wx, wy);
     const last = points[points.length - 1];
-    // Centred on the pen, and only once it would clear the last one, so a
-    // drag is a row of shapes rather than a smear of them.
-    if (last && Math.abs(x - last.x) < side && Math.abs(y - last.y) < side) return null;
-    return { x, y, width: side, height: side };
+    // Only once it would clear the last one, so a drag is a row of shapes
+    // rather than a smear of them.
+    if (last && Math.abs(box.x - last.x) < box.width && Math.abs(box.y - last.y) < box.height) {
+      return null;
+    }
+    return box;
   };
 
   const take = (wx: number, wy: number): boolean => {

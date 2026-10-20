@@ -43,7 +43,7 @@ import { TransformBox } from "./transform-box";
 import { transformSome, type Affine } from "./transform";
 import { drawToolCursor, hasToolCursor } from "./cursor";
 import { onFrame } from "./frame";
-import { beginShapeStamp, type StampBox, type StampBoxAt } from "./tools-stamp";
+import { beginShapeStamp, freeStampBox, type StampBox, type StampBoxAt } from "./tools-stamp";
 import {
   DEFAULT_STYLE,
   type DrawingTool,
@@ -543,6 +543,7 @@ export class DrawingLayer {
    * strokes over the same ground have to agree about where the boxes are.
    */
   private stampBox(x: number, y: number): StampBox | null {
+    if (this.style.stampGrid === false) return freeStampBox(this.style, x, y);
     const asked = this.callbacks.stampBoxAt?.(x, y);
     if (asked) return asked;
     const { width, height } = this.style.stamp;

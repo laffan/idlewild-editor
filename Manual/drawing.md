@@ -118,7 +118,7 @@ Part of [the Idlewild manual](README.md).
 - **Use Grid**, under Use as Eraser in the Shape brush's panel, is on to
   begin with. Off, the shapes go where the pen goes instead — square, a grid
   space wide, laid side by side along the drag — rather than into the spaces
-  it crosses. A project with no lattice has no such switch
+  it crosses, and the faded preview under the pointer follows suit. A project with no lattice has no such switch
 
 ## Erasing, and the knife
 
