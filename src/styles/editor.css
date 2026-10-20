@@ -611,6 +611,15 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
   top: 0;
   pointer-events: none;
 }
+/* The live canvas and the tail over it, as one group: a translucent stroke in
+   flight takes its opacity here, so the two composite as one stroke first —
+   see `drawing/tail-canvas.ts`. */
+.draw-ink {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.draw-tail { transform-origin: 0 0; }
 
 /* Both modes that run the game hide the tools, so they hide the ink's own
    layer with them — it is a sheet over the canvas, and the canvas is behind a

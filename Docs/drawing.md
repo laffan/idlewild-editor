@@ -25,6 +25,7 @@ selection out.
 | `drawing-layer*.ts`, `re-anchor.ts` | `surface.ts`, `drawing-layer.ts` |
 | `stroke-paint.ts` | `rasterise.ts` — strokes → RGBA → PSD |
 | `engine/stroke.js`'s rAF batching (delta #24) | `frame.ts` — one repaint a frame |
+| — | `live-ink.ts`, `tail-canvas.ts` — a stroke in flight drawn a frame at a time, not re-laid |
 
 Not coming across, because none of it is drawing: the shelf, the pocket,
 splits, proof pages, flowcharts, markdown, text and image shapes, brush slots
@@ -421,6 +422,74 @@ blit-forward re-anchor (#25), its opacity-swap double buffer (#29/#31) and its
 tile index. The first two are about panning and re-anchoring rather than about
 drawing; the third pays off on a layer with thousands of strokes, where a
 re-bake's bbox cull is currently the only thing narrowing the work.
+
+### The stroke in flight, and the three more things that were paying for it
+
+The five above made a stroke cheap to *land*. Drawing one still got slower the
+longer it got, and a quick hand felt it first — *on an M1 iPad it is fine
+until I sketch quickly, and then the lag catches up*. A quick hand makes a long
+line in few frames, and every frame of a stroke was still the whole stroke.
+
+Measured with a scripted scribble four samples a frame for three hundred
+frames (headless Chromium, software raster, so the absolute numbers are a
+desktop's and only the shape carries to an iPad): the plain pencil went from
+4 ms a frame at the start to 81 ms at the end; the plan's pencil from 6 to
+121; the plan's eraser from 51 to 213. After the three below, every one of
+them is under a millisecond a frame and stays there.
+
+**6. Every frame re-laid the whole stroke.** Batching to one paint a frame (1)
+stopped the waste inside a frame, but that one paint was still a clear of the
+stroke's whole box, the streamline from the first sample, and every stamp
+from the first one — so the stroke as a whole was quadratic in its own
+length, and the region WebKit had to upload grew with it. `live-ink.ts`
+draws it a frame at a time instead. The streamline is a lag filter that runs
+forwards, so every output but the pointer's own is settled the moment the
+next sample arrives, and the stamp walk only needs to know where it stopped
+(`StampWalk` in `render.ts`). The settled part is stamped once onto the live
+canvas and left there; the one segment still moving — from the last settled
+point to the pointer — goes on a small canvas of its own over the live one
+(`tail-canvas.ts`), cleared and redrawn every frame. It lays the same stamps
+in the same order as the whole-stroke walk, so the line under the pen is
+still the line that lands — `live-ink.test.ts` holds the two walks stamp for
+stamp, and a pixel comparison against the old path in a browser differed by
+at most 2/255 for ink.
+
+The tail has a canvas of its own rather than a backup of the pixels under
+it, and that is the trap worth writing down: **a canvas used as a
+`drawImage` source is snapshotted whole.** The first version copied the few
+pixels under the tail out of the live canvas each frame, and it cost a flat
+40 ms a frame — the price of a four-thousand-pixel surface, every time,
+however small the rectangle asked for. Nothing in the drawing path reads
+from the two big canvases while a pen is down.
+
+**7. A translucent stroke was flattened every frame.** The plan's ink is 90 %,
+so every frame of every plan stroke went through `composited`: the whole
+stroke stamped into a scratch canvas as big as the backing and laid down
+once — with that scratch as a `drawImage` source, which is (6)'s trap again.
+In flight it is now stamped opaque, and the opacity is set on the group the
+live and tail canvases sit in (`Surface.setInkOpacity`). The two composite
+as one first, so where the tail overlaps the line it does not come out
+darker, and the result is the picture `composited` made. A highlighter's
+multiply onto an empty canvas was only ever its alpha, so it is the same.
+
+**8. An eraser backed up and recut its whole mark every frame.** An opaque
+eraser cuts its settled stamps straight into the done canvas as they settle:
+`dst × (1 − a₁) × (1 − a₂) …` is what taking the whole mark out at once
+leaves when the colour is opaque. The stroke then lands through
+`Surface.adoptAppend`, which records it as painted rather than cutting it a
+second time (and re-bakes if a locked layer turned it away, since the cut is
+then in the canvas and not the document). The cost is the tail: a hole cannot
+go on a canvas of its own, so the last fraction of one sample's travel is cut
+when the pen comes up rather than shown. A translucent eraser does not have
+the identity — per stamp it compounds — and keeps the whole-stroke path.
+
+What still takes the whole-stroke path, and is the next thing to look at if
+it matters: **smoothing above zero**. Its last stage pulls every point towards
+the chord between the two ends, and the far end is the pointer, so nothing
+in a smoothed stroke settles until the pen comes up. The hold that
+straightens a stroke in PSD Edit mode hands over to the same path when it
+fires, and so does the Pattern brush, whose lattice is worked out over the
+whole path.
 
 ### Fingers never draw
 

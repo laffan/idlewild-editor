@@ -417,8 +417,10 @@ export class DrawingLayer {
     return this.working ?? this.store.strokes;
   }
 
-  private local(event: PointerEvent): { x: number; y: number } {
-    const rect = this.root.getBoundingClientRect();
+  private local(
+    event: PointerEvent,
+    rect = this.root.getBoundingClientRect(),
+  ): { x: number; y: number } {
     return this.surface.screenToWorld(
       event.clientX - rect.left,
       event.clientY - rect.top,
@@ -473,7 +475,10 @@ export class DrawingLayer {
     y: number,
     pressure: number,
   ): ToolSession {
-    if (tool === "pencil") {
+    // The Pattern brush is the pencil's own session. What makes it a Pattern
+    // brush is the style it carries, not the gesture — see `paint-render.ts`,
+    // which turns the path into the lattice cells it passed over.
+    if (tool === "pencil" || tool === "pattern") {
       return beginDraw(
         this.store,
         this.surface,
@@ -494,21 +499,6 @@ export class DrawingLayer {
         },
         x,
         y,
-      );
-    }
-    if (tool === "pattern") {
-      // The pencil's own session. What makes it a Pattern brush is the style
-      // it carries, not the gesture — see `paint-render.ts`, which turns the
-      // path into the lattice cells it passed over.
-      return beginDraw(
-        this.store,
-        this.surface,
-        this.atlas,
-        this.style,
-        x,
-        y,
-        pressure,
-        { straightenAfterMs: this.straightenHoldMs },
       );
     }
     if (tool === "shape") {
@@ -571,10 +561,12 @@ export class DrawingLayer {
       return;
     }
     // Coalesced events are the difference between a smooth curve and a
-    // polyline on a 120 Hz Pencil against a 60 Hz frame.
+    // polyline on a 120 Hz Pencil against a 60 Hz frame. One layout read for
+    // all of them: the surface does not move between samples of one event.
     const moves = event.getCoalescedEvents?.() ?? [];
+    const rect = this.root.getBoundingClientRect();
     for (const move of moves.length ? moves : [event]) {
-      const at = this.local(move);
+      const at = this.local(move, rect);
       const { x, y } = this.lock?.apply(at.x, at.y, move.shiftKey) ?? at;
       this.session.move(x, y, this.pressure(move));
     }

@@ -282,3 +282,42 @@ describe("an erase in flight", () => {
     expect(calls).toEqual([]);
   });
 });
+
+/**
+ * An opaque eraser drawn a frame at a time (`live-ink.ts`) has cut its whole
+ * mark into the baked canvas by the time it lands. Cutting it again on the
+ * way in would bite deeper into every soft edge.
+ */
+describe("a stroke that lands already cut", () => {
+  it("is recorded as painted rather than stamped again", () => {
+    const a = stroke("a");
+    const b = stroke("b");
+    const surface = ready([a]);
+    surface.adoptAppend(() => surface.apply([a, b]), () => [a, b]);
+    expect(drawn).toEqual([]);
+
+    // Only that one: the next append is stamped as usual.
+    const c = stroke("c");
+    surface.apply([a, b, c]);
+    expect(drawn.map((s) => s.id)).toEqual(["c"]);
+  });
+
+  /** A locked layer turns the stroke away, and the cut has to come back out. */
+  it("re-bakes when nothing was appended after all", () => {
+    const a = stroke("a");
+    const surface = ready([a]);
+    surface.adoptAppend(() => undefined, () => [a]);
+    expect(drawn.map((s) => s.id)).toEqual(["a"]);
+  });
+
+  /** What a stroke keeping its own pixels between frames watches for. */
+  it("counts every re-bake, and nothing else", () => {
+    const a = stroke("a");
+    const surface = ready([a]);
+    const before = surface.generation;
+    surface.apply([a, stroke("b")]);
+    expect(surface.generation).toBe(before);
+    surface.repaint([a]);
+    expect(surface.generation).toBe(before + 1);
+  });
+});

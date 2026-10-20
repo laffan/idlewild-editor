@@ -5,7 +5,8 @@
  * spacing and lay one rotated atlas cell down at each step, sized by the
  * pressure interpolated between the two samples either side. One
  * `drawImage` per stamp, no path, no gradient — which is what keeps a long
- * stroke cheap enough to re-lay every frame while it is being drawn.
+ * stroke cheap to bake. A stroke in flight is not re-laid every frame any
+ * more: the walk resumes where it stopped (`StampWalk`, `live-ink.ts`).
  */
 
 import type { Stroke } from "../lib/types";
@@ -30,60 +31,140 @@ export const STREAMLINE = 0.42;
  */
 const PRESSURE_FLOOR = 0.6;
 
+export type Tinted = { atlas: CanvasImageSource; cell: number; variants: number };
+
+/**
+ * How far a walk along a stream has got: enough to carry on from there.
+ *
+ * `stampStream` walks a whole stream in one go. An in-flight stroke is walked
+ * a few segments a frame instead (`live-ink.ts`), and the stamps it lays have
+ * to be the ones the whole walk would have laid — same spacing across the
+ * join, same variant and turn on each — so what the walk has to remember
+ * between frames is these two numbers and nothing else.
+ */
+export interface StampWalk {
+  /** How far into the next segment its first stamp lands. */
+  carry: number;
+  /** How many stamps have been laid, which picks each one's variant and turn. */
+  index: number;
+}
+
 export function stampStream(
   ctx: CanvasRenderingContext2D,
   stream: readonly StreamPoint[],
   size: number,
-  tinted: { atlas: CanvasImageSource; cell: number; variants: number },
+  tinted: Tinted,
 ): void {
   if (stream.length === 0) return;
-  const { atlas, cell, variants } = tinted;
-  const half = size * 0.5;
-  const spacing = Math.max(0.6, size * SPACING_FRAC);
-  let stampIndex = 0;
-
-  const stamp = (x: number, y: number, pressure: number) => {
-    const r = half * (PRESSURE_FLOOR + (1 - PRESSURE_FLOOR) * pressure);
-    const variant = stampIndex % variants;
-    const angle = stampAngle(stampIndex);
-    stampIndex++;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    ctx.drawImage(atlas, variant * cell, 0, cell, cell, -r, -r, r * 2, r * 2);
-    ctx.restore();
-  };
-
+  const walk: StampWalk = { carry: 0, index: 0 };
   if (stream.length === 1) {
-    stamp(stream[0].point[0], stream[0].point[1], stream[0].pressure);
+    stampDot(ctx, stream[0], size, tinted, walk);
     return;
   }
+  stampSegments(ctx, stream, 1, stream.length, size, tinted, walk);
+}
 
-  // `carry` keeps the spacing continuous across segment boundaries, so the
-  // stamps do not bunch up at every recorded sample.
-  let carry = 0;
-  for (let i = 1; i < stream.length; i++) {
-    const a = stream[i - 1];
-    const b = stream[i];
-    const dx = b.point[0] - a.point[0];
-    const dy = b.point[1] - a.point[1];
-    const length = Math.hypot(dx, dy);
-    if (length === 0) continue;
-    const ux = dx / length;
-    const uy = dy / length;
+/** A stream of one point, which is one stamp where the pen went down. */
+export function stampDot(
+  ctx: CanvasRenderingContext2D,
+  at: StreamPoint,
+  size: number,
+  tinted: Tinted,
+  walk: StampWalk,
+): void {
+  layStamps(ctx, size, tinted, walk, (lay) =>
+    lay(at.point[0], at.point[1], at.pressure),
+  );
+}
 
-    let d = carry;
-    while (d < length) {
-      const t = d / length;
-      stamp(
-        a.point[0] + ux * d,
-        a.point[1] + uy * d,
-        a.pressure + (b.pressure - a.pressure) * t,
-      );
-      d += spacing;
+/**
+ * Stamp the segments ending at `from` up to (not including) `to` — segment
+ * `i` runs from `stream[i - 1]` to `stream[i]` — carrying on from `walk` and
+ * leaving it where the last of them ended.
+ */
+export function stampSegments(
+  ctx: CanvasRenderingContext2D,
+  stream: readonly StreamPoint[],
+  from: number,
+  to: number,
+  size: number,
+  tinted: Tinted,
+  walk: StampWalk,
+): void {
+  if (from >= to) return;
+  const spacing = Math.max(0.6, size * SPACING_FRAC);
+  layStamps(ctx, size, tinted, walk, (lay) => {
+    // `carry` keeps the spacing continuous across segment boundaries, so the
+    // stamps do not bunch up at every recorded sample.
+    let carry = walk.carry;
+    for (let i = Math.max(1, from); i < to; i++) {
+      const a = stream[i - 1];
+      const b = stream[i];
+      const dx = b.point[0] - a.point[0];
+      const dy = b.point[1] - a.point[1];
+      const length = Math.hypot(dx, dy);
+      if (length === 0) continue;
+      const ux = dx / length;
+      const uy = dy / length;
+
+      let d = carry;
+      while (d < length) {
+        const t = d / length;
+        lay(
+          a.point[0] + ux * d,
+          a.point[1] + uy * d,
+          a.pressure + (b.pressure - a.pressure) * t,
+        );
+        d += spacing;
+      }
+      carry = d - length;
     }
-    carry = d - length;
-  }
+    walk.carry = carry;
+  });
+}
+
+/**
+ * The per-stamp arithmetic, around a walk that decides where the stamps go.
+ *
+ * Each stamp is one `setTransform` and one `drawImage`. It was `save`,
+ * `translate`, `rotate`, `drawImage` and `restore` — and `restore` copies the
+ * whole graphics state back, which on a stroke of a few hundred stamps is a
+ * few hundred state copies for what is, in the end, a matrix. The matrix is
+ * the context's own transform with the stamp's translation and turn folded
+ * in, and the context is left holding the transform it came with.
+ */
+function layStamps(
+  ctx: CanvasRenderingContext2D,
+  size: number,
+  tinted: Tinted,
+  walk: StampWalk,
+  body: (lay: (x: number, y: number, pressure: number) => void) => void,
+): void {
+  const { atlas, cell, variants } = tinted;
+  const half = size * 0.5;
+  const { a, b, c, d, e, f } = ctx.getTransform();
+  let index = walk.index;
+
+  body((x, y, pressure) => {
+    const r = half * (PRESSURE_FLOOR + (1 - PRESSURE_FLOOR) * pressure);
+    const variant = index % variants;
+    const angle = stampAngle(index);
+    index++;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    ctx.setTransform(
+      a * cos + c * sin,
+      b * cos + d * sin,
+      c * cos - a * sin,
+      d * cos - b * sin,
+      a * x + c * y + e,
+      b * x + d * y + f,
+    );
+    ctx.drawImage(atlas, variant * cell, 0, cell, cell, -r, -r, r * 2, r * 2);
+  });
+
+  walk.index = index;
+  ctx.setTransform(a, b, c, d, e, f);
 }
 
 /**
@@ -449,7 +530,7 @@ function flattened(
   ctx: CanvasRenderingContext2D,
   stream: readonly StreamPoint[],
   size: number,
-  tinted: { atlas: CanvasImageSource; cell: number; variants: number },
+  tinted: Tinted,
   composite: GlobalCompositeOperation,
   strokeAlpha: number,
 ): void {

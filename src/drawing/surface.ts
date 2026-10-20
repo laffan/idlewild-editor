@@ -46,8 +46,10 @@
 
 import type { Stroke } from "../lib/types";
 import type { AtlasCache } from "./atlas";
-import { boxesOverlap, strokeBox } from "./geometry";
+import { appended, boxesOverlap, strokeBox } from "./geometry";
 import { renderStroke } from "./render";
+import { PixelBackup } from "./pixel-backup";
+import { context, stageCanvas, TailCanvas } from "./tail-canvas";
 import type { Bounds } from "./types";
 
 /**
@@ -91,6 +93,9 @@ export class Surface {
   private readonly doneCtx: CanvasRenderingContext2D;
   private readonly live: HTMLCanvasElement;
   private readonly liveCtx: CanvasRenderingContext2D;
+  /** The live canvas and the tail over it, which a stroke's opacity is set on. */
+  private readonly ink: HTMLElement;
+  private readonly tail = new TailCanvas();
   private readonly atlas: AtlasCache;
 
   /** World rect the backing covers, and the zoom its ink was baked at. */
@@ -99,6 +104,7 @@ export class Surface {
   private worldSize = 0;
   private bakeZoom = 1;
   private pixels = 0;
+  private dpr = 1;
 
   /**
    * The stroke list the done canvas currently holds, by identity.
@@ -152,8 +158,12 @@ export class Surface {
    * The backup is the mark's own rectangle, not the backing: a stroke covers
    * a few hundred pixels of a canvas that is four thousand across.
    */
-  private erasing: { canvas: HTMLCanvasElement; rect: Bounds | null } | null =
-    null;
+  private erasing: PixelBackup | null = null;
+
+  /** See `generation`. */
+  private generationValue = 0;
+  /** Inside `adoptAppend`: the next appended stroke is already on the canvas. */
+  private adopting = false;
 
   private view: Viewport = {
     originX: 0,
@@ -166,11 +176,14 @@ export class Surface {
   constructor(atlas: AtlasCache) {
     this.atlas = atlas;
 
-    this.done = canvas("draw-done");
-    this.live = canvas("draw-live");
+    this.done = stageCanvas("draw-done");
+    this.live = stageCanvas("draw-live");
     this.stage = document.createElement("div");
     this.stage.className = "draw-stage";
-    this.stage.append(this.done, this.live);
+    this.ink = document.createElement("div");
+    this.ink.className = "draw-ink";
+    this.ink.append(this.live, this.tail.el);
+    this.stage.append(this.done, this.ink);
 
     this.root = document.createElement("div");
     this.root.className = "draw-surface";
@@ -249,6 +262,11 @@ export class Surface {
       this.repaint(strokes);
       return;
     }
+    if (this.adopting && added.length === 1) {
+      this.adopting = false;
+      this.painted = strokes;
+      return;
+    }
     if (added.length > 0) {
       this.applyWorldTransform(this.doneCtx);
       const visible = this.backingBounds();
@@ -270,10 +288,13 @@ export class Surface {
       this.present();
       return;
     }
+    // A re-anchor comes through here too, so this one count covers both ways
+    // the pixels stop meaning what they meant — see `generation`.
+    this.generationValue++;
 
     // A re-bake is the baked state, so any backup taken before it describes
     // nothing — see `restoreErased`.
-    if (this.erasing) this.erasing.rect = null;
+    this.erasing?.drop();
     this.clearAll(this.doneCtx);
     this.applyWorldTransform(this.doneCtx);
     this.layBackdrop();
@@ -302,37 +323,10 @@ export class Surface {
   beginErase(box: Bounds): CanvasRenderingContext2D {
     this.restoreErased();
     if (this.pixels === 0) return this.doneCtx;
-    const held = this.erasing ?? { canvas: document.createElement("canvas"), rect: null };
-    this.erasing = held;
-
+    this.erasing ??= new PixelBackup();
     // The mark's rectangle in backing pixels, clamped to the backing: a stroke
     // run off the edge has nothing out there to put back.
-    const want = this.toBacking(box);
-    const x = Math.max(0, Math.floor(want.x));
-    const y = Math.max(0, Math.floor(want.y));
-    const right = Math.min(this.pixels, Math.ceil(want.x + want.width));
-    const bottom = Math.min(this.pixels, Math.ceil(want.y + want.height));
-    const width = right - x;
-    const height = bottom - y;
-
-    if (width > 0 && height > 0) {
-      // Grown in steps, because the rectangle grows with the stroke and
-      // assigning `canvas.width` reallocates the backing store every time.
-      const step = (n: number) => Math.min(this.pixels, Math.ceil(n / 256) * 256);
-      if (held.canvas.width < width || held.canvas.height < height) {
-        held.canvas.width = Math.max(held.canvas.width, step(width));
-        held.canvas.height = Math.max(held.canvas.height, step(height));
-      }
-      const backup = held.canvas.getContext("2d");
-      if (backup) {
-        backup.clearRect(0, 0, width, height);
-        backup.drawImage(this.done, x, y, width, height, 0, 0, width, height);
-        held.rect = { x, y, width, height };
-      }
-    } else {
-      held.rect = null;
-    }
-
+    this.erasing.take(this.done, this.backingRect(box));
     this.applyWorldTransform(this.doneCtx);
     return this.doneCtx;
   }
@@ -356,13 +350,81 @@ export class Surface {
    * anything any more and putting it back would restore ink that has gone.
    */
   private restoreErased(): void {
-    const held = this.erasing;
-    if (!held?.rect) return;
-    const { x, y, width, height } = held.rect;
-    this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
-    this.doneCtx.clearRect(x, y, width, height);
-    this.doneCtx.drawImage(held.canvas, 0, 0, width, height, x, y, width, height);
-    held.rect = null;
+    this.erasing?.restore(this.doneCtx);
+  }
+
+  /**
+   * Bumped whenever the done canvas is re-laid from the strokes, which a
+   * re-anchor does too after moving the world under both canvases. A stroke
+   * that keeps its pixels between frames (`live-ink.ts`) lays itself again
+   * from the beginning when it changes.
+   */
+  get generation(): number {
+    return this.generationValue;
+  }
+
+  /** `beginLive` without the clear, for `live-ink.ts`. Close it with `endLive`. */
+  continueLive(): CanvasRenderingContext2D {
+    this.backLive();
+    this.applyWorldTransform(this.liveCtx);
+    return this.liveCtx;
+  }
+
+  /** A world box as whole backing pixels, clamped to the backing; null if off it. */
+  backingRect(box: Bounds): Bounds | null {
+    if (this.pixels === 0) return null;
+    const want = this.toBacking(box);
+    const x = Math.max(0, Math.floor(want.x));
+    const y = Math.max(0, Math.floor(want.y));
+    const right = Math.min(this.pixels, Math.ceil(want.x + want.width));
+    const bottom = Math.min(this.pixels, Math.ceil(want.y + want.height));
+    if (right <= x || bottom <= y) return null;
+    return { x, y, width: right - x, height: bottom - y };
+  }
+
+  /**
+   * The opacity a stroke in flight is shown at. A translucent one is stamped
+   * opaque and shown through this, which is the picture `composited` makes
+   * of it — one alpha over the finished mark — without flattening the whole
+   * mark every frame. Back to 1 when the stroke is over, by whoever set it.
+   */
+  setInkOpacity(opacity: number): void {
+    this.ink.style.opacity = opacity < 1 ? String(opacity) : "";
+  }
+
+  /**
+   * The tail canvas over `box`, cleared, in world coordinates — see
+   * `tail-canvas.ts`. Null clears it and hands nothing back.
+   */
+  beginTail(box: Bounds | null): CanvasRenderingContext2D | null {
+    const scale = this.pixels / this.worldSize;
+    const rect = box ? this.backingRect(box) : null;
+    return this.tail.begin(rect, scale, this.anchorX, this.anchorY, this.dpr);
+  }
+
+  /** The done canvas in world coordinates, for `live-ink.ts`'s eraser. Close with `endEraseFrame`. */
+  continueDone(): CanvasRenderingContext2D {
+    this.applyWorldTransform(this.doneCtx);
+    return this.doneCtx;
+  }
+
+  /**
+   * Run `add`, which appends a stroke whose mark the done canvas already
+   * carries — an erase cut a frame at a time — so the append is recorded as
+   * painted rather than cut a second time. If nothing was appended, because a
+   * locked layer turned the stroke away, the cut is in the canvas and not in
+   * the document, and only a re-bake takes it back out.
+   */
+  adoptAppend(add: () => void, strokes: () => readonly Stroke[]): void {
+    this.adopting = true;
+    try {
+      add();
+    } finally {
+      if (this.adopting) {
+        this.adopting = false;
+        this.repaint(strokes());
+      }
+    }
   }
 
   /** Put the live context into world coordinates, cleared and ready. */
@@ -389,6 +451,7 @@ export class Surface {
 
   clearLive(): void {
     this.clearLiveDirty();
+    this.tail.clear();
     this.liveCtx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
@@ -479,6 +542,7 @@ export class Surface {
     );
 
     this.bakeZoom = view.zoom;
+    this.dpr = dpr;
     this.worldSize = pixels / (dpr * this.bakeZoom);
     // Centre the covered rect on the middle of what the camera can see.
     this.anchorX = view.originX + view.width / view.zoom / 2 - this.worldSize / 2;
@@ -555,6 +619,7 @@ export class Surface {
     this.live.style.width = "1px";
     this.live.style.height = "1px";
     this.liveDirty = null;
+    this.tail.release();
   }
 
   /** World → backing pixels, for both canvases. */
@@ -616,37 +681,4 @@ export class Surface {
     this.stage.style.transform =
       `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
   }
-}
-
-/**
- * The strokes `next` has that `before` did not, or null if it is not simply
- * `before` with something on the end.
- *
- * Identity and nothing deeper — see `apply`. Returns an empty array for a
- * list that merely re-wraps the same strokes, which is what an erase drag's
- * commit hands over and which correctly bakes nothing.
- */
-function appended(
-  before: readonly Stroke[],
-  next: readonly Stroke[],
-): Stroke[] | null {
-  if (next.length < before.length) return null;
-  for (let i = 0; i < before.length; i++) {
-    if (before[i] !== next[i]) return null;
-  }
-  return next.slice(before.length);
-}
-
-function canvas(className: string): HTMLCanvasElement {
-  const el = document.createElement("canvas");
-  el.className = className;
-  el.width = 1;
-  el.height = 1;
-  return el;
-}
-
-function context(el: HTMLCanvasElement): CanvasRenderingContext2D {
-  const ctx = el.getContext("2d");
-  if (!ctx) throw new Error("The drawing layer needs a 2D canvas context");
-  return ctx;
 }

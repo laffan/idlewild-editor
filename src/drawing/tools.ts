@@ -30,6 +30,9 @@
  * Each session also tells the surface where it painted, so the next clear
  * covers that rectangle rather than the whole four-thousand-pixel backing —
  * see `Surface.endLive`.
+ *
+ * The pencil goes one step further: its frame lays only what settled since
+ * the last one, rather than the whole stroke again — see `live-ink.ts`.
  */
 
 import type { Stroke } from "../lib/types";
@@ -47,6 +50,7 @@ import {
   type InkPoint,
 } from "./geometry";
 import { onFrame } from "./frame";
+import { liveInk, paintsIncrementally, type LiveInk } from "./live-ink";
 import { paintRegion } from "./paint-render";
 import {
   renderErase,
@@ -168,11 +172,28 @@ export function beginDraw(
     style.size +
     (style.paint.kind === "pattern" ? patternScaleOf(style.paint) : 0);
 
-  // An erase is previewed on the **baked** canvas rather than the live one,
-  // because a hole has to be cut out of the pixels it is taking away — see
-  // `Surface.beginErase`. Everything else about the gesture is the same, down
-  // to re-laying the whole mark every frame.
+  // Plain ink, a translucent colour, the highlighter and the eraser are drawn
+  // a frame at a time — only what changed since the last frame — and stay so
+  // until something about the stroke makes all of it move: the hold below
+  // straightening it. See `live-ink.ts`.
+  let live: LiveInk | null = paintsIncrementally(style)
+    ? liveInk(surface, atlas, style)
+    : null;
+
+  // The whole-stroke path. An erase is previewed on the **baked** canvas
+  // rather than the live one, because a hole has to be cut out of the pixels
+  // it is taking away — see `Surface.beginErase`. Everything else about the
+  // gesture is the same, down to re-laying the whole mark every frame.
   const paint = (): void => {
+    if (live && !straight) {
+      live.paint(points);
+      return;
+    }
+    if (live) {
+      // The hold has fired, and from here every point moves with the pointer.
+      if (live.abandon()) surface.repaint(store.strokes);
+      live = null;
+    }
     const held = shaped();
     const stream = streamlinePoints(held, STREAMLINE);
     const box = boundsOf(held, reach);
@@ -228,16 +249,21 @@ export function beginDraw(
       disarm();
       frame.cancel();
       surface.clearLive();
-      // The preview goes back before the stroke goes in: what `apply` stamps
-      // is the mark for real, and leaving the preview under it would take the
-      // same pixels out twice.
-      surface.endErase();
       if (points.length < 2) {
         // A tap is not a stroke. Two points is the minimum the streamline
         // needs before it draws anything but a single stamp.
         points.push({ x: points[0].x + 0.01, y: points[0].y, pressure });
       }
-      store.add(toFlat(shaped()), style);
+      // An eraser drawn a frame at a time has already cut its mark, and the
+      // stroke goes in as cut rather than being cut again — `live-ink.ts`.
+      const cut = live?.end(points) ?? false;
+      // The preview goes back before the stroke goes in: what `apply` stamps
+      // is the mark for real, and leaving the preview under it would take the
+      // same pixels out twice.
+      surface.endErase();
+      const add = () => void store.add(toFlat(shaped()), style);
+      if (cut) surface.adoptAppend(add, () => store.strokes);
+      else add();
     },
   };
 }

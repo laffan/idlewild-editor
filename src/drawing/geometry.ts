@@ -49,7 +49,17 @@ export function toFlat(points: readonly InkPoint[]): number[] {
 
 // ── perfect-freehand's streamline ───────────────────────────────────────────
 
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/**
+ * How far each interior sample is pulled from the last output towards
+ * itself, for a given streamline. Its own function because the in-flight
+ * stroke runs the same filter a sample at a time (`live-ink.ts`), and the two
+ * have to agree to the last bit for the line drawn live to be the line kept.
+ */
+export function streamlineWeight(streamline: number): number {
+  return 0.15 + (1 - streamline) * 0.85;
+}
 
 /**
  * Smooth a raw pointer trail into the point list the renderer stamps along.
@@ -63,7 +73,7 @@ export function streamlinePoints(
   streamline: number,
 ): StreamPoint[] {
   if (raw.length === 0) return [];
-  const t = 0.15 + (1 - streamline) * 0.85;
+  const t = streamlineWeight(streamline);
   const out: StreamPoint[] = [
     { point: [raw[0].x, raw[0].y], pressure: raw[0].pressure },
   ];
@@ -573,4 +583,23 @@ export function simplify(
   }
 
   return points.filter((_, i) => keep[i] === 1);
+}
+
+/**
+ * The strokes `next` has that `before` did not, or null if it is not simply
+ * `before` with something on the end.
+ *
+ * Identity and nothing deeper — see `Surface.apply`. Returns an empty array for a
+ * list that merely re-wraps the same strokes, which is what an erase drag's
+ * commit hands over and which correctly bakes nothing.
+ */
+export function appended(
+  before: readonly Stroke[],
+  next: readonly Stroke[],
+): Stroke[] | null {
+  if (next.length < before.length) return null;
+  for (let i = 0; i < before.length; i++) {
+    if (before[i] !== next[i]) return null;
+  }
+  return next.slice(before.length);
 }
