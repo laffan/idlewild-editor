@@ -43,6 +43,12 @@ const calls: string[] = [];
 function fakeContext(): Record<string, unknown> {
   return {
     setTransform: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    rect: vi.fn(),
+    clip: vi.fn(),
+    globalCompositeOperation: "source-over",
     clearRect: vi.fn(() => void calls.push("clear")),
     drawImage: vi.fn(() => void calls.push("image")),
     imageSmoothingEnabled: true,
@@ -319,5 +325,57 @@ describe("a stroke that lands already cut", () => {
     expect(surface.generation).toBe(before);
     surface.repaint([a]);
     expect(surface.generation).toBe(before + 1);
+  });
+});
+
+/**
+ * A pan that nears the backing's edge re-centres it. That used to re-bake
+ * every stroke in view, which with a few hundred strokes froze the canvas for
+ * as long as it took; a pan now slides the baked pixels and stamps only what
+ * reaches into the strips the slide uncovered. See `backing-slide.ts`.
+ *
+ * At this view the backing is 2560 pixels covering 1280 world units from
+ * x = -240, and a pan to x = 200 re-centres it 200 units to the right.
+ */
+describe("a pan past the backing's edge", () => {
+  function at(id: string, x: number): Stroke {
+    return { ...stroke(id), points: [x, 0, 0.5, x + 10, 10, 0.5] };
+  }
+  const panned = { ...view, originX: 200 };
+
+  it("slides, and stamps only the strokes in the uncovered strip", () => {
+    const held = [at("near", 0), at("far", 1100)];
+    const surface = ready(held);
+    const before = surface.generation;
+    surface.sync(panned, held);
+    expect(drawn.map((s) => s.id)).toEqual(["far"]);
+    // What a stroke in flight watches for, since its pixels moved too.
+    expect(surface.generation).toBe(before + 1);
+  });
+
+  it("re-bakes when the zoom changed rather than the place", () => {
+    const held = [at("near", 0), at("far", 1100)];
+    const surface = ready(held);
+    surface.sync({ ...view, zoom: 2 }, held);
+    // "near" never leaves the middle, so only a re-bake lays it again; "far"
+    // is out of what half the world covers at twice the zoom.
+    expect(drawn.map((s) => s.id)).toEqual(["near"]);
+  });
+
+  /** The canvas holds a cut the strokes do not, so only a re-bake is true. */
+  it("re-bakes while an eraser has cut into the canvas mid-stroke", () => {
+    const held = [at("near", 0), at("far", 1100)];
+    const surface = ready(held);
+    surface.continueDone();
+    surface.endEraseFrame();
+    surface.sync(panned, held);
+    expect(drawn.map((s) => s.id)).toEqual(["near", "far"]);
+  });
+
+  it("re-bakes when the canvas holds other strokes than the ones it is given", () => {
+    const held = [at("near", 0), at("far", 1100)];
+    const surface = ready(held);
+    surface.sync(panned, [held[0]]);
+    expect(drawn.map((s) => s.id)).toEqual(["near"]);
   });
 });

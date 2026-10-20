@@ -14,9 +14,9 @@
  * What the backing cannot do is cover an infinite canvas, so it follows the
  * camera. `sync` re-anchors it when the viewport drifts near an edge or the
  * zoom has moved far enough that the baked ink would show its resolution;
- * everything else is a transform. Hush's blit-forward re-anchor (its delta
- * #25), which slides the baked pixels and repaints only the newly exposed
- * strips, is the next increment — this one re-bakes what is visible.
+ * everything else is a transform. A re-anchor for a pan slides the baked
+ * pixels and draws only the strips that uncovers (`backing-slide.ts`); one
+ * for a change of zoom or size re-bakes what is visible.
  *
  * ## Three things that are about cost rather than about drawing
  *
@@ -49,8 +49,10 @@ import type { AtlasCache } from "./atlas";
 import { appended, boxesOverlap, strokeBox } from "./geometry";
 import { renderStroke } from "./render";
 import { PixelBackup } from "./pixel-backup";
+import { slideBacking } from "./backing-slide";
 import { context, stageCanvas, TailCanvas } from "./tail-canvas";
 import type { Bounds } from "./types";
+import { screenToWorld, worldToScreen, type Viewport } from "./viewport";
 
 /**
  * Artwork to bake under the ink: the picture, and where it goes in the world.
@@ -64,15 +66,7 @@ export interface Backdrop {
   smooth: boolean;
 }
 
-/** How the world maps onto the screen: `screen = (world − origin) × zoom`. */
-export interface Viewport {
-  originX: number;
-  originY: number;
-  zoom: number;
-  /** The host's size in CSS pixels. */
-  width: number;
-  height: number;
-}
+export type { Viewport } from "./viewport";
 
 /** How much more than the viewport the backing covers. */
 const COVER = 1.6;
@@ -144,26 +138,18 @@ export class Surface {
    */
   private backdrop: Backdrop | null = null;
   /**
-   * An erase gesture in flight, previewed on the **baked** canvas.
-   *
-   * Every other tool previews on the live canvas, which sits over the baked
-   * one. An eraser cannot: `destination-out` into a canvas that holds nothing
-   * takes nothing out and shows nothing, and a hole in an upper layer only
-   * reveals the layer below it. So an erase in progress is drawn into `done`
-   * itself, over the pixels it is actually taking away, and what it took is
-   * put back before the next frame re-lays it — the same "re-lay the whole
-   * mark every frame" the live canvas's callers already do, against a backup
-   * of the rectangle the mark covers rather than a clear.
-   *
-   * The backup is the mark's own rectangle, not the backing: a stroke covers
-   * a few hundred pixels of a canvas that is four thousand across.
+   * An erase gesture in flight, previewed on the **baked** canvas: a hole in
+   * the live canvas over it would only reveal the canvas below. What it cut
+   * last frame is put back from here before the next frame cuts again — the
+   * mark's own rectangle, not the backing. See `beginErase`.
    */
   private erasing: PixelBackup | null = null;
 
-  /** See `generation`. */
+  // See `generation`; inside `adoptAppend`; an eraser in flight has cut into
+  // the done canvas (`continueDone`), so a pan has to re-bake, not slide.
   private generationValue = 0;
-  /** Inside `adoptAppend`: the next appended stroke is already on the canvas. */
   private adopting = false;
+  private cutting = false;
 
   private view: Viewport = {
     originX: 0,
@@ -269,12 +255,7 @@ export class Surface {
     }
     if (added.length > 0) {
       this.applyWorldTransform(this.doneCtx);
-      const visible = this.backingBounds();
-      for (const stroke of added) {
-        const box = strokeBox(stroke);
-        if (box && !boxesOverlap(box, visible)) continue;
-        renderStroke(this.doneCtx, stroke, this.atlas);
-      }
+      this.layStrokes(added, [this.backingBounds()]);
       this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
     }
     this.painted = strokes;
@@ -291,6 +272,7 @@ export class Surface {
     // A re-anchor comes through here too, so this one count covers both ways
     // the pixels stop meaning what they meant — see `generation`.
     this.generationValue++;
+    this.cutting = false;
 
     // A re-bake is the baked state, so any backup taken before it describes
     // nothing — see `restoreErased`.
@@ -298,12 +280,7 @@ export class Surface {
     this.clearAll(this.doneCtx);
     this.applyWorldTransform(this.doneCtx);
     this.layBackdrop();
-    const visible = this.backingBounds();
-    for (const stroke of strokes) {
-      const box = strokeBox(stroke);
-      if (box && !boxesOverlap(box, visible)) continue;
-      renderStroke(this.doneCtx, stroke, this.atlas);
-    }
+    this.layStrokes(strokes, [this.backingBounds()]);
     this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
     this.painted = strokes;
   }
@@ -404,6 +381,7 @@ export class Surface {
 
   /** The done canvas in world coordinates, for `live-ink.ts`'s eraser. Close with `endEraseFrame`. */
   continueDone(): CanvasRenderingContext2D {
+    this.cutting = true;
     this.applyWorldTransform(this.doneCtx);
     return this.doneCtx;
   }
@@ -417,6 +395,7 @@ export class Surface {
    */
   adoptAppend(add: () => void, strokes: () => readonly Stroke[]): void {
     this.adopting = true;
+    this.cutting = false;
     try {
       add();
     } finally {
@@ -461,10 +440,7 @@ export class Surface {
   }
 
   screenToWorld(screenX: number, screenY: number): { x: number; y: number } {
-    return {
-      x: screenX / this.view.zoom + this.view.originX,
-      y: screenY / this.view.zoom + this.view.originY,
-    };
+    return screenToWorld(this.view, screenX, screenY);
   }
 
   /**
@@ -475,10 +451,7 @@ export class Surface {
    * the surface is `inset: 0` inside it, so the two agree.
    */
   worldToScreen(worldX: number, worldY: number): { x: number; y: number } {
-    return {
-      x: (worldX - this.view.originX) * this.view.zoom,
-      y: (worldY - this.view.originY) * this.view.zoom,
-    };
+    return worldToScreen(this.view, worldX, worldY);
   }
 
   /** How many CSS pixels one world unit covers. */
@@ -540,6 +513,16 @@ export class Surface {
       256,
       Math.min(MAX_BACKING_PX, Math.round(longest * COVER * dpr)),
     );
+    // A pan over a canvas holding just the baked strokes slides rather than
+    // re-bakes (`backing-slide.ts`); a cut in flight or a new scale re-bakes.
+    const slides =
+      pixels === this.pixels &&
+      dpr === this.dpr &&
+      view.zoom === this.bakeZoom &&
+      strokes === this.painted &&
+      !this.cutting &&
+      !this.erasing?.rect;
+    const was = { x: this.anchorX, y: this.anchorY };
 
     this.bakeZoom = view.zoom;
     this.dpr = dpr;
@@ -547,6 +530,13 @@ export class Surface {
     // Centre the covered rect on the middle of what the camera can see.
     this.anchorX = view.originX + view.width / view.zoom / 2 - this.worldSize / 2;
     this.anchorY = view.originY + view.height / view.zoom / 2 - this.worldSize / 2;
+    // A slide moves whole pixels, so the anchor moves by whole pixels too.
+    const scale = pixels / this.worldSize;
+    const [dx, dy] = [was.x - this.anchorX, was.y - this.anchorY].map((d) => Math.round(d * scale));
+    if (slides) {
+      this.anchorX = was.x - dx / scale;
+      this.anchorY = was.y - dy / scale;
+    }
 
     if (pixels !== this.pixels) {
       // Assigning width always clears and may reallocate the backing store,
@@ -565,8 +555,34 @@ export class Surface {
     // changing under it. Clearing a stale one would leave ink behind.
     this.liveDirty = null;
 
-    this.repaint(strokes);
+    if (slides && Math.abs(dx) < pixels && Math.abs(dy) < pixels) {
+      this.slideBy(dx, dy, strokes);
+    } else {
+      this.repaint(strokes);
+    }
   }
+
+  /** Move the baked pixels and draw what the move uncovered — `backing-slide.ts`. */
+  private slideBy(dx: number, dy: number, strokes: readonly Stroke[]): void {
+    // What was drawn against the old anchor is somewhere else now.
+    this.generationValue++;
+    const world = { x: this.anchorX, y: this.anchorY, scale: this.pixels / this.worldSize };
+    slideBacking(this.doneCtx, this.pixels, dx, dy, world, (reach) => {
+      this.applyWorldTransform(this.doneCtx);
+      this.layBackdrop();
+      this.layStrokes(strokes, reach);
+    });
+  }
+
+  /** Stamp the strokes that reach into any of `within`, in order. */
+  private layStrokes(strokes: readonly Stroke[], within: readonly Bounds[]): void {
+    for (const stroke of strokes) {
+      const box = strokeBox(stroke);
+      if (box && !within.some((r) => boxesOverlap(box, r))) continue;
+      renderStroke(this.doneCtx, stroke, this.atlas);
+    }
+  }
+
 
   /**
    * The artwork, under everything, in the world transform already applied.

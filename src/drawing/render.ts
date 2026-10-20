@@ -15,6 +15,7 @@ import { paintPatternStroke, paintRegion, paintShapeStroke } from "./paint-rende
 import type { AtlasCache } from "./atlas";
 import { STRIDE, streamlineFor, type StreamPoint } from "./geometry";
 import { stampAngle } from "./geometry";
+import { drawnPart, lands } from "./stamp-cull";
 import { alphaOf, opaqueHex } from "../lib/color";
 import type { Bounds, StrokeStyle } from "./types";
 
@@ -148,8 +149,10 @@ function layStamps(
   body((x, y, pressure) => {
     const r = half * (PRESSURE_FLOOR + (1 - PRESSURE_FLOOR) * pressure);
     const variant = index % variants;
-    const angle = stampAngle(index);
-    index++;
+    const at = index++;
+    // A turned square reaches √2 of its half-width; 1.5 is that and some.
+    if (!lands(x, y, r * 1.5)) return;
+    const angle = stampAngle(at);
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     ctx.setTransform(
@@ -564,11 +567,15 @@ let scratchBusy = false;
  */
 function composited(
   ctx: CanvasRenderingContext2D,
-  box: Bounds,
+  whole: Bounds,
   composite: GlobalCompositeOperation,
   alpha: number,
   body: (target: CanvasRenderingContext2D) => void,
 ): void {
+  // Only the part of the mark that can land, while a slide's strips are drawn.
+  const part = drawnPart(whole);
+  if (!part) return;
+  const box = part;
   const scratch = scratchBusy ? null : scratchFor(ctx);
   if (!scratch) {
     // No second context to be had, which is a browser this app does not run

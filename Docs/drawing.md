@@ -295,9 +295,23 @@ presenting it would visibly stretch. The pixel budget is fixed — viewport ×
 zoom, which is what keeps the ink at screen resolution however far in the
 user has gone without the backing growing without bound when they go out.
 
-Hush's blit-forward re-anchor (its delta #25) — slide the baked pixels by the
-same delta and repaint only the newly exposed strips — is the next increment.
-This one re-bakes what is visible.
+A re-anchor for a pan is Hush's blit-forward (its delta #25,
+`backing-slide.ts`): the baked pixels slide by the pan, a whole number of
+backing pixels, and only the strips that uncovers are drawn — the strokes that
+reach into them, clipped to them, with stamps that land wholly outside skipped
+(`stamp-cull.ts`). It used to re-bake everything in view, and that cost was
+the stroke count: about 8 ms for an empty layer and over a second for a few
+hundred strokes in headless Chromium, once per re-centre, for the ink and the
+plan both. With the sidebars hidden the backing is at its 4096 cap and covers
+less of the world past the screen, so it re-centres more often — which is how
+a session of quick sketching followed by a pan froze the iPad for seconds.
+
+What still re-bakes: a change of zoom past the tolerance, a change of backing
+size, a canvas that holds other strokes than the ones handed in, and an eraser
+mid-stroke that has cut into the canvas. A slid canvas can differ from a fresh
+bake by a few levels on a handful of pixels where a stamp crosses a seam;
+strips reach 8 pixels back over the old edge, where a stroke run off the
+canvas rasterised a shade differently, and the next re-bake evens it out.
 
 ### What a stroke costs, and the five things that were paying for it
 
