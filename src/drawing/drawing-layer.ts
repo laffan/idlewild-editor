@@ -38,6 +38,7 @@ import {
   type ToolSession,
 } from "./tools";
 import { PointFill } from "./fill-points";
+import { AxisLock } from "./axis-lock";
 import { strokesBox } from "./geometry";
 import { TransformBox } from "./transform-box";
 import { transformSome, type Affine } from "./transform";
@@ -50,6 +51,9 @@ import {
   type FillMode,
   type StrokeStyle,
 } from "./types";
+
+/** The brushes that lay a line, which Shift keeps to one axis — `axis-lock.ts`. */
+const LOCKS = new Set<DrawingTool | null>(["pencil", "pattern", "shape"]);
 
 export interface DrawingCallbacks {
   /** Two-finger navigation, in screen pixels, for the game camera. */
@@ -134,6 +138,8 @@ export class DrawingLayer {
   private sessionPointer: number | null = null;
   /** The erase drag's uncommitted stroke list; null outside one. */
   private working: Stroke[] | null = null;
+  /** Shift's one-axis hold on the stroke under way, for the brushes in `LOCKS`. */
+  private lock: AxisLock | null = null;
   /** What the lasso caught, and the box it wears — see `transform-box.ts`. */
   private selection: ReadonlySet<string> = new Set();
   private readonly transform: TransformBox;
@@ -354,14 +360,6 @@ export class DrawingLayer {
   }
 
   /**
-   * Re-lay every stroke from scratch.
-   *
-   * Two callers, and both of them mean it. A brush's PNG replacing its
-   * procedural tip changes what every stroke drawn with it looks like, and a
-   * change of layer changes which strokes there are — neither is describable
-   * as a diff against what is on the backing.
-   */
-  /**
    * Put artwork under the ink, or take it away — see `Surface.backdrop`.
    *
    * PSD Edit mode's alone. It is here rather than on the surface's own face
@@ -372,6 +370,8 @@ export class DrawingLayer {
     this.surface.setBackdrop(backdrop, this.strokes());
   }
 
+  /** Re-lay every stroke from scratch: a brush's PNG has replaced its
+   *  procedural tip, or the layer — and so which strokes there are — changed. */
   repaint(): void {
     this.surface.repaint(this.strokes());
   }
@@ -462,6 +462,7 @@ export class DrawingLayer {
     this.root.setPointerCapture(event.pointerId);
     this.sessionPointer = event.pointerId;
     const { x, y } = this.local(event);
+    this.lock = LOCKS.has(this.tool) ? new AxisLock(x, y) : null;
     this.session = this.open(this.tool, x, y, this.pressure(event));
     event.preventDefault();
   };
@@ -535,13 +536,8 @@ export class DrawingLayer {
     }, x, y);
   }
 
-  /**
-   * Where a stamp goes, with the fallback for a layer that has no grid.
-   *
-   * A lattice of the style's own stamp size, anchored on the world origin —
-   * the same rule the pattern lattice follows, and for the same reason: two
-   * strokes over the same ground have to agree about where the boxes are.
-   */
+  /** Where a stamp goes: off the grid, in a grid space, or — on a layer with no
+   *  grid — on a lattice of its own size from the world origin, as patterns are. */
   private stampBox(x: number, y: number): StampBox | null {
     if (this.style.stampGrid === false) return freeStampBox(this.style, x, y);
     const asked = this.callbacks.stampBoxAt?.(x, y);
@@ -578,7 +574,8 @@ export class DrawingLayer {
     // polyline on a 120 Hz Pencil against a 60 Hz frame.
     const moves = event.getCoalescedEvents?.() ?? [];
     for (const move of moves.length ? moves : [event]) {
-      const { x, y } = this.local(move);
+      const at = this.local(move);
+      const { x, y } = this.lock?.apply(at.x, at.y, move.shiftKey) ?? at;
       this.session.move(x, y, this.pressure(move));
     }
     event.preventDefault();

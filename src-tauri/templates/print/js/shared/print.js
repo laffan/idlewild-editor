@@ -109,10 +109,16 @@ export function installPrint(game, config) {
   // is read inside one frame, so it has to be asked for by hand once the
   // camera is on it; see `readBoards`. Imported here rather than at the top
   // so a project whose `canvas.js` has been taken apart still prints.
+  //
+  // Backdrops are then drawn once more over the box round every artboard, so
+  // a gradient spans the spread the way the editor draws it and each artboard
+  // is read with its own part of it rather than the whole of it.
   let followView = null;
+  let backdrops = null;
   import("./canvas.js")
     .then((canvas) => {
       if (typeof canvas.updateCanvas === "function") followView = canvas.updateCanvas;
+      if (typeof canvas.drawBackdrops === "function") backdrops = canvas.drawBackdrops;
     })
     .catch(() => {});
 
@@ -127,7 +133,11 @@ export function installPrint(game, config) {
         const chosen = pickBoards(boards, options.artboard);
         let pages;
         try {
-          pages = await readBoards(game, sheet, boards[0], chosen, followView);
+          pages = await readBoards(game, sheet, boards[0], chosen, {
+            followView,
+            backdrops,
+            span: spanOf(boards),
+          });
         } catch (err) {
           reject(err);
           return;
@@ -194,16 +204,26 @@ function pickBoards(boards, asked) {
  * read, and the cameras are put back before anything is awaited, so the
  * running game never draws a frame from anywhere else.
  */
-async function readBoards(game, sheet, first, chosen, followView) {
+async function readBoards(game, sheet, first, chosen, view) {
+  const { followView, backdrops, span } = view;
   const scenes = game.scene.getScenes(false).filter((scene) => scene.cameras?.main);
   const cameras = scenes.map((scene) => scene.cameras.main);
   // Backdrops and patterns are drawn for the camera's view, so they are
-  // redrawn for each artboard's — and then for the game's own again.
-  const follow = () => {
+  // redrawn for each artboard's — and then for the game's own again. Reading
+  // an artboard, the backdrops are drawn over the span of every artboard, so
+  // a gradient is cut into each one's part of it.
+  const follow = (reading) => {
     if (!followView) return;
     for (const scene of scenes) {
       try {
         followView(scene);
+        if (reading && backdrops && span) {
+          const world = scene.cameras.main.worldView;
+          const kept = [world.x, world.y, world.width, world.height];
+          world.setTo(span.x, span.y, span.width, span.height);
+          backdrops(scene);
+          world.setTo(...kept);
+        }
       } catch (err) {
         console.warn("ExportForPrint(): could not redraw the view:", err);
       }
@@ -216,12 +236,12 @@ async function readBoards(game, sheet, first, chosen, followView) {
     const size = { width: board.width, height: board.height };
     const saved = cameras.map((camera) => [camera, camera.scrollX, camera.scrollY]);
     for (const [camera, x, y] of saved) aim(camera, x + dx, y + dy, size);
-    follow();
+    follow(true);
     // The synchronous half of the read — every matrix and every capture —
     // runs inside this call; only the readbacks are left to await.
     const page = readPage(game, { width: board.width, height: board.height, dpi: sheet.dpi });
     for (const [camera, x, y] of saved) aim(camera, x, y);
-    follow();
+    follow(false);
     reads.push(page.then((p) => ({ page: p, board })));
   }
   return Promise.all(reads);
@@ -257,6 +277,15 @@ function aim(camera, x, y, page) {
   const width = (page?.width ?? camera.width) / zoomX;
   const height = (page?.height ?? camera.height) / zoomY;
   camera.worldView?.setTo(left, top, width, height);
+}
+
+/** The box round every artboard, in the world — what a gradient spans. */
+function spanOf(boards) {
+  const left = Math.min(...boards.map((b) => b.x ?? 0));
+  const top = Math.min(...boards.map((b) => b.y ?? 0));
+  const right = Math.max(...boards.map((b) => (b.x ?? 0) + b.width));
+  const bottom = Math.max(...boards.map((b) => (b.y ?? 0) + b.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 /** `<name>-<artboard>`, for a project with more than one artboard. */

@@ -65,6 +65,10 @@ Part of [the Idlewild manual](README.md).
   anything on the canvas, or tapping empty canvas, puts it down
 - **Everything outside the artboards is shaded a little darker**, the canvas
   and any ink there alike: what prints is what is left clear
+- **A gradient backdrop spans the artboards**, from the edge of the first to
+  the edge of the last, and stays put as the canvas is panned. Each artboard
+  prints its own part of it — two sheets side by side under a left-to-right
+  sky print the left half and the right half — just as the canvas shows them
 - **Show ruler**, in the artboard's inspector, puts a ruler along the top
   and left edges of every artboard, in the artboard's own unit. Hover a ruler
   for a blue guide across the sheet with its position beside it; click or tap

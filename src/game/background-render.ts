@@ -24,6 +24,8 @@ import type { DocStore } from "../lib/doc-store";
 import { alphaOf, hexToNumber } from "../lib/color";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
 import type { Background } from "../lib/types";
+import { currentArtboards } from "../lib/print";
+import { gradientAt, gradientCells, mix, spanOf, type Box } from "./gradient-span";
 
 /** Kept in step with `doc-renderer.ts`: one layer's worth of depth. */
 const DEPTH_STRIDE = 1000;
@@ -68,16 +70,19 @@ export class BackgroundRender {
   /** Redraw when the view or the document has moved. Cheap every frame. */
   update(camera: Phaser.Cameras.Scene2D.Camera): void {
     const view = camera.worldView;
+    // A print project's gradients span its artboards — see `gradient-span.ts`.
+    const span = spanOf(currentArtboards());
     const next = [
       Math.round(view.x),
       Math.round(view.y),
       Math.round(view.width),
       Math.round(view.height),
+      span ? `${span.x},${span.y},${span.width},${span.height}` : "",
       this.describe(),
     ].join("|");
     if (next === this.signature) return;
     this.signature = next;
-    this.draw(view);
+    this.draw(view, span);
   }
 
   /** Force the next update to redraw — after a scene switch or an edit. */
@@ -118,7 +123,7 @@ export class BackgroundRender {
     return parts.join(";");
   }
 
-  private draw(view: Phaser.Geom.Rectangle): void {
+  private draw(view: Phaser.Geom.Rectangle, span: Box | null): void {
     const layers = this.store.layers;
     const seen = new Set<string>();
     this.front = null;
@@ -137,7 +142,7 @@ export class BackgroundRender {
       // Back-most last in the document, so it is painted first here and
       // whatever is in front of it goes over the top.
       for (const background of [...backgrounds].reverse()) {
-        paint(g, background, view);
+        paint(g, background, view, span);
       }
     });
 
@@ -171,7 +176,12 @@ function paint(
   g: Phaser.GameObjects.Graphics,
   background: Background,
   view: Phaser.Geom.Rectangle,
+  span: Box | null,
 ): void {
+  if (background.kind === "gradient" && background.gradient && span) {
+    paintSpanned(g, background.gradient, view, span);
+    return;
+  }
   if (background.kind === "gradient" && background.gradient) {
     const { from, to, angle } = background.gradient;
     const [tl, tr, bl, br] = gradientCorners(from, to, angle);
@@ -185,6 +195,32 @@ function paint(
     g.fillStyle(hexToNumber(color), alphaOf(color));
   }
   g.fillRect(view.x, view.y, view.width, view.height);
+}
+
+/** A gradient over a print project's artboards, cell by cell — `gradient-span.ts`. */
+function paintSpanned(
+  g: Phaser.GameObjects.Graphics,
+  gradient: { from: string; to: string; angle?: number },
+  view: Box,
+  span: Box,
+): void {
+  const at = gradientAt(gradient.angle ?? 0, span);
+  const from = hexToNumber(gradient.from);
+  const to = hexToNumber(gradient.to);
+  const a = alphaOf(gradient.from);
+  const b = alphaOf(gradient.to);
+  for (const cell of gradientCells(view, span)) {
+    const ts = [
+      at(cell.x, cell.y),
+      at(cell.x + cell.width, cell.y),
+      at(cell.x, cell.y + cell.height),
+      at(cell.x + cell.width, cell.y + cell.height),
+    ];
+    const [tl, tr, bl, br] = ts.map((t) => mix(from, to, t));
+    const [al, ar, bll, brr] = ts.map((t) => a + (b - a) * t);
+    g.fillGradientStyle(tl, tr, bl, br, al, ar, bll, brr);
+    g.fillRect(cell.x, cell.y, cell.width, cell.height);
+  }
 }
 
 /**
@@ -259,15 +295,5 @@ function cornerMix(angle: number, at: (t: number) => number): number[] {
   return dots.map((dot) => at((dot - low) / span));
 }
 
-/** Two packed colours, channel by channel. */
-function mix(a: number, b: number, t: number): number {
-  const at = Math.max(0, Math.min(1, t));
-  const channel = (shift: number) => {
-    const from = (a >> shift) & 0xff;
-    const to = (b >> shift) & 0xff;
-    return Math.round(from + (to - from) * at) & 0xff;
-  };
-  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
-}
 
 

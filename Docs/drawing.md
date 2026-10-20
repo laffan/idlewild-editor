@@ -557,6 +557,15 @@ Both consume the strokes. The PSD and the zone are the same shape in a better
 form, and leaving the ink behind means every sketch you convert is drawn
 twice, in the same place, at the same size.
 
+### Shift keeps a line to one axis
+
+`drawing/axis-lock.ts`, applied in `DrawingLayer.onMove` to every coalesced
+point before the session sees it, for the Pencil, the Pattern brush and the
+Shape brush (`LOCKS`). The axis is the larger of the two once the pointer has
+moved four world pixels, and the other coordinate is held at where the stroke
+was when the lock began; Shift up frees it, and Shift down again decides
+afresh from there.
+
 ### Use Grid, on the Shape brush
 
 `StrokeStyle.stampGrid` — absent means on. On, a stamp fills the grid space

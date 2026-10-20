@@ -120,6 +120,13 @@ Part of [the Idlewild manual](README.md).
   space wide, laid side by side along the drag — rather than into the spaces
   it crosses, and the faded preview under the pointer follows suit. A project with no lattice has no such switch
 
+## Straight along one axis
+
+- **Hold Shift** while drawing with the Pencil, the Pattern brush or the Shape
+  brush and the mark keeps to one axis — a straight row across, or a straight
+  column down. Which one is the way the pen first moves; let go of Shift and
+  it is free again
+
 ## Erasing, and the knife
 
 - **Every brush can be turned round and used as an eraser.** Pencil, Pattern,

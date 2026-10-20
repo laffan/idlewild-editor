@@ -276,7 +276,11 @@ without a redraw an artboard after the first was read with no backdrop under
 it. `updateCanvas` is reached by a dynamic import of `./canvas.js` at
 install, so a project that has taken that file apart still prints. The
 cameras are aimed back and the view redrawn once more before anything is
-awaited. The
+awaited. Reading an artboard, the backdrops are drawn once more over the box
+round every artboard (`canvas.js`'s `drawBackdrops`, imported beside
+`updateCanvas`), so a gradient is cut into each artboard's part of one spread
+rather than drawn whole on each — the way the editor draws it on a print
+project (`game/gradient-span.ts`, used by `background-render.ts`). The
 matrices and the captures are all synchronous, and only the readbacks are
 left to settle — so the running game never draws a frame from anywhere else.
 Every page but the last is posted as a snapshot, so the editor's run ends where
