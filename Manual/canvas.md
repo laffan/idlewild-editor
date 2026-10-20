@@ -23,6 +23,8 @@ Part of [the Idlewild manual](README.md).
   window controls in its top-left corner, and the header and the home
   screen's bar start to the right of them, so the back arrow is never under
   them
+- **Plan mode**, from the pencil beside the scene's name, draws a blue plan
+  over the scene on no layer — see [Drawing](drawing.md#plan-mode)
 - **While a project's PSDs load**, the canvas is greyed out with a bar that
   fills as each one lands and the name of the one on its way. A project with
   a lot of large files can take a while to open, and the canvas is not worth

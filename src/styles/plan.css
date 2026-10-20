@@ -1,0 +1,68 @@
+/* Plan mode, and the plan it leaves on the canvas — see editor/plan-mode.ts.
+
+   The sheet sits where the ink does, at 4, and just after the ink's own sheet
+   in the canvas column, so the plan is drawn over the scene's ink and under
+   the rail, the floating bars and the artboards' labels. It takes no pointer
+   unless its surface is active, which is only in the mode. */
+.plan-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* The faint blue over the scene while planning: tracing paper, not a wash. */
+.plan-tint {
+  position: absolute;
+  inset: 0;
+  display: none;
+  background: rgb(10 132 255 / 0.1);
+  pointer-events: none;
+}
+.editor-canvas-wrap.planning .plan-tint { display: block; }
+
+/* The plan's own toolbar, where the rail is: Pencil, Eraser and Done. */
+.plan-bar { display: none; }
+.editor-canvas-wrap.planning .plan-bar { display: flex; }
+.plan-bar-head {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a84ff;
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.plan-bar .tool-btn[aria-pressed="true"] { background: #0a84ff; }
+.plan-bar .tool-btn.erasing::after { background: #0a84ff; }
+.plan-bar .tool-btn.erasing { color: var(--chrome-dim); }
+.plan-bar .tool-btn.erasing[aria-pressed="true"] { color: #fff; }
+.plan-bar .tool-btn.erasing[aria-pressed="true"]::after { background: #fff; }
+.plan-done {
+  font: 600 12px var(--font-heading);
+  color: var(--chrome-text);
+}
+
+/* Everything else on the canvas column steps aside while planning: the rail
+   and the drawing toolbar, the tool's name, and the bars that float over a
+   selection — there is nothing selected, and nothing but the plan to draw. */
+.editor-canvas-wrap.planning > .tool-rail:not(.plan-bar),
+.editor-canvas-wrap.planning > .tool-name,
+.editor-canvas-wrap.planning > .selection-actions,
+.editor-canvas-wrap.planning > .canvas-float { display: none; }
+
+/* The pencil beside the scene dropdown. */
+.scene-plan {
+  flex: none;
+  width: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.scene-plan:hover { background: var(--chrome-bg); color: var(--chrome-text); }
+.scene-plan.on,
+.scene-plan.on:hover { background: #0a84ff; color: #fff; }

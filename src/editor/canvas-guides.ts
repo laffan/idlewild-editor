@@ -14,14 +14,18 @@
  * of `editor.ts` for the 700-line rule.
  */
 
+import type { Viewport } from "../drawing";
+import type { DocStore } from "../lib/doc-store";
 import { currentArtboards, isPrint, onPageChange } from "../lib/print";
 import { projectPresentation, type ProjectMeta } from "../lib/types";
 import { ArtboardChrome } from "./artboard-chrome";
 import { ArtboardsPanel } from "./artboards-panel";
 import { renderArtboard } from "./inspect-artboard";
 import type { Inspector } from "./inspector";
+import type { LayersPanel } from "./layers-panel";
 import type { OverlaysPanel } from "./overlays-panel";
 import { changePage } from "./print-page";
+import { PlanMode, type PlanModeDeps } from "./plan-mode";
 import { openPrintSetup } from "./print-setup";
 import { createPsdVeil } from "./psd-veil";
 import { ScreenGuide } from "./screen-guide";
@@ -33,6 +37,10 @@ export interface CanvasGuidesDeps {
   canvasWrap: HTMLElement;
   overlays: OverlaysPanel;
   inspector: Inspector;
+  store: DocStore;
+  layers: LayersPanel;
+  /** The game camera, for the plan's two-finger gestures — see `plan-mode.ts`. */
+  camera: PlanModeDeps["camera"];
   defaultZoom: () => number;
   centreOn: (x: number, y: number) => void;
   /** Put down whatever the canvas has selected. */
@@ -41,6 +49,9 @@ export interface CanvasGuidesDeps {
 
 export interface CanvasGuides {
   guide: ScreenGuide;
+  plan: PlanMode;
+  /** The camera moved: the guide, and the plan's sheet, follow it. */
+  sync: (view: Viewport) => void;
   destroy: () => void;
 }
 
@@ -60,6 +71,17 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
   deps.canvasWrap.appendChild(veil.root);
   deps.overlays.setGuide(guide);
   const stops: Array<() => void> = [];
+  // The scene's plan: the pencil beside the scene's name, the sheet over the
+  // canvas, and its row in Overlays while there is a plan to show.
+  const plan: PlanMode = new PlanMode({
+    store: deps.store,
+    wrap: deps.canvasWrap,
+    camera: deps.camera,
+    onChange: () => deps.overlays.showPlanSwitch(plan.present, (shown, o) => plan.setOverlay(shown, o)),
+  });
+  deps.layers.addSceneAction(plan.toggle);
+  deps.overlays.showPlanSwitch(plan.present, (shown, o) => plan.setOverlay(shown, o));
+  stops.push(() => plan.destroy());
   if (isPrint(deps.meta)) {
     const chrome = new ArtboardChrome({ preview: (board) => guide.previewBoard(board) });
     guide.setChrome(chrome);
@@ -130,6 +152,11 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
   }
   return {
     guide,
+    plan,
+    sync: (view) => {
+      guide.sync(view);
+      plan.sync(view);
+    },
     destroy: () => {
       for (const stop of stops) stop();
       artboards?.destroy();

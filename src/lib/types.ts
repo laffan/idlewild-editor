@@ -468,6 +468,8 @@ export interface Scene {
    * the layer holding it, clears this rather than leaving it dangling.
    */
   startPointId?: string;
+  /** Plan mode's blue strokes: on no layer, never exported — `lib/plan.ts`. */
+  plan?: Stroke[];
 }
 
 /** The saved body of a project. */

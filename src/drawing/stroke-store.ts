@@ -14,16 +14,28 @@ import { makeId } from "../lib/doc-store";
 import type { Stroke } from "../lib/types";
 import { DEFAULT_STYLE, type StrokeStyle } from "./types";
 
+/**
+ * Where strokes come from and go to, when it is not a layer — the scene's
+ * plan, which is drawn with the same engine and belongs to no layer. See
+ * `lib/plan.ts`.
+ */
+export interface StrokeSource {
+  strokes(): readonly Stroke[];
+  write(next: Stroke[]): void;
+}
+
 export class StrokeStore extends EventTarget {
   private readonly doc: DocStore;
   private layerId: string;
+  private readonly source: StrokeSource | null;
   style: StrokeStyle = { ...DEFAULT_STYLE };
   private selected = new Set<string>();
 
-  constructor(doc: DocStore, layerId: string) {
+  constructor(doc: DocStore, layerId: string, source: StrokeSource | null = null) {
     super();
     this.doc = doc;
     this.layerId = layerId;
+    this.source = source;
   }
 
   setLayer(layerId: string): void {
@@ -33,6 +45,7 @@ export class StrokeStore extends EventTarget {
   }
 
   get strokes(): readonly Stroke[] {
+    if (this.source) return this.source.strokes();
     return this.doc.layer(this.layerId)?.strokes ?? [];
   }
 
@@ -94,6 +107,11 @@ export class StrokeStore extends EventTarget {
    * ride the same autosave as everything else.
    */
   private writeStrokes(next: Stroke[]): void {
+    if (this.source) {
+      this.source.write(next);
+      this.dispatchEvent(new CustomEvent("change"));
+      return;
+    }
     const layer = this.doc.layer(this.layerId);
     if (!layer) return;
     if (layer.locked) {

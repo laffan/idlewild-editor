@@ -557,6 +557,29 @@ Both consume the strokes. The PSD and the zone are the same shape in a better
 form, and leaving the ink behind means every sketch you convert is drawn
 twice, in the same place, at the same size.
 
+### The plan, which is ink on no layer
+
+Plan mode (`editor/plan-mode.ts`) draws a scene's plan: `Scene.plan`, a list
+of strokes on the scene rather than on a layer (`lib/plan.ts`), so it is in
+no layer's counts, not in the strokes tray, and neither the game config nor
+an export reads it. It is drawn by a second `DrawingLayer` whose `StrokeStore`
+reads and writes through a `StrokeSource` — the open scene's plan, written
+with `editDoc` so a stroke is one undo step — instead of a layer. The empty
+plan is one frozen list, because the surface tells "nothing changed" from
+"redraw" by identity.
+
+Its sheet sits at the ink's z-index, kept just after the ink's own sheet in
+the canvas column (`PlanMode.sync`), so the plan draws over the scene's ink
+and under the rail and the artboards' labels. Out of the mode its surface is
+inert and only its strokes show, at the Overlays panel's Plan opacity; in
+the mode it takes the pointer, a tint goes between it and the scene, and the
+canvas column wears `.planning`, which hides the rail, the drawing toolbar
+and the floating bars in favour of the plan's own Pencil, Eraser and Done.
+The pencil is the engine's pencil with the colour fixed to `PLAN_COLOR`; the
+eraser is the same pencil turned round. Entering clears the canvas selection,
+so Delete has nothing on the scene to reach. Overlays' Plan row exists only
+while the open scene has a plan (`OverlaysPanel.showPlanSwitch`).
+
 ### What is still ink
 
 Ink that is never converted is never exported, and it is easy to lose: a

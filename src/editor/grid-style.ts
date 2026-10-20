@@ -104,28 +104,6 @@ export interface GridStyleActions {
  * permanently occupying the sidebar above the minimap.
  */
 export function gridStyleRows(actions: GridStyleActions): HTMLElement {
-  const readout = h("div", {
-    class: "overlays-readout m",
-    text: percentOf(actions.opacity),
-  });
-  const slider = h("input", {
-    class: "overlays-slider",
-    type: "range",
-    min: String(Math.round(GRID_OPACITY_MIN * 100)),
-    max: "100",
-    step: "1",
-    value: String(Math.round(actions.opacity * 100)),
-    "aria-label": "Grid opacity",
-    // `input` rather than `change`, so the lattice follows the slider: the
-    // whole question being asked is what it looks like at this weight.
-    onInput: (event: Event) => {
-      const next = Number((event.target as HTMLInputElement).value);
-      if (!Number.isFinite(next)) return;
-      const opacity = clampGridOpacity(next / 100);
-      readout.textContent = percentOf(opacity);
-      actions.onOpacity(opacity);
-    },
-  });
 
   const swatchChip = h("span", { class: "overlays-swatch-chip" });
   swatchChip.style.background = actions.color;
@@ -162,15 +140,47 @@ export function gridStyleRows(actions: GridStyleActions): HTMLElement {
   return h(
     "div",
     { class: "overlays-grid-style" },
-    h(
-      "div",
-      { class: "overlays-setting" },
-      h("span", { class: "overlays-name m", text: "Opacity" }),
-      slider,
-      readout,
-    ),
+    opacityRow(actions.opacity, "Grid opacity", actions.onOpacity),
     swatch,
     pickerBox,
+  );
+}
+
+/**
+ * An Opacity row — a slider and its percentage — for a mark under its switch:
+ * the lattice's weight, and the plan's. Never below `GRID_OPACITY_MIN`, so a
+ * mark that is on can always be seen.
+ */
+export function opacityRow(
+  value: number,
+  label: string,
+  onOpacity: (opacity: number) => void,
+): HTMLElement {
+  const readout = h("div", { class: "overlays-readout m", text: percentOf(value) });
+  const slider = h("input", {
+    class: "overlays-slider",
+    type: "range",
+    min: String(Math.round(GRID_OPACITY_MIN * 100)),
+    max: "100",
+    step: "1",
+    value: String(Math.round(value * 100)),
+    "aria-label": label,
+    // `input` rather than `change`, so the mark follows the slider: the
+    // whole question being asked is what it looks like at this weight.
+    onInput: (event: Event) => {
+      const next = Number((event.target as HTMLInputElement).value);
+      if (!Number.isFinite(next)) return;
+      const opacity = clampGridOpacity(next / 100);
+      readout.textContent = percentOf(opacity);
+      onOpacity(opacity);
+    },
+  });
+  return h(
+    "div",
+    { class: "overlays-setting" },
+    h("span", { class: "overlays-name m", text: "Opacity" }),
+    slider,
+    readout,
   );
 }
 

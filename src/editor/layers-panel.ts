@@ -211,6 +211,11 @@ export class LayersPanel {
     this.render();
   }
 
+  /** A button beside the scene dropdown — see `ScenesBar.addAction`. */
+  addSceneAction(button: HTMLElement): void {
+    this.scenes.addAction(button);
+  }
+
   setCollapsed(collapsed: boolean): void {
     this.root.classList.toggle("collapsed", collapsed);
   }

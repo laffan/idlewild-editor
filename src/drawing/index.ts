@@ -32,7 +32,7 @@
  */
 
 export { DrawingLayer, type DrawingCallbacks } from "./drawing-layer";
-export { StrokeStore } from "./stroke-store";
+export { StrokeStore, type StrokeSource } from "./stroke-store";
 export { rasteriseStrokes, strokesToPsd } from "./rasterise";
 export { strokesToZonePoints, zonePoints } from "./to-zone";
 // `STRIDE` with it: a stroke's points are flat — x, y, pressure — and anything

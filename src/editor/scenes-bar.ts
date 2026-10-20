@@ -39,6 +39,8 @@ export class ScenesBar {
    * sidebar.
    */
   private browsing = false;
+  /** Buttons beside the dropdown — plan mode's pencil, see `addAction`. */
+  private readonly actions: HTMLElement[] = [];
 
   constructor(store: DocStore) {
     this.store = store;
@@ -66,7 +68,13 @@ export class ScenesBar {
     if (this.renaming) return;
     clear(this.root);
     this.label.textContent = this.store.activeScene.name;
-    this.root.appendChild(this.button);
+    this.root.append(this.button, ...this.actions);
+  }
+
+  /** Put a button beside the dropdown, on the right of the bar. */
+  addAction(button: HTMLElement): void {
+    this.actions.push(button);
+    this.render();
   }
 
   /** Offer the scenes and nothing else, or the whole menu again. */

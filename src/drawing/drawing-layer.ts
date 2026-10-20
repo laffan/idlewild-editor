@@ -26,7 +26,7 @@
 import type { DocStore } from "../lib/doc-store";
 import type { Stroke } from "../lib/types";
 import { createAtlasCache, type AtlasCache } from "./atlas";
-import { StrokeStore } from "./stroke-store";
+import { StrokeStore, type StrokeSource } from "./stroke-store";
 import { Surface, type Backdrop, type Viewport } from "./surface";
 import {
   beginDraw,
@@ -148,10 +148,19 @@ export class DrawingLayer {
   private lastPanX = 0;
   private lastPanY = 0;
 
-  constructor(doc: DocStore, layerId: string, callbacks: DrawingCallbacks) {
+  /**
+   * `source` draws somewhere other than a layer — the scene's plan, see
+   * `editor/plan-mode.ts`. `layerId` is then not read.
+   */
+  constructor(
+    doc: DocStore,
+    layerId: string,
+    callbacks: DrawingCallbacks,
+    source: StrokeSource | null = null,
+  ) {
     this.callbacks = callbacks;
     this.atlas = createAtlasCache();
-    this.store = new StrokeStore(doc, layerId);
+    this.store = new StrokeStore(doc, layerId, source);
     this.surface = new Surface(this.atlas);
     this.root = this.surface.root;
     this.pointFill = new PointFill(this.surface, this.store, () =>

@@ -190,6 +190,22 @@ Part of [the Idlewild manual](README.md).
   file: `Recoleta-Bold.otf` is *Recoleta-Bold*. The cross on a font's chip
   takes it out of the project
 
+## Plan mode
+
+- **The pencil beside the scene's name** opens plan mode: tracing paper over
+  the scene. The canvas takes a faint blue tint, artboards and all, and the
+  toolbars give way to **Pencil**, **Eraser** and **Done**. The pencil only
+  draws in bright blue; the eraser takes plan ink out. Done, the pencil again
+  or Esc puts it away
+- **The plan is on no layer.** It belongs to the scene, saves with the
+  project and undoes like anything else, but it is not in any layer's
+  strokes, not in what the game is sent and not on any page that prints
+- **Out of plan mode the plan stays on the canvas** — just the blue strokes,
+  without the tint — over everything, and it never takes a tap or a click.
+  While the open scene has a plan, Overlays has a **Plan** row with its own
+  switch and an opacity slider. Fingers pan and pinch in plan mode as they do
+  everywhere else
+
 ## Loose strokes
 
 - **Strokes**, at the top of the left sidebar above the layer list, lists

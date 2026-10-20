@@ -58,6 +58,7 @@ import { h, ICONS, icon } from "../lib/dom";
 import {
   clampGridOpacity,
   gridStyleRows,
+  opacityRow,
   readGridColor,
   readGridOpacity,
   GRID_STYLE_DEFAULTS,
@@ -86,7 +87,7 @@ const STORAGE_KEY = "idlewild.overlays";
  * project's alone — the ruler guides on its artboards, see
  * `artboard-chrome.ts` — and its row is only added there (`addGuidesSwitch`).
  */
-export type OverlaySwitch = "grid" | "boundary" | "centre" | "guides" | "minimap";
+export type OverlaySwitch = "grid" | "boundary" | "centre" | "guides" | "plan" | "minimap";
 
 /**
  * What the panel remembers: the four marks, the lattice's own two settings,
@@ -98,6 +99,8 @@ export type OverlayState = Record<OverlaySwitch, boolean> & {
   gridColor: string;
   /** And its weight, 0 to 1, multiplied into the fade the renderer applies. */
   gridOpacity: number;
+  /** How strongly a scene's plan shows outside plan mode, 0.1 to 1. */
+  planOpacity: number;
 };
 
 /**
@@ -116,9 +119,11 @@ export const OVERLAY_DEFAULTS: OverlayState = {
   boundary: true,
   centre: true,
   guides: true,
+  plan: true,
   minimap: true,
   open: false,
   ...GRID_STYLE_DEFAULTS,
+  planOpacity: 1,
 };
 
 /** The keys that are plainly switches, which is how a stored one is read. */
@@ -127,6 +132,7 @@ const SWITCHES: readonly OverlaySwitch[] = [
   "boundary",
   "centre",
   "guides",
+  "plan",
   "minimap",
 ];
 
@@ -155,6 +161,8 @@ export function readOverlays(raw: string | null): OverlayState {
     // all is a mark nobody can find the switch for.
     state.gridColor = readGridColor(record.gridColor);
     state.gridOpacity = readGridOpacity(record.gridOpacity);
+    state.planOpacity =
+      typeof record.planOpacity === "number" ? clampGridOpacity(record.planOpacity) : 1;
     return state;
   } catch {
     return { ...OVERLAY_DEFAULTS };
@@ -192,6 +200,13 @@ const ROWS: readonly Row[] = [
   { key: "minimap", label: "Minimap", title: "Where you are standing" },
 ];
 
+/** The open scene's plan, while it has one — put in by `showPlanSwitch`. */
+const PLAN_ROW: Row = {
+  key: "plan",
+  label: "Plan",
+  title: "The scene's plan, drawn in plan mode — the pencil beside the scene's name",
+};
+
 /** A print project's extra row, put in by `addGuidesSwitch`. */
 const GUIDES_ROW: Row = {
   key: "guides",
@@ -223,6 +238,10 @@ export class OverlaysPanel {
   private lattice: LatticeHost | null = null;
   /** What the Guides row switches, on a print project — see `addGuidesSwitch`. */
   private guides: ((on: boolean) => void) | null = null;
+  /** What the Plan row switches and dims — see `showPlanSwitch`. */
+  private plan: ((shown: boolean, opacity: number) => void) | null = null;
+  /** The plan's opacity row, under its switch. */
+  private planStyle: HTMLElement | null = null;
 
   /**
    * @param hasLattice whether this project's grid draws one — `Grid.snaps`.
@@ -306,6 +325,43 @@ export class OverlaysPanel {
   }
 
   /**
+   * The Plan row and its opacity, while the open scene has a plan.
+   *
+   * Comes and goes with the plan rather than sitting there switching nothing:
+   * a scene nobody has planned on has no Plan to show or hide. Put back each
+   * time in the same place — above Guides and Minimap — and the switch and
+   * the weight are remembered across scenes and sessions, like every other
+   * mark's.
+   */
+  showPlanSwitch(present: boolean, apply: (shown: boolean, opacity: number) => void): void {
+    this.plan = apply;
+    const button = this.buttons.get("plan");
+    if (present && !button) {
+      const row = this.rowButton(PLAN_ROW);
+      this.planStyle = h(
+        "div",
+        { class: "overlays-grid-style" },
+        opacityRow(this.state.planOpacity, "Plan opacity", (opacity) =>
+          this.setStyle({ planOpacity: opacity }),
+        ),
+      );
+      const before = this.buttons.get("guides") ?? this.buttons.get("minimap") ?? null;
+      this.body.insertBefore(row, before);
+      this.body.insertBefore(this.planStyle, before);
+      const at = this.rows.findIndex((r) => r.key === "guides" || r.key === "minimap");
+      this.rows = [...this.rows.slice(0, at), PLAN_ROW, ...this.rows.slice(at)];
+    } else if (!present && button) {
+      button.remove();
+      this.planStyle?.remove();
+      this.planStyle = null;
+      this.buttons.delete("plan");
+      this.rows = this.rows.filter((r) => r.key !== "plan");
+    }
+    this.paint();
+    this.apply();
+  }
+
+  /**
    * The whole width is the switch. Nothing else is on the row — no name to
    * type into, no grip — so a finger should be able to land anywhere, which
    * is the same argument Code's layer directory makes about its own rows.
@@ -373,6 +429,7 @@ export class OverlaysPanel {
     // A colour for a mark nobody is drawing is two rows of chrome about
     // nothing, so the lattice's settings go with its switch.
     if (this.gridStyle) this.gridStyle.hidden = !this.state.grid;
+    if (this.planStyle) this.planStyle.hidden = !this.state.plan;
     for (const row of this.rows) {
       const button = this.buttons.get(row.key);
       if (!button) continue;
@@ -390,6 +447,7 @@ export class OverlaysPanel {
     this.minimap.setVisible(this.state.minimap);
     this.guide?.setMarksVisible(this.state.boundary, this.state.centre);
     this.guides?.(this.state.guides);
+    this.plan?.(this.state.plan, clampGridOpacity(this.state.planOpacity));
     this.lattice?.setGridVisible(this.state.grid);
     this.lattice?.setGridStyle(
       hexToNumber(this.state.gridColor),

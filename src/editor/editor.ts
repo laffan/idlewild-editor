@@ -458,7 +458,8 @@ export async function mountEditor(
 
   // The screen guide, and a print project's artboards — `canvas-guides.ts`.
   const guides = createCanvasGuides({
-    ...{ meta, main: layout.main, canvasWrap, overlays, inspector },
+    ...{ meta, main: layout.main, canvasWrap, overlays, inspector, store, layers },
+    camera: () => handle?.scene ?? null,
     defaultZoom: () => render.options.defaultZoom,
     centreOn: (x, y) => handle?.scene.centreOn(x, y),
     // Picking an artboard puts down whatever the canvas had selected.
@@ -488,7 +489,7 @@ export async function mountEditor(
       onViewport: (view) => {
         drawing?.sync(view);
         minimap.setViewport(view);
-        guide.sync(view);
+        guides.sync(view);
         zoomBadge.setZoom(view.zoom);
         // The shape is in world units and the bar is chrome, so the bar has to
         // be moved every time the camera does.
@@ -568,6 +569,7 @@ export async function mountEditor(
   drawing.style = libraryStyle(grid, drawing.style);
   canvasWrap.appendChild(drawing.root);
   drawing.sync(handle.scene.viewport());
+  guides.sync(handle.scene.viewport()); // and the plan's sheet goes over the ink
   if (import.meta.env.DEV) exposeDevHooks(handle.scene, inspector);
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
   reportAssetServer(base);

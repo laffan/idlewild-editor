@@ -33,6 +33,8 @@ describe("the remembered switches", () => {
       centre: true,
       // A print project's guides; a game never shows the row.
       guides: true,
+      // The open scene's plan, which only has a row while there is one.
+      plan: true,
       minimap: true,
       open: false,
       // And the lattice as the renderer draws it when nobody has said
@@ -41,6 +43,7 @@ describe("the remembered switches", () => {
       // rather than agreeing with the constant.
       gridColor: "#a9c2d3",
       gridOpacity: 1,
+      planOpacity: 1,
     });
   });
 
@@ -50,10 +53,12 @@ describe("the remembered switches", () => {
       boundary: false,
       centre: true,
       guides: false,
+      plan: false,
       minimap: false,
       open: false,
       gridColor: "#ff0000",
       gridOpacity: 0.4,
+      planOpacity: 0.5,
     };
     expect(readOverlays(JSON.stringify(stored))).toEqual(stored);
   });

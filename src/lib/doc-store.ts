@@ -189,6 +189,7 @@ export class DocStore extends EventTarget {
       ...(source.startPointId && points.has(source.startPointId)
         ? { startPointId: points.get(source.startPointId) }
         : {}),
+      ...(source.plan ? { plan: source.plan } : {}),
     };
     const at = this.state.scenes.findIndex((s) => s.id === sceneId) + 1;
     const scenes = [...this.state.scenes];
