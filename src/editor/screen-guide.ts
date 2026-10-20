@@ -356,7 +356,12 @@ export class ScreenGuide {
     }
 
     const boards = currentArtboards().map((board) => {
-      if (this.preview?.id === board.id) return { ...board, ...this.preview };
+      // Drawn as the custom sheet it is about to become, so its label says the
+      // size being dragged to rather than the paper it started as.
+      const p = this.preview;
+      if (p?.id === board.id) {
+        return { ...board, ...p, paper: "custom", customWidth: p.width, customHeight: p.height };
+      }
       return this.drag && this.drag.id === board.id
         ? { ...board, x: board.x + this.drag.dx, y: board.y + this.drag.dy }
         : board;

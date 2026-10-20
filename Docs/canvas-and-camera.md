@@ -97,6 +97,11 @@ pointer-down, and held for the gesture; the fit is redone on release.
 
 ### The switches above it
 
+Each row carries a small icon beside its name — the lattice, a camera's
+framing corners (a sheet, on a print project, where the row is Artboards), a
+crosshair, a ruler for the guides, a pencil for the plan and a folded map —
+so the list reads at a glance; the names stay what is read.
+
 Four things on this canvas are drawn *about* the document rather than being
 part of it: the lattice, the boundary around the screen the game opens at, the
 crosshair on world `0, 0`, and this map. All four are useful and none of them is

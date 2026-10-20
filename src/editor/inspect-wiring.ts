@@ -127,6 +127,17 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     onStrokesToPsd: () =>
       void deps.convert().strokesToPsd().then(() => deps.inspector().revealPsdLayers()),
     onStrokesToZone: () => deps.convert().strokesToZone(),
+    onStrokesColor: (color) => {
+      const selection = deps.scene()?.getSelection();
+      if (selection?.kind !== "strokes") return;
+      const layer = store.layer(selection.layerId);
+      if (!layer || layer.locked) return;
+      const ids = new Set(selection.ids);
+      store.replaceStrokes(
+        layer.id,
+        layer.strokes.map((s) => (ids.has(s.id) && s.color !== color ? { ...s, color } : s)),
+      );
+    },
     isAnchored: (key) => deps.scene()?.psdAnchored(key) ?? true,
     // A pattern shape is drawn in mask mode — `editor/mask.ts`. The panel's
     // own button opens it; the sketch panel's turns a lassoed outline into one

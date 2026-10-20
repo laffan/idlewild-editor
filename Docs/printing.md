@@ -226,13 +226,17 @@ on a print project), independent of the rulers; their handles live on the
 rulers, so they come and go with them. A handle carries its own value tag,
 shown on hover by the stylesheet so nothing is rebuilt under the pointer, and
 the layer wears `.command` while ⌘ or Control is held, which turns every handle
-into an ×. Camera boundary hides the frames, labels and shade and leaves the
-rulers and guides alone.
+into an ×. Camera boundary — relabelled **Artboards** on a print project
+(`OverlaysPanel.relabel`), because that is what it switches there — hides the
+frames, labels and shade and leaves the rulers and guides alone.
 
 **Resize** puts eight handles on the picked artboard; `ScreenGuide.previewBoard`
-draws the sheet at the size being dragged to, and one `changePage` on release
-writes it as a `custom` sheet, with the corner moved when the left or top edge
-was the one dragged (`resized` in `artboard-chrome.ts`).
+draws the sheet at the size being dragged to — as the custom sheet it is
+about to become, so its label reads the size under the pointer — and one
+`changePage` on release writes it as a `custom` sheet, with the corner moved
+when the left or top edge was the one dragged (`resized` in
+`artboard-chrome.ts`). `canvas-guides.ts` remembers the paper, orientation,
+custom size and corner as Resize is pressed, and **Cancel** writes them back.
 
 ## ExportForPrint()
 

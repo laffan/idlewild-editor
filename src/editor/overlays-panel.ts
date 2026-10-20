@@ -174,6 +174,8 @@ interface Row {
   key: OverlaySwitch;
   label: string;
   title: string;
+  /** The mark, drawn small beside its name. */
+  icon: string | readonly string[];
 }
 
 /**
@@ -190,14 +192,20 @@ export function overlayRows(hasLattice: boolean): readonly Row[] {
 }
 
 const ROWS: readonly Row[] = [
-  { key: "grid", label: "Grid", title: "The lattice the document is measured in" },
+  {
+    key: "grid",
+    label: "Grid",
+    title: "The lattice the document is measured in",
+    icon: ICONS.layerTile,
+  },
   {
     key: "boundary",
     label: "Camera boundary",
     title: "The screen the game opens at",
+    icon: ICONS.frame,
   },
-  { key: "centre", label: "Centre point", title: "World 0, 0" },
-  { key: "minimap", label: "Minimap", title: "Where you are standing" },
+  { key: "centre", label: "Centre point", title: "World 0, 0", icon: ICONS.crosshair },
+  { key: "minimap", label: "Minimap", title: "Where you are standing", icon: ICONS.map },
 ];
 
 /** The open scene's plan, while it has one — put in by `showPlanSwitch`. */
@@ -205,6 +213,7 @@ const PLAN_ROW: Row = {
   key: "plan",
   label: "Plan",
   title: "The scene's plan, drawn in plan mode — the pencil beside the scene's name",
+  icon: ICONS.pencil,
 };
 
 /** A print project's extra row, put in by `addGuidesSwitch`. */
@@ -212,6 +221,7 @@ const GUIDES_ROW: Row = {
   key: "guides",
   label: "Guides",
   title: "The guides pulled from the artboards' rulers, with the rulers or without",
+  icon: ICONS.ruler,
 };
 
 export class OverlaysPanel {
@@ -374,11 +384,26 @@ export class OverlaysPanel {
         title: row.title,
         onClick: () => this.set(row.key, !this.state[row.key]),
       },
+      h("span", { class: "overlays-icon" }, icon(row.icon, 15)),
       h("span", { class: "overlays-name", text: row.label }),
       h("span", { class: "overlays-eye" }),
     );
     this.buttons.set(row.key, button);
     return button;
+  }
+
+  /**
+   * Call a row something else — on a print project the boundary is the
+   * artboards, which is what that switch then shows and hides.
+   */
+  relabel(key: OverlaySwitch, label: string, title: string, mark: string | readonly string[]): void {
+    this.rows = this.rows.map((row) => (row.key === key ? { ...row, label, title, icon: mark } : row));
+    const button = this.buttons.get(key);
+    if (!button) return;
+    button.title = title;
+    const name = button.querySelector(".overlays-name");
+    if (name) name.textContent = label;
+    button.querySelector(".overlays-icon")?.replaceChildren(icon(mark, 15));
   }
 
   /**

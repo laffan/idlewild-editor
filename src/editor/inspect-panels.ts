@@ -74,6 +74,8 @@ export interface PanelActions {
   onFillToPsd: () => void;
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
+  /** Ink the selected strokes another colour — a pattern's too. */
+  onStrokesColor: (color: string) => void;
   /**
    * The pattern layer a lassoed sketch would become a shape on, or null.
    *
@@ -546,6 +548,21 @@ export function renderStrokes(
 
   panel.head("Sketch", count(strokes.length, "stroke"));
   convertSection(panel, "panel-btn primary", () => actions.onStrokesToPsd());
+  // What the ink is, for a pen's strokes and a pattern's alike: the pattern is
+  // revealed in a colour too. Opens on the first stroke's when they differ.
+  const picker = createPaintPicker({
+    value: { kind: "color", color: strokes[0].color },
+    kinds: ["color"],
+    onChange: (paint) => actions.onStrokesColor(paint.color),
+  });
+  panel.body.appendChild(
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Colour" }),
+      picker.root,
+    ),
+  );
   panel.section("Info");
   panel.row("Layer", layer.name);
   const box = strokesBox(strokes);

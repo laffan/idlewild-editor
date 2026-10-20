@@ -57,6 +57,8 @@ export interface InspectorCallbacks
   /** Hand a stroke selection on as a placed PSD, or as a boundary zone. */
   onStrokesToPsd: () => void;
   onStrokesToZone: () => void;
+  /** Recolour the selected strokes. */
+  onStrokesColor: (color: string) => void;
   /**
    * The selected PSD's own layer stack, as an editor that loads itself. Built
    * by the shell rather than here, because it needs the project id and a way

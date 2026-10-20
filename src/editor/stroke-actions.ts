@@ -39,12 +39,18 @@ export async function convertStrokesToPsd(
   drawing: DrawingLayer,
   scene: WorldScene,
   selection: StrokeSelection,
-): Promise<void> {
+  /**
+   * The layer the PSD lands on, when it is not the one being worked on — the
+   * plan's, whose ink is on no layer and goes to the top object layer. See
+   * `editor/plan-mode.ts`.
+   */
+  onLayer?: string,
+): Promise<boolean> {
   const strokes = drawing.strokesById(selection.ids);
   const box = strokesBox(strokes);
   if (!box) {
     log.warn("Those strokes have nothing to rasterise");
-    return;
+    return false;
   }
 
   // Something on screen for the whole wait. Stamping the ink, encoding it and
@@ -85,7 +91,7 @@ export async function convertStrokesToPsd(
         ),
       }),
     });
-    if (!result) return;
+    if (!result) return false;
 
     // The ink going and the artwork arriving are one thing — and only one
     // thing. Placing can refuse: a locked layer, a file the pipeline found
@@ -95,6 +101,10 @@ export async function convertStrokesToPsd(
     // its place.
     await progress.stage("Placing the artwork…");
     store.history.begin();
+    // Placing lands on the scene's active layer, so for another layer it is
+    // made the active one for the length of the place and given back after.
+    const working = scene.activeLayerId;
+    if (onLayer) scene.activeLayerId = onLayer;
     try {
       const placed = await scene.placePsd(
         result.key,
@@ -107,18 +117,21 @@ export async function convertStrokesToPsd(
           `${result.key}.psd was written but nothing was placed — ` +
             "keeping the strokes",
         );
-        return;
+        return false;
       }
       drawing.removeStrokes(selection.ids);
     } finally {
+      if (onLayer) scene.activeLayerId = working;
       store.history.end();
     }
     log.info(
       `${strokes.length} strokes → ${result.key}.psd ` +
         `(${result.width}×${result.height})`,
     );
+    return true;
   } catch (err) {
     log.error("Could not turn the strokes into a PSD:", err);
+    return false;
   } finally {
     // However it went. A refusal has to take the sheet with it, or the app is
     // held behind a wait that is over.

@@ -75,12 +75,15 @@ Part of [the Idlewild manual](README.md).
   and never print
 - **Guides** in Overlays shows or hides the guides. They stay on the canvas
   with the rulers turned off; their handles are on the rulers, so moving or
-  removing one needs the rulers showing. Camera boundary hides the frames,
+  removing one needs the rulers showing. On a print project the switch the
+  game calls Camera boundary is called **Artboards**: it hides the frames,
   labels and shading, and leaves the rulers and guides to their own switches
-- **Resize** puts handles on the picked artboard's edges and corners until it
-  is pressed again (it reads **Done resizing** meanwhile). Dragging one makes
-  the sheet a custom size, in whole points; dragging the left or top edge
-  moves the corner too, so the opposite edge stays put
+- **Resize** puts handles on the picked artboard's edges and corners until
+  **Done resizing** is pressed. Dragging one makes the sheet a custom size, in
+  whole points, and the artboard's label shows the size as you drag; dragging
+  the left or top edge moves the corner too, so the opposite edge stays put.
+  **Cancel**, beside Done resizing, puts the sheet back the size and place it
+  was when Resize was pressed
 - **The first artboard is the game's screen**: the running game is its size,
   and the camera stands on its corner. Removing the first makes the next one
   first

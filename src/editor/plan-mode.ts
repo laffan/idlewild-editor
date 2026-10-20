@@ -6,7 +6,9 @@
  * that draws only in the plan's blue and an Eraser, and whatever is drawn
  * goes on the scene's plan rather than on a layer (`lib/plan.ts`). A Lasso
  * catches plan strokes to move, scale and turn in the box they then wear
- * (`drawing/transform-box.ts`), or to Delete. The pencil and the eraser have
+ * (`drawing/transform-box.ts`), to Delete, or to Convert to PSD — which
+ * hands them, as a placed PSD, to the top object layer in the stack and takes
+ * them off the plan, the way a sketch converted on its own layer leaves it. The pencil and the eraser have
  * every brush control in the inspector's TOOL zone but the colour — a plan is
  * blue — and each keeps its own. Done, the pencil again, or Escape puts the
  * mode away.
@@ -28,7 +30,11 @@ import { DrawingLayer, type StrokeStyle, type Viewport } from "../drawing";
 import type { DocStore } from "../lib/doc-store";
 import { h, ICONS, icon } from "../lib/dom";
 import { hasPlan, PLAN_COLOR, planSource } from "../lib/plan";
-import type { Selection } from "../lib/types";
+import { Grid } from "../lib/grid";
+import { layerKind } from "../lib/layer-kinds";
+import * as log from "../lib/log";
+import type { WorldScene } from "../game/world-scene";
+import { convertStrokesToPsd } from "./stroke-actions";
 import { brushSection } from "./inspect-brush";
 import type { Inspector } from "./inspector";
 import { isTyping } from "./shortcuts";
@@ -55,12 +61,11 @@ export interface PlanModeDeps {
   wrap: HTMLElement;
   /** Whose TOOL zone the plan's brush controls take over in the mode. */
   inspector: Inspector;
-  /** The game camera, which the sheet's two-finger gestures drive. */
-  camera: () => {
-    panScreen: (dx: number, dy: number) => void;
-    zoomAt: (factor: number, x: number, y: number) => void;
-    setSelection: (selection: Selection) => void;
-  } | null;
+  /** Whose `psd/` a converted plan is written into. */
+  projectId: string;
+  /** The scene: its camera, which the sheet's two-finger gestures drive, and
+   *  where a converted plan is placed. */
+  camera: () => WorldScene | null;
   /** The open scene's plan appeared, went, or the mode was entered or left. */
   onChange?: () => void;
 }
@@ -100,6 +105,8 @@ export class PlanMode {
         onZoom: (factor, x, y) => deps.camera()?.zoomAt(factor, x, y),
         onSelect: (ids) => {
           this.selected = ids;
+          // The panel offers Convert to PSD for what was caught.
+          if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.tool));
         },
         onZone: () => {},
         onFillPoints: () => {},
@@ -254,6 +261,36 @@ export class PlanMode {
     this.layer.setTool("pencil");
   }
 
+  /**
+   * What the lasso caught, as a placed PSD on the top object layer in the
+   * stack — the first one a person sees in the list — and off the plan.
+   */
+  private async convert(): Promise<void> {
+    const scene = this.deps.camera();
+    const { store } = this.deps;
+    if (!scene || this.selected.length === 0) return;
+    const target = store.layers.find((layer) => layerKind(layer) === "object");
+    if (!target) {
+      log.warn("The plan needs an object layer to become a PSD on — add one first");
+      return;
+    }
+    const grid = new Grid(store.projection, store.gridSize);
+    const ids = this.selected;
+    const done = await convertStrokesToPsd(
+      this.deps.projectId,
+      store,
+      grid,
+      this.layer,
+      scene,
+      { kind: "strokes", layerId: target.id, ids },
+      target.id,
+    );
+    if (!done) return;
+    this.layer.select([]);
+    this.selected = [];
+    if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.tool));
+  }
+
   /** A plan tool's style: its own tip, size and smoothing, and the plan's blue. */
   private styleFor(tool: "pencil" | "eraser"): StrokeStyle {
     return {
@@ -272,8 +309,27 @@ export class PlanMode {
       subject: `Plan ${TOOL_NAMES[tool].toLowerCase()}`,
       hint: TOOL_HINTS[tool],
       rows: () => {
-        // Nothing to set, so the zone says what the tool does instead.
-        if (tool === "lasso") return [h("div", { class: "inspect-empty", text: TOOL_HINTS.lasso })];
+        // Nothing to set, so the zone says what the tool does instead — and,
+        // once something is caught, what can be done with it.
+        if (tool === "lasso") {
+          if (this.selected.length === 0) {
+            return [h("div", { class: "inspect-empty", text: TOOL_HINTS.lasso })];
+          }
+          const n = this.selected.length;
+          return [
+            h(
+              "div",
+              { class: "inspect-section" },
+              h("div", { class: "inspect-title", text: `${n} plan stroke${n === 1 ? "" : "s"}` }),
+              h("button", {
+                class: "panel-btn primary",
+                text: "Convert to PSD",
+                title: "A placed PSD on the top object layer; the strokes leave the plan",
+                onClick: () => void this.convert(),
+              }),
+            ),
+          ];
+        }
         return [
           brushSection(this.styleFor(tool), (patch) => {
             this.styles[tool] = { ...this.styles[tool], ...patch };

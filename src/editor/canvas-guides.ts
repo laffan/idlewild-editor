@@ -16,7 +16,8 @@
 
 import type { Viewport } from "../drawing";
 import type { DocStore } from "../lib/doc-store";
-import { currentArtboards, isPrint, onPageChange } from "../lib/print";
+import { ICONS } from "../lib/dom";
+import { currentArtboards, isPrint, onPageChange, type PagePatch } from "../lib/print";
 import { projectPresentation, type ProjectMeta } from "../lib/types";
 import { ArtboardChrome } from "./artboard-chrome";
 import { ArtboardsPanel } from "./artboards-panel";
@@ -76,6 +77,7 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
   const plan: PlanMode = new PlanMode({
     store: deps.store,
     wrap: deps.canvasWrap,
+    projectId: deps.meta.id,
     inspector: deps.inspector,
     camera: deps.camera,
     onChange: () => deps.overlays.showPlanSwitch(plan.present, (shown, o) => plan.setOverlay(shown, o)),
@@ -86,6 +88,8 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
   if (isPrint(deps.meta)) {
     const chrome = new ArtboardChrome({ preview: (board) => guide.previewBoard(board) });
     guide.setChrome(chrome);
+    // The boundary switch shows and hides the artboards here, so it says so.
+    deps.overlays.relabel("boundary", "Artboards", "The sheets this project prints", ICONS.file);
     // The guides have a switch of their own, beside the canvas's other marks.
     deps.overlays.addGuidesSwitch((on) => chrome.setGuidesVisible(on));
     stops.push(() => chrome.destroy());
@@ -102,6 +106,8 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
      * being replaced knows it is not the one being put down.
      */
     let shown: string | null = null;
+    /** The sheet as it was when Resize was pressed — what Cancel goes back to. */
+    let before: PagePatch | null = null;
 
     /** Put an artboard in the inspector, or take it out. */
     const show = (id: string | null) => {
@@ -131,8 +137,16 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
             setRulers: (on) => void changePage({ rulers: on }),
             resizing: chrome.resizing === id,
             setResizing: (on) => {
+              before = on && board ? sheetOf(board) : null;
               chrome.setResizing(on ? id : null);
               inspector.render();
+            },
+            cancelResize: () => {
+              const back = before;
+              before = null;
+              chrome.setResizing(null);
+              inspector.render();
+              if (back) void changePage({ artboard: id, ...back });
             },
             pageSetup: () => openPrintSetup(deps.meta, id),
             remove: () => {
@@ -165,6 +179,12 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
       veil.destroy();
     },
   };
+}
+
+/** The fields a resize changes, as a patch that puts them back. */
+function sheetOf(board: PagePatch): PagePatch {
+  const { paper, landscape, customWidth, customHeight, x, y } = board;
+  return { paper, landscape, customWidth, customHeight, x, y };
 }
 
 /**

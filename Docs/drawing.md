@@ -599,7 +599,16 @@ eraser is the same pencil turned round; each keeps its own tip, size and
 smoothing, edited through `Inspector.setToolOverride` with `brushSection`
 from `inspect-brush.ts` — the pencil's panel without its colour — which also
 keeps the LAYER zone down, since the plan is on no layer. The Lasso is the
-engine's lasso, with the box above, and Delete removes what it caught. Entering clears the canvas selection,
+engine's lasso, with the box above, and Delete removes what it caught. Its
+panel offers Convert to PSD for what was caught: `convertStrokesToPsd`, the
+sketch's own conversion, with an `onLayer` — the top object layer, made the
+scene's active layer for the length of the place and given back after — so
+the PSD lands there and the strokes leave the plan only once it has.
+
+A lassoed sketch's panel (`renderStrokes`) carries a colour picker, colour
+only, which rewrites the selected strokes' `color` through `replaceStrokes`
+— a pattern stroke's included, since a pattern is revealed in a colour. It
+writes as it changes, as a fill's picker does. Entering clears the canvas selection,
 so Delete has nothing on the scene to reach. Overlays' Plan row exists only
 while the open scene has a plan (`OverlaysPanel.showPlanSwitch`).
 

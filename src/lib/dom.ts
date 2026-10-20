@@ -293,6 +293,13 @@ export const ICONS = {
      A brush standing on its ferrule, a stack of sheets, and a box with its
      corner handles: what is in my hand, where it is going, what is under it,
      which is the sentence the three zones are in that order to make. */
+  /* The Overlays rows' own: a camera's framing corners, for the boundary of
+     the game's screen; a crosshair, for world 0, 0; a ruler, for the guides
+     pulled from one; and a folded map, for the minimap. */
+  frame: ["M3 8V3h5", "M16 3h5v5", "M21 16v5h-5", "M8 21H3v-5"],
+  crosshair: ["M12 2v6", "M12 16v6", "M2 12h6", "M16 12h6", "M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"],
+  ruler: ["M3 16 16 3l5 5L8 21Z", "m7 12 2 2", "m10 9 2 2", "m13 6 2 2"],
+  map: ["M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3Z", "M9 3v15", "M15 6v15"],
   zoneTool: ["M12 3v7", "M9 10h6l-1.2 7.6a1.8 1.8 0 0 1-3.6 0L9 10Z"],
   zoneLayer: ["m12 3 9 5-9 5-9-5 9-5Z", "m3 13 9 5 9-5", "m3 17 9 5 9-5"],
   zoneObject: ["M7 7h10v10H7z", "M4 4h.01", "M20 4h.01", "M4 20h.01", "M20 20h.01"],

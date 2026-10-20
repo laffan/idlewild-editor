@@ -41,6 +41,8 @@ export interface ArtboardPanelActions {
   setRulers: (on: boolean) => void;
   resizing: boolean;
   setResizing: (on: boolean) => void;
+  /** Put the sheet back the size and place it was when Resize was pressed. */
+  cancelResize: () => void;
   pageSetup: () => void;
   remove: () => void;
 }
@@ -79,15 +81,27 @@ export function renderArtboard(
     h(
       "div",
       { class: "inspect-section" },
-      h("button", {
-        class: actions.resizing ? "panel-btn primary" : "panel-btn",
-        text: actions.resizing ? "Done resizing" : "Resize",
-        title: actions.resizing
-          ? "Put the handles away"
-          : "Handles on the edges and corners, to drag the sheet to a size",
-        "aria-pressed": String(actions.resizing),
-        onClick: () => actions.setResizing(!actions.resizing),
-      }),
+      h(
+        "div",
+        { class: "panel-btn-row" },
+        h("button", {
+          class: actions.resizing ? "panel-btn primary" : "panel-btn",
+          text: actions.resizing ? "Done resizing" : "Resize",
+          title: actions.resizing
+            ? "Keep the size, and put the handles away"
+            : "Handles on the edges and corners, to drag the sheet to a size",
+          "aria-pressed": String(actions.resizing),
+          onClick: () => actions.setResizing(!actions.resizing),
+        }),
+        actions.resizing
+          ? h("button", {
+              class: "panel-btn",
+              text: "Cancel",
+              title: "Put the sheet back as it was before Resize",
+              onClick: actions.cancelResize,
+            })
+          : null,
+      ),
       h("button", {
         class: "panel-btn",
         text: "Page Setup…",
