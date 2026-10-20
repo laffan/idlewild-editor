@@ -232,15 +232,21 @@ pub(crate) fn process_held(
         } else {
             None
         };
+        let slanted = align_copy(project_id, key, meta.as_ref(), enlarged.as_deref().unwrap_or(&source), &emit_log);
         emit_log(&format!("Parsing psd/{key}.psd"));
-        let parsed = run_psd_to_json(
-            enlarged.as_deref().unwrap_or(&source),
-            &assets_root,
-            options,
-            &emit_log,
-        );
+        let parsed = slanted.as_ref().map_err(String::clone).and_then(|slanted| {
+            run_psd_to_json(
+                slanted.as_deref().or(enlarged.as_deref()).unwrap_or(&source),
+                &assets_root,
+                options,
+                &emit_log,
+            )
+        });
         if let Some(copy) = &enlarged {
             crate::psd_pixel_scale::remove_copy(copy);
+        }
+        if let Ok(Some(copy)) = &slanted {
+            crate::psd_grid_align::remove_copy(copy);
         }
         parsed?;
         emit_log(&format!("Wrote assets/{key}/data.json"));
@@ -264,6 +270,16 @@ pub(crate) fn process_held(
         None
     };
     let source = enlarged.clone().unwrap_or(source);
+    // Grid alignment: both runs below start from the slanted copy.
+    let slanted = align_copy(project_id, key, meta.as_ref(), &source, &emit_log).inspect_err(|_| {
+        if let Some(copy) = &enlarged {
+            crate::psd_pixel_scale::remove_copy(copy);
+        }
+    })?;
+    if let Some(path) = &slanted {
+        bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    }
+    let source = slanted.clone().unwrap_or(source);
 
     let print_root = store::print_dir(project_id)?;
     let print_out = print_root.join(safe_key(key)?);
@@ -306,6 +322,9 @@ pub(crate) fn process_held(
     });
     if let Some(copy) = &enlarged {
         crate::psd_pixel_scale::remove_copy(copy);
+    }
+    if let Some(copy) = &slanted {
+        crate::psd_grid_align::remove_copy(copy);
     }
     printed?;
     if let Some(reason) = screened? {
@@ -467,6 +486,7 @@ pub fn rename_and_process(
 
     let (width, height) = psd_dimensions(&dest)?;
     crate::psd_pixel_scale::carry(project_id, key, to, true);
+    crate::psd_grid_align::carry(project_id, key, to, true);
     crate::psd_send::carry(project_id, key, to, true);
     let mut manifest = process_held(project_id, to, &ProcessOptions::default(), &emit_log)?;
 
@@ -513,6 +533,7 @@ pub fn duplicate_and_process(
 
     let (width, height) = psd_dimensions(&source)?;
     crate::psd_pixel_scale::carry(project_id, key, &copy, false);
+    crate::psd_grid_align::carry(project_id, key, &copy, false);
     crate::psd_send::carry(project_id, key, &copy, false);
     let manifest = process_held(project_id, &copy, &ProcessOptions::default(), emit_log)?;
     Ok(ImportResult {
@@ -613,3 +634,21 @@ pub fn thumbnail(path: &str, max_size: u32) -> Result<String, String> {
     let img = image::open(path).map_err(|e| format!("Cannot open image: {e}"))?;
     crate::psd_write::png_data_url(&img.thumbnail(max_size, max_size))
 }
+
+/// Grid alignment: the file laid into the grid's plane, written beside the
+/// project for this parse, or None for a file drawn flat. See
+/// `psd_grid_align.rs`.
+fn align_copy(
+    project_id: &str,
+    key: &str,
+    meta: Option<&crate::project::ProjectMeta>,
+    from: &std::path::Path,
+    emit_log: &impl Fn(&str),
+) -> Result<Option<std::path::PathBuf>, String> {
+    let Some(meta) = meta else { return Ok(None) };
+    let Some(plane) = crate::psd_grid_align::align_of(meta, key) else { return Ok(None) };
+    emit_log(&format!("Laying {key} into the grid"));
+    let bytes = std::fs::read(from).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
+    crate::psd_grid_align::write_copy(project_id, key, &bytes, plane, meta.options.pixel_art).map(Some)
+}
+

@@ -472,6 +472,10 @@ pub struct ProjectMeta {
     /// `psd_pixel_scale::downsample`.
     #[serde(default, rename = "downsampleKept", skip_serializing_if = "BTreeSet::is_empty")]
     pub downsample_kept: BTreeSet<String>,
+    /// Grid alignment, by PSD key: the plane each file is laid into when it is
+    /// parsed. The PSD itself never changes — see `psd_grid_align.rs`.
+    #[serde(default, rename = "gridAlign", skip_serializing_if = "BTreeMap::is_empty")]
+    pub grid_align: BTreeMap<String, crate::psd_grid_align::GridAlign>,
 }
 
 impl ProjectMeta {
@@ -500,6 +504,7 @@ impl ProjectMeta {
             pixel_scale: BTreeMap::new(),
             psd_send: BTreeMap::new(),
             downsample_kept: BTreeSet::new(),
+            grid_align: BTreeMap::new(),
         }
     }
 }

@@ -724,6 +724,8 @@ export async function invoke(
     case "is_psd_processed": return true;
     case "downsample_psd_pixels":
     case "set_psd_pixel_scale":
+    case "set_psd_grid_align":
+    case "rasterize_psd_grid_align":
     case "add_psd_anchor":
       return psdManifest((args as any)?.key ?? "tower");
     case "save_staging": return null;

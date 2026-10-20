@@ -118,6 +118,10 @@ pub struct ArchivedProject {
     /// be again.
     #[serde(default, rename = "downsampleKept")]
     pub downsample_kept: std::collections::BTreeSet<String>,
+    /// Grid Alignment, by key — like `pixel_scale`, what a re-parse here
+    /// should slant the file by.
+    #[serde(default, rename = "gridAlign")]
+    pub grid_align: std::collections::BTreeMap<String, crate::psd_grid_align::GridAlign>,
 }
 
 /// **Export project**: the project itself, as a `.idlewild` file — source PSDs
@@ -171,6 +175,7 @@ pub fn export(project_id: &str, dest: &Path) -> Result<(), String> {
             pixel_scale: meta.pixel_scale.clone(),
             psd_send: meta.psd_send.clone(),
             downsample_kept: meta.downsample_kept.clone(),
+            grid_align: meta.grid_align.clone(),
         },
     };
     zip.start_file(MANIFEST, options).map_err(|e| e.to_string())?;
@@ -361,6 +366,7 @@ fn finish(id: &str, manifest: &Manifest) -> Result<ProjectMeta, String> {
     meta.pixel_scale = project.pixel_scale.clone();
     meta.psd_send = project.psd_send.clone();
     meta.downsample_kept = project.downsample_kept.clone();
+    meta.grid_align = project.grid_align.clone();
     store::write_meta(&meta)?;
 
     if !store::game_dir(id)?.join("index.html").exists() {

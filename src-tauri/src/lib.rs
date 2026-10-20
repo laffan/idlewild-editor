@@ -30,6 +30,7 @@ mod psd_background;
 mod psd_context;
 mod psd_extract;
 mod psd_flatten;
+mod psd_grid_align;
 mod psd_layers;
 mod psd_marks;
 mod psd_merge;
@@ -440,6 +441,8 @@ pub fn run() {
             projects::set_project_page,
             print_pdf::export_print_pdf,
             psd_pixel_scale::set_psd_pixel_scale,
+            psd_grid_align::set_psd_grid_align,
+            psd_grid_align::rasterize_psd_grid_align,
             psd_pixel_scale::downsample_psd_pixels,
             project_fonts::list_project_fonts,
             font_clipboard::read_clipboard_font,

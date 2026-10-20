@@ -225,7 +225,7 @@ fn unpremultiplied() -> &'static [[u8; 256]; 256] {
     })
 }
 
-fn premultiply(pixels: &mut [u8]) {
+pub(crate) fn premultiply(pixels: &mut [u8]) {
     let table = premultiplied();
     for px in pixels.chunks_exact_mut(4) {
         match px[3] {
@@ -242,7 +242,7 @@ fn premultiply(pixels: &mut [u8]) {
     }
 }
 
-fn unpremultiply(pixels: &mut [u8]) {
+pub(crate) fn unpremultiply(pixels: &mut [u8]) {
     let table = unpremultiplied();
     for px in pixels.chunks_exact_mut(4) {
         match px[3] {

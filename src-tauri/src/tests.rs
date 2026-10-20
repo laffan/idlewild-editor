@@ -28,6 +28,7 @@ mod marks;
 mod merging;
 mod options;
 mod painting;
+mod grid_align;
 mod perf;
 mod palette;
 mod presentation;

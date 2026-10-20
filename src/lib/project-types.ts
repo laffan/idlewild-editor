@@ -261,6 +261,9 @@ export interface ProjectMeta {
   /** Pixel art upscale, by PSD key — absent for every file at its own size.
    *  See `editor/psd-pixel-scale.ts`. */
   pixelScale?: Record<string, number>;
+  /** Grid alignment, by PSD key — absent for every file drawn flat. See
+   *  `editor/psd-grid-align.ts`. */
+  gridAlign?: Record<string, import("./grid-align").GridAlign>;
   /** What goes into each PSD when it is opened or shared, by key — see
    *  `editor/psd-send.ts`. Absent for files that follow the defaults. */
   psdSend?: Record<string, { palette?: boolean; context?: boolean }>;

@@ -635,6 +635,34 @@ The sheet reads the file's size with `read_psd_layers` and shows what each
 preset and a custom size will write, with the same rounding as
 `psd_downsample::scaled` (`downsampledLength`).
 
+### Grid Alignment
+
+A note can be laid into an isometric grid's plane; so can a PSD.
+`ProjectMeta.gridAlign` maps a key to a `GridAlign` — which diagonal its rows
+run along (`runs`), whether it stands `upright`, and the two unit vectors its
+x and y axes go to on the canvas (`ax, ay, bx, by`), worked out in the editor
+by `groundPlane` exactly as for a note (`lib/grid-align.ts`), so the Rust side
+never needs the grid. `process_held` — after the Pixel Art Rescale copy, so
+the two stack — writes `.grid/<key>.psd` (`psd_grid_align::aligned`) and parses
+that instead: every layer is resampled through the inverse map into the box
+round its four transformed corners, premultiplied bilinear, or nearest on a
+pixel-art project, and the canvas grows to the box round the whole slanted
+canvas. Groups are rebuilt as they were. On a print project both runs start
+from the copy. **The file in `psd/` is never changed**, and the copy is removed
+once parsed.
+
+Because reconciliation measures placements against the manifest's anchor
+mark, which is slanted with everything else, a placement keeps standing on
+its cell as the artwork changes shape.
+
+**Rasterize Grid Alignment** (`psd_grid_align::rasterize`) writes the slanted
+PSD over the file in `psd/`, drops the key from the map and processes it under
+one lock; it refuses a file the rebuild would lose masks or clipping from
+(`unrebuildable_because`), as Downsample does. The inspector's rows are
+`editor/psd-grid-align.ts`, mounted under Pixel Art Rescale on an isometric
+project only. Rename and duplicate carry the setting on both sides of the IPC,
+and a `.idlewild` carries the map.
+
 ### Include palette and Include context
 
 The Open / Share PSD control (`openControl` in `editor/psd-layer-actions.ts`)

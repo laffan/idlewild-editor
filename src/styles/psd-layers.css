@@ -217,6 +217,16 @@
 }
 .side-panel .psd-pixel-scale-seg .opt-seg-btn:last-child { flex: 0 0 auto; padding: 0 6px; }
 
+/* Grid Alignment under it, on an isometric project — a note's controls for
+   the whole file. See editor/psd-grid-align.ts. */
+.psd-grid-align { margin-top: 14px; }
+.psd-grid-align-name {
+  margin-bottom: 8px;
+  font: 600 12px/1.2 var(--font-heading);
+  color: var(--chrome-text);
+}
+.psd-grid-align .inspect-stack > .panel-btn { justify-content: center; }
+
 /* Open PSD / Share PSD with its two Include boxes under Adjust layers and
    Re-parse — see `openControl` in psd-layer-actions.ts. The button is an
    ordinary `.panel-btn`, the same size and hover as the two above it, and the

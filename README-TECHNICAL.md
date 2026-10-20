@@ -57,6 +57,7 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 │  psd_downsample.rs a print PSD at screen resolution            │
 │  psd_resolution.rs the DPI a print PSD says it was made at     │
 │  psd_pixel_scale.rs Pixel Art Rescale: parsed bigger, nearest  │
+│  psd_grid_align.rs Grid Alignment: parsed slanted, isometric   │
 │  psd_anchor.rs   a P | anchor for a file that came without one │
 │  project_fonts.rs a project's own font files                   │
 │  print.rs        game or page: the DPI, the sheet, the formats │

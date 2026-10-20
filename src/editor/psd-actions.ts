@@ -39,6 +39,13 @@ import { resetLayerPositions } from "./layer-positions";
 import { psdLayerOwner } from "./psd-layer-owner";
 import { PsdLayerEditor } from "./psd-layers";
 import { carryPixelScale, changePixelScale, pixelScaleRow } from "./psd-pixel-scale";
+import {
+  carryGridAlign,
+  changeGridAlign,
+  confirmRasterize,
+  gridAlignRows,
+  rasterizeGridAlign,
+} from "./psd-grid-align";
 import { h } from "../lib/dom";
 import type { PsdLayerInfo } from "../lib/ipc";
 import { openRefreshPsd } from "./sheets";
@@ -389,6 +396,7 @@ export function createPsdFileActions(
       const result = await psd.rename(projectId, key, name);
       if (result.key === key) return;
       carryPixelScale(key, result.key, true);
+      carryGridAlign(key, result.key, true);
       carryDownsampleKept(key, result.key, true);
       carrySendChoice(key, result.key, true);
       await scene()?.renamePsd(key, result.key);
@@ -413,6 +421,7 @@ export function createPsdFileActions(
     try {
       const copy = await psd.duplicate(projectId, key);
       carryPixelScale(key, copy.key, false);
+      carryGridAlign(key, copy.key, false);
       carryDownsampleKept(key, copy.key, false);
       carrySendChoice(key, copy.key, false);
       // A copy of an extruded PSD is an extrusion of its own, and carrying
@@ -527,6 +536,30 @@ export function createPsdLayersFactory(
     };
     paint(false);
     editor.root.appendChild(slot);
+    // Grid Alignment beneath it, on an isometric project only.
+    if (options.grid.projection === "isometric") {
+      const alignSlot = h("div", { class: "psd-grid-align-slot" });
+      const alignDeps = { projectId, grid: options.grid, applyManifest: scaleDeps.applyManifest };
+      const run = async (job: () => Promise<void>) => {
+        paintAlign(true);
+        await job();
+        paintAlign(false);
+      };
+      const paintAlign = (busy: boolean) =>
+        alignSlot.replaceChildren(
+          gridAlignRows(
+            key,
+            busy,
+            (how) => void run(() => changeGridAlign(alignDeps, key, how)),
+            () =>
+              void confirmRasterize(key).then(
+                (sure) => (sure ? run(() => rasterizeGridAlign(alignDeps, key)) : undefined),
+              ),
+          ),
+        );
+      paintAlign(false);
+      editor.root.appendChild(alignSlot);
+    }
     return editor;
   };
 }

@@ -72,6 +72,25 @@ Part of [the Idlewild manual](README.md).
   hard edges go fuzzy. On a file that has used it the box is greyed out; the
   file can still be downsampled further without it, and it shrinks
 
+## Grid Alignment
+
+- On an **isometric** project, under Pixel art upscale: **Grid Alignment**, the
+  same controls a note has. **Align to the grid** lays the artwork along the
+  grid's own two axes, so it reads as part of the world rather than facing
+  the viewer
+- While it is on: **NW→SE** / **SW→NE** picks which diagonal the artwork's rows
+  follow, and **Upright** stands it up — its columns straight down the screen,
+  the way a sign on the face of a wall is — rather than lying it on the floor
+- **The PSD itself is not changed.** The canvas, Play, a publish and a print
+  export all show it slanted; open it in Photoshop or draw in it here and it
+  is still flat, and what comes back is slanted again. Turning the switch off
+  puts it back flat
+- The setting belongs to the **file**, so every placement of it is slanted
+  together. **Make Unique** first for one that should differ
+- **Rasterize Grid Alignment** writes the slant into the PSD itself and turns
+  the switch off. It asks first: the flat original is gone. A file whose
+  masks or clipping the rewrite would lose is refused
+
 ## PSD Edit mode
 
 - **PSD Edit mode**, from the pen on any sprite row of that list, the way the cube

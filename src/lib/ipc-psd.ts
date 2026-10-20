@@ -19,6 +19,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { invokeBytes } from "./ipc-bytes";
 import type { ProjectMeta } from "./project-types";
+import type { GridAlign } from "./grid-align";
 
 export interface OutputFile {
   absolutePath: string;
@@ -455,6 +456,13 @@ export const psd = {
    */
   setPixelScale: (id: string, key: string, factor: number) =>
     invoke<string>("set_psd_pixel_scale", { id, key, factor }),
+  /** Lay a file into the grid's plane, or flat again with null; hands back the
+   *  new manifest. See `psd_grid_align.rs`. */
+  setGridAlign: (id: string, key: string, align: GridAlign | null) =>
+    invoke<string>("set_psd_grid_align", { id, key, align }),
+  /** Write the slant into the file itself and drop the setting. */
+  rasterizeGridAlign: (id: string, key: string) =>
+    invoke<string>("rasterize_psd_grid_align", { id, key }),
   /**
    * Pixel Art Downsample: rewrite the PSD itself at `factor` of its size,
    * nearest neighbour, and set its upscale. `maintain` is Maintain canvas
