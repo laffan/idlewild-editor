@@ -191,19 +191,15 @@
 }
 .psd-layers-foot:not(:empty) { margin-top: 4px; }
 
-/* The buttons around the list. Everything about the *file* is one row over
-   the stack it is about — it used to be three buttons in three places with
-   the list in between — and New layer is under it, where the row it makes
-   will appear. See editor/psd-layer-actions.ts. */
-.psd-layers-head { margin-bottom: 8px; }
-/* The row's buttons carry their own top margin from `.panel-btn`, which is
-   right under a paragraph and wrong directly under a heading. */
-.psd-layers-head .panel-btn { margin-top: 0; }
-.psd-layers-new .panel-btn { margin-top: 6px; }
-/* Reset Layer Position, directly over the list and on a line of its own —
-   it is a correction rather than one of the three standing actions above it,
-   and its label is a sentence rather than a verb. */
-.psd-layers-reset { margin-bottom: 8px; }
+/* The buttons in Edit Layers, under the list: New layer, then Adjust layers.
+   See editor/psd-layer-actions.ts. Each slot carries its button's gap, so an
+   empty one — a read-only file, a one-layer PSD — leaves none. */
+.psd-layers-new .panel-btn,
+.psd-layers-adjust-slot .panel-btn { margin-top: 6px; }
+/* Reset Layer Position, after the fold and on a line of its own — a
+   correction rather than a standing action, and its label is a sentence
+   rather than a verb. */
+.psd-layers-reset { margin-top: 10px; }
 .psd-layers-reset .panel-btn { margin-top: 0; justify-content: center; }
 
 /* Pixel Art Rescale, at the foot of the PSD section: its name on the left and
@@ -241,38 +237,16 @@
 }
 .psd-grid-align .inspect-stack > .panel-btn { justify-content: center; }
 
-/* Open PSD / Share PSD with its two Include boxes under Adjust layers and
-   Re-parse — see `openControl` in psd-layer-actions.ts. The button is an
-   ordinary `.panel-btn`, the same size and hover as the two above it, and the
-   boxes sit directly under it as its options. The block keeps clear of the
-   layer list beneath, so the ticks do not read as the list's first rows. */
+/* The file's own actions after Edit Layers: Open PSD / Share PSD with its
+   options, then Re-parse — see `psdHeadRow` in psd-layer-actions.ts. */
 .psd-layers-head-block {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 14px;
+  margin-top: 12px;
 }
-.psd-layers-head-block .psd-layers-head { margin-bottom: 0; }
-.psd-open { display: flex; flex-direction: column; gap: 2px; }
-.psd-open .psd-open-btn { margin-top: 0; justify-content: center; text-align: center; }
-.psd-open-includes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 12px;
-  padding: 0 2px;
-}
-.psd-open-include {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 28px;
-  font: 500 12px var(--font-body);
-  color: var(--chrome-dim);
-  cursor: pointer;
-}
-.psd-open-include:hover { color: var(--chrome-text); }
-
-.psd-open-include:has(input:checked) { color: var(--chrome-text); }
+.psd-layers-head-block .panel-btn,
+.psd-layers-head-block .with-options { margin-top: 0; }
 .psd-pixel-block { display: flex; flex-direction: column; gap: 6px; }
 .psd-pixel-block .psd-downsample-btn { margin-top: 0; }
 

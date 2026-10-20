@@ -41,13 +41,13 @@ import {
   moveBlock,
 } from "./psd-layer-tree";
 import {
+  adjustLayersButton,
   editLayersSection,
   newLayerButton,
   psdHeadRow,
   resetPositionsRow,
   type PsdIncludeCallbacks,
   type PlacedState,
-  type PsdHeadState,
 } from "./psd-layer-actions";
 import { manifestName, type OwnedLayer } from "./psd-layer-owner";
 import { asRow, psdLayerRow, type Row } from "./psd-layer-row";
@@ -127,19 +127,17 @@ export class PsdLayerEditor {
   private readonly resetRow: HTMLElement;
   private readonly list: HTMLElement;
   private readonly newRow: HTMLElement;
+  private readonly adjustRow: HTMLElement;
   private readonly foot: HTMLElement;
   private stack: PsdLayerList | null = null;
   private rows: Row[] = [];
   private drag: DragState | null = null;
   private busy = false;
   /**
-   * What the canvas is doing with this PSD, as the inspector last said.
-   *
-   * Pushed in rather than read out: this list knows about a *file*, and
-   * whether the placement of it is open for layer-by-layer moves — and
-   * whether any of its layers have been moved off the space the file puts
-   * them on — are facts about the document and the canvas. Null while nothing
-   * has said: a file with one layer, or one nothing has placed.
+   * What the canvas is doing with this PSD, as the inspector last said —
+   * pushed in, because whether it is opened up and whether its layers have
+   * moved are facts about the document and the canvas, not about the file.
+   * Null while nothing has said: one layer, or nothing placed.
    */
   private placed: PlacedState | null = null;
   /**
@@ -164,13 +162,13 @@ export class PsdLayerEditor {
     this.callbacks = callbacks;
 
     this.status = h("div", { class: "psd-layers-status m" });
-    // Four slots the panel refills rather than four panels: the row above the
-    // list changes with the canvas, so does the correction directly over it,
-    // and the one below the list changes with the file.
+    // Slots the panel refills rather than panels: Adjust layers and the reset
+    // change with the canvas, New layer and the file's actions with the file.
     this.head = h("div", { class: "psd-layers-head-slot" });
     this.resetRow = h("div", { class: "psd-layers-reset-slot" });
     this.list = h("div", { class: "psd-layer-list" });
     this.newRow = h("div", { class: "psd-layers-new-slot" });
+    this.adjustRow = h("div", { class: "psd-layers-adjust-slot" });
     this.foot = h("div", { class: "psd-layers-foot" });
     // The file's own size, which is not the placement's: a converted sketch
     // carries the grid it was drawn over beside the artwork, so the canvas
@@ -182,11 +180,11 @@ export class PsdLayerEditor {
       { class: "inspect-section psd-layers" },
       h("div", { class: "inspect-section-title m", text: "PSD" }),
       this.canvas,
-      this.head,
       this.status,
-      this.resetRow,
-      editLayersSection(this.list, this.newRow),
+      editLayersSection(this.list, this.newRow, this.adjustRow),
       this.foot,
+      this.resetRow,
+      this.head,
     );
     // Before the file has been read, so the buttons that are about the file
     // rather than about its stack are there from the first frame.
@@ -321,24 +319,25 @@ export class PsdLayerEditor {
   }
 
   /**
-   * The two rows above the list — see psd-layer-actions.ts.
+   * Everything that is not the stack — see psd-layer-actions.ts.
    *
-   * The button row is always there. The reset is a correction, and it is drawn
-   * only while a layer of this PSD is standing somewhere the file does not put
-   * it, so the slot over the list is usually empty.
+   * The file's actions are always there. Adjust layers needs a placement of
+   * more than one layer, and the reset is a correction drawn only while a
+   * layer of this PSD is standing somewhere the file does not put it.
    */
   private renderHead(): void {
     clear(this.head);
     clear(this.resetRow);
-    const state: PsdHeadState = {
-      members: this.placed?.members ?? 0,
-      adjusting: this.placed?.adjusting ?? false,
-      openLabel: this.callbacks.openLabel,
-      refreshLabel: this.callbacks.refreshLabel,
-    };
+    clear(this.adjustRow);
+    const adjust = adjustLayersButton(
+      this.placed?.members ?? 0,
+      this.placed?.adjusting ?? false,
+      () => this.callbacks.onToggleAdjust(),
+    );
+    if (adjust) this.adjustRow.appendChild(adjust);
+    const { openLabel, refreshLabel } = this.callbacks;
     this.head.appendChild(
-      psdHeadRow(state, {
-        onToggleAdjust: () => this.callbacks.onToggleAdjust(),
+      psdHeadRow({ openLabel, refreshLabel }, {
         onOpen: () => this.callbacks.onOpen(),
         onRefresh: () => this.callbacks.onRefresh(),
       }, this.callbacks),

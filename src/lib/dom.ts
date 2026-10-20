@@ -280,6 +280,9 @@ export const ICONS = {
   /* A tileset: the same ruled grid with one space picked out, which is what
      the palette is for and what the Import Tiled row carries. */
   tiles: ["M4 4h16v16H4z", "M4 12h16", "M12 4v12", "M12 12h8v8h-8z"],
+  /* Three chips in a row: a palette strip, which is what Include palette puts
+     on top of a PSD — the mark beside Open PSD that says it will. */
+  swatches: ["M3 9h5v6H3z", "M9.5 9h5v6h-5z", "M16 9h5v6h-5z"],
   /* Two stops fading into each other: a gradient backdrop's own row. */
   gradient: ["M4 4h16v16H4z", "M4 12h16", "M4 8h16", "M4 16h16"],
   /* A triangle with a bar in it — the one glyph here that means something is

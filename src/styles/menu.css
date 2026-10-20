@@ -48,6 +48,12 @@
 .menu-item svg { flex: none; color: var(--chrome-dim); }
 .menu-item:hover svg { color: var(--chrome-text); }
 
+/* A row that is a setting — a checkbox, its glyph, its name — and leaves the
+   menu open when pressed. The box is the row's state, not a second target:
+   the whole row is pressed, so the box ignores the pointer. See lib/menu.ts. */
+.menu-item.check input[type="checkbox"] { pointer-events: none; }
+.menu-item.check { padding-right: 14px; }
+
 /* The row for whatever is already chosen, which a long menu needs and a short
    one never did: the font picker can be forty rows, and scrolling one with no
    mark on it is scrolling to find out nothing. See lib/menu.ts. */

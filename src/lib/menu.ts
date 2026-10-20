@@ -23,6 +23,14 @@ export interface MenuItem {
   font?: string;
   /** Marked as the one currently chosen. */
   current?: boolean;
+  /**
+   * A setting rather than a place to go: the row carries a checkbox, a press
+   * ticks or unticks it, and the menu stays open so the next one can be
+   * changed too. `onSelect` is called after the box has flipped.
+   */
+  checked?: boolean;
+  /** What the row says on hover — a checkbox row's explanation. */
+  title?: string;
   onSelect: () => void;
 }
 
@@ -66,25 +74,7 @@ export function openMenu(
   };
 
   for (const item of items) {
-    root.appendChild(
-      h(
-        "button",
-        {
-          class: item.current ? "menu-item current" : "menu-item",
-          role: "menuitem",
-          ...(item.current ? { "aria-current": "true" } : {}),
-          onClick: () => {
-            close();
-            item.onSelect();
-          },
-        },
-        item.glyph ? icon(item.glyph, 17) : null,
-        h("span", {
-          text: item.label,
-          ...(item.font ? { style: { fontFamily: item.font } } : {}),
-        }),
-      ),
-    );
+    root.appendChild(item.checked === undefined ? row(item, close) : checkRow(item));
   }
 
   document.body.appendChild(root);
@@ -95,6 +85,63 @@ export function openMenu(
   window.addEventListener("resize", close);
 
   return { close };
+}
+
+/** A row that goes somewhere: the press closes the menu, then acts. */
+function row(item: MenuItem, close: () => void): HTMLElement {
+  return h(
+    "button",
+    {
+      class: item.current ? "menu-item current" : "menu-item",
+      role: "menuitem",
+      title: item.title ?? null,
+      ...(item.current ? { "aria-current": "true" } : {}),
+      onClick: () => {
+        close();
+        item.onSelect();
+      },
+    },
+    item.glyph ? icon(item.glyph, 17) : null,
+    h("span", {
+      text: item.label,
+      ...(item.font ? { style: { fontFamily: item.font } } : {}),
+    }),
+  );
+}
+
+/**
+ * A row that is a setting: the app's own checkbox, the item's glyph, its
+ * label. The box is drawn rather than pressed — the whole row is the target,
+ * as it is on every other menu row — so it is inert to the pointer and kept
+ * in step with the row's `aria-checked` here.
+ */
+function checkRow(item: MenuItem): HTMLElement {
+  let on = item.checked === true;
+  const box = h("input", {
+    type: "checkbox",
+    tabindex: "-1",
+    "aria-hidden": "true",
+  }) as HTMLInputElement;
+  box.checked = on;
+  const button = h(
+    "button",
+    {
+      class: "menu-item check",
+      role: "menuitemcheckbox",
+      "aria-checked": String(on),
+      title: item.title ?? null,
+      onClick: () => {
+        on = !on;
+        box.checked = on;
+        button.setAttribute("aria-checked", String(on));
+        item.onSelect();
+      },
+    },
+    box,
+    item.glyph ? icon(item.glyph, 17) : null,
+    h("span", { text: item.label }),
+  );
+  return button;
 }
 
 /**

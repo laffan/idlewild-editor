@@ -58,9 +58,11 @@ input[type="checkbox"]:focus-visible { outline: 2px solid var(--color-accent); o
   input[type="checkbox"]::before { width: 11px; height: 5px; }
 }
 
-/* A slider: a thin well and a light knob. No fill to the knob's left — the
-   native control can only draw one in the accent, and a column of red bars
-   down the overlays is the opposite of quiet. */
+/* A slider: a thin well and a grey knob that lightens under the pointer. No
+   fill to the knob's left — the native control can only draw one in the
+   accent, and a column of red bars down the overlays is the opposite of
+   quiet. The knob is grey rather than white for the same reason: a white dot
+   on every slider was the brightest thing in the panel. */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -88,7 +90,7 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: -4px;
   border: 0;
   border-radius: 50%;
-  background: var(--chrome-text);
+  background: var(--chrome-dim);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
 }
 input[type="range"]::-moz-range-thumb {
@@ -96,11 +98,13 @@ input[type="range"]::-moz-range-thumb {
   height: 12px;
   border: 0;
   border-radius: 50%;
-  background: var(--chrome-text);
+  background: var(--chrome-dim);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
 }
-input[type="range"]:hover::-webkit-slider-thumb { background: #fff; }
-input[type="range"]:hover::-moz-range-thumb { background: #fff; }
+input[type="range"]:hover::-webkit-slider-thumb,
+input[type="range"]:active::-webkit-slider-thumb { background: var(--chrome-text); }
+input[type="range"]:hover::-moz-range-thumb,
+input[type="range"]:active::-moz-range-thumb { background: var(--chrome-text); }
 input[type="range"]:focus-visible { outline: none; }
 input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--color-accent); }
 input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--color-accent); }
@@ -167,6 +171,45 @@ input[type="range"]:disabled { opacity: 0.4; cursor: default; }
 .resize-handle.horizontal.dragging::after { height: 2px; }
 
 .resize-handle:focus-visible { outline: none; }
+
+/* ── a button with options ───────────────────────────────────────────────────
+
+   The action, left-aligned, and a smaller half on the right that opens a
+   dropdown of checkboxes about it — see lib/with-options-button.ts. The two
+   halves are one shape split by a 1px seam of the panel showing through, the
+   way a split button is drawn in a desktop app: one control, two targets.
+   The options half shows a mark for each option that is on, in ink, beside
+   its own sliders glyph, which stays dim — the marks are what is set, the
+   glyph is only the way in. */
+.with-options {
+  display: flex;
+  gap: 1px;
+  margin-top: 6px;
+}
+.with-options > .panel-btn { margin-top: 0; }
+.with-options-main {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+  text-align: left;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+.with-options-more {
+  flex: none;
+  width: auto;
+  padding: 0 8px;
+  gap: 6px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+.with-options-more[aria-expanded="true"] { background: var(--chrome-hover); }
+.with-options-marks { display: flex; align-items: center; gap: 4px; }
+.with-options-marks:empty { display: none; }
+.with-options-mark { display: flex; color: var(--chrome-text); }
+.with-options-glyph { display: flex; color: var(--chrome-dim); }
+.with-options-more:hover .with-options-glyph svg { color: var(--chrome-text); }
+/* `.panel-btn svg` dims every icon on a button; the marks are the exception,
+   because they are the state rather than decoration. */
+.panel-btn .with-options-mark svg { color: var(--chrome-text); }
 
 /* ── colour picker ───────────────────────────────────────────────────────── */
 

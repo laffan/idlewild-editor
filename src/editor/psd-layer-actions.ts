@@ -1,30 +1,26 @@
 /**
- * The buttons around a PSD's layer list: the row above it, and the one thing
- * below it.
+ * The buttons around a PSD's layer list.
  *
- * They were spread across the inspector — Adjust layers up near the top of
- * the panel as a note beside the file's name, Open PSD and Re-parse right
- * down at the bottom under the stack. Three buttons about the same file, in
- * three places, with the list they are all about in between. They are one row
- * now, directly over the list, because every one of them is an answer to
- * *what do I want to do with this file*: open it up on the canvas, send it
- * out, bring it back.
+ * The PSD section reads top to bottom as the file's name and size, then
+ * **Edit Layers** — the stack, New layer, and Adjust layers — then what is
+ * done to the file as a whole: send it out (Open PSD, with what goes with it
+ * in its own dropdown) and bring it back (Re-parse).
  *
- * New layer is the exception and sits under the list, where the thing it
- * makes will appear — which is at the top, because a new layer goes on top of
- * a stack the way it does in Photoshop.
+ * Adjust layers is in the fold with the stack because it is about the layers:
+ * it opens the PSD up on the canvas so they move one at a time. It sits under
+ * New layer, which sits under the list, where the thing it makes appears.
  *
- * **Reset Layer Position** is the other exception, and it is not part of that
- * row either: it is a correction rather than a standing action, it is drawn
- * only while a layer of this PSD is standing somewhere the file does not put
- * it, and its being there at all is the only thing that says so. It goes
- * directly over the list.
+ * **Reset Layer Position** is a correction rather than a standing action: it
+ * is drawn only while a layer of this PSD is standing somewhere the file does
+ * not put it, and its being there at all is the only thing that says so. It
+ * stays outside the fold, which starts closed, so it is never hidden in one.
  *
  * Nothing here holds state. The editor owns what these do; the list owns when
  * to draw them.
  */
 
-import { h } from "../lib/dom";
+import { h, ICONS } from "../lib/dom";
+import { withOptionsButton } from "../lib/with-options-button";
 import { EDIT_LAYERS, sectionTitle } from "./inspect-collapse";
 
 /**
@@ -44,18 +40,8 @@ export interface PlacedState {
   displaced: number;
 }
 
-/** What the row above the list currently has to say. */
+/** What the file's own buttons say. */
 export interface PsdHeadState {
-  /**
-   * How many of this PSD's layers are placed as one thing on the canvas.
-   *
-   * Zero for a file that is not placed at all, and one for a single-layer
-   * document — in both of those Adjust layers has nothing to open up, so it
-   * is left out rather than offered and refused.
-   */
-  members: number;
-  /** Whether the canvas already has it open, layer by layer. */
-  adjusting: boolean;
   /** What sending the file out is called here — it differs by platform. */
   openLabel: string;
   /** And bringing it back, which is a re-parse on both — see `psd-actions.ts`. */
@@ -63,7 +49,6 @@ export interface PsdHeadState {
 }
 
 export interface PsdHeadCallbacks {
-  onToggleAdjust: () => void;
   onOpen: () => void;
   onRefresh: () => void;
 }
@@ -81,97 +66,102 @@ export interface PsdIncludeCallbacks {
 }
 
 /**
- * The row above the list.
- *
- * Adjust layers first, because it is the one that changes the canvas rather
- * than the file, and it reads as a switch: pressed while the PSD is open.
+ * The file's own actions, after Edit Layers: Open PSD (or Share PSD) with its
+ * options, and Re-parse under it — out, and back.
  */
 export function psdHeadRow(
   state: PsdHeadState,
   callbacks: PsdHeadCallbacks,
   include: PsdIncludeCallbacks = {},
 ): HTMLElement {
-  const row = h("div", { class: "panel-btn-row psd-layers-head" });
-  if (state.members > 1) {
-    row.appendChild(
-      h("button", {
-        class: state.adjusting ? "panel-btn pressed" : "panel-btn",
-        text: state.adjusting ? "Done adjusting" : "Adjust layers",
-        title: state.adjusting
-          ? `Move this PSD as one thing again — ${state.members} layers`
-          : `Move one layer of this PSD at a time — ${state.members} in it`,
-        "aria-pressed": String(state.adjusting),
-        onClick: callbacks.onToggleAdjust,
-      }),
-    );
-  }
-  row.append(
+  return h(
+    "div",
+    { class: "psd-layers-head-block" },
+    openControl(state, callbacks, include),
     h("button", {
       class: "panel-btn",
       text: state.refreshLabel,
       onClick: callbacks.onRefresh,
     }),
   );
-  return h("div", { class: "psd-layers-head-block" }, row, openControl(state, callbacks, include));
 }
 
 /**
- * Open PSD (or Share PSD), with what goes out with it inside the same box.
+ * Open PSD (or Share PSD), with what goes out with it in its own dropdown.
  *
- * One control rather than a button and two settings somewhere else, because
- * the boxes are about *this* send: **Include palette** puts the palette strip
- * in the file, **Include context** a picture of the canvas around it, and
- * each is written fresh every time the file goes out. Unticking one takes
- * its layer out of the file. The boxes are labels beside the button rather
- * than inside it — a control inside a button is not one a finger or a screen
- * reader can reach. The button is an ordinary `panel-btn`, like Re-parse
- * above it: a box drawn round all three made it read as a panel rather than
- * as something to press.
+ * **Include palette** puts the palette strip in the file and **Include
+ * context** a picture of the canvas around it, each written fresh every time
+ * the file goes out; unticking one takes its layer out. They are about *this*
+ * send, so they are the button's options rather than two checkboxes laid out
+ * under it — see `lib/with-options-button.ts`, which also puts a mark beside
+ * the options glyph for each one that is on.
  */
 function openControl(
   state: PsdHeadState,
   callbacks: PsdHeadCallbacks,
   include: PsdIncludeCallbacks,
 ): HTMLElement {
-  const button = h("button", {
-    class: "panel-btn psd-open-btn",
-    text: state.openLabel,
-    onClick: callbacks.onOpen,
-  });
   const choice = include.include?.();
   if (!choice || !include.onInclude) {
-    return h("div", { class: "psd-open" }, button);
+    return h("button", {
+      class: "panel-btn psd-open-btn",
+      text: state.openLabel,
+      onClick: callbacks.onOpen,
+    });
   }
-  const box = (label: string, on: boolean, title: string, patch: (on: boolean) => object) => {
-    const input = h("input", { type: "checkbox" }) as HTMLInputElement;
-    input.checked = on;
-    input.addEventListener("change", () => include.onInclude?.(patch(input.checked)));
-    return h("label", { class: "psd-open-include", title }, input, h("span", { text: label }));
-  };
-  return h(
-    "div",
-    { class: "psd-open" },
-    button,
-    h(
-      "div",
-      { class: "psd-open-includes" },
-      box(
-        "Include palette",
-        choice.palette,
-        "Put your palette into this PSD as a strip of swatches on top, so the " +
-          "other app's eyedropper has it. Untick to take it out.",
-        (on) => ({ palette: on }),
-      ),
-      box(
-        "Include context",
-        choice.context,
-        "Put what is around this PSD on the canvas into it, as a layer called " +
-          "context at 50% opacity under the artwork — refreshed each time it " +
-          "goes out. Untick to take it out.",
-        (on) => ({ context: on }),
-      ),
-    ),
-  );
+  const onInclude = include.onInclude;
+  return withOptionsButton({
+    label: state.openLabel,
+    onClick: callbacks.onOpen,
+    optionsLabel: "What goes into the PSD with it",
+    options: [
+      {
+        label: "Include palette",
+        glyph: ICONS.swatches,
+        on: choice.palette,
+        title:
+          "Put your palette into this PSD as a strip of swatches on top, so " +
+          "the other app's eyedropper has it. Untick to take it out.",
+        onChange: (on) => onInclude({ palette: on }),
+      },
+      {
+        label: "Include context",
+        glyph: ICONS.frame,
+        on: choice.context,
+        title:
+          "Put what is around this PSD on the canvas into it, as a layer " +
+          "called context at 50% opacity under the artwork — refreshed each " +
+          "time it goes out. Untick to take it out.",
+        onChange: (on) => onInclude({ context: on }),
+      },
+    ],
+  });
+}
+
+/**
+ * **Adjust layers**, the last thing in Edit Layers: a switch, pressed while
+ * the canvas has this PSD open layer by layer.
+ *
+ * `members` is how many of its layers are placed as one thing. Zero for a file
+ * that is not placed and one for a single-layer document — in both there is
+ * nothing to open up, so the button is left out rather than offered and
+ * refused, and this returns null.
+ */
+export function adjustLayersButton(
+  members: number,
+  adjusting: boolean,
+  onToggle: () => void,
+): HTMLElement | null {
+  if (members <= 1) return null;
+  return h("button", {
+    class: adjusting ? "panel-btn pressed" : "panel-btn",
+    text: adjusting ? "Done adjusting" : "Adjust layers",
+    title: adjusting
+      ? `Move this PSD as one thing again — ${members} layers`
+      : `Move one layer of this PSD at a time — ${members} in it`,
+    "aria-pressed": String(adjusting),
+    onClick: onToggle,
+  });
 }
 
 /**
@@ -239,21 +229,26 @@ export function newLayerButton(busy: boolean, onAdd: () => void): HTMLElement {
 }
 
 /**
- * Edit Layers: the file's stack and New layer, as a fold of their own inside
- * the PSD section, closed until somebody opens it.
+ * Edit Layers: the file's stack, New layer and Adjust layers, as a fold of
+ * their own at the head of the PSD section, closed until somebody opens it.
  *
  * What stays outside is about the file rather than its stack — its size, the
- * row of actions over it, what the list could not do — and so does Apply,
+ * actions on the whole file, what the list could not do — and so does Apply,
  * because a staged edit is still waiting on it after the fold is closed. A
  * nested `.inspect-section` so the inspector's one fold pass reaches it; it
  * starts closed because `EDIT_LAYERS` is in `FOLDED_FIRST`.
  */
-export function editLayersSection(list: HTMLElement, newRow: HTMLElement): HTMLElement {
+export function editLayersSection(
+  list: HTMLElement,
+  newRow: HTMLElement,
+  adjustRow: HTMLElement,
+): HTMLElement {
   return h(
     "div",
     { class: "inspect-section psd-edit-layers" },
     sectionTitle(EDIT_LAYERS),
     list,
     newRow,
+    adjustRow,
   );
 }
