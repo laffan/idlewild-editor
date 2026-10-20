@@ -17,6 +17,15 @@ import type { Scene, Stroke } from "./types";
 export const PLAN_COLOR = "#0a84ff";
 
 /**
+ * How opaque the plan pencil's ink is. A little under full, so a plan stroke
+ * crossing another — or the artwork under it — still lets it show through.
+ * The alpha travels in the stroke's colour, as every colour's does here, and
+ * is applied once to the finished stroke, so a stroke is evenly 90% rather
+ * than darker where its stamps overlap.
+ */
+export const PLAN_INK_ALPHA = 0.9;
+
+/**
  * No plan, as one list rather than a new empty one per ask: the ink engine
  * tells "nothing changed" from "redraw" by identity.
  */

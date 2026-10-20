@@ -1,0 +1,86 @@
+/* A grid of pictures to choose from, inside a sheet — Import Assets' projects
+   and then the PSDs in one of them. See editor/import-assets.ts.
+
+   The home screen's cards at sheet scale: a picture, a name under it and a
+   quiet line under that. A project's picture is a view of its canvas and
+   fills the box; a PSD's is the artwork cropped to what is drawn, so it sits
+   on a checker and is fitted whole. A card that can be ticked carries the
+   app's checkbox in the picture's corner, and the whole card is its label. */
+
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 14px;
+  max-height: 54vh;
+  padding: 2px;
+}
+
+.asset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.asset-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--canvas-bg);
+  box-shadow: 0 0 0 1px var(--chrome-edge);
+  transition: box-shadow 120ms ease;
+}
+.asset-thumb img { display: block; width: 100%; height: 100%; }
+.asset-thumb.cover img { object-fit: cover; }
+/* The artwork cropped to itself, on the checker every partly transparent
+   colour in the app is shown over, with room round it. */
+.asset-thumb.contain {
+  background-color: var(--chrome-field);
+  background-image:
+    linear-gradient(45deg, var(--chrome-raised) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--chrome-raised) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--chrome-raised) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--chrome-raised) 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+}
+.asset-thumb.contain img {
+  object-fit: contain;
+  padding: 10px;
+  image-rendering: auto;
+}
+.asset-thumb-empty { font-size: var(--text-sm); color: var(--color-neutral-600); }
+
+.asset-card:hover .asset-thumb { box-shadow: 0 0 0 2px var(--chrome-dim); }
+.asset-card:focus-visible { outline: none; }
+.asset-card:focus-visible .asset-thumb { box-shadow: 0 0 0 2px var(--color-accent); }
+
+.asset-name {
+  font: 600 var(--text-md)/1.3 var(--font-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asset-meta { font-size: var(--text-sm); color: var(--chrome-faint); }
+
+/* The tick, in the picture's corner, and the picture outlined while ticked. */
+.asset-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+}
+.asset-card.pickable:has(.asset-check:checked) .asset-thumb {
+  box-shadow: 0 0 0 2px var(--color-accent);
+}

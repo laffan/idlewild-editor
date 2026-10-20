@@ -390,7 +390,8 @@ function projectCard(
     .then((url) => {
       if (!url) return;
       thumb.style.backgroundImage = `url(${url})`;
-      clear(thumb);
+      // The label only: the tick beside it is what Select shows on this card.
+      thumb.querySelector(".project-thumb-empty")?.remove();
     })
     .catch(() => {});
 

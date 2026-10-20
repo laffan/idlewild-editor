@@ -14,9 +14,13 @@
  *
  * Keyed by project as well as by file, because two projects can each have a
  * `tower.psd` and the cache outlives a project being closed.
+ *
+ * **A file's layers** are cached the same way, beside it: one call answers
+ * every row of the stack (`psd_flatten::psd_layer_thumbnails`), it is asked
+ * for once, and the same rewrite forgets both.
  */
 
-import { psd } from "./ipc-psd";
+import { psd, type LayerThumb } from "./ipc-psd";
 import { openProject } from "./print";
 
 /** Big enough for a 26px row thumbnail on a 2× screen, with room to spare. */
@@ -26,6 +30,9 @@ const SIZE = 64;
 const asked = new Map<string, Promise<string>>();
 /** And what has come back, so a row rebuilt later can draw it at once. */
 const settled = new Map<string, string>();
+/** The same two, for a file's layers. */
+const layersAsked = new Map<string, Promise<LayerThumb[]>>();
+const layersSettled = new Map<string, LayerThumb[]>();
 
 function cacheKey(key: string): string | null {
   const id = openProject()?.id;
@@ -63,10 +70,41 @@ export function psdThumb(key: string): Promise<string> {
   return pending;
 }
 
+/** A file's layers, if they have already arrived. */
+export function readyPsdLayerThumbs(key: string): LayerThumb[] | undefined {
+  const at = cacheKey(key);
+  return at === null ? undefined : layersSettled.get(at);
+}
+
+/**
+ * A picture of every row of a file's layer list, index for index with
+ * `psd.readLayers`. Asked for once per file; never rejects — a file that
+ * cannot be read answers no rows, and each row keeps its icon.
+ */
+export function psdLayerThumbs(key: string): Promise<LayerThumb[]> {
+  const id = openProject()?.id;
+  const at = cacheKey(key);
+  if (!id || at === null) return Promise.resolve([]);
+  let pending = layersAsked.get(at);
+  if (!pending) {
+    pending = psd.layerThumbnails(id, key, SIZE).then(
+      (rows) => rows,
+      () => [],
+    );
+    layersAsked.set(at, pending);
+    void pending.then((rows) => {
+      if (layersAsked.get(at) === pending) layersSettled.set(at, rows);
+    });
+  }
+  return pending;
+}
+
 /** The file on disk has changed: whatever was drawn of it is out of date. */
 export function forgetPsdThumb(key: string): void {
   const at = cacheKey(key);
   if (at === null) return;
   asked.delete(at);
   settled.delete(at);
+  layersAsked.delete(at);
+  layersSettled.delete(at);
 }

@@ -176,17 +176,64 @@ async function showProjects(wizard: Wizard): Promise<void> {
     return;
   }
 
-  const list = h("div", { class: "sheet-list scroll" });
+  // The projects as the home screen shows them — a picture of each and its
+  // name under it — because a picture is how somebody finds the project the
+  // tower was drawn in, and a list of names is a test of memory.
+  const grid = h("div", { class: "asset-grid scroll" });
   for (const meta of others) {
-    list.appendChild(
-      option(
-        meta.name,
-        `${meta.projection} · ${meta.gridSize} px`,
-        () => void showPsds(wizard, meta),
+    const thumb = assetThumb("No preview yet");
+    void projects
+      .thumbnail(meta.id)
+      .then((url) => url && showThumb(thumb, url, "cover"))
+      .catch(() => {});
+    grid.appendChild(
+      h(
+        "button",
+        { class: "asset-card", onClick: () => void showPsds(wizard, meta) },
+        thumb,
+        h("div", { class: "asset-name", text: meta.name }),
+        h("div", { class: "asset-meta m", text: `${meta.projection} · ${meta.gridSize} px` }),
       ),
     );
   }
-  sheet.body.appendChild(list);
+  sheet.body.appendChild(grid);
+}
+
+/** The picture box a card leads with, saying `empty` until there is one. */
+function assetThumb(empty: string): HTMLElement {
+  return h("div", { class: "asset-thumb" }, h("span", { class: "asset-thumb-empty m", text: empty }));
+}
+
+/**
+ * Put a picture in a card's box. `cover` for a project's, which is a view of
+ * its canvas and fills the box; `contain` for a PSD's, which is the artwork
+ * cropped and must not lose its edges.
+ */
+function showThumb(thumb: HTMLElement, url: string, fit: "cover" | "contain"): void {
+  thumb.querySelector(".asset-thumb-empty")?.remove();
+  thumb.classList.add(fit);
+  thumb.prepend(h("img", { src: url, alt: "", draggable: "false" }));
+}
+
+/** How many PSD thumbnails are asked for at once: each is a parse of the file. */
+const THUMB_JOBS = 3;
+
+/** Fetch the pictures for a set of cards a few at a time, in order. */
+async function fillPsdThumbs(
+  from: ProjectMeta,
+  cards: ReadonlyArray<{ key: string; thumb: HTMLElement }>,
+  stale: () => boolean,
+): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < cards.length && !stale()) {
+      const card = cards[next++];
+      const url = await psd.artThumbnail(from.id, card.key, 192).catch(() => "");
+      if (url && !stale()) showThumb(card.thumb, url, "contain");
+      else if (!stale()) card.thumb.querySelector(".asset-thumb-empty")!.textContent = "Nothing visible";
+    }
+  };
+  await Promise.all(Array.from({ length: THUMB_JOBS }, worker));
 }
 
 /**
@@ -210,7 +257,7 @@ async function showPsds(wizard: Wizard, from: ProjectMeta): Promise<void> {
 
   const chosen = new Set<string>();
   const boxes = new Map<string, HTMLInputElement>();
-  const list = h("div", { class: "sheet-list scroll psd-picker" });
+  const list = h("div", { class: "asset-grid scroll" });
   const tally = h("div", { class: "sheet-row-key m" });
   const importButton = h("button", {
     class: "btn btn-primary",
@@ -284,28 +331,33 @@ async function showPsds(wizard: Wizard, from: ProjectMeta): Promise<void> {
     return;
   }
 
+  // A card per file: its picture, its name, its size. The whole card is the
+  // label of its checkbox, so a tap anywhere on the picture ticks it — the
+  // home screen's Select, in a sheet.
+  const cards: Array<{ key: string; thumb: HTMLElement }> = [];
   for (const file of files) {
-    const box = h("input", {
-      type: "checkbox",
-      class: "check-box",
-    }) as HTMLInputElement;
+    const box = h("input", { type: "checkbox", class: "asset-check" }) as HTMLInputElement;
     box.addEventListener("change", () => {
       if (box.checked) chosen.add(file.key);
       else chosen.delete(file.key);
       refresh();
     });
     boxes.set(file.key, box);
+    const thumb = assetThumb("Loading…");
+    thumb.appendChild(box);
+    cards.push({ key: file.key, thumb });
     list.appendChild(
       h(
         "label",
-        { class: "psd-pick" },
-        box,
-        h("span", { class: "psd-pick-name", text: `${file.key}.psd` }),
-        h("span", { class: "sheet-list-hint m", text: size(file.bytes) }),
+        { class: "asset-card pickable" },
+        thumb,
+        h("div", { class: "asset-name", text: `${file.key}.psd` }),
+        h("div", { class: "asset-meta m", text: size(file.bytes) }),
       ),
     );
   }
   refresh();
+  await fillPsdThumbs(from, cards, stale);
 }
 
 /** Pick files off the filesystem and bring every one of them in. */

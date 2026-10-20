@@ -197,3 +197,77 @@ fn psd_layers_can_be_reordered_and_renamed() {
         std::panic::resume_unwind(payload);
     }
 }
+
+/// One thumbnail per row of the inspector's layer list, in the same order.
+///
+/// The editor matches the two lists index for index — Edit Layers draws the
+/// picture beside the row of the same number — so the thumbnails have to come
+/// off the same walk as `psd_layers::read`. A group is a row of its own with a
+/// picture of its contents, and a layer with nothing drawn in it answers an
+/// empty string rather than a transparent PNG, so its row keeps its icon.
+#[test]
+fn layer_thumbnails_follow_the_layer_list() {
+    use crate::{psd_flatten, psd_layers};
+    use psd::{GroupBuilder, LayerBuilder, PsdBuilder};
+
+    let meta = store::create_project(
+        "Thumbs",
+        Projection::Orthogonal,
+        Scaffold::Topdown,
+        32,
+        GameOptions::default(),
+    )
+    .expect("project should be created");
+
+    let result = std::panic::catch_unwind(|| {
+        let mut builder = PsdBuilder::new(32, 32);
+        builder.add_layer(
+            LayerBuilder::new("S | blank").rgba(8, 8, swatch(8, 8, [0, 0, 0, 0])),
+        );
+        builder.add_group(
+            GroupBuilder::new("G | tower")
+                .add_layer(
+                    LayerBuilder::new("S | walls")
+                        .rgba(16, 16, swatch(16, 16, [120, 80, 40, 255]))
+                        .at(0, 16),
+                )
+                .add_layer(
+                    LayerBuilder::new("S | roof")
+                        .rgba(16, 8, swatch(16, 8, [200, 40, 20, 255]))
+                        .at(0, 8),
+                ),
+        );
+        std::fs::write(
+            store::psd_dir(&meta.id).unwrap().join("tower.psd"),
+            builder.to_bytes().expect("PSD should build"),
+        )
+        .expect("PSD should save");
+
+        let list = psd_layers::read(&meta.id, "tower").expect("stack should read");
+        let thumbs = psd_flatten::psd_layer_thumbnails(meta.id.clone(), "tower".into(), 32)
+            .expect("thumbnails should build");
+
+        let listed: Vec<(&str, usize)> =
+            list.layers.iter().map(|l| (l.name.as_str(), l.depth)).collect();
+        let pictured: Vec<(&str, usize)> =
+            thumbs.iter().map(|t| (t.name.as_str(), t.depth)).collect();
+        assert_eq!(pictured, listed, "one picture per row, in the list's order");
+
+        for thumb in &thumbs {
+            if thumb.name == "S | blank" {
+                assert_eq!(thumb.url, "", "nothing drawn, nothing to show");
+            } else {
+                assert!(
+                    thumb.url.starts_with("data:image/png;base64,"),
+                    "{} should have a picture",
+                    thumb.name
+                );
+            }
+        }
+    });
+
+    store::delete_project(&meta.id).ok();
+    if let Err(payload) = result {
+        std::panic::resume_unwind(payload);
+    }
+}

@@ -366,9 +366,9 @@ export class WorldScene extends Phaser.Scene {
     this.cam.persist();
   }
 
-  /** Stand somewhere else at the zoom you are at — what the minimap asks for. */
-  centreOn(worldX: number, worldY: number): void {
-    this.cam.centreOn(worldX, worldY);
+  /** Stand somewhere else at your zoom — the minimap jumps, the sidebar glides. */
+  centreOn(worldX: number, worldY: number, glide = false): void {
+    void (glide ? this.cam.glideTo(worldX, worldY) : this.cam.centreOn(worldX, worldY));
   }
 
   /** Repaint from the document. Cheap: everything here is retained state. */

@@ -65,6 +65,11 @@ export async function convertStrokesToPsd(
     "Drawing the strokes…",
   );
 
+  // How long each stage took, for the line in the console at the end: the
+  // conversion is several seconds on a large sketch, and which of drawing,
+  // writing and placing that time went on is the first thing to know about
+  // one that seems slow.
+  const timer = stageTimer();
   try {
     const name = `sketch-${Date.now().toString(36)}`;
     // A sketch knows exactly which spaces it was drawn over, so it is marked
@@ -80,7 +85,10 @@ export async function convertStrokesToPsd(
     const result = await strokesToPsd(projectId, name, strokes, {
       atlas: drawing.atlas,
       scale: sourceScale(),
-      stage: (line) => progress.stage(line),
+      stage: (line) => {
+        timer.mark(line);
+        return progress.stage(line);
+      },
       marks: (raster) => ({
         ...scaleMarks(
           marksForCells(grid, cells, anchor, {
@@ -99,6 +107,7 @@ export async function convertStrokesToPsd(
     // becomes nothing at all, which is the worst outcome available here and
     // silent besides, so the ink stays until there is artwork standing in
     // its place.
+    timer.mark("Placing the artwork…");
     await progress.stage("Placing the artwork…");
     store.history.begin();
     // Placing lands on the scene's active layer, so for another layer it is
@@ -126,7 +135,7 @@ export async function convertStrokesToPsd(
     }
     log.info(
       `${strokes.length} strokes → ${result.key}.psd ` +
-        `(${result.width}×${result.height})`,
+        `(${result.width}×${result.height}) — ${timer.done()}`,
     );
     return true;
   } catch (err) {
@@ -207,4 +216,30 @@ export function convertStrokesToPatternShape(
     `${strokes.length} strokes → ${shape.name} ` +
       `(${shape.cells?.length ?? 0} spaces)`,
   );
+}
+
+/**
+ * Times named stages back to back: each `mark` ends the stage before it.
+ * `done` closes the last and says them all, as `drawing 120 ms · writing …`.
+ */
+function stageTimer(): { mark: (line: string) => void; done: () => string } {
+  const spans: string[] = [];
+  let current: { name: string; at: number } | null = null;
+  const close = () => {
+    if (!current) return;
+    spans.push(`${current.name} ${Math.round(performance.now() - current.at)} ms`);
+    current = null;
+  };
+  return {
+    mark: (line) => {
+      close();
+      // "Drawing the strokes…" → "drawing": the verb is the name.
+      const name = line.split(" ")[0].toLowerCase();
+      current = { name, at: performance.now() };
+    },
+    done: () => {
+      close();
+      return spans.join(" · ");
+    },
+  };
 }

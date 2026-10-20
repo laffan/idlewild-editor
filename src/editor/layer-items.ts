@@ -27,7 +27,7 @@ import type { LayerKind } from "../lib/types";
 import type { Layer, Placement, Selection } from "../lib/types";
 import { describeFill } from "../lib/doc-shape";
 import { paintLabel } from "../lib/paint";
-import { psdThumb, readyPsdThumb } from "../lib/psd-thumbs";
+import { psdThumbBox } from "./psd-thumb-box";
 
 export interface LayerItem {
   /** What selecting this row means. */
@@ -351,7 +351,7 @@ export function renderLayerItem(
           style: { backgroundColor: item.swatch },
         })
       : item.psdKey && !item.groupId
-        ? thumbnail(item.psdKey, item.path)
+        ? psdThumbBox(item.psdKey, item.path)
         : icon(item.path, 13),
     onRename && item.psdKey
       ? nameField(item.psdKey, onRename, select)
@@ -387,25 +387,6 @@ export function renderLayerItem(
     );
   }
   return row;
-}
-
-/**
- * A placed PSD's picture, in place of the file icon every row used to carry.
- *
- * The icon stands in until the picture arrives, and stays for a file with
- * nothing visible in it. A thumbnail already fetched is drawn at once, so a
- * list rebuilt by an edit does not blink back to icons — see
- * `lib/psd-thumbs.ts`.
- */
-function thumbnail(key: string, fallback: string | readonly string[]): HTMLElement {
-  const box = h("span", { class: "layer-item-thumb" }, icon(fallback, 13));
-  const show = (url: string) => {
-    if (url) box.replaceChildren(h("img", { src: url, alt: "", draggable: "false" }));
-  };
-  const ready = readyPsdThumb(key);
-  if (ready !== undefined) show(ready);
-  else void psdThumb(key).then(show);
-  return box;
 }
 
 /**

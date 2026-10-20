@@ -31,6 +31,8 @@ import type { DocStore } from "../lib/doc-store";
 import { layerKind } from "../lib/layer-kinds";
 import { layerDepth, type ManifestLayer } from "../lib/manifest";
 import { count, describe, emptyText, KIND_ICONS, layerItems } from "./layer-items";
+import { layerGlyph } from "./psd-layer-row";
+import { psdLayerThumbBox, psdThumbBox, thumbsByPath } from "./psd-thumb-box";
 import type { Layer } from "../lib/types";
 
 export interface DirectoryContext {
@@ -127,7 +129,7 @@ function fillLayer(
     }
     group.appendChild(psdRow(layer.id, item.selection.placementId, item, ctx));
     const id = psdRowId(layer.id, item.selection.placementId);
-    if (ctx.isOpen(id)) fillPsd(group, ctx.psdLayers(item.psdKey));
+    if (ctx.isOpen(id)) fillPsd(group, item.psdKey, ctx.psdLayers(item.psdKey));
   }
 
   if (layer.strokes.length > 0) {
@@ -141,7 +143,7 @@ function fillLayer(
 function psdRow(
   layerId: string,
   placementId: string,
-  item: { label: string; detail: string; warning?: string },
+  item: { label: string; detail: string; warning?: string; psdKey?: string; path: string | readonly string[] },
   ctx: DirectoryContext,
 ): HTMLElement {
   const id = psdRowId(layerId, placementId);
@@ -158,6 +160,7 @@ function psdRow(
       { class: open ? "layer-disclose open" : "layer-disclose" },
       icon(ICONS.chevronRight, 12),
     ),
+    item.psdKey ? psdThumbBox(item.psdKey, item.path) : null,
     h("span", { class: "layer-item-label", text: item.label }),
     h("span", {
       class: "layer-item-detail m",
@@ -176,11 +179,12 @@ function psdRow(
  * tells a developer whether a row has a texture behind it or is a point the
  * config carries.
  */
-function fillPsd(group: HTMLElement, layers: readonly ManifestLayer[]): void {
+function fillPsd(group: HTMLElement, key: string, layers: readonly ManifestLayer[]): void {
   if (layers.length === 0) {
     group.appendChild(
       h("div", {
         class: "psd-layer-row empty m",
+        style: { paddingLeft: "68px" },
         // Not an error: the file is placed and it draws. The manifest simply
         // has not arrived yet, or this is a key the scene never loaded.
         text: "Not loaded yet",
@@ -200,6 +204,7 @@ function fillPsd(group: HTMLElement, layers: readonly ManifestLayer[]): void {
           style: { paddingLeft: `${68 + layerDepth(layer.path) * 14}px` },
           title: layer.path,
         },
+        psdLayerThumbBox(key, (thumbs) => thumbsByPath(thumbs).get(layer.path), layerGlyph(layer)),
         h("span", { class: "psd-layer-name", text: layer.name }),
         h("span", { class: "psd-layer-kind m", text: layer.category }),
       ),

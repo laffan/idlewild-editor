@@ -29,7 +29,7 @@
 //! exactly what the canvas shows when it draws the same layers as separate
 //! placements — so the palette and the artwork beside it agree.
 
-use crate::psd_layers::{crop, items, Item};
+use crate::psd_layers::{crop, items, rows, Item};
 use crate::{psd_pipeline, store};
 use image::RgbaImage;
 use psd::Psd;
@@ -77,11 +77,7 @@ pub fn write(project_id: &str, key: &str) -> Result<MergedArt, String> {
 /// two orienting marks — what the merged palette is and what a thumbnail
 /// shows.
 fn composite(project_id: &str, key: &str) -> Result<RgbaImage, String> {
-    let path = psd_pipeline::psd_path(project_id, key)?;
-    let bytes = std::fs::read(&path)
-        .map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
-    let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot read {key}.psd: {e:?}"))?;
-
+    let doc = parse(project_id, key)?;
     let (width, height) = (doc.width(), doc.height());
     if width == 0 || height == 0 {
         return Err(format!("{key}.psd has no canvas to merge"));
@@ -89,6 +85,13 @@ fn composite(project_id: &str, key: &str) -> Result<RgbaImage, String> {
     let mut canvas = RgbaImage::new(width, height);
     paint(&doc, None, 255, &mut canvas);
     Ok(canvas)
+}
+
+fn parse(project_id: &str, key: &str) -> Result<Psd, String> {
+    let path = psd_pipeline::psd_path(project_id, key)?;
+    let bytes = std::fs::read(&path)
+        .map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
+    Psd::from_bytes(&bytes).map_err(|e| format!("Cannot read {key}.psd: {e:?}"))
 }
 
 /// A small picture of a placed file, for its row in the layer list.
@@ -101,11 +104,74 @@ fn composite(project_id: &str, key: &str) -> Result<RgbaImage, String> {
 /// for a file with nothing visible in it, which the row draws as its icon.
 #[tauri::command(async)]
 pub fn psd_art_thumbnail(id: String, key: String, max_size: u32) -> Result<String, String> {
-    let canvas = composite(&id, &key)?;
-    let Some((left, top, width, height)) = opaque_bounds(&canvas) else {
+    thumbnail(&composite(&id, &key)?, max_size)
+}
+
+/// One row of a PSD's layer list as a picture, beside what names it.
+///
+/// The name and depth come with the picture so the editor can work out the
+/// row's place in the manifest — `S | roof` inside `G | tower` is
+/// `tower/roof` there — without reading the stack a second time.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerThumb {
+    pub name: String,
+    pub depth: usize,
+    /// A PNG data URL, or empty for a layer with nothing in it.
+    pub url: String,
+}
+
+/// A small picture of every row in a PSD's layer list, in the order
+/// `psd_layers::read` lists them — the same walk, so index for index.
+///
+/// The same treatment as the file's own thumbnail: cropped to what is drawn
+/// before it is shrunk. A layer is its own pixels, hidden or not — the row is
+/// there to say what the layer *is*, and its eye says whether it shows. A
+/// group is its contents composited the way the file's thumbnail is, so a
+/// folder of a roof and walls looks like the building. One parse for the
+/// whole list, which is why this is one command rather than one per row.
+#[tauri::command(async)]
+pub fn psd_layer_thumbnails(
+    id: String,
+    key: String,
+    max_size: u32,
+) -> Result<Vec<LayerThumb>, String> {
+    let doc = parse(&id, &key)?;
+    let (width, height) = (doc.width(), doc.height());
+    rows(&doc)
+        .iter()
+        .map(|row| {
+            let (name, picture) = match row.item {
+                Item::Layer(at) => {
+                    let layer = doc.layer_by_idx(at);
+                    let (_, _, w, h, pixels) = crop(layer, width, height);
+                    (layer.name().to_string(), RgbaImage::from_raw(w, h, pixels))
+                }
+                Item::Group(group) => {
+                    let mut canvas = RgbaImage::new(width.max(1), height.max(1));
+                    paint(&doc, Some(group), 255, &mut canvas);
+                    let name = doc.groups().get(&group).map(|g| g.name().to_string());
+                    (name.unwrap_or_default(), Some(canvas))
+                }
+            };
+            let url = match picture {
+                Some(picture) if picture.width() > 0 && picture.height() > 0 => {
+                    thumbnail(&picture, max_size)?
+                }
+                _ => String::new(),
+            };
+            Ok(LayerThumb { name, depth: row.depth, url })
+        })
+        .collect()
+}
+
+/// Crop a picture to what is drawn in it and shrink it to fit `max_size`, as
+/// a PNG data URL — or an empty string when nothing in it is drawn.
+fn thumbnail(picture: &RgbaImage, max_size: u32) -> Result<String, String> {
+    let Some((left, top, width, height)) = opaque_bounds(picture) else {
         return Ok(String::new());
     };
-    let art = image::imageops::crop_imm(&canvas, left, top, width, height).to_image();
+    let art = image::imageops::crop_imm(picture, left, top, width, height).to_image();
     let side = max_size.max(1);
     crate::psd_write::png_data_url(&image::DynamicImage::ImageRgba8(art).thumbnail(side, side))
 }

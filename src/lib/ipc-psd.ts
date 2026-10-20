@@ -21,6 +21,15 @@ import { invokeBytes } from "./ipc-bytes";
 import type { ProjectMeta } from "./project-types";
 import type { GridAlign } from "./grid-align";
 
+/** One row of a PSD's layer list as a picture — see `layerThumbnails`. */
+export interface LayerThumb {
+  /** The row's name as the file holds it, prefix and all. */
+  name: string;
+  depth: number;
+  /** A PNG data URL, or empty for a layer with nothing drawn in it. */
+  url: string;
+}
+
 export interface OutputFile {
   absolutePath: string;
   relativePath: string;
@@ -522,6 +531,12 @@ export const psd = {
    */
   artThumbnail: (id: string, key: string, maxSize: number) =>
     invoke<string>("psd_art_thumbnail", { id, key, maxSize }),
+  /**
+   * Every row of the file's layer list as the same kind of picture, in the
+   * order `readLayers` lists them — see `psd_flatten::psd_layer_thumbnails`.
+   */
+  layerThumbnails: (id: string, key: string, maxSize: number) =>
+    invoke<LayerThumb[]>("psd_layer_thumbnails", { id, key, maxSize }),
   assetUrl: (id: string, relative: string) =>
     invoke<string>("read_asset_data_url", { id, relative }),
 };

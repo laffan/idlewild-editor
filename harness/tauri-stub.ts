@@ -733,6 +733,22 @@ export async function invoke(
       return "data:image/svg+xml;utf8," + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="64"><rect x="4" y="16" width="32" height="48" fill="#b0784a"/><path d="M0 18 20 0 40 18z" fill="#c0392b"/></svg>',
       );
+    // One small picture per row of the stack `read_psd_layers` answers, in
+    // its order: a coloured block for a sprite, nothing for the two marks.
+    case "psd_layer_thumbnails": {
+      const asked = String((args as any).key);
+      const stack = (asked === "tower" ? PSD_LAYERS : generatedStack(asked)).map(layerInfo);
+      const hues = ["#c0392b", "#b0784a", "#3f7f5f", "#4a6fa5"];
+      return stack.map((layer: any, at: number) => ({
+        name: layer.name,
+        depth: layer.depth,
+        url: layer.category === "point" || layer.category === "zone"
+          ? ""
+          : "data:image/svg+xml;utf8," + encodeURIComponent(
+            `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect x="6" y="6" width="28" height="28" fill="${hues[at % hues.length]}"/></svg>`,
+          ),
+      }));
+    }
     case "save_staging": return null;
     case "save_print_file": case "save_print_files": return undefined;
     case "reimport_psd":

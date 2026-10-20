@@ -14,6 +14,7 @@
 
 import { h, ICONS, icon } from "../lib/dom";
 import { blockLength } from "./psd-layer-tree";
+import { psdLayerThumbBox } from "./psd-thumb-box";
 import type { OwnedLayer } from "./psd-layer-owner";
 import type { PsdLayerInfo, PsdLayerList } from "../lib/ipc";
 
@@ -98,6 +99,14 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
           icon(ICONS.grip, 14),
         )
       : h("div", { class: "psd-layer-grip" }),
+    // By the index the file gave the row, which travels with it through a
+    // reorder that has not been applied yet — so the picture stays with its
+    // layer rather than with its place in the list.
+    psdLayerThumbBox(
+      ctx.stack.key,
+      (thumbs) => thumbs[row.source.index]?.url,
+      layerGlyph(row.source),
+    ),
     h(
       "div",
       { class: "psd-layer-main" },
@@ -335,4 +344,12 @@ function foldEl(row: Row, ctx: RowContext): HTMLElement {
     icon(shut ? ICONS.chevronRight : ICONS.chevronDown, 12),
     h("span", { text: label }),
   );
+}
+
+/** What a row shows until its picture arrives, or for a layer with none. */
+export function layerGlyph(layer: { category: string; isGroup?: boolean }): string | readonly string[] {
+  if (layer.isGroup || layer.category === "group") return ICONS.folder;
+  if (layer.category === "point") return ICONS.point;
+  if (layer.category === "zone") return ICONS.boundary;
+  return ICONS.image;
 }

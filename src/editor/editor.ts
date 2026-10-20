@@ -136,7 +136,7 @@ export async function mountEditor(
   const layers: LayersPanel = new LayersPanel(
     store,
     layersPanelCallbacks({
-      scene: () => handle?.scene ?? null,
+      ...{ scene: () => handle?.scene ?? null, store },
       panel: () => layers,
       activeLayerId: () => activeLayerId,
       setActiveLayer,

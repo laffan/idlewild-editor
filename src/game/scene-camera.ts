@@ -23,6 +23,8 @@ const MIN_ZOOM = 0.1;
 // As far in as Project Options may set a project, or the setting lies: this
 // was 4 while the sheet took 8, so 6× reached the game and 4× the canvas.
 const MAX_ZOOM = ZOOM_RANGE.max;
+/** How long `glideTo` takes, in milliseconds. */
+const GLIDE_MS = 220;
 
 export interface SceneCameraConfig {
   scene: Phaser.Scene;
@@ -55,6 +57,8 @@ export class SceneCamera {
   private placed = false;
   /** The last state pushed to `onViewport`, so an idle frame costs nothing. */
   private lastView = "";
+  /** Bumped by every move, so a glide in flight knows a hand took over. */
+  private moves = 0;
 
   constructor(config: SceneCameraConfig) {
     this.config = config;
@@ -140,6 +144,7 @@ export class SceneCamera {
 
   /** Move by a distance on screen, whatever the zoom makes of it in world. */
   pan(dxScreen: number, dyScreen: number): void {
+    this.moves++;
     this.camera.scrollX -= dxScreen / this.camera.zoom;
     this.camera.scrollY -= dyScreen / this.camera.zoom;
     this.settle();
@@ -150,6 +155,7 @@ export class SceneCamera {
    * is measured from the canvas's corner, not the page's.
    */
   zoomBy(factor: number, screenX: number, screenY: number): void {
+    this.moves++;
     const before = this.camera.getWorldPoint(screenX, screenY);
     this.camera.setZoom(
       Phaser.Math.Clamp(this.camera.zoom * factor, MIN_ZOOM, MAX_ZOOM),
@@ -195,10 +201,39 @@ export class SceneCamera {
    * the map unreadable as a way of getting about.
    */
   centreOn(worldX: number, worldY: number): void {
+    this.moves++;
     this.camera.centerOn(worldX, worldY);
     this.settle();
     this.config.onInvalidate();
     this.persist();
+  }
+
+  /**
+   * Travel to a place rather than appear there: what picking something in the
+   * left sidebar does, so the canvas is seen to come round to it.
+   *
+   * A fifth of a second, easing out. Stopped dead by any other move — a pan
+   * or a pinch mid-glide is somebody taking the camera back — and skipped
+   * for anyone who has asked the system for less motion, who get the jump.
+   * Written to the document once, where it ends, rather than every frame.
+   */
+  glideTo(worldX: number, worldY: number): void {
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (still) return this.centreOn(worldX, worldY);
+    const from = this.camera.midPoint.clone();
+    const mine = ++this.moves;
+    const start = performance.now();
+    const step = (now: number) => {
+      if (mine !== this.moves) return;
+      const t = Math.min(1, (now - start) / GLIDE_MS);
+      const eased = 1 - (1 - t) ** 3;
+      this.camera.centerOn(from.x + (worldX - from.x) * eased, from.y + (worldY - from.y) * eased);
+      this.settle();
+      this.config.onInvalidate();
+      if (t < 1) requestAnimationFrame(step);
+      else this.persist();
+    };
+    requestAnimationFrame(step);
   }
 
   /** Back to the origin, at the zoom a scene opens at. */

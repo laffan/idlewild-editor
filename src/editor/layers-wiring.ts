@@ -19,10 +19,15 @@ import { importTiledMap, type TileDeps } from "./tile-actions";
 import type { LayersPanel, LayersPanelCallbacks } from "./layers-panel";
 import type { WorldScene } from "../game/world-scene";
 import type { Selection } from "../lib/types";
+import type { DocStore } from "../lib/doc-store";
+import { Grid } from "../lib/grid";
+import { selectionCentre } from "./selection-focus";
 
 export interface LayersWiringDeps {
   /** The live scene, or null before it has booted. */
   scene: () => WorldScene | null;
+  /** The document, for where a picked row's subject stands on the canvas. */
+  store: DocStore;
   /** The panel itself, which two of its own rows have to re-render. */
   panel: () => LayersPanel;
   /** The layer new work lands on, and the way to move it. */
@@ -42,6 +47,14 @@ export function layersPanelCallbacks(
 ): LayersPanelCallbacks {
   const selection = (): Selection =>
     deps.scene()?.getSelection() ?? { kind: "none" };
+  // Picked in the list, so it may be anywhere: bring the canvas round to it.
+  const reveal = (held: Selection) => {
+    const scene = deps.scene();
+    if (!scene) return;
+    const { store } = deps;
+    const at = selectionCentre(held, store, new Grid(store.projection, store.gridSize));
+    if (at) scene.centreOn(at.x, at.y, true);
+  };
 
   return {
     getActiveLayerId: deps.activeLayerId,
@@ -58,6 +71,7 @@ export function layersPanelCallbacks(
       // list, and every kind added since has had to remember to join it.
       deps.setActiveLayer(layerOf(held) || deps.activeLayerId());
       deps.scene()?.setSelection(held);
+      reveal(held);
     },
     // Strokes picked from a list rather than lassoed: Select first, so the
     // box they wear is up and takes the pointer — under a brush it is not,
@@ -66,6 +80,7 @@ export function layersPanelCallbacks(
       deps.selectTool();
       deps.setActiveLayer(layerOf(held) || deps.activeLayerId());
       deps.scene()?.setSelection(held);
+      reveal(held);
     },
     // A fact about the file rather than about the document, so it is asked
     // of the scene — see `PsdPlacements.anchored`.

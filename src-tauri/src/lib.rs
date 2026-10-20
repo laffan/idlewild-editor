@@ -467,6 +467,7 @@ pub fn run() {
             site_listing::list_site_files,
             psd_flatten::merge_psd_art,
             psd_flatten::psd_art_thumbnail,
+            psd_flatten::psd_layer_thumbnails,
             game_files::read_game_file,
             game_files::read_game_template,
             game_files::write_game_file,

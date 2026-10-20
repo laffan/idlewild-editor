@@ -30,7 +30,8 @@
 import { DrawingLayer, type StrokeStyle, type Viewport } from "../drawing";
 import type { DocStore } from "../lib/doc-store";
 import { h, ICONS, icon } from "../lib/dom";
-import { hasPlan, PLAN_COLOR, planSource } from "../lib/plan";
+import { withAlpha } from "../lib/color";
+import { hasPlan, PLAN_COLOR, PLAN_INK_ALPHA, planSource } from "../lib/plan";
 import { Grid } from "../lib/grid";
 import { layerKind } from "../lib/layer-kinds";
 import * as log from "../lib/log";
@@ -40,8 +41,8 @@ import { brushSection } from "./inspect-brush";
 import type { Inspector } from "./inspector";
 import { isTyping } from "./shortcuts";
 
-/** What the plan's pencil starts as: thin, unsmoothed, and only ever blue. */
-const PENCIL = { size: 4, smoothing: 0 };
+/** What the plan's pencil starts as: Charcoal, thin, unsmoothed, only ever blue. */
+const PENCIL = { brushId: 2, size: 4, smoothing: 0 };
 /** And its eraser: what the pencil would draw, wide, taken out. */
 const ERASER = { size: 28, smoothing: 0 };
 
@@ -305,12 +306,16 @@ export class PlanMode {
     if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.tool));
   }
 
-  /** A plan tool's style: its own tip, size and smoothing, and the plan's blue. */
+  /**
+   * A plan tool's style: its own tip, size and smoothing, and the plan's blue
+   * — at the plan's ink opacity for the pencil, and opaque for the eraser,
+   * whose alpha is how much it takes out: a 90% eraser leaves a ghost.
+   */
   private styleFor(tool: "pencil" | "eraser"): StrokeStyle {
     return {
       ...this.layer.style,
       ...this.styles[tool],
-      color: PLAN_COLOR,
+      color: tool === "pencil" ? withAlpha(PLAN_COLOR, PLAN_INK_ALPHA) : PLAN_COLOR,
       mode: "ink",
       erase: tool === "eraser",
       paint: { kind: "color" },
