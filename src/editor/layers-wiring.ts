@@ -33,6 +33,8 @@ export interface LayersWiringDeps {
   tiles: () => TileDeps;
   /** Rename a PSD's file — the same action the inspector's heading had. */
   renamePsd?: (key: string, name: string) => void;
+  /** Put the Select tool in hand — see `onSelectStrokes`. */
+  selectTool: () => void;
 }
 
 export function layersPanelCallbacks(
@@ -54,6 +56,14 @@ export function layersPanelCallbacks(
       // so the next Fill or Add Image lands where the user is looking.
       // `layerOf` rather than a list of the kinds that have one: this was a
       // list, and every kind added since has had to remember to join it.
+      deps.setActiveLayer(layerOf(held) || deps.activeLayerId());
+      deps.scene()?.setSelection(held);
+    },
+    // Strokes picked from a list rather than lassoed: Select first, so the
+    // box they wear is up and takes the pointer — under a brush it is not,
+    // and the selection looked like nothing had happened.
+    onSelectStrokes: (held) => {
+      deps.selectTool();
       deps.setActiveLayer(layerOf(held) || deps.activeLayerId());
       deps.scene()?.setSelection(held);
     },

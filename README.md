@@ -105,7 +105,7 @@ One page per area, in roughly the order you meet them.
 | [Scenes and layers](Manual/scenes-and-layers.md) | What a scene is, the four kinds of layer, and the layer list |
 | [Drawing](Manual/drawing.md) | The brushes, Fill, the Pattern and Shape brushes, erasing, Slice, Text |
 | [Tile layers](Manual/tile-layers.md) | A Tiled map: importing one, the palette, and painting with it |
-| [Colour](Manual/colour.md) | The picker, the eyedropper and its magnifier, your palette, the browsed ones, and the strip a PSD carries out |
+| [Color](Manual/colour.md) | The picker, the eyedropper and its magnifier, your palette, the browsed ones, and the strip a PSD carries out |
 | [Patterns and shapes](Manual/patterns-and-shapes.md) | The two libraries, and the two editors that fill them |
 | [Fills, generated PSDs and Extrude mode](Manual/fills-and-extrude.md) | Filling grid spaces, pulling a solid out of them, turning either into a file |
 | [The properties sidebar](Manual/inspector.md) | Three zones, folding sections, and where the explanations live |

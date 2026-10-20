@@ -28,7 +28,7 @@ Part of [the Idlewild manual](README.md).
   rather than a run of spaces. The scale sits directly under the template
   because it is a number *about* the template and means nothing on its own
 - **A strip of the canvas** closes the Template group: the lattice those two
-  choices make, in the editor's own colours, at the zoom the project will
+  choices make, in the editor's own colors, at the zoom the project will
   open at, with the choice said under it — *Isometric · 64 px spaces*. It
   redraws as the template, the scale or the default zoom changes, so how
   dense 16 px is, or how few 256 px spaces fit across a window, is seen

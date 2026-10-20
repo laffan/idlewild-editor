@@ -17,7 +17,7 @@ Part of [the Idlewild manual](README.md).
   start on Wednesday, because nobody wants a mark they made to belong to the
   file they happened to make it in. What a *document* stores is the id, so a
   project opened on a machine whose library does not have that row draws the
-  stroke in its colour and says so; the built-ins are in the binary, so a
+  stroke in its color and says so; the built-ins are in the binary, so a
   project using only those is portable with no caveat at all. New, Edit,
   Duplicate, Rename and Remove are under the swatches, and **Restore
   defaults** puts back anything taken out. Editing a built-in makes a copy and

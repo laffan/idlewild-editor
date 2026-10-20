@@ -95,7 +95,7 @@ export function openNewBackground(
 ): void {
   openMenu(anchor, [
     {
-      label: "Colour",
+      label: "Color",
       glyph: ICONS.fill,
       onSelect: () => make(deps, layerId, "color"),
     },

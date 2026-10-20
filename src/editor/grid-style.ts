@@ -133,7 +133,7 @@ export function gridStyleRows(actions: GridStyleActions): HTMLElement {
         swatch.setAttribute("aria-expanded", String(open));
       },
     },
-    h("span", { class: "overlays-name m", text: "Line colour" }),
+    h("span", { class: "overlays-name m", text: "Line color" }),
     swatchChip,
   );
 

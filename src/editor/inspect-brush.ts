@@ -68,6 +68,8 @@ export interface ToolPanelActions {
   onSnapToGrid: (on: boolean) => void;
   /** Auto depth sort for the active layer, or null where it does not apply. */
   autoDepth: boolean | null;
+  /** Whether the project has a lattice for the Shape brush's Use Grid to use. */
+  gridSnaps: boolean;
   onAutoDepth: (on: boolean) => void;
 }
 
@@ -102,7 +104,7 @@ export const TOOL_HINTS: Partial<Record<ToolId, string>> = {
   shape:
     "Drag across the grid and every space you cross takes one copy, filling " +
     "that space exactly. Crossing a space twice changes nothing.",
-  fill: "Sweeps and tapped-out shapes, filled with a colour, a pattern or a shape.",
+  fill: "Sweeps and tapped-out shapes, filled with a color, a pattern or a shape.",
 };
 
 /**
@@ -139,7 +141,13 @@ export function toolPanel(
   // added — so it belongs at the top rather than buried under the sliders that
   // shape them. The other way in is a long press on the tool's own button; see
   // `tool-rail.ts`.
-  if (canErase(tool)) rows.unshift(eraserRow(actions));
+  if (canErase(tool)) {
+    const first = eraserRow(actions);
+    // Under it, for the Shape brush on a project with a lattice: whether the
+    // shapes go in its spaces or wherever the pen does.
+    if (tool === "shape" && actions.gridSnaps) first.appendChild(gridRow(style, actions));
+    rows.unshift(first);
+  }
   return rows;
 }
 
@@ -208,6 +216,19 @@ function selectPanel(actions: ToolPanelActions): HTMLElement[] {
  * because "here is what is happening" is a thing to ask for rather than a
  * thing to read every time.
  */
+/** The Shape brush's Use Grid switch — see `StrokeStyle.stampGrid`. */
+function gridRow(style: StrokeStyle, actions: ToolPanelActions): HTMLElement {
+  const on = style.stampGrid !== false;
+  return optionSwitchRow({
+    label: "Use Grid",
+    value: on,
+    onChange: (next) => actions.onStyle({ stampGrid: next }),
+    title: on
+      ? "Each shape fills the grid space under the pen."
+      : "Shapes go where the pen does, off the grid — square, a space wide, side by side.",
+  }).root;
+}
+
 function eraserRow(actions: ToolPanelActions): HTMLElement {
   const on = actions.erasing;
   const row = optionSwitchRow({
@@ -335,7 +356,7 @@ function inkPanel(
   return [
     brushSection(style, actions.onStyle),
     paintSection(
-      "Colour",
+      "Color",
       style,
       actions,
       ["color"],
@@ -498,7 +519,7 @@ function fillPanel(
       style,
       actions,
       ["color", "pattern", "shape"],
-      "What the inside of the shape is made of: a flat colour, a pixel " +
+      "What the inside of the shape is made of: a flat color, a pixel " +
         "pattern on the world's own lattice, or a field of a library shape.",
     ),
   );

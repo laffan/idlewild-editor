@@ -52,7 +52,7 @@ export interface PaintPicker {
 }
 
 const KIND_LABELS: Record<PaintKind, string> = {
-  color: "Colour",
+  color: "Color",
   pattern: "Pattern",
   shape: "Shape",
 };
@@ -257,7 +257,7 @@ export function createPaintPicker(options: PaintPickerOptions): PaintPicker {
       { class: "paint-section" },
       paint.kind === "color"
         ? null
-        : h("div", { class: "lib-section-title m", text: "Colour" }),
+        : h("div", { class: "lib-section-title m", text: "Color" }),
       picker.root,
     );
   }
@@ -385,7 +385,7 @@ function libraryRow<T extends { id: string; name: string }>(
             `Remove ${row.name}?`,
             isDefault
               ? "It is one of the built-in rows, so it only leaves this palette — Restore defaults brings it back. Anything already drawn with it keeps drawing."
-              : "It goes for good. Anything already drawn with it keeps its colour but loses the pattern.",
+              : "It goes for good. Anything already drawn with it keeps its color but loses the pattern.",
             "Remove",
             false,
           );

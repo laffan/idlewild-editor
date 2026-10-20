@@ -14,7 +14,7 @@ Part of [the Idlewild manual](README.md).
   in your own code is `this.scene.start("Cave")`, under the name you gave it
 - **The scaffold and your code are different files now.** A scene used to be
   one thousand-line file with the editor's machinery at the top of it, marked
-  block by block and shown in a different colour, and whatever you wrote went
+  block by block and shown in a different color, and whatever you wrote went
   in between. The machinery is in `js/shared/` — `canvas.js` puts the document
   on screen, `character.js` wires up whatever moves in it — and a scene file is
   a short one that calls six of them and is otherwise yours, with nothing in it
@@ -125,7 +125,7 @@ Part of [the Idlewild manual](README.md).
   finger drag with nothing following it looks like nothing happening
 - The editor and you do not fight over the code. A scaffolded file marks the
   runs the editor maintains — `preload`, `placeDocument` and the rest — and
-  those lines come up in their own colour and refuse to be typed over. It is
+  those lines come up in their own color and refuse to be typed over. It is
   decided **line by line**, so a `console.log` dropped into the middle of one
   is yours to edit and delete while the lines around it stay locked, and every
   marked block has a **Reset** beside it that puts it back the way it came.
@@ -276,13 +276,13 @@ Part of [the Idlewild manual](README.md).
   Vanilla, which has no scaffolded page for it to describe — is the HTML and
   CSS *around* the game rather than the game. Six settings: a **fixed size** with a
   width and a height — or the window, which is what every project has done until
-  now — **centred** or top left, a **margin**, a **corner radius**, and the
-  **page colour** behind it all. That last one is the HTML background, not
+  now — **centered** or top left, a **margin**, a **corner radius**, and the
+  **page color** behind it all. That last one is the HTML background, not
   Phaser's own: they are only both visible once one of the other three has
   pulled the game back from an edge, which is exactly when you want to pick them
   separately — and why they start out different. The world keeps the pale blue
   it has always had; the page behind it is a neutral dark, the way a video
-  player mats a picture. A frame the same colour as the sky just reads as the
+  player mats a picture. A frame the same color as the sky just reads as the
   world carrying on past its own border. A 320×568 phone game is a 320×568 game on a desktop now instead of
   one stretched across it. None of it rewrites a line of your `styles.css`: the
   values ride in the generated config, `js/main.js` puts them on the document as

@@ -158,12 +158,12 @@ export function renderFill(
       ? paintLabel(fill.paint)
       : fill.kind === "pattern"
         ? "Pattern image"
-        : "Colour",
+        : "Color",
   );
   if (fill.rect) {
     panel.row("Origin", `${Math.round(fill.rect.x)}, ${Math.round(fill.rect.y)}`);
   }
-  panel.row("Colour", fill.color ?? "—");
+  panel.row("Color", fill.color ?? "—");
   if (fill.patternKey) panel.row("Pattern image", fill.patternKey);
   panel.fillSection(fill);
 
@@ -559,7 +559,7 @@ export function renderStrokes(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Colour" }),
+      h("div", { class: "inspect-section-title m", text: "Color" }),
       picker.root,
     ),
   );

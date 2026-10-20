@@ -1,6 +1,6 @@
-# Colour
+# Color
 
-One picker answers *what colour* everywhere — the pen, a fill, a backdrop,
+One picker answers *what color* everywhere — the pen, a fill, a backdrop,
 either stop of a gradient, text, the page around the game — and what has grown
 around it: an eyedropper, a palette you build, a shelf of palettes to raid, and
 a way of sending the lot out inside a PSD.
@@ -11,25 +11,25 @@ Part of [the Idlewild manual](README.md).
 
 ## The picker
 
-- **It is the same control everywhere.** A colour chosen for a stroke and a
-  colour chosen for a backdrop are the same question, so there is one answer
+- **It is the same control everywhere.** A color chosen for a stroke and a
+  color chosen for a backdrop are the same question, so there is one answer
   to it: the field, the hue slider, the opacity slider beside it, a hex
   preview you can type into, and two rows of swatches underneath. What you add
   to the palette while painting is there the next time you open a fill
-- **Opacity is part of the colour**, on the second slider — see
+- **Opacity is part of the color**, on the second slider — see
   [Drawing](drawing.md). The preview and every swatch sit over a checker, so a
-  colour that is half there looks half there rather than looking like a paler
-  colour that is not
+  color that is half there looks half there rather than looking like a paler
+  color that is not
 
 ## The eyedropper
 
-- **The pipette at the head of the hex row picks a colour off the canvas.**
+- **The pipette at the head of the hex row picks a color off the canvas.**
   Press it, then press anywhere on your artwork. It samples the picture — the
   ink and the placed files under it — and not the app around them, so it
   cannot hand you back the grey of a toolbar by mistake
 - **A magnifier rides with the pointer** showing the screen blown up twelve
   times, with the pixel you are about to take boxed in the middle and its hex
-  underneath. Its ring is that colour, so the answer reads at a glance. The
+  underneath. Its ring is that color, so the answer reads at a glance. The
   point of it is the hard part of an eyedropper: knowing which side of an edge
   you are on before you commit to it
 - **Press and drag to hunt.** A tap picks what is under it; holding and moving
@@ -37,20 +37,20 @@ Part of [the Idlewild manual](README.md).
   pencil the magnifier sits over the pointer, since it shows you what is
   underneath; with a finger it lifts above, since a finger does not
 - **What you get is what you can see.** A half-transparent stroke over the grid
-  samples as the blend your eye reads, not as the stroke's colour at full
+  samples as the blend your eye reads, not as the stroke's color at full
   strength
-- **Escape, a right-click, or lifting off nothing** leaves the colour as it was
+- **Escape, a right-click, or lifting off nothing** leaves the color as it was
 
 ## Your palette
 
-Under the recent colours is a second row that works the other way round.
+Under the recent colors is a second row that works the other way round.
 
-- **The recents are a record** — the last eight colours you used, kept and
+- **The recents are a record** — the last eight colors you used, kept and
   dropped without being asked. **The palette is a decision.** Nothing goes into
   it except through the `+`, and nothing leaves it except through the `−`
-- **The button at the head of the row is about the colour in your hand.** It is
-  a `+` while that colour is not in the palette and a `−` while it is. So
-  taking a colour out is: pick it from the row, then press the button that is
+- **The button at the head of the row is about the color in your hand.** It is
+  a `+` while that color is not in the palette and a `−` while it is. So
+  taking a color out is: pick it from the row, then press the button that is
   already sitting there
 - **Tap a swatch to go to it**, exactly as you would a recent
 - **It holds forty-eight**, and it fills up rather than pushing the oldest out.
@@ -68,9 +68,9 @@ Under the recent colours is a second row that works the other way round.
   [simple-tileset-generator](https://laffan.github.io/simple-tileset-generator/) —
   muzli, Adobe Color, ColourLovers, Coolors and ColorHunt, each credited with a
   link under its own rows
-- **Tap a colour to take that colour. Press Use to take the row.** Both *add*
-  to your palette rather than replacing it, so a row you liked two colours in
-  contributes two colours
+- **Tap a color to take that color. Press Use to take the row.** Both *add*
+  to your palette rather than replacing it, so a row you liked two colors in
+  contributes two colors
 - **It opens beside the picker rather than over it**, on purpose: the palette
   you are filling stays on screen and nothing moves while you fill it. Escape
   closes it, as does the button in its corner
@@ -80,12 +80,12 @@ Under the recent colours is a second row that works the other way round.
 - **It is the *Include palette* tick under a PSD's Open PSD button** — see
   [Getting images in](images.md#and-out-again). It is off until you tick it,
   and each file keeps its own answer. (There used to be an *Attach palette to
-  PSDs* switch under the colour picker as well; it is gone, and the tick is
+  PSDs* switch under the color picker as well; it is gone, and the tick is
   the one place this is decided)
 - **Tick it and your palette travels inside the artwork.** With it on, the
   file sent out through **Open PSD** (or **Share PSD** on an iPad) gets the
   palette written into it as a strip of flat squares on the topmost layer — so
-  the moment it opens in Photoshop or Procreate, the project's colours are
+  the moment it opens in Photoshop or Procreate, the project's colors are
   there to sample. See [A PSD's own layers](psd-layers.md) for the round trip
   that button is half of
 - **The squares are a quarter of a grid space**, in the top-left corner,

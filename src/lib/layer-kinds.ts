@@ -69,7 +69,7 @@ export const LAYER_KINDS: readonly {
   {
     kind: "background",
     label: "Background layer",
-    hint: "Colour, a gradient, or painted scenery behind everything.",
+    hint: "Color, a gradient, or painted scenery behind everything.",
   },
   {
     kind: "tile",
@@ -374,7 +374,7 @@ export function addBackground(
   const held = backgroundsOf(store.layer(layerId));
   const made: Background = {
     id: makeId("bg"),
-    name: `${kind === "gradient" ? "Gradient" : "Colour"} ${held.length + 1}`,
+    name: `${kind === "gradient" ? "Gradient" : "Color"} ${held.length + 1}`,
     kind,
     ...(kind === "gradient"
       ? { gradient: { ...BACKGROUND_GRADIENT } }

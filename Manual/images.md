@@ -35,7 +35,7 @@ Part of [the Idlewild manual](README.md).
   copied — and nothing is thresholded away, so the soft edge of a brush stroke
   comes across intact. It applies to a drop and to Paste from clipboard, and
   deliberately **not** to replacing a PSD that is already in the project: a
-  file coming back is held where it is rather than re-centred, and cropping
+  file coming back is held where it is rather than re-centered, and cropping
   one would slide the artwork out from under everything standing on it
 - **And copy one back out, with ⌘C.** Pasting a PSD worked from the start and
   copying one did not, so files only ever travelled one way: into a project and
@@ -64,7 +64,7 @@ Part of [the Idlewild manual](README.md).
   re-anchors to it — which is how you make something stand on its tile. A
   file that comes back **without** the dot — flattened on save, or brought
   home through Photos as a picture — is held where it is instead of being
-  re-centred on its canvas, and the console says the mark has gone
+  re-centered on its canvas, and the console says the mark has gone
 - Both marks sit at the **bottom** of the stack and arrive **turned off**.
   They are the editor's rows rather than the artist's picture, and every
   program that opens a PSD draws its flattened composite — so a finished

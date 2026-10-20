@@ -98,7 +98,7 @@ export function paintIsPlain(paint: PaintSpec | undefined): boolean {
 
 /** What the paint is called, for a readout. */
 export function paintLabel(paint: PaintSpec | undefined): string {
-  if (!paint || paint.kind === "color") return "Colour";
+  if (!paint || paint.kind === "color") return "Color";
   if (paint.kind === "pattern") return paintPattern(paint)?.name ?? "Pattern (missing)";
   return paintShape(paint)?.name ?? "Shape (missing)";
 }

@@ -47,7 +47,7 @@ Part of [the Idlewild manual](README.md).
   how far in you are, and a tap on it puts the canvas back to 100% — one
   screen pixel per world pixel, which is the size the artwork is measured at
 - **Overlays > Grid** has two settings under it while the grid is showing:
-  how strong the lines are and what colour they are drawn in. The pale blue
+  how strong the lines are and what color they are drawn in. The pale blue
   default disappears into a pale sketch and shouts over a dark one, and both
   end with the grid switched off — which is not what you want on a canvas
   whose whole point is the spaces
@@ -64,7 +64,7 @@ Part of [the Idlewild manual](README.md).
   at the size the game will get in Play, with both sidebars down, divided by
   the project's default zoom. At that zoom the two cancel and the box is the
   game's window life size on the canvas; at any other zoom it grows and
-  shrinks with the camera, and stays centred on the crosshair. It is Draw's
+  shrinks with the camera, and stays centered on the crosshair. It is Draw's
   alone — in Code and Play the real screen is the thing in front of you
 - **Overlays**, a folded section above the minimap, switches those two marks,
   the minimap itself and **the grid** on and off one at a time. A boundary is
@@ -90,7 +90,7 @@ Part of [the Idlewild manual](README.md).
   pan off the edge of it and the picture opens out until both are in view,
   which is how you get back. Tap it to stand somewhere, or drag to run the
   camera across the scene; the zoom you are at is beside its name. Fills come
-  in their own colour, placed PSDs as the space they take up, boundaries and
+  in their own color, placed PSDs as the space they take up, boundaries and
   points as the marks they are on the canvas, and a sketch as the line it was
   drawn as — and a layer you have hidden is hidden here too. It keeps its own
   height, like every other divider in the shell. It is **Draw's**: in Code and

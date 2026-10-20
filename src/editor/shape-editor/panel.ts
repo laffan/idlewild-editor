@@ -58,7 +58,7 @@ const PRIMITIVES: Array<{ id: Primitive; label: string }> = [
 
 const ALIGNMENTS: Array<{ id: Alignment; label: string }> = [
   { id: "left", label: "Left" },
-  { id: "centre", label: "Centre" },
+  { id: "centre", label: "Center" },
   { id: "right", label: "Right" },
   { id: "top", label: "Top" },
   { id: "middle", label: "Middle" },

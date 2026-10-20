@@ -95,6 +95,6 @@ Part of [the Idlewild manual](README.md).
   from — the hut's wall is `S | wall-hut`, and an animation keeps its
   attributes as `S | hero-guy | animation` — which says what each part is in a
   file that is no longer either of them, and means two files that each call a
-  layer `layer 1` cannot collide. The new file is anchored at its own centre.
+  layer `layer 1` cannot collide. The new file is anchored at its own center.
   What goes is the *placements*: the source PSDs stay in the project, because
   another scene may be drawing them

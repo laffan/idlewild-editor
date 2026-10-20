@@ -175,7 +175,7 @@ export function renderText(
       optionSegmented(
         [
           { value: "left", label: "Left" },
-          { value: "center", label: "Centre" },
+          { value: "center", label: "Center" },
           { value: "right", label: "Right" },
         ],
         item.align,
@@ -288,7 +288,7 @@ export function renderText(
     value: item.color,
     onChange: (hex) => write({ color: hex }),
   });
-  panel.section("Colour").appendChild(picker.root);
+  panel.section("Color").appendChild(picker.root);
 
   panel.body.appendChild(
     h(

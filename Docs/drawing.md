@@ -557,6 +557,15 @@ Both consume the strokes. The PSD and the zone are the same shape in a better
 form, and leaving the ink behind means every sketch you convert is drawn
 twice, in the same place, at the same size.
 
+### Use Grid, on the Shape brush
+
+`StrokeStyle.stampGrid` — absent means on. On, a stamp fills the grid space
+under the pen (`stampBoxAt`), a diamond on an isometric project. Off,
+`beginShapeStamp` is given no `boxAt` and lays its own: a square a space wide
+(an isometric space's 2:1 would squash every shape), centred on the pen, and
+only once it would clear the last one, so a drag is a row rather than a smear.
+The switch sits under Use as Eraser, and only where the grid snaps.
+
 ### The box a lasso selection wears
 
 `drawing/transform-box.ts` belongs to the `DrawingLayer`, so the scene's ink
@@ -621,7 +630,10 @@ loose stroke in the scene at the top of the left column, grouped by the tool
 that drew it — read off the stroke (`strokeTool`): an erasing stroke is an
 Eraser whatever brush made it, then Fill, Shape and Pattern by mode and paint,
 and Pen for the rest. A row is one tool's strokes on one layer, because a
-`strokes` selection is one layer's worth, and tapping it selects them. The
+`strokes` selection is one layer's worth, and tapping it puts the Select
+tool in hand (`onSelectStrokes` in `layers-wiring.ts`, which a layer's own
+"N strokes" row uses too) and then selects them — under a brush the
+selection's box is not offered, and it looked as if nothing had happened. The
 heading keeps the total when folded, and the section is hidden when there is
 nothing in it.
 

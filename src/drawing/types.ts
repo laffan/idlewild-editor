@@ -78,6 +78,12 @@ export interface StrokeStyle {
    * what an isometric project's spaces are.
    */
   stamp: { width: number; height: number; diamond?: boolean };
+  /**
+   * Whether the Shape brush lays its shapes in the grid's spaces — the
+   * default, and a diamond each on an isometric project — or where the pen
+   * goes, square and side by side. Its Use Grid switch; absent means on.
+   */
+  stampGrid?: boolean;
 }
 
 export const DEFAULT_STYLE: StrokeStyle = {

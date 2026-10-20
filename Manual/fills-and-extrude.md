@@ -1,6 +1,6 @@
 # Fills, generated PSDs and Extrude mode
 
-Filling a patch of grid with a colour, pulling a solid out of it, and turning
+Filling a patch of grid with a color, pulling a solid out of it, and turning
 either one into a Photoshop document you can go on drawing in.
 
 Part of [the Idlewild manual](README.md).
@@ -9,9 +9,9 @@ Part of [the Idlewild manual](README.md).
 
 ## Filling a selection
 
-- Fill a selection with any colour, from a full picker with recent swatches.
+- Fill a selection with any color, from a full picker with recent swatches.
   It starts grey rather than in the app's accent: a fill is usually a
-  block-out, and the accent is the colour the editor draws its *own* marks in
+  block-out, and the accent is the color the editor draws its *own* marks in
   — selection outlines, the extrude plate, a blocking boundary — so a
   block-out arriving in it was the one fill nobody could tell from chrome
 - Generate PSD makes an empty file the size and shape of the selected grid

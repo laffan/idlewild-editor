@@ -65,10 +65,10 @@ Part of [the Idlewild manual](README.md).
   and not otherwise, the way a placed image's outline is — a boundary is a
   thing you are working on, not a feature of the ground
 - A **background layer** is the backdrop, and **New Background** at the foot
-  of its list offers three things. **Colour** and **gradient** are
+  of its list offers three things. **Color** and **gradient** are
   camera-locked and have no extent — a backdrop is wherever you are looking,
   which is the only reading that never shows its own edge — so the inspector
-  offers colours and a direction and nothing about size or position.
+  offers colors and a direction and nothing about size or position.
   **Image** asks how much ground the backdrop covers — in grid spaces, 30 ×
   10 by default — and writes a PSD that size with an anchor, the grid drawn
   on it and a `T | Background` group holding one sprite layer to paint into.

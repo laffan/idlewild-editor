@@ -138,7 +138,7 @@ export function layerItems(
         backgroundId: background.id,
       },
       label: background.name,
-      detail: background.kind === "gradient" ? "gradient" : "colour",
+      detail: background.kind === "gradient" ? "gradient" : "color",
       path: background.kind === "gradient" ? ICONS.gradient : ICONS.fill,
       swatch: background.color ?? background.gradient?.from,
     });
@@ -195,7 +195,7 @@ export function layerItems(
           ? `${paintLabel(fill.paint)} fill`
           : fill.kind === "pattern"
             ? "Pattern fill"
-            : "Colour fill",
+            : "Color fill",
       detail: describeFill(fill),
       path: ICONS.fill,
       swatch: fill.color ?? "#ec3013",

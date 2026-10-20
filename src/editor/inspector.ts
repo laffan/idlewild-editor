@@ -385,6 +385,7 @@ export class Inspector {
       // A grid space, for the two library editors' previews — the one thing
       // in this zone that is about the project rather than about the tool.
       cell: this.grid.tileWidth,
+      gridSnaps: this.grid.snaps,
       fillMode: this.callbacks.fillMode(),
       onFillMode: (mode) => this.callbacks.onFillMode(mode),
       fillPoints: this.callbacks.fillPoints(),

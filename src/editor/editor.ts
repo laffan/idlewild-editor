@@ -142,6 +142,7 @@ export async function mountEditor(
       setActiveLayer,
       ...{ backgrounds: () => backgrounds, tiles: () => tiles },
       renamePsd: (key, name) => void psdFile.rename(key, name),
+      selectTool: () => tools?.apply("select", false),
     }),
     overlays.root,
   );

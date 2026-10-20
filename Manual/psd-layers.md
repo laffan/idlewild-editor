@@ -110,7 +110,7 @@ Part of [the Idlewild manual](README.md).
   would have drawn; a fifth with a button of its own and a rule of its own was
   one too many. The bar it was on is the last of what used to be a second tool
   rail that appeared and disappeared with the mode, so nothing in hand is set
-  from there any more: the brush, the size, the smoothing, the colour and the
+  from there any more: the brush, the size, the smoothing, the color and the
   eraser switch are all in the TOOL section of the properties column, where
   they are while drawing anywhere else
 - **Erasing in PSD Edit mode reaches the artwork in the file**, not just the

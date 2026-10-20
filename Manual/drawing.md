@@ -41,10 +41,10 @@ Part of [the Idlewild manual](README.md).
   onto that canvas rather than the layer being re-laid, and the line under
   the pointer is redrawn once a frame however many samples a 120 Hz Pencil
   hands over in one
-- Every colour the editor picks carries its **opacity**, on a second slider
-  beside the hue one: the track is the colour itself fading out over a
+- Every color the editor picks carries its **opacity**, on a second slider
+  beside the hue one: the track is the color itself fading out over a
   checker, and what it hands back is one value — `#rrggbb`, or `#rrggbbaa`
-  once the slider leaves the top. It works the same everywhere a colour is
+  once the slider leaves the top. It works the same everywhere a color is
   picked: a fill, a backdrop, either stop of a gradient, and the pen. A
   translucent stroke is composited once rather than per stamp, so a half-there
   line is half there along its whole length instead of solid down the middle
@@ -56,17 +56,17 @@ Part of [the Idlewild manual](README.md).
   document stores is the line that was on the screen, the way a ruler leaves
   a straight line behind rather than a note saying one was used. The sweep
   fill borrows it on its own: its outline is a line, and a fill shows the
-  hand's wobble more plainly than a line does because there is a flat colour
+  hand's wobble more plainly than a line does because there is a flat color
   on one side of it
 - **The tool draws itself under the pointer.** The pencil, the Pattern brush
   and the Shape brush each show a faded stamp of what they are about to lay
-  down, where it would land: the tip's own shape at its own size and colour,
+  down, where it would land: the tip's own shape at its own size and color,
   the pattern on the world's lattice at its own scale, the shape filling the
   space it is going to fill. It is the real mark at a lower opacity rather
   than a drawing of one, so it cannot say something the tool does not do, and
   it goes the moment you press. A tool turned round to erase previews in red,
   ringed — a tint alone is invisible over a block-out that is already that
-  colour
+  color
 
 ## Fill
 
@@ -84,7 +84,7 @@ Part of [the Idlewild manual](README.md).
   again still closes the shape, which is how a polygon has always been closed;
   the bar is what tells you so
 - **Fill takes all three.** The swept shape and the tapped-out one can be a
-  flat colour, a pattern revealed on the world's own lattice, or a field of a
+  flat color, a pattern revealed on the world's own lattice, or a field of a
   shape — and so can a filled run of grid spaces, where a shape fill is a
   tileset laid down in one gesture: the spaces are already there, so *a shape
   in every space* is exactly what it sounds like. It is the one tool that
@@ -115,6 +115,10 @@ Part of [the Idlewild manual](README.md).
   space below, and a run of quarter circles rounds a corner along the lattice.
   That is what the shapes are for: they come from a tileset generator, where
   the tile is the unit
+- **Use Grid**, under Use as Eraser in the Shape brush's panel, is on to
+  begin with. Off, the shapes go where the pen goes instead — square, a grid
+  space wide, laid side by side along the drag — rather than into the spaces
+  it crosses. A project with no lattice has no such switch
 
 ## Erasing, and the knife
 
@@ -153,7 +157,7 @@ Part of [the Idlewild manual](README.md).
   API for that here, so they are found by measuring: a family that is not
   installed falls through to a generic and measures the same as one. Each name
   in the list is set in its own face, because *Didot* in the panel's own font
-  says nothing about Didot. Six sizes, a colour and an alignment beside it, and
+  says nothing about Didot. Six sizes, a color and an alignment beside it, and
   restyling one sets the next — the same way a brush keeps its size, and it is
   the whole style rather than a list somebody has to remember to extend. A
   **line height** against the size, so a note retyped twice as big keeps its
@@ -197,8 +201,8 @@ Part of [the Idlewild manual](README.md).
   — and drag the round knob above it to turn them, in 15° steps with Shift.
   The strokes follow as you drag, and the change is one step to undo. A
   stroke scaled up is drawn heavier, as if it had been drawn at that size
-- **The colour of a selection** is in the right sidebar under it, whichever
-  brush drew it — a pen's ink, or the colour a pattern is revealed in. It
+- **The color of a selection** is in the right sidebar under it, whichever
+  brush drew it — a pen's ink, or the color a pattern is revealed in. It
   changes the selected strokes as you pick
 - The box is there under the Lasso and under Select, Pan and the other tools
   that do not draw — so strokes picked from the Strokes list can be moved
@@ -211,7 +215,7 @@ Part of [the Idlewild manual](README.md).
   toolbars give way to **Pencil**, **Eraser**, **Lasso** and **Done**. The
   pencil only draws in bright blue; the eraser takes plan ink out. The right
   sidebar's TOOL zone has the pencil's and the eraser's brush, size and
-  smoothing — everything but the colour — and each remembers its own. The
+  smoothing — everything but the color — and each remembers its own. The
   Lasso catches plan strokes to move, scale and turn in the same box as
   above, or to remove with Delete — or, from the right sidebar, **Convert to
   PSD**: the strokes leave the plan and arrive as a placed PSD on the top
@@ -234,8 +238,9 @@ Part of [the Idlewild manual](README.md).
   many there are and, when they are spread over more than one layer, which
   layer they are on. Ink is not in what the project exports until it is a
   PSD, so this is the list of what would be left out
-- **Tap a row to select those strokes** on the canvas, ready to convert or
-  delete. The heading keeps the total when the list is folded, and the whole
+- **Tap a row to select those strokes** on the canvas — the Select tool is
+  put in hand first, so the box they wear is there to move them — ready to
+  convert or delete. The heading keeps the total when the list is folded, and the whole
   section goes away when there are no loose strokes left
 
 ## Handing a sketch to its layer

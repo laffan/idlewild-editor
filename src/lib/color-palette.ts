@@ -82,7 +82,7 @@ export function createPaletteRow(options: PaletteRowOptions): PaletteRow {
     lead.replaceChildren(icon(held ? ICONS.minus : ICONS.plus, 13));
     lead.title = held
       ? `Take ${hex} out of the palette`
-      : "Add the current colour to the palette";
+      : "Add the current color to the palette";
     lead.setAttribute("aria-label", lead.title);
     // A colour nobody could see is a colour there is no point keeping, and
     // the picker starts every session able to produce one.

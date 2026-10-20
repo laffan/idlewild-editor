@@ -211,7 +211,7 @@ function paletteRow(row: readonly string[]): HTMLElement {
           log.info(
             palette.has(colour)
               ? `${colour} is already in the palette`
-              : `The palette is full — take a colour out to add ${colour}`,
+              : `The palette is full — take a color out to add ${colour}`,
           );
         },
       }),
@@ -222,16 +222,16 @@ function paletteRow(row: readonly string[]): HTMLElement {
       class: "palette-use",
       type: "button",
       text: "Use",
-      title: "Add every colour in this row to the palette",
+      title: "Add every color in this row to the palette",
       onClick: () => {
         // A row is several colours at once, so this one *does* say what it
         // did: five taps' worth of squares appearing is harder to count than
         // to be told about, and "nothing happened" is the answer worth having.
         const added = palette.addMany(row);
         if (added === 0) {
-          log.info("Nothing new in that row — every colour is already in the palette");
+          log.info("Nothing new in that row — every color is already in the palette");
         } else {
-          log.info(`Added ${added} colour${added === 1 ? "" : "s"} to the palette`);
+          log.info(`Added ${added} color${added === 1 ? "" : "s"} to the palette`);
         }
       },
     }),

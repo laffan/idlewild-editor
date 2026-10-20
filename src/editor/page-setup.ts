@@ -175,7 +175,7 @@ export function openPageSetup(
 
   const placement = optionSegmented(
     [
-      { value: "center", label: "Centred" },
+      { value: "center", label: "Centered" },
       { value: "start", label: "Top left" },
     ],
     page.centered ? "center" : "start",
@@ -205,7 +205,7 @@ export function openPageSetup(
   const swatch = optionSwatch(
     page.background,
     () => openColour(),
-    "Page colour",
+    "Page color",
   );
 
   /**
@@ -220,7 +220,7 @@ export function openPageSetup(
    */
   function openColour(): void {
     const inner = openSheet({
-      title: "Page colour",
+      title: "Page color",
       subtitle: "Behind the game, where the game does not reach",
       width: 420,
     });
@@ -272,7 +272,7 @@ export function openPageSetup(
             title: "Margin",
             hint:
               "Clear space around the game, on every side. This is the setting " +
-              "that makes the page colour visible on a game that would otherwise " +
+              "that makes the page color visible on a game that would otherwise " +
               "reach every edge.",
             control: margin.root,
           }),
@@ -281,7 +281,7 @@ export function openPageSetup(
             hint:
               "Rounds the corners of the game itself. The canvas is clipped to " +
               "the rounded box, so what shows through at each corner is the page " +
-              "colour.",
+              "color.",
             control: radius.root,
           }),
         ],
@@ -290,7 +290,7 @@ export function openPageSetup(
         title: "Page",
         rows: [
           optionRow({
-            title: "Page colour",
+            title: "Page color",
             hint:
               "The background of the HTML page, behind everything. Not the " +
               "game's own background, which is behind what your scenes draw — " +

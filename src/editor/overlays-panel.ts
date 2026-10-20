@@ -204,7 +204,7 @@ const ROWS: readonly Row[] = [
     title: "The screen the game opens at",
     icon: ICONS.frame,
   },
-  { key: "centre", label: "Centre point", title: "World 0, 0", icon: ICONS.crosshair },
+  { key: "centre", label: "Center point", title: "World 0, 0", icon: ICONS.crosshair },
   { key: "minimap", label: "Minimap", title: "Where you are standing", icon: ICONS.map },
 ];
 

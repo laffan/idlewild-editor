@@ -14,6 +14,11 @@ has not used it, with the feature-by-feature manual under [`Manual/`](Manual/).
 - **No source file may exceed 700 lines.** Carried over from phaser-bench and
   hush. `npm run check:lines` enforces it over `src/`, `src-tauri/src/` and
   `scripts/`.
+- **What a person reads says *color* and *center*.** Every label, title
+  and message in the app, and the manual, use the American spelling. Code
+  identifiers, stored keys (`"centre"` in the Overlays state, a text
+  alignment's id) and these technical docs keep the spelling they were
+  written in: renaming a stored key would forget what people had set.
 - **Document objects are immutable once stored.** Every mutation replaces the
   object rather than writing through it. Hush's drawing engine diffs strokes
   by identity, so an in-place write would make its sync shim miss the change.

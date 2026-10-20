@@ -178,7 +178,7 @@ describe("layerItems", () => {
 
     expect(items.map((i) => i.label)).toEqual([
       "tower.psd",
-      "Colour fill",
+      "Color fill",
       "Dock edge",
     ]);
     expect(items[0].selection).toEqual({

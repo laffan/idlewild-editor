@@ -169,7 +169,7 @@ async function attachPalette(
       log.warn(`The palette did not go into ${key}.psd: ${result.skipped}`);
     } else if (result.changed && strip) {
       log.info(
-        `Put ${colors.length} palette colour${colors.length === 1 ? "" : "s"} ` +
+        `Put ${colors.length} palette color${colors.length === 1 ? "" : "s"} ` +
           `into ${key}.psd as its topmost layer`,
       );
     } else if (result.changed) {

@@ -91,7 +91,7 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
     class: "cp-hex",
     spellcheck: "false",
     maxlength: "9",
-    "aria-label": "Hex colour",
+    "aria-label": "Hex color",
   });
   const recentRow = h("div", { class: "cp-recent" });
 
@@ -107,8 +107,8 @@ export function createColorPicker(options: ColorPickerOptions): ColorPicker {
   const dropper = h("button", {
     class: "cp-dropper",
     type: "button",
-    title: "Pick a colour off the canvas",
-    "aria-label": "Pick a colour off the canvas",
+    title: "Pick a color off the canvas",
+    "aria-label": "Pick a color off the canvas",
     onClick: () => {
       void pickColor().then((hex) => {
         if (hex) settle(hex);

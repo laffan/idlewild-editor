@@ -516,7 +516,7 @@ export class DrawingLayer {
         this.surface,
         this.atlas,
         this.style,
-        (wx, wy) => this.stampBox(wx, wy),
+        this.style.stampGrid === false ? null : (wx, wy) => this.stampBox(wx, wy),
         x,
         y,
       );

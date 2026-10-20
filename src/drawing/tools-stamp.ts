@@ -54,7 +54,11 @@ export function beginShapeStamp(
   surface: Surface,
   atlas: Parameters<typeof renderLive>[3],
   style: StrokeStyle,
-  boxAt: StampBoxAt,
+  /**
+   * Where a stamp at a point goes — a grid space — or null to lay them where
+   * the pen is, a stamp's width apart: the Shape brush with Use Grid off.
+   */
+  boxAt: StampBoxAt | null,
   x: number,
   y: number,
 ): ToolSession {
@@ -65,8 +69,21 @@ export function beginShapeStamp(
   /** The box every stamp fills. Taken once: a grid does not change mid-drag. */
   let stamp = style.stamp;
 
+  const free = (wx: number, wy: number): StampBox | null => {
+    // Square, a grid space wide: off the grid there is no space whose
+    // proportions to take, and an isometric space's 2:1 squashes every shape.
+    const side = Math.max(style.stamp.width, style.stamp.height);
+    const x = wx - side / 2;
+    const y = wy - side / 2;
+    const last = points[points.length - 1];
+    // Centred on the pen, and only once it would clear the last one, so a
+    // drag is a row of shapes rather than a smear of them.
+    if (last && Math.abs(x - last.x) < side && Math.abs(y - last.y) < side) return null;
+    return { x, y, width: side, height: side };
+  };
+
   const take = (wx: number, wy: number): boolean => {
-    const box = boxAt(wx, wy);
+    const box = boxAt ? boxAt(wx, wy) : free(wx, wy);
     if (!box) return false;
     const key = `${Math.round(box.x)},${Math.round(box.y)}`;
     if (seen.has(key)) return false;

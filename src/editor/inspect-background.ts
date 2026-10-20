@@ -45,7 +45,7 @@ export function renderBackground(
   if (!layer || !background) return panel.empty();
 
   panel.editableHead(
-    background.kind === "gradient" ? "Gradient" : "Colour",
+    background.kind === "gradient" ? "Gradient" : "Color",
     background.name,
     "",
     (next) => updateBackground(store, layerId, backgroundId, { name: next }),
@@ -87,7 +87,7 @@ function colourControls(
     h(
       "div",
       { class: "inspect-section" },
-      h("div", { class: "inspect-section-title m", text: "Colour" }),
+      h("div", { class: "inspect-section-title m", text: "Color" }),
       picker.root,
     ),
   ];

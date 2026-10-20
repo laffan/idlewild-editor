@@ -54,6 +54,8 @@ export interface LayersPanelCallbacks {
   onSelectLayer: (layerId: string) => void;
   /** Selecting a placement, fill or boundary from the list under a layer. */
   onSelectItem: (selection: Selection) => void;
+  /** Selecting strokes from a list — the Strokes section, or a layer's row. */
+  onSelectStrokes: (selection: Selection) => void;
   getActiveLayerId: () => string;
   getSelection: () => Selection;
   /**
@@ -170,7 +172,7 @@ export class LayersPanel {
     });
     this.scenes = new ScenesBar(store);
     // Loose ink, by tool, above the list — see `strokes-tray.ts`.
-    this.strokes = new StrokesTray({ select: (s) => this.callbacks.onSelectItem(s) });
+    this.strokes = new StrokesTray({ select: (s) => this.callbacks.onSelectStrokes(s) });
     this.title = h("div", { class: "panel-title m", text: "Layers" });
     // Four kinds of layer, so the `+` asks which — and on a blank project
     // three, because a tileset needs a lattice to be cut on. A menu rather
@@ -399,7 +401,7 @@ export class LayersPanel {
                   ? "layer-item active"
                   : "layer-item",
               onClick: () =>
-                this.callbacks.onSelectItem({
+                this.callbacks.onSelectStrokes({
                   kind: "strokes",
                   layerId: layer.id,
                   ids: layer.strokes.map((stroke) => stroke.id),
