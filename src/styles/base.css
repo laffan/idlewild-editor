@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=Archivo+Narrow:wght@500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap");
 /* Fira Code is bundled rather than fetched: the editor has to work offline. */
 @import "@fontsource/fira-code/400.css";
 @import "@fontsource/fira-code/500.css";
@@ -15,6 +15,7 @@
 @import "./modes.css";
 @import "./panels.css";
 @import "./layer-items.css";
+@import "./layer-directory.css";
 @import "./strokes.css";
 @import "./plan.css";
 @import "./stroke-transform.css";
@@ -36,6 +37,8 @@ html, body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-body);
+  font-size: var(--text-md);
+  -webkit-font-smoothing: antialiased;
   /* iPad: kill pinch-zoom and double-tap zoom on the shell. The game canvas
      and the drawing layer read raw pointer events and do their own zoom. */
   touch-action: manipulation;
@@ -48,21 +51,39 @@ body { -webkit-user-select: none; user-select: none; }
 #app { height: 100%; display: flex; flex-direction: column; }
 
 button, input, textarea { font-family: inherit; color: inherit; }
-button { cursor: pointer; border-radius: 0; }
+button { cursor: pointer; border-radius: var(--radius-md); }
 
 :focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
-::selection { background: var(--color-accent-200); }
+::selection { background: color-mix(in srgb, var(--color-accent) 40%, transparent); }
 
-/* The uppercase micro-label used throughout both screens. */
+/* The label face used throughout both screens: the body face in sentence
+   case. It was narrow capitals with tracking, which is what made every
+   heading, key and caption in the chrome shout at the same volume as the
+   thing it labelled; a label is quieter by being smaller and dimmer, not by
+   being louder. */
 .m {
   font-family: var(--font-label);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
+
+/* Scrollbars in the chrome's own greys, thin, rather than the platform's. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--chrome-hover) transparent;
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: var(--chrome-hover);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track { background: transparent; }
 
 /* Output and code are read, and read means selected and copied. The shell
    suppresses selection so a drag on chrome never highlights it; these opt

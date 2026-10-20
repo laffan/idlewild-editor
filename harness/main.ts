@@ -1,5 +1,6 @@
 import "../src/styles/base.css";
 import { mountEditor } from "../src/editor/editor";
+import { renderHome } from "../src/home/home";
 
 // Test hook: the live document's first layer, for driving the editor from a
 // script without going through the panels.
@@ -30,20 +31,30 @@ const options = (window as any).__options ?? {
   character: true,
 };
 
-void mountEditor(
-  document.getElementById("app")!,
-  {
-    id: "demo",
-    name: "Marsh Kingdom",
-    projection,
-    genre: scaffold,
-    gridSize: (window as any).__gridSize ?? 64,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    layerCount: 3,
-    options,
-    // A print project, when a script asks for one — see `lib/print.ts`.
-    output: (window as any).__output,
-  },
-  { onBack: () => {} },
-);
+const meta = {
+  id: "demo",
+  name: "Marsh Kingdom",
+  projection,
+  genre: scaffold,
+  gridSize: (window as any).__gridSize ?? 64,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  layerCount: 3,
+  options,
+  // A print project, when a script asks for one — see `lib/print.ts`.
+  output: (window as any).__output,
+};
+
+// The project list rather than the editor: `?screen=home`. A few cards, so
+// the grid has something in it; opening one mounts the editor as the app does.
+if (new URLSearchParams(location.search).get("screen") === "home") {
+  (window as any).__projects ??= [
+    meta,
+    { ...meta, id: "b", name: "Cave Run", projection: "orthogonal", genre: "platformer", gridSize: 32, layerCount: 5 },
+    { ...meta, id: "c", name: "Postcard", projection: "blank", genre: "vanilla", layerCount: 1 },
+  ];
+  renderHome(document.getElementById("app")!, {
+    onOpenProject: (m) =>
+      void mountEditor(document.getElementById("app")!, m as any, { onBack: () => location.reload() }),
+  });
+} else void mountEditor(document.getElementById("app")!, meta, { onBack: () => {} });

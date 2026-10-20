@@ -27,6 +27,7 @@ import codeCss from "../code.css?raw";
 import docsCss from "../docs.css?raw";
 import modesCss from "../modes.css?raw";
 import panelsCss from "../panels.css?raw";
+import directoryCss from "../layer-directory.css?raw";
 import inspectCss from "../inspect.css?raw";
 import libraryCss from "../library.css?raw";
 import sheetsCss from "../sheets.css?raw";
@@ -434,7 +435,7 @@ describe("the sidebar as a directory", () => {
   it("lets the names be selected, which nothing else in the shell allows", () => {
     // The point of a lookup is copying what you looked up.
     expect(
-      ruleIn(panelsCss, ".side-panel.left.browsing .panel-body")["user-select"],
+      ruleIn(directoryCss, ".side-panel.left.browsing .panel-body")["user-select"],
     ).toBe("text");
   });
 });

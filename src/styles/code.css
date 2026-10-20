@@ -96,48 +96,49 @@
   display: flex;
   flex-wrap: wrap;
   flex: none;
+  gap: 2px;
+  padding: 4px;
   border-bottom: var(--rule-chrome);
 }
 .code-new {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 30px;
+  min-height: var(--ctl);
   padding: 0 8px;
   border: 0;
-  border-left: 1px solid var(--chrome-rule);
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--chrome-text);
+  color: var(--chrome-dim);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font: 600 11px var(--font-heading);
+  font: 500 var(--text-sm) var(--font-heading);
   white-space: nowrap;
 }
-.code-new:first-child { border-left: 0; }
+.code-new:hover { color: var(--chrome-text); }
 /* A column dock leaves the tree 170px, which is not two names wide — so they
    stack rather than being clipped to "New Fold". */
 .code-backdrop.dock-right .code-new { flex-basis: 100%; }
-.code-new:hover { background: var(--chrome-rule); }
+.code-new:hover { background: var(--chrome-hover); }
 .code-new svg { flex: none; color: var(--chrome-dim); }
 .code-new:hover svg { color: var(--chrome-text); }
 /* The gear at the end of the strip takes only the glyph's width, so the two
    named buttons keep the row. It stays on the first line when the dock is
    narrow enough to stack them, which is what `flex-basis: 100%` above would
    otherwise do to it as well. */
-.code-gear { flex: none; min-width: 34px; }
+.code-gear { flex: none; min-width: var(--ctl); }
 .code-backdrop.dock-right .code-gear { flex-basis: auto; }
 
 .code-files { flex: 1; min-height: 0; }
 .code-file {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 4px 0 12px;
-  border-bottom: 1px solid var(--chrome-panel);
-  color: var(--color-neutral-300);
-  font: 400 13px var(--font-mono);
+  gap: 8px;
+  min-height: calc(var(--row) - 4px);
+  padding: 0 4px 0 10px;
+  color: var(--chrome-dim);
+  font: 400 var(--text-md) var(--font-mono);
   cursor: pointer;
   /* The row is dragged, so the browser must not also select its text. */
   touch-action: none;
@@ -145,7 +146,7 @@
 .code-file svg { flex: none; }
 /* A folder's fold arrow, and the space one would have taken on a row that
    does not fold — so every name in the column still starts at the same x. */
-.code-file > svg:first-child { color: var(--color-neutral-500); }
+.code-file > svg:first-child { color: var(--chrome-faint); }
 .code-file-gap { flex: none; width: 12px; }
 .code-file-name {
   flex: 1;
@@ -154,9 +155,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.code-file:hover { background: var(--chrome-panel); }
-.code-file.active { background: var(--chrome-rule); color: var(--chrome-text); }
-.code-file.dir { color: var(--color-neutral-500); }
+.code-file:hover { background: var(--chrome-row-hover); color: var(--chrome-text); }
+.code-file.active { background: var(--chrome-row-active); color: var(--chrome-text); }
+.code-file.dir { color: var(--chrome-dim); }
 
 /* The half of the site the modal only shows: the processed `assets/`, the two
    vendored runtime libraries, and the README a publish writes. They are here
@@ -170,7 +171,7 @@
    The default cursor is the other half of the same sentence: the pointer says
    there is nothing to press before anything is pressed. */
 .code-file.generated {
-  color: var(--color-neutral-500);
+  color: var(--chrome-faint);
   cursor: default;
 }
 .code-file.generated .code-file-name { opacity: 0.75; }
@@ -183,10 +184,10 @@
 .code-file-menu {
   flex: none;
   width: 28px;
-  height: 28px;
+  height: 24px;
   border: 0;
   background: transparent;
-  color: var(--color-neutral-500);
+  color: var(--chrome-dim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,7 +196,7 @@
 }
 .code-file:hover .code-file-menu,
 .code-file-menu:focus-visible { opacity: 1; }
-.code-file-menu:hover { color: var(--chrome-text); background: var(--chrome-rule); }
+.code-file-menu:hover { color: var(--chrome-text); background: var(--chrome-hover); }
 /* There is no hover on an iPad, so on touch it is simply always there —
    otherwise rename, duplicate and delete would be unreachable on the
    platform this is mainly for. */
@@ -214,11 +215,11 @@
 /* The folder the release would drop into. An outline as well as a tint: on a
    row that is already the open file, a tint alone is a change of shade. */
 .code-file.drop-into {
-  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  background: var(--chrome-row-active);
   box-shadow: inset 0 0 0 1px var(--color-accent);
   color: var(--chrome-text);
 }
-.code-file.drop-into svg { color: var(--color-accent-400); }
+.code-file.drop-into svg { color: var(--chrome-text); }
 /* The tree's own root, which is every row at once rather than any of them. */
 .code-files.drop-root { box-shadow: inset 0 0 0 2px var(--color-accent); }
 
@@ -240,21 +241,22 @@
   gap: 8px;
   max-width: 60vw;
   padding: 6px 10px;
+  border-radius: var(--radius-md);
   background: var(--chrome-bg);
-  border: 1px solid var(--color-accent);
+  border: 1px solid var(--chrome-edge);
   box-shadow: var(--shadow-lg);
   color: var(--chrome-text);
-  font: 400 12px var(--font-mono);
+  font: 400 var(--text-md) var(--font-mono);
 }
 .code-drag-ghost svg { flex: none; color: var(--chrome-dim); }
 .code-ghost-name { white-space: nowrap; }
 /* Where it would land, or that it would not. */
 .code-ghost-target {
-  font-size: 10px;
-  color: var(--color-accent-400);
+  font-size: var(--text-sm);
+  color: var(--chrome-text);
   white-space: nowrap;
 }
-.code-drag-ghost.outside { border-color: var(--color-neutral-600); }
+.code-drag-ghost.outside { border-color: var(--chrome-rule); }
 .code-drag-ghost.outside .code-ghost-target { color: var(--chrome-dim); }
 
 /* `position: relative` is load-bearing rather than tidy: ⌘F's box is
@@ -276,7 +278,7 @@
    editor carried Save, its shortcut and two history buttons. One row of 44px
    where there were three of 44, 60 and 56. */
 .code-bar {
-  min-height: 44px;
+  min-height: var(--bar-h);
   flex: none;
   border-bottom: 1px solid var(--chrome-rule);
   display: flex;
@@ -301,13 +303,13 @@
   justify-content: center;
   padding: 0;
 }
-.code-bar-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.code-bar-btn:hover { background: var(--chrome-hover); color: var(--chrome-text); }
 /* On, rather than merely hovered: the file column is showing, the reference is
    up. Lit rather than filled — the reference used to be a pill that went solid
    accent, and a block of colour in a 44px bar over a file reads as an alert.
    And one of these is on by default, so it must not shout. */
 .code-bar-btn[aria-pressed="true"] { color: var(--chrome-text); }
-.code-bar-btn[aria-expanded="true"] { background: var(--chrome-rule); color: var(--chrome-text); }
+.code-bar-btn[aria-expanded="true"] { background: var(--chrome-hover); color: var(--chrome-text); }
 
 /* The three about the panel, at the far end. `margin-left` rather than a
    spacer element: the note already claims the free space, and this sits after
@@ -340,12 +342,12 @@
   color: var(--chrome-dim);
 }
 .code-path-name { flex: none; white-space: nowrap; }
-.code-dirty { flex: none; font-size: 10px; color: var(--color-accent); }
+.code-dirty { flex: none; font-size: var(--text-sm); color: var(--color-warn); }
 /* Why an edit did not take, or what a Reset just did. Right-aligned so it
    never pushes the filename around as it comes and goes. */
 .code-note {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
   text-align: right;
   min-width: 0;
@@ -361,8 +363,8 @@
    marker comments that bracket a block are dimmed further, because they are
    the fence rather than the code. See code/managed-blocks.ts. */
 .cm-editor .cm-line.cm-managed {
-  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: rgb(255 255 255 / 0.035);
+  box-shadow: inset 2px 0 0 rgb(255 255 255 / 0.18);
 }
 .cm-editor .cm-line.cm-managed-mark { opacity: 0.55; }
 
@@ -372,20 +374,18 @@
 .cm-editor .cm-reset {
   margin-left: 12px;
   padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
-  background: transparent;
-  color: var(--color-accent-400);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--chrome-control);
+  color: var(--chrome-dim);
   font-family: var(--font-label);
-  font-size: 10px;
+  font-size: var(--text-xs);
   line-height: 16px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   vertical-align: middle;
   cursor: pointer;
 }
 .cm-editor .cm-reset:hover {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+  background: var(--chrome-hover);
   color: var(--chrome-text);
 }
 
@@ -399,29 +399,25 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 6px 8px 6px 14px;
   border-bottom: 1px solid var(--chrome-rule);
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--chrome-bg));
-  color: var(--chrome-text);
-  font-size: 11px;
+  background: var(--color-warn-soft);
+  color: var(--color-warn);
+  font-size: var(--text-md);
 }
 .code-repair.hidden { display: none; }
 .code-repair-btn {
   margin-left: auto;
   flex: none;
-  padding: 4px 12px;
-  border: 1px solid var(--color-accent);
-  background: transparent;
-  color: var(--color-accent-400);
-  font-family: var(--font-label);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.code-repair-btn:hover {
-  background: var(--color-accent);
+  min-height: var(--ctl);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
   color: var(--chrome-text);
+  font: 500 var(--text-md) var(--font-label);
 }
+.code-repair-btn:hover { background: var(--chrome-hover); }
 
 .code-editor { flex: 1; min-height: 0; overflow: hidden; }
 .code-editor .cm-editor { height: 100%; }
@@ -453,9 +449,10 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 6px 6px 10px;
-  background: var(--chrome-panel);
-  border: 1px solid var(--chrome-rule);
+  padding: 4px 4px 4px 10px;
+  border-radius: var(--radius-lg);
+  background: var(--chrome-bg);
+  border: 1px solid var(--chrome-edge);
   box-shadow: var(--shadow-lg);
   color: var(--chrome-text);
   max-width: calc(100% - 32px);
@@ -464,17 +461,18 @@
 .code-find > svg { flex: none; color: var(--chrome-dim); }
 /* A query with no answers says so in the count; the border says it at a
    glance, which is what you want while you are still typing. */
-.code-find.no-matches { border-color: var(--color-accent-600); }
+.code-find.no-matches { border-color: var(--color-danger); }
 
 .code-find-field {
   flex: 1 1 180px;
   min-width: 80px;
-  height: 26px;
+  height: var(--ctl);
   padding: 0 6px;
-  border: 1px solid var(--chrome-rule);
-  background: var(--chrome-bg);
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--chrome-text);
-  font: 400 12px var(--font-mono);
+  font: 400 var(--text-md) var(--font-mono);
 }
 .code-find-field:focus {
   outline: none;
@@ -498,26 +496,28 @@
   align-items: center;
   justify-content: center;
 }
-.code-find-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.code-find-btn:hover { background: var(--chrome-hover); color: var(--chrome-text); }
 /* The case switch is a word rather than a glyph — "Aa" is what every editor
    this one's users have already used calls it. */
 .code-find-case { font: 600 11px var(--font-body); }
 .code-find-btn[aria-pressed="true"] {
-  background: var(--color-accent);
+  background: var(--chrome-selected);
   color: var(--chrome-text);
 }
 
 /* Every answer in the open file, and the one in hand.
 
-   The current match is the accent; the rest are a wash of it. Two shades of
+   The current match is solid amber; the rest are a wash of it. Two shades of
    one colour rather than two colours, because they are the same kind of
-   thing — the difference is only which one Enter would take you to next. */
+   thing — the difference is only which one Enter would take you to next.
+   Amber rather than the accent, which over a line of code reads as an error;
+   it is the colour a find highlight is in most editors. */
 .cm-editor .cm-find-match {
-  background: color-mix(in srgb, var(--color-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--color-warn) 28%, transparent);
 }
 .cm-editor .cm-find-current {
-  background: var(--color-accent);
-  color: var(--color-neutral-100);
+  background: var(--color-warn);
+  color: #1c1c1c;
 }
 
 /* ── Find in all files ─────────────────────────────────────────────────────
@@ -585,13 +585,14 @@
   gap: 8px;
   padding: 3px 8px;
   border: 0;
+  border-radius: 0;
   background: transparent;
-  color: var(--color-neutral-300);
+  color: var(--chrome-dim);
   font: 400 11px var(--font-mono);
   text-align: left;
   cursor: pointer;
 }
-.code-find-hit:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.code-find-hit:hover { background: var(--chrome-hover); color: var(--chrome-text); }
 .code-find-line { flex: none; min-width: 24px; font-size: 10px; text-align: right; }
 .code-find-text {
   flex: 1;

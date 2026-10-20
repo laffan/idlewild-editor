@@ -166,7 +166,6 @@ export function openNewProject(
   const sheet = openSheet({
     title: "New Project",
     titled: false,
-    light: true,
     width: 620,
   });
 
@@ -458,7 +457,6 @@ export function openNewProject(
         scaffoldGroup,
         renderingGroup,
       ],
-      true,
     ),
   );
   redrawPreview();

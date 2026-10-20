@@ -20,35 +20,38 @@
 .menu {
   position: fixed;
   z-index: 70;
-  min-width: 208px;
+  min-width: 200px;
+  padding: 4px;
   background: var(--chrome-bg);
-  border: var(--rule-chrome);
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
 }
+/* A row inset in the menu, rounded, and no rule between rows: a menu is one
+   list, and a line under every item made eight items look like eight boxes. */
 .menu-item {
   min-height: var(--hit);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 16px;
+  gap: 10px;
+  padding: 0 10px;
   border: 0;
-  border-top: var(--rule-chrome);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--chrome-text);
-  font: 600 14px var(--font-heading);
+  font: 400 var(--text-lg) var(--font-heading);
   text-align: left;
 }
-.menu-item:first-child { border-top: 0; }
-.menu-item:hover { background: var(--chrome-rule); }
+.menu-item:hover { background: var(--chrome-hover); }
 .menu-item svg { flex: none; color: var(--chrome-dim); }
 .menu-item:hover svg { color: var(--chrome-text); }
 
 /* The row for whatever is already chosen, which a long menu needs and a short
    one never did: the font picker can be forty rows, and scrolling one with no
    mark on it is scrolling to find out nothing. See lib/menu.ts. */
-.menu-item.current { box-shadow: inset 2px 0 0 var(--color-accent); }
+.menu-item.current { background: var(--chrome-control); font-weight: 600; }
 
 /* And a ceiling, for the same menu. Forty families is taller than the window,
    and a menu that runs off the bottom of the screen has rows nobody can reach.

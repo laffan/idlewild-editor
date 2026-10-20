@@ -77,7 +77,7 @@ Part of [the Idlewild manual](README.md).
 - **The branch box offers the branches that exist, and has a New branch row
   above them** — naming one that is not there is how you publish to a fresh
   `gh-pages`, and the line under the box says which of the two is about to
-  happen, in the accent when it is one that will be created
+  happen, in amber when it is one that will be created
 - **The GitHub publish commits, it does not force-push.** The quick way to ship
   a built site is to make a repository out of the output and force-push it,
   which works right up until somebody types `main` into the branch box. This

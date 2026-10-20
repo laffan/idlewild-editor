@@ -345,7 +345,6 @@ export class FileTree {
       title: isDir ? "New folder" : "New file",
       label: "Path inside game/",
       value: parent ? `${parent}/${suggested}` : suggested,
-      light: false,
     });
     if (!name) return;
 
@@ -366,7 +365,6 @@ export class FileTree {
       label: "Path inside game/",
       value: file.path,
       confirmLabel: "Rename",
-      light: false,
     });
     if (!next || next === file.path) return;
     try {
@@ -394,7 +392,6 @@ export class FileTree {
       `Delete ${basename(file.path)}?`,
       `${file.path} — ${what} goes for good.`,
       "Delete",
-      false,
     );
     if (!sure) return;
     try {

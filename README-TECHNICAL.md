@@ -172,6 +172,7 @@ a Mac, that is usually why. See [`Docs/ipad.md`](Docs/ipad.md),
 | [Print projects](Docs/printing.md) | Two resolutions, the sheet as world, `ExportForPrint()`, the PDF and the PSD |
 | [The code panel](Docs/code-panel.md) | CodeMirror over the real tree, the three places it sits, the reference, the console |
 | [The iPad](Docs/ipad.md) | The safe area, and the scene manifest the app will not launch without |
+| [The interface](Docs/interface.md) | One dark system: surfaces, how the accent is spent, density by pointer, one of each control |
 | [Testing](Docs/testing.md) | What is covered and where |
 | [Known gaps](Docs/known-gaps.md) | What is not done, and what is a trade rather than a bug |
 
@@ -224,6 +225,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | Selection | [`Docs/selection.md`](Docs/selection.md) |
 | Snap to grid, and the arrow keys | [`Docs/selection.md`](Docs/selection.md) |
 | Testing | [`Docs/testing.md`](Docs/testing.md) |
+| The interface, and how the accent is spent | [`Docs/interface.md`](Docs/interface.md) |
 | The PDF | [`Docs/printing.md`](Docs/printing.md) |
 | The PSD | [`Docs/printing.md`](Docs/printing.md) |
 | The PNG | [`Docs/printing.md`](Docs/printing.md) |

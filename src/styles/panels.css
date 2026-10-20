@@ -1,4 +1,11 @@
-/* Left (layers) and right (inspector) sidebars. */
+/* Left (layers) and right (inspector) sidebars.
+
+   The left column is a stack of sections — the scene, its layers, the
+   overlays, the map — and every section heading in it is the same strip: a
+   short row on the panel's raised grey, the name in the label face and a
+   control at the end. Rows in a list carry no rule under them; the row under
+   the pointer and the chosen row are lighter, which is what says where one
+   ends and the next begins. */
 
 .side-panel {
   width: 280px;
@@ -8,42 +15,57 @@
   flex-direction: column;
   color: var(--chrome-text);
 }
-.side-panel.left { border-right: var(--rule-chrome); }
-.side-panel.right { width: 300px; border-left: var(--rule-chrome); }
+.side-panel.right { width: 300px; }
 .side-panel.collapsed { display: none; }
 
 /* The scene dropdown, above the layer list.
 
    A scene is the place you are in and a layer is what is in it, so the two
    read as one column rather than two panels: the bar has the panel's own
-   ground and a rule under it, and the name is set in the heading face because
-   it is the thing this sidebar is currently about. */
+   ground, and the name is set a step larger because it is the thing this
+   sidebar is currently about. */
 .scenes-bar {
   flex: none;
-  min-height: var(--hit);
-  border-bottom: var(--rule-chrome);
+  min-height: calc(var(--row) + 6px);
   display: flex;
-  align-items: stretch;
-  padding: 0 8px 0 8px;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border-bottom: var(--rule-chrome);
 }
+.scenes-bar > button:not(.scene-pick) {
+  width: var(--ctl);
+  height: var(--ctl);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.scenes-bar > button:not(.scene-pick):hover { background: var(--chrome-hover); color: var(--chrome-text); }
 .scene-pick {
   flex: 1;
   min-width: 0;
+  align-self: stretch;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--chrome-text);
   padding: 0 8px;
   text-align: left;
 }
-.scene-pick:hover { background: var(--chrome-bg); }
+.scene-pick svg { color: var(--chrome-dim); }
+.scene-pick:hover { background: var(--chrome-hover); }
 .scene-name {
   flex: 1;
   min-width: 0;
-  font: 700 13px/1 var(--font-heading);
-  letter-spacing: 0.04em;
+  font: 600 var(--text-lg)/1 var(--font-heading);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -51,38 +73,57 @@
 .scene-rename {
   flex: 1;
   min-width: 0;
-  margin: 6px 0;
-  border: 1px solid var(--color-neutral-700);
-  background: var(--chrome-bg);
+  height: var(--ctl);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--chrome-text);
-  font: 700 13px/1 var(--font-heading);
-  letter-spacing: 0.04em;
+  font: 600 var(--text-lg)/1 var(--font-heading);
   padding: 0 8px;
+  outline: none;
 }
 
-.panel-head {
-  min-height: 60px;
+/* ── section headings ───────────────────────────────────────────────────────
+   Layers, Overlays, Minimap, Strokes and Artboards: one strip. */
+.panel-head,
+.overlays-head,
+.minimap-head {
+  min-height: 28px;
   flex: none;
-  border-bottom: var(--rule-chrome);
   display: flex;
   align-items: center;
-  padding: 0 12px 0 16px;
-  gap: 8px;
+  gap: 6px;
+  padding: 0 6px 0 10px;
+  background: var(--chrome-raised);
+  color: var(--chrome-dim);
 }
-.panel-title { font-size: 11px; font-weight: 600; color: var(--chrome-text); }
+@media (pointer: coarse) {
+  .panel-head,
+  .overlays-head,
+  .minimap-head { min-height: 36px; }
+}
+.panel-title {
+  font: 600 var(--text-sm) var(--font-label);
+  color: var(--chrome-dim);
+}
 .panel-add {
   margin-left: auto;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--color-neutral-700);
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--chrome-text);
+  color: var(--chrome-dim);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
 }
-.panel-add:hover { background: var(--chrome-rule); }
-.panel-body { flex: 1; }
+.panel-add:hover { background: var(--chrome-hover); color: var(--chrome-text); }
+@media (pointer: coarse) {
+  .panel-add { width: 32px; height: 32px; }
+}
+.panel-body { flex: 1; padding: 2px 0; }
 
 /* ── the bottom of the sidebar ──────────────────────────────────────────────
    The switches for the canvas's own marks, and the map they sit on top of.
@@ -107,23 +148,19 @@
 }
 .overlays-head {
   width: 100%;
-  height: 32px;
   border: 0;
-  background: transparent;
-  color: var(--chrome-text);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px 0 10px;
+  border-radius: 0;
+  padding-left: 6px;
   text-align: left;
 }
-.overlays-head:hover { background: var(--chrome-panel); }
+.overlays-head:hover { color: var(--chrome-text); }
+.overlays-head:hover .panel-title { color: var(--chrome-text); }
 /* Pointing down when the rows are showing, and along when they are not — the
    arrow says which way the section will go, as a disclosure does anywhere. */
 .overlays-chevron {
   flex: none;
   display: flex;
-  color: var(--chrome-dim);
+  color: var(--chrome-faint);
   transition: transform 120ms ease;
 }
 .overlays.closed .overlays-chevron { transform: rotate(-90deg); }
@@ -132,7 +169,7 @@
 .overlays-body {
   display: flex;
   flex-direction: column;
-  padding-bottom: 4px;
+  padding: 2px 0 4px;
 }
 /* The whole width is the switch: nothing else is on the row, so a finger
    should be able to land anywhere. The same argument Code's layer directory
@@ -142,43 +179,42 @@
   align-items: center;
   gap: 8px;
   /* The whole row is the target, so it answers to the rule every target in
-     this app answers to rather than to the 34px the layer rows give a toggle
-     that shares its row with five other controls. */
+     this app answers to. */
   min-height: var(--hit);
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--chrome-text);
-  padding: 0 8px 0 30px;
+  padding: 0 10px 0 28px;
   text-align: left;
 }
-.overlays-row:hover { background: var(--chrome-panel); }
-/* A name, in the body face — not the uppercase micro-label the headings above
-   and below it are in. Three rows of narrow capitals under a heading in narrow
-   capitals read as three more headings rather than as things to press. */
+.overlays-row:hover { background: var(--chrome-row-hover); }
+.overlays-row svg { color: var(--chrome-dim); }
+/* A name, in the body face: the row is a thing to press, not a heading. */
 .overlays-name {
   flex: 1;
   min-width: 0;
-  font: 600 13px var(--font-heading);
+  font: 500 var(--text-md) var(--font-heading);
 }
-/* The eye the layer rows use, in the colours they use it in: the accent for
-   on, and the far end of the neutral ramp for off. */
+/* The eye the layer rows use, in the colours they use it in: ink for on,
+   faint for off. Not the accent — an eye being open is the normal state of
+   things, and the normal state should be the quiet one. */
 .overlays-eye {
   flex: none;
   display: flex;
-  color: var(--color-accent);
+  color: var(--chrome-dim);
 }
-.overlays-row.off .overlays-name { color: var(--chrome-dim); }
-.overlays-row.off .overlays-eye { color: var(--color-neutral-600); }
+.overlays-row.off .overlays-name { color: var(--chrome-faint); }
+.overlays-row.off svg,
+.overlays-row.off .overlays-eye { color: var(--chrome-faint); }
 
 /* The lattice's own two settings, directly under the Grid switch and folded
-   away with it. Indented past the eye column so they read as belonging to the
-   row above rather than as two more marks to switch; shorter than a switch
-   row, because they are adjustments rather than targets a finger has to find
-   in a hurry. See editor/grid-style.ts. */
+   away with it. Indented past the icon column so they read as belonging to
+   the row above. See editor/grid-style.ts. */
 .overlays-grid-style {
   display: flex;
   flex-direction: column;
-  padding: 0 8px 6px 30px;
+  padding: 0 10px 4px 51px;
 }
 /* Folded away with the Grid switch. The rule is needed rather than tidy:
    `display: flex` above is an author style and the browser's own
@@ -190,7 +226,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
+  min-height: 24px;
   border: 0;
   background: transparent;
   color: var(--chrome-dim);
@@ -200,16 +236,10 @@
 }
 .overlays-setting .overlays-name {
   flex: none;
-  width: 68px;
-  font: 500 10px var(--font-label);
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  width: 64px;
+  font: 400 var(--text-sm) var(--font-label);
 }
-.overlays-slider {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--color-accent);
-}
+.overlays-slider { flex: 1; min-width: 0; }
 /* Wide enough for "100%" so the slider beside it does not resize as the
    number changes — the same rule the palette's own zoom readout follows. */
 .overlays-readout {
@@ -218,16 +248,15 @@
   text-align: right;
   font: 500 10px/1 var(--font-mono);
 }
-/* The colour itself is the control: a chip that opens the picker under it.
-   Folded rather than always showing, because a full picker permanently above
-   the minimap costs the map more than a colour anybody sets once is worth. */
+/* The colour itself is the control: a chip that opens the picker under it. */
 .overlays-colour { cursor: pointer; }
 .overlays-colour:hover .overlays-name { color: var(--chrome-text); }
 .overlays-swatch-chip {
   flex: none;
   width: 22px;
   height: 14px;
-  border: 1px solid var(--chrome-rule);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
 }
 .overlays-picker { padding: 2px 0 6px; }
 
@@ -235,9 +264,8 @@
    same heading, the same full-width rows. A row is the artboard — tap to pick
    it and go to it — with its size under its name, and two small buttons on
    the end. See editor/artboards-panel.ts. */
-.artboards-row { padding-left: 30px; padding-right: 4px; cursor: pointer; }
-.artboards-row.picked { background: var(--chrome-panel); }
-.artboards-row.picked .overlays-name { color: var(--color-accent); }
+.artboards-row { padding-left: 28px; padding-right: 4px; cursor: pointer; }
+.artboards-row.picked { background: var(--chrome-row-active); }
 .artboards-text {
   flex: 1;
   min-width: 0;
@@ -248,7 +276,7 @@
 }
 .artboards-text .overlays-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .artboards-size {
-  font: 500 10px var(--font-label);
+  font: 400 var(--text-sm) var(--font-label);
   color: var(--chrome-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -256,8 +284,8 @@
 }
 .artboards-action {
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 26px;
+  height: 26px;
   border: 0;
   background: transparent;
   color: var(--chrome-dim);
@@ -266,7 +294,7 @@
   justify-content: center;
   padding: 0;
 }
-.artboards-action:hover:not(:disabled) { color: var(--chrome-text); }
+.artboards-action:hover:not(:disabled) { color: var(--chrome-text); background: var(--chrome-hover); }
 .artboards-action:disabled { opacity: 0.35; }
 .artboards-add { color: var(--chrome-dim); }
 .artboards-add-icon { display: flex; margin-left: -20px; width: 14px; }
@@ -288,19 +316,12 @@
   display: flex;
   flex-direction: column;
 }
-.minimap-head {
-  flex: none;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 16px;
-}
+.minimap-head { padding-left: 10px; }
 .minimap-zoom {
   margin-left: auto;
-  font-size: 10px;
-  color: var(--chrome-dim);
-  font-variant-numeric: tabular-nums;
+  padding-right: 4px;
+  font: 500 10px var(--font-mono);
+  color: var(--chrome-faint);
 }
 /* The map itself is the canvas ground seen from far away, which is what makes
    it read as the same place the editor is showing. */
@@ -329,23 +350,27 @@
   position: absolute;
   left: 0;
   top: 0;
-  border: 1px solid var(--color-accent);
-  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--chrome-bg) 20%, transparent);
+  border: 1px solid var(--chrome-panel);
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--chrome-bg) 22%, transparent);
   pointer-events: none;
 }
 
-/* Layer rows */
+/* ── layer rows ─────────────────────────────────────────────────────────── */
 .layer-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 8px 8px 6px;
-  min-height: 64px;
-  border-bottom: var(--rule-chrome);
+  gap: 2px;
+  padding: 4px 4px 4px 2px;
+  min-height: calc(var(--row) + 12px);
   background: transparent;
 }
-.layer-row.active { background: var(--chrome-rule); }
+.layer-row:hover { background: var(--chrome-row-hover); }
+.layer-row.active { background: var(--chrome-row-active); }
 .layer-row.locked .layer-name { color: var(--chrome-dim); }
+/* A hidden layer is still listed and still yours; it is set back, the way an
+   outliner sets back what is not being drawn. */
+.layer-row.unseen .layer-name,
+.layer-row.unseen .layer-kind { color: var(--chrome-faint); }
 
 /* One element per layer, holding its row and whatever is listed under it, so
    a reorder moves the whole thing. */
@@ -357,12 +382,11 @@
    rather than a scroll of the panel behind it. */
 .layer-grip {
   flex: none;
-  margin-left: 2px;
-  width: 26px;
-  min-height: 40px;
+  width: 20px;
+  min-height: 28px;
   border: 0;
   background: transparent;
-  color: var(--color-neutral-500);
+  color: var(--chrome-faint);
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -371,8 +395,16 @@
   cursor: grab;
   touch-action: none;
 }
-.layer-grip:hover { color: var(--chrome-text); background: var(--chrome-rule); }
+.layer-grip:hover { color: var(--chrome-text); }
 .layer-grip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+/* With a pointer the handle waits for the row to be under it: six dots on
+   every row is a column of texture down the edge of the list. A finger has
+   no hover to wait for, so on a touch screen it stays. */
+@media (hover: hover) {
+  .layer-grip { opacity: 0; }
+  .layer-row:hover .layer-grip,
+  .layer-grip:focus-visible { opacity: 1; }
+}
 
 .panel-body.reordering { cursor: grabbing; }
 .panel-body.reordering .layer-grip { cursor: grabbing; }
@@ -382,21 +414,20 @@
 .panel-body.reordering .layer-item { pointer-events: none; }
 
 .layer-group.dragging {
-  opacity: 0.9;
-  background: var(--chrome-rule);
+  background: var(--chrome-raised);
   box-shadow: var(--shadow-md);
 }
-.layer-group.dragging .layer-row { border-bottom-color: var(--color-accent); }
+.layer-group.dragging .layer-row { box-shadow: inset 0 -2px 0 var(--color-accent); }
 
 /* The collapse arrow, first on the row: it is about the rows underneath, so
    it stands at the left edge they are indented from. */
 .layer-disclose {
   flex: none;
-  width: 22px;
-  height: 34px;
+  width: 20px;
+  height: 28px;
   border: 0;
   background: transparent;
-  color: var(--color-neutral-500);
+  color: var(--chrome-faint);
   padding: 0;
   display: flex;
   align-items: center;
@@ -406,42 +437,41 @@
 .layer-disclose svg { transition: transform 120ms ease; }
 .layer-disclose.open svg { transform: rotate(90deg); }
 
-.layer-main { flex: 1; min-width: 0; padding-left: 2px; }
+.layer-main { flex: 1; min-width: 0; padding-left: 4px; }
 
 /* Contents of an expanded layer. */
 .layer-item {
   width: 100%;
-  min-height: 38px;
+  min-height: var(--row);
   display: flex;
   align-items: center;
   gap: 8px;
   /* Indented to sit under the layer's name, past the collapse arrow and the
-     kind glyph that now make up the row's left gutter. */
-  padding: 0 10px 0 52px;
+     kind glyph that make up the row's left gutter. */
+  padding: 0 10px 0 48px;
   border: 0;
-  border-bottom: var(--rule-chrome);
+  border-radius: 0;
   background: transparent;
-  color: var(--color-neutral-300);
-  font: 500 13px var(--font-body);
+  color: var(--chrome-dim);
+  font: 400 var(--text-md) var(--font-body);
   text-align: left;
 }
-.layer-item:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.layer-item:hover { background: var(--chrome-row-hover); color: var(--chrome-text); }
 .layer-item.active {
-  background: var(--chrome-rule);
+  background: var(--chrome-row-active);
   color: var(--chrome-text);
-  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 .layer-item.empty {
-  color: var(--color-neutral-600);
-  font-size: 10px;
+  color: var(--chrome-faint);
+  font-size: var(--text-sm);
   cursor: default;
 }
-.layer-item.empty:hover { background: transparent; color: var(--color-neutral-600); }
+.layer-item.empty:hover { background: transparent; color: var(--chrome-faint); }
 
 /* A placed PSD is carried to another layer by its own grip. The row keeps
-   the indent it had — the grip takes the first 22px of the 52px gutter and
-   the icon lands exactly where it did without one. */
-.layer-item.has-grip { padding-left: 30px; }
+   the indent it had — the grip takes the first 22px of the gutter and the
+   icon lands exactly where it did without one. */
+.layer-item.has-grip { padding-left: 26px; }
 .layer-item-grip {
   flex: none;
   width: 22px;
@@ -450,10 +480,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--color-neutral-600);
+  color: var(--chrome-faint);
   cursor: grab;
   /* What makes a drag on the iPad a move rather than a scroll of the panel. */
   touch-action: none;
+}
+@media (hover: hover) {
+  .layer-item-grip { opacity: 0; }
+  .layer-item:hover .layer-item-grip { opacity: 1; }
 }
 .layer-item:hover .layer-item-grip { color: var(--chrome-text); }
 /* A placed PSD's name, typed in place like a layer's — see `nameField` in
@@ -462,9 +496,10 @@
 .layer-item-name {
   flex: 1;
   min-width: 0;
-  height: 24px;
-  padding: 0 2px;
+  height: 22px;
+  padding: 0 4px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   font: inherit;
   color: inherit;
@@ -472,7 +507,11 @@
   -webkit-user-select: text;
   user-select: text;
 }
-.layer-item-name:focus { background: var(--chrome-bg); color: var(--chrome-text); }
+.layer-item-name:focus {
+  background: var(--chrome-field);
+  color: var(--chrome-text);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
 
 /* Carrying one. The rows do not move as the finger travels — there is one
    legal drop per layer rather than a position in a list — so the destination
@@ -481,15 +520,15 @@
 .panel-body.carrying .layer-item,
 .panel-body.carrying .layer-row > * { pointer-events: none; }
 .layer-group.drop-into {
-  background: var(--chrome-rule);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  background: var(--chrome-row-active);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 /* A member of a group, under the group's own row. The indent is the whole of
    how a group is drawn — it has no mark on the canvas, because the outline
    round it is the outline any multi-selection gets. See lib/groups.ts. */
-.layer-item.nested { padding-left: 66px; }
-.layer-item.nested.has-grip { padding-left: 44px; }
+.layer-item.nested { padding-left: 64px; }
+.layer-item.nested.has-grip { padding-left: 42px; }
 
 .layer-item-label {
   flex: 1;
@@ -500,17 +539,18 @@
 }
 .layer-item-detail {
   flex: none;
-  font-size: 10px;
-  color: var(--color-neutral-600);
+  font-size: var(--text-sm);
+  color: var(--chrome-faint);
 }
 
 .layer-name {
   width: 100%;
-  height: 24px;
-  padding: 0 2px;
+  height: 20px;
+  padding: 0 4px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  font: 600 14px var(--font-heading);
+  font: 500 var(--text-lg) var(--font-heading);
   color: var(--chrome-text);
   outline: none;
   /* The shell suppresses selection globally so a drag on chrome never
@@ -519,112 +559,44 @@
   -webkit-user-select: text;
   user-select: text;
 }
-.layer-name:focus { background: var(--chrome-bg); }
-.layer-meta { font-size: 10px; color: var(--chrome-dim); margin-top: 4px; }
+.layer-name:focus {
+  background: var(--chrome-field);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+.layer-meta {
+  padding-left: 4px;
+  margin-top: 1px;
+  font-size: var(--text-sm);
+  color: var(--chrome-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
+/* The eye and the lock. Ink is the state worth seeing — a layer drawn, a
+   layer locked — and faint is the one that is not: a hidden eye, an open
+   padlock. Neither is ever the accent; that is the tool in hand. */
 .layer-toggle {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   border: 0;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--chrome-text);
+  color: var(--chrome-dim);
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
+  padding: 0;
 }
-.layer-toggle:hover { background: var(--chrome-rule); }
-.layer-toggle.off { color: var(--color-neutral-600); }
-.layer-toggle.on { color: var(--color-accent); }
-
-
-/* ── the directory, which is what Code mode makes of this column ───────────
-
-   Same tree, handles off, one level deeper. See `editor/layer-directory.ts`
-   for why: the game is running over the canvas, so there is nothing in here
-   to rename, hide, lock or carry anywhere — what is wanted beside the code is
-   the names, and the one thing under a placed PSD that Draw's list
-   deliberately does not show is what is inside the file. */
-
-/* The `+` goes, because a layer added here would land on a scene behind a
-   running game. `display: flex` on the button outranks the UA's own
-   `[hidden] { display: none }`, so hiding it takes a rule of its own — which
-   is the sort of thing that looks like it works until somebody opens Code. */
-.panel-add[hidden] { display: none; }
-
-/* The whole row is the disclosure. In Draw it is a 22px arrow because five
-   other controls are on the row; with those gone, a finger should be able to
-   land anywhere. */
-.layer-row.browse {
-  width: 100%;
-  border-left: 0;
-  border-right: 0;
-  border-top: 0;
-  font: inherit;
-  text-align: left;
-  color: inherit;
-  /* A tapped row is not a field, so the rows can keep the panel's own
-     min-height without the 64px a rename field needs. */
-  min-height: 52px;
-}
-.layer-row.browse:hover { background: var(--chrome-rule); }
-
-/* The name, as text rather than as the input it is in Draw. */
-.layer-name.static {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.layer-toggle:hover { background: var(--chrome-hover); color: var(--chrome-text); }
+.layer-toggle.off,
+.layer-toggle.lock { color: var(--chrome-faint); }
+.layer-toggle.lock.on { color: var(--chrome-text); }
+@media (pointer: coarse) {
+  .layer-toggle { width: 34px; height: 34px; }
 }
 
-/* A placed PSD's row, which opens onto the file's own stack. The chevron
-   takes the first 22px of the 52px gutter, exactly as the drag grip does in
-   Draw, so the label lands where it always does. */
-.layer-item.browse { padding-left: 30px; }
-.layer-item.browse .layer-disclose { width: 22px; margin-left: -22px; }
-
-/* And a row that is only a row: a fill, a point, a boundary, a backdrop.
-   Nothing to open and nothing to select, so nothing lights up under the
-   pointer either. */
-.layer-item.static { cursor: default; }
-.layer-item.static:hover {
-  background: transparent;
-  color: var(--color-neutral-300);
-}
-
-/* One layer inside a PSD. Indented past the file's own row and again by its
-   depth in the stack, which `layer-directory.ts` writes inline — the nesting
-   is the file's, not a number this stylesheet could know. */
-.psd-layer-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding-right: 10px;
-  border-bottom: var(--rule-chrome);
-  color: var(--color-neutral-400);
-  font: 500 12px var(--font-body);
-}
-.psd-layer-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.psd-layer-kind { flex: none; font-size: 10px; color: var(--color-neutral-600); }
-/* A layer whose eye is off in the file. It is still in the document and still
-   exported — hidden is about drawing — so it is dimmed rather than left out. */
-.psd-layer-row.hidden-layer { color: var(--color-neutral-600); }
-.psd-layer-row.empty { color: var(--color-neutral-600); font-style: italic; }
-
-/* The point of a lookup is copying what you looked up. The shell suppresses
-   selection globally so a drag on chrome never highlights it; this column is
-   the one place that is the wrong default, and only while it is a directory. */
-.side-panel.left.browsing .panel-body {
-  user-select: text;
-  -webkit-user-select: text;
-}
 
 /* Narrow windows: sidebars overlay the canvas instead of squeezing it. */
 @media (max-width: 900px) {
@@ -633,46 +605,8 @@
   .side-panel.right { right: 0; }
 }
 
-
-/* ── the three kinds of layer ───────────────────────────────────────────────
-
-   A layer says what it is for before it says what it is called: object,
-   pattern or background. A glyph rather than a word — the three read apart at
-   a glance, the column is narrow, and the inspector says it in words. */
-.layer-kind {
-  flex: none;
-  width: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-neutral-600);
-}
-.layer-row.active .layer-kind { color: var(--chrome-text); }
-.layer-row.kind-pattern .layer-kind,
-.layer-row.kind-background .layer-kind { color: var(--color-accent-300); }
-
-/* A row for something that is wrong rather than something that is there: a
-   PSD on an object layer with no anchor mark at the root of its stack. Greyed
-   rather than hidden or struck through — the file is placed and it draws, and
-   what the row is saying is that one thing about it is missing. */
-.layer-item.warned .layer-item-label { color: var(--color-neutral-600); }
-.layer-item-warning {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: var(--color-accent-300);
-}
-
-/* New Background, at the foot of a background layer's own list. Nothing on
-   one can be put down by aiming at the canvas, so the button lives where the
-   thing it makes will be listed. */
-.layer-item.add {
-  justify-content: center;
-  padding-left: 52px;
-  color: var(--color-accent-300);
-  font: 600 11px var(--font-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
+/* Code mode's directory takes the `+` away: a layer added there would land
+   on a scene behind a running game. `display: flex` on the button outranks
+   the UA's own `[hidden] { display: none }`, so hiding it takes a rule of its
+   own. The rest of the directory is `layer-directory.css`. */
+.panel-add[hidden] { display: none; }

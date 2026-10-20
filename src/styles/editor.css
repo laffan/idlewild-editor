@@ -76,21 +76,58 @@
   padding-top: var(--safe-top);
   /* A windowed iPad's controls sit over this corner, and the back arrow is
      the first thing in it — see --window-controls. */
-  padding-left: max(var(--safe-left), var(--window-controls));
-  padding-right: var(--safe-right);
+  padding-left: max(calc(var(--safe-left) + 6px), var(--window-controls));
+  padding-right: calc(var(--safe-right) + 6px);
   display: flex;
-  align-items: stretch;
+  align-items: center;
+  gap: 4px;
   background: var(--chrome-bg);
-  border-bottom: var(--rule-chrome);
+  /* No rule under it: the bar is the darkest surface on screen and the
+     sidebars a step lighter, and the step is the edge. */
   /* At the bar's height there is nothing to wrap onto a second line, and a
      long project name must not push the mode toggle off the end. */
   overflow: hidden;
 }
 
+/* Every button in the bar is the same inset square: a target the bar's own
+   height would be a slab, and a row of slabs divided by rules is what made
+   this bar read as a table. */
+.icon-btn,
+.header-history,
+.header-menu {
+  width: calc(var(--bar-h) - 10px);
+  height: calc(var(--bar-h) - 10px);
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.icon-btn:hover,
+.header-history:hover:not(:disabled),
+.header-menu:hover,
+.header-menu[aria-expanded="true"] {
+  background: var(--chrome-hover);
+  color: var(--chrome-text);
+}
+/* Nothing to go back to. Dimmed rather than hidden: a control that comes and
+   goes is harder to aim at than one that is simply not available yet, and on
+   a touch screen aim is the whole cost. */
+.header-history:disabled {
+  color: var(--chrome-faint);
+  opacity: 0.6;
+  cursor: default;
+}
+
 .header-name {
   display: flex;
   align-items: center;
-  font: 600 14px var(--font-heading);
+  margin-left: 2px;
+  font: 600 var(--text-lg) var(--font-heading);
   color: var(--chrome-text);
   min-width: 0;
   overflow: hidden;
@@ -101,116 +138,92 @@
   display: flex;
   align-items: center;
   flex: none;
-  font-size: 10px;
-  color: var(--chrome-dim);
-  border-left: var(--rule-chrome);
-  padding: 0 12px;
-  margin-left: 12px;
+  font-size: var(--text-sm);
+  color: var(--chrome-faint);
+  padding: 0 8px;
 }
 /* Takes the slack, so everything after it is pinned to the right edge. */
 .header-spacer { flex: 1; min-width: 8px; }
 
-/* Undo and redo, immediately before the Edit/Play toggle. Two square hit
-   targets of the bar's own height, so they are a finger's width on an iPad
-   without the header growing to accommodate them. */
+/* Undo and redo, immediately before the Edit/Play toggle, held a little
+   apart from it: they are about the document, the toggle about the view. */
 .header-history-pair {
   display: flex;
   flex: none;
-  border-left: var(--rule-chrome);
-}
-.header-history {
-  width: var(--bar-h);
-  flex: none;
-  border: 0;
-  background: transparent;
-  color: var(--chrome-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-.header-history:hover:not(:disabled) { background: var(--chrome-rule); }
-/* Nothing to go back to. Dimmed rather than hidden: a control that comes and
-   goes is harder to aim at than one that is simply not available yet, and on
-   a touch screen aim is the whole cost. */
-.header-history:disabled {
-  color: var(--chrome-rule);
-  cursor: default;
+  gap: 2px;
+  margin-right: 8px;
 }
 
-.icon-btn {
-  width: var(--bar-h);
-  border: 0;
-  background: transparent;
-  color: var(--chrome-text);
+/* Draw / Code / Play: one segmented switch in a trough. The chosen mode is a
+   lighter surface rather than the accent — it is where you are, not
+   something that is switched on, and a slab of the accent in the corner of
+   the screen was the loudest thing in the app. */
+.mode-toggle {
   display: flex;
-  align-items: center;
-  justify-content: center;
   flex: none;
-  padding: 0;
+  gap: 2px;
+  padding: 2px;
+  margin-right: 6px;
+  border-radius: var(--radius-lg);
+  background: var(--chrome-raised);
 }
-.icon-btn:hover { background: var(--chrome-rule); }
-
-.mode-toggle { display: flex; flex: none; }
 .mode-btn {
-  min-width: 76px;
-  padding: 0 16px;
+  min-width: 64px;
+  height: calc(var(--bar-h) - 14px);
+  padding: 0 14px;
   border: 0;
-  border-left: var(--rule-chrome);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--chrome-dim);
-  font: 600 13px var(--font-heading);
+  font: 500 var(--text-md) var(--font-heading);
   text-align: center;
 }
-.mode-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
-.mode-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
-
-.header-menu {
-  width: var(--bar-h);
-  flex: none;
-  border: 0;
-  border-left: var(--rule-chrome);
-  background: transparent;
+.mode-btn[aria-pressed="true"] {
+  background: var(--chrome-selected);
   color: var(--chrome-text);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  box-shadow: var(--shadow-sm);
 }
-.header-menu:hover,
-.header-menu[aria-expanded="true"] { background: var(--chrome-rule); }
+.mode-btn:not([aria-pressed="true"]):hover {
+  background: var(--chrome-hover);
+  color: var(--chrome-text);
+}
 
-/* Floating action bar over a grid selection */
+/* Floating action bar over a grid selection. A rounded strip of the frame's
+   own dark, its buttons inset in it, and the first one — the action the
+   selection was made for — the one place the accent runs. */
 .selection-actions {
   position: absolute;
   display: flex;
-  border: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-lg);
   background: var(--chrome-bg);
   box-shadow: var(--shadow-md);
   z-index: 6;
 }
 .selection-actions button {
-  min-height: 52px;
-  padding: 0 18px;
+  min-height: calc(var(--ctl) + 4px);
+  padding: 0 12px;
   border: 0;
-  border-left: var(--rule-chrome);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--chrome-text);
-  font: 600 14px var(--font-heading);
+  font: 500 var(--text-md) var(--font-heading);
   text-align: left;
 }
 .selection-actions button:first-child {
-  border-left: 0;
   background: var(--color-accent);
   color: #fff;
 }
-.selection-actions button:not(:first-child):hover { background: var(--chrome-rule); }
+.selection-actions button:first-child:hover { background: var(--color-accent-600); }
+.selection-actions button:not(:first-child):hover { background: var(--chrome-hover); }
 .selection-size {
-  border-left: var(--rule-chrome);
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  font-size: 10px;
+  padding: 0 8px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
 }
 
@@ -226,64 +239,74 @@
 .canvas-float {
   position: absolute;
   display: flex;
-  border: 0;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-lg);
   background: var(--chrome-bg);
   box-shadow: var(--shadow-md);
   z-index: 6;
 }
 .canvas-float.hidden { display: none; }
 .canvas-float button {
-  min-height: 44px;
-  padding: 0 16px;
+  min-height: calc(var(--ctl) + 4px);
+  padding: 0 12px;
   border: 0;
-  border-left: var(--rule-chrome);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--chrome-text);
-  font: 600 13px var(--font-heading);
+  font: 500 var(--text-md) var(--font-heading);
 }
-.canvas-float button:first-child { border-left: 0; }
-.canvas-float button:hover { background: var(--chrome-rule); }
+.canvas-float button:hover { background: var(--chrome-hover); }
 .canvas-float .float-go { background: var(--color-accent); color: #fff; }
 .canvas-float .float-go:hover { background: var(--color-accent-600); }
 /* Two corners are a line, and the button is about to be useful again — so it
    greys out where it stands rather than appearing at the third tap and moving
    the other two under your finger. */
 .canvas-float .float-go[disabled] {
-  background: var(--chrome-rule);
-  color: var(--chrome-dim);
+  background: var(--chrome-control);
+  color: var(--chrome-faint);
 }
-.canvas-float .float-go[disabled]:hover { background: var(--chrome-rule); }
+.canvas-float .float-go[disabled]:hover { background: var(--chrome-control); }
 .canvas-float .float-note {
-  border-left: var(--rule-chrome);
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  font-size: 10px;
+  padding: 0 8px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
 }
 
-/* Edge toggles.
+/* Edge toggles: a slim tab against the canvas's edge, the sidebar's own grey,
+   so it reads as a handle on the panel it folds rather than as a black slab
+   standing on the work.
+
    Anchored below the tool rail rather than at dead centre: the rail is four
-   56px items starting 16px down, so a centred toggle collided with its last
-   button on anything short. The floor came up when the ink's tools left for
-   the bottom corner. */
+   items starting 16px down, so a centred toggle collided with its last button
+   on anything short. */
 .edge-toggle {
   position: absolute;
   top: max(50%, 256px);
   transform: translateY(-50%);
-  width: 26px;
-  height: 88px;
+  width: 14px;
+  height: 56px;
   border: 0;
-  background: var(--chrome-bg);
-  color: var(--chrome-text);
+  background: var(--chrome-panel);
+  color: var(--chrome-faint);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   z-index: 6;
+  opacity: 0.85;
 }
-.edge-toggle.left { left: 0; border-left: 0; }
-.edge-toggle.right { right: 0; border-right: 0; }
+.edge-toggle:hover { color: var(--chrome-text); opacity: 1; }
+.edge-toggle svg { width: 12px; height: 12px; }
+.edge-toggle.left { left: 0; border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.edge-toggle.right { right: 0; border-radius: var(--radius-md) 0 0 var(--radius-md); }
+@media (pointer: coarse) {
+  .edge-toggle { width: 22px; height: 72px; }
+}
 
 /* Terminal drawer */
 .terminal {
@@ -303,81 +326,76 @@
 .terminal-head {
   display: flex;
   align-items: center;
-  height: var(--bar-h);
+  height: calc(var(--bar-h) - 10px);
 }
 .terminal-toggle {
   flex: 1;
   min-width: 0;
   height: 100%;
   border: 0;
+  border-radius: 0;
   background: transparent;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 16px;
+  gap: 8px;
+  padding: 0 12px;
   color: var(--chrome-dim);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: 500;
 }
+.terminal-toggle:hover { color: var(--chrome-text); }
 .terminal-filters {
   flex: none;
   display: flex;
-  gap: 8px;
-  padding: 0 16px;
+  gap: 2px;
+  padding: 0 8px;
 }
 .terminal-filters.hidden { display: none; }
 .terminal-filter {
-  min-height: 26px;
-  padding: 0 12px;
-  border: var(--rule-chrome);
+  min-height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--chrome-dim);
   font-family: var(--font-label);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: var(--text-sm);
 }
+.terminal-filter:hover { color: var(--chrome-text); }
 .terminal-filter[aria-pressed="true"] {
-  background: var(--chrome-text);
-  border-color: var(--chrome-text);
-  color: var(--chrome-bg);
+  background: var(--chrome-control);
+  color: var(--chrome-text);
 }
 /* Clear is an action, not a third filter, so it never wears the pressed state
    and is set apart from the two that do. */
-.terminal-clear {
-  margin-left: 4px;
-  border-color: transparent;
-}
-.terminal-clear:hover { color: var(--chrome-text); }
+.terminal-clear { margin-left: 8px; }
 .terminal-body {
   /* Starting height; the divider above writes an inline height over this. */
   height: 186px;
   min-height: 80px;
   overflow: auto;
   border-top: var(--rule-chrome);
-  padding: 12px 16px 16px;
+  padding: 6px 12px 10px;
 }
 .terminal-line {
   display: flex;
   gap: 12px;
-  padding: 5px 0;
+  padding: 2px 0;
   font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.3;
+  font-size: var(--text-md);
+  line-height: 1.45;
 }
-.terminal-time { color: var(--color-neutral-600); flex: none; }
+.terminal-time { color: var(--chrome-faint); flex: none; }
 .terminal-level {
   flex: none;
-  width: 52px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 11px;
+  width: 44px;
+  font-size: var(--text-sm);
   padding-top: 1px;
 }
-.terminal-level.log { color: var(--color-neutral-400); }
-.terminal-level.info { color: var(--color-neutral-500); }
-.terminal-level.warn { color: var(--color-accent-400); }
-.terminal-level.error { color: var(--color-accent); }
+.terminal-level.log { color: var(--chrome-dim); }
+.terminal-level.info { color: var(--chrome-dim); }
+.terminal-level.warn { color: var(--color-warn); }
+.terminal-level.error { color: var(--color-danger); }
 
 /* A line that knows where it was written says so by being the way back to
    it. The chip is the whole target: it is already the one fixed-width thing
@@ -388,9 +406,7 @@ button.terminal-level {
   background: transparent;
   font: inherit;
   text-align: left;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-size: 11px;
+  font-size: var(--text-sm);
 }
 button.terminal-level.linked {
   text-decoration: underline;
@@ -400,9 +416,9 @@ button.terminal-level.linked {
 button.terminal-level.linked:hover { color: var(--chrome-text); }
 
 /* ── A logged value, opened a level at a time ──────────────────────────────
-   The palette is the system's own: warm accent for the literals you read,
-   neutrals for the structure around them. One hue, as everywhere else, with
-   weight and italics doing the work a second hue would do elsewhere. */
+   Neutrals for the structure, and a muted straw for the literals you read —
+   not the accent, which on a console line would read as an error. Weight
+   and italics do the rest. */
 .lt { display: inline; }
 .lt-head {
   border: 0;
@@ -437,14 +453,14 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 }
 .lt-row { white-space: pre-wrap; overflow-wrap: anywhere; }
 .lt-key { color: var(--color-neutral-400); }
-.lt-string { color: var(--color-accent-400); }
+.lt-string { color: #c9b98a; }
 .lt-number { color: var(--color-neutral-100); }
 .lt-bool { color: var(--color-neutral-100); font-weight: 600; }
 .lt-empty { color: var(--color-neutral-600); font-style: italic; }
 .lt-other { color: var(--color-neutral-500); }
 .lt-more { color: var(--color-neutral-600); font-style: italic; }
 .terminal-message {
-  color: var(--color-neutral-300);
+  color: var(--chrome-text);
   white-space: pre-wrap;
   /* Data URLs and stack frames are single unbreakable tokens; without this
      they run off the edge instead of wrapping. */

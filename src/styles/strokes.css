@@ -5,13 +5,15 @@
 .strokes-tray { border-top: 0; border-bottom: var(--rule-chrome); }
 .strokes-tray[hidden] { display: none; }
 .strokes-tray .overlays-body { max-height: 30vh; overflow-y: auto; }
+/* The count is a warning — ink that will not export — so it takes the
+   warning's colour rather than the accent. */
 .strokes-total {
   margin-left: auto;
-  font: 600 11px var(--font-label);
-  color: var(--color-accent);
+  padding-right: 4px;
+  font: 600 var(--text-sm) var(--font-label);
+  color: var(--color-warn);
 }
-.strokes-row { padding-left: 30px; }
-.strokes-row.picked { background: var(--chrome-panel); }
-.strokes-row.picked .overlays-name { color: var(--color-accent); }
+.strokes-row { padding-left: 28px; }
+.strokes-row.picked { background: var(--chrome-row-active); }
 .strokes-icon { flex: none; display: flex; color: var(--chrome-dim); }
 .side-panel.left.browsing .strokes-tray { display: none; }

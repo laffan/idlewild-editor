@@ -5,9 +5,6 @@ import { h } from "./dom";
 export interface SheetOptions {
   title: string;
   subtitle?: string;
-  /** Light sheets sit on the home screen; the default dark ones sit over the
-   *  editor canvas. */
-  light?: boolean;
   /** Tapping the backdrop dismisses unless this is false. */
   dismissable?: boolean;
   width?: number;
@@ -55,7 +52,7 @@ export function openSheet(options: SheetOptions): SheetHandle {
   const panel = h(
     "div",
     {
-      class: options.light ? "sheet light" : "sheet",
+      class: "sheet",
       style: options.width ? { maxWidth: `${options.width}px` } : undefined,
       role: "dialog",
       "aria-modal": "true",
@@ -104,10 +101,9 @@ export function confirmSheet(
   title: string,
   message: string,
   confirmLabel = "Delete",
-  light = true,
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const sheet = openSheet({ title, light, width: 480 });
+    const sheet = openSheet({ title, width: 480 });
     sheet.body.appendChild(
       h("div", { style: { font: "500 15px var(--font-body)" }, text: message }),
     );
@@ -146,12 +142,10 @@ export function chooseSheet(options: {
   title: string;
   message: string;
   choices: Array<{ id: string; label: string; primary?: boolean }>;
-  light?: boolean;
 }): Promise<string | null> {
   return new Promise((resolve) => {
     const sheet = openSheet({
       title: options.title,
-      light: options.light,
       width: 520,
     });
     sheet.body.appendChild(
@@ -199,12 +193,10 @@ export function promptSheet(options: {
   label: string;
   value?: string;
   confirmLabel?: string;
-  light?: boolean;
 }): Promise<string | null> {
   return new Promise((resolve) => {
     const sheet = openSheet({
       title: options.title,
-      light: options.light,
       width: 520,
     });
 

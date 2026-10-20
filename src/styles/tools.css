@@ -17,6 +17,10 @@
   background: var(--chrome-bg);
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   z-index: 5;
 }
 /* The second column, standing on the bottom edge rather than hanging from the
@@ -31,28 +35,45 @@
   bottom: 16px;
   background: transparent;
   gap: 5px;
+  padding: 0;
+  box-shadow: none;
 }
-.tool-group { display: flex; flex-direction: column; background: var(--chrome-bg); }
+.tool-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: var(--chrome-bg);
+  box-shadow: var(--shadow-md);
+}
 .tool-group:empty { display: none; }
+/* A square inset in the column, rounded, with no rule between it and the
+   next: the column is one object, and the rules made it eleven. */
 .tool-btn {
   /* `relative` for the eraser's slash, which is a pseudo-element over the
      icon rather than a second glyph — see `.tool-btn.erasing`; and for the
      tooltip, which hangs off the button's right edge. */
   position: relative;
-  width: 45px;
-  height: 45px;
+  width: 32px;
+  height: 32px;
   border: 0;
-  border-top: 1px solid var(--chrome-rule);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--chrome-dim);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
 }
-.tool-btn:first-child { border-top: 0; }
+/* The tool in hand: the one control on screen that is always in the accent,
+   because which tool is up decides what every press on the canvas does. */
 .tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
-.tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
-.tool-btn[disabled] { opacity: 0.45; }
+.tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-hover); color: var(--chrome-text); }
+.tool-btn[disabled] { opacity: 0.4; }
+@media (pointer: coarse) {
+  .tool-btn { width: 42px; height: 42px; }
+}
 /* A withheld tool, belt and braces. The rail takes one out of the DOM rather
    than hiding it — see `ToolRail.setOffered`, which explains why — but the
    rule that made hiding *not work* is right above this one: `display: flex`
@@ -77,7 +98,7 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 24px;
+  width: 20px;
   height: 2px;
   background: var(--color-accent);
   transform: translate(-50%, -50%) rotate(45deg);
@@ -94,17 +115,19 @@
    tooltip until the next tap somewhere else. */
 .tool-tip {
   position: absolute;
-  left: calc(100% + 8px);
+  left: calc(100% + 10px);
   top: 50%;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  border-radius: 6px;
-  background: var(--color-neutral-900);
-  color: #fff;
-  font: 500 11px/1 var(--font-body);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--chrome-edge);
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  box-shadow: var(--shadow-md);
+  font: 500 var(--text-sm)/1 var(--font-body);
   white-space: nowrap;
   pointer-events: none;
   visibility: hidden;
@@ -113,7 +136,7 @@
 }
 .tool-tip kbd {
   font: 500 10px/1 var(--font-mono);
-  color: rgb(255 255 255 / 0.6);
+  color: var(--chrome-dim);
 }
 @media (hover: hover) {
   .tool-btn:hover .tool-tip {

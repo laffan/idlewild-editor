@@ -32,27 +32,23 @@ repository branch is already the place the site goes, and publishing into
 `public_html/nine-roads/` when the target said `public_html/` would be this
 code naming a directory somebody else owns.
 
-## An options vocabulary, which is not this app's design system
+## An options vocabulary, for pages of settings
 
-The Logins sheet is a settings page, and the modernist system the rest of the
-chrome is drawn in — flat, zero-radius, 2px rules, uppercase micro-labels in
-Archivo Narrow — is the wrong tool for one. That system is right for chrome
-standing over a canvas, where everything is a control and nothing is prose. A
-settings page is a list you run your eye down.
+The Logins sheet is a settings page: a list you run your eye down rather than
+a panel you work in. `styles/options.css` lays the app's own controls out for
+that. It uses the same corners, greys, segmented trough and switch as the rest
+of the chrome (see [The interface](interface.md)), and adds two things of its
+own:
 
-So `styles/options.css` departs, on three counts and only three:
-
-- **Rounded groups.** `--radius-md` is `0` everywhere else in this app. A
-  settings list reads as cards of related rows, and the corner is what makes a
-  group look like a group rather than like four rules in a row.
-- **Sentence case in the body face.** No uppercase `--font-label`. A row's
-  title is a name, and a name in narrow capitals is a heading.
+- **Cards.** A settings list reads as groups of related rows, and the raised
+  card is what makes a group look like a group.
 - **Two lines to a row.** A title and a quiet second line, rather than a key
   column and a value. The second line is where a row says what it is *for*,
   which is the thing a settings list exists to tell you.
 
-Everything else is the system's — the palette, the body face, the accent —
-because a settings page that is a different *colour* is a different app.
+It used to depart from the rest of the app on corners and on sentence case.
+Since the interface refresh the rest of the app has both, so the only
+differences left are the two above.
 
 **Nothing in it names a feature.** The classes are groups, rows, leads, trails;
 `lib/options-list.ts` is the matching set of builders, so a page hands it rows

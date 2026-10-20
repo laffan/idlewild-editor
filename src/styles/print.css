@@ -91,7 +91,7 @@
 .print-export-formats .opt-seg-btn:hover:not(:disabled) { background: var(--chrome-panel); }
 .print-export-formats .opt-seg-btn[aria-pressed="true"] {
   color: var(--chrome-text);
-  background: var(--chrome-rule);
+  background: var(--chrome-hover);
 }
 
 .print-export-body {
@@ -141,9 +141,9 @@
   font: 500 11px var(--font-body);
   cursor: pointer;
 }
-.print-export-thumb:hover { background: var(--chrome-rule); }
+.print-export-thumb:hover { background: var(--chrome-hover); }
 .print-export-thumb.selected {
-  border-color: var(--color-accent-400);
+  border-color: var(--chrome-text);
   color: var(--chrome-text);
 }
 .print-export-thumb canvas {
@@ -174,12 +174,12 @@
   height: 4px;
   border-radius: 2px;
   overflow: hidden;
-  background: var(--chrome-rule);
+  background: var(--chrome-hover);
 }
 .print-progress-fill {
   height: 100%;
   width: 0;
-  background: var(--color-accent-400);
+  background: var(--color-accent);
   transition: width 0.2s ease;
 }
 /* Compositor-only, so it keeps moving while the main thread is busy. */
@@ -198,9 +198,9 @@
   margin: auto;
   max-width: 420px;
   padding: 18px 20px;
-  border: 1px solid var(--color-accent-700);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--color-accent-900) 55%, var(--chrome-panel));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 50%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--color-danger-soft);
   color: var(--chrome-text);
   font-size: 13px;
 }
@@ -236,4 +236,4 @@
   color: var(--chrome-text);
 }
 .code-bar-btn.code-run[hidden] { display: none; }
-.code-bar-btn.code-run.is-stop { color: var(--color-accent-400); }
+.code-bar-btn.code-run.is-stop { color: var(--color-danger); }

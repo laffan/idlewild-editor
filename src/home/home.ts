@@ -503,7 +503,7 @@ function item(
 }
 
 function openRename(meta: ProjectMeta, reload: () => Promise<void>): void {
-  const sheet = openSheet({ title: "Rename project", light: true, width: 480 });
+  const sheet = openSheet({ title: "Rename project", width: 480 });
   const input = h("input", { class: "input", value: meta.name, maxlength: "60" });
   sheet.body.appendChild(input);
 

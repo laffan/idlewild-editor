@@ -1,6 +1,7 @@
-/* What stands at the head of a row under a layer in the left sidebar: a
-   colour chip for a fill or a backdrop, a picture for a placed PSD, and an
-   icon for everything else. Out of panels.css, which is at the line limit. */
+/* What stands at the head of a row in the left sidebar: a layer's kind, and
+   under a layer a colour chip for a fill or a backdrop, a picture for a
+   placed PSD, and an icon for everything else. Out of panels.css, which is
+   at the line limit. */
 
 /* Over a checker, so a colour somebody has made half transparent reads as
    half transparent rather than as a paler colour it is not. Small enough that
@@ -9,7 +10,8 @@
   flex: none;
   width: 13px;
   height: 13px;
-  border: 1px solid var(--color-neutral-600);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
   background-image:
     linear-gradient(45deg, var(--color-neutral-600) 25%, transparent 25%),
     linear-gradient(-45deg, var(--color-neutral-600) 25%, transparent 25%),
@@ -24,8 +26,8 @@
    not vanish into the chrome. */
 .layer-item-thumb {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -33,3 +35,45 @@
   background: rgb(255 255 255 / 0.08);
 }
 .layer-item-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* ── the four kinds of layer ────────────────────────────────────────────────
+
+   A layer says what it is for before it says what it is called. A glyph
+   rather than a word — they read apart at a glance, the column is narrow, and
+   the inspector says it in words. One colour for all of them: the shape is
+   the difference, and colouring two of the four made those two look like
+   warnings. */
+.layer-kind {
+  flex: none;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--chrome-faint);
+}
+.layer-row.active .layer-kind { color: var(--chrome-dim); }
+
+/* A row for something that is wrong rather than something that is there: a
+   PSD on an object layer with no anchor mark at the root of its stack. Greyed
+   rather than hidden or struck through — the file is placed and it draws, and
+   what the row is saying is that one thing about it is missing. */
+.layer-item.warned .layer-item-label { color: var(--chrome-faint); }
+.layer-item-warning {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  color: var(--color-warn);
+}
+
+/* New Background, at the foot of a background layer's own list. Nothing on
+   one can be put down by aiming at the canvas, so the button lives where the
+   thing it makes will be listed. */
+.layer-item.add {
+  justify-content: flex-start;
+  padding-left: 48px;
+  color: var(--chrome-dim);
+  font: 500 var(--text-sm) var(--font-label);
+}
+.layer-item.add:hover { color: var(--chrome-text); }

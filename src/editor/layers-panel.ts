@@ -572,6 +572,8 @@ export class LayersPanel {
     const classes = ["layer-row", `kind-${kind}`];
     if (active) classes.push("active");
     if (layer.locked) classes.push("locked");
+    // Hidden reads on the whole row, dimmed, rather than on the eye alone.
+    if (!layer.visible) classes.push("unseen");
 
     const name = h("input", {
       class: "layer-name",
@@ -640,7 +642,7 @@ export class LayersPanel {
       h(
         "button",
         {
-          class: layer.visible ? "layer-toggle" : "layer-toggle off",
+          class: layer.visible ? "layer-toggle eye" : "layer-toggle eye off",
           title: layer.visible ? "Hide layer" : "Show layer",
           onClick: (event: Event) => {
             event.stopPropagation();
@@ -652,7 +654,7 @@ export class LayersPanel {
       h(
         "button",
         {
-          class: layer.locked ? "layer-toggle on" : "layer-toggle",
+          class: layer.locked ? "layer-toggle lock on" : "layer-toggle lock",
           title: layer.locked ? "Unlock layer" : "Lock layer",
           onClick: (event: Event) => {
             event.stopPropagation();

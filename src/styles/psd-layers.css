@@ -14,19 +14,19 @@
    bigger than the image the editor draws — this is where the two numbers are
    reconciled. */
 .psd-layers-canvas {
-  font-size: 10px;
-  color: var(--color-neutral-600);
+  font-size: var(--text-sm);
+  color: var(--chrome-faint);
   margin-bottom: 8px;
   overflow-wrap: anywhere;
 }
 .psd-layers-status {
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
   line-height: 1.5;
   margin-bottom: 8px;
 }
 .psd-layers-status[hidden] { display: none; }
-.psd-layers-status.blocked { color: var(--color-accent-300); }
+.psd-layers-status.blocked { color: var(--color-warn); }
 
 /* Edit Layers: the stack and New layer, folded inside the PSD section and
    closed to begin with — see `editLayersSection`. It is a section in a
@@ -35,13 +35,17 @@
 .psd-layers .psd-edit-layers.collapsed { padding: 0; border-top: 0; margin-top: 4px; }
 .psd-edit-layers > .inspect-section-title { margin-bottom: 8px; }
 
-.psd-layer-list { border: 1px solid var(--color-neutral-700); }
+.psd-layer-list {
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
+  overflow: hidden;
+}
 .psd-layer-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 6px 5px 0;
-  border-top: 1px solid var(--chrome-rule);
+  padding: 2px 4px 2px 0;
+  border-top: 1px solid var(--chrome-panel);
   background: transparent;
 }
 /* The rule is on the top edge rather than the bottom because a folded
@@ -58,10 +62,10 @@
   flex: none;
   width: 22px;
   align-self: stretch;
-  min-height: 32px;
+  min-height: 28px;
   border: 0;
   background: transparent;
-  color: var(--color-neutral-500);
+  color: var(--chrome-faint);
   padding: 0;
   display: flex;
   align-items: center;
@@ -69,7 +73,7 @@
   cursor: grab;
   touch-action: none;
 }
-.psd-layer-grip:hover { color: var(--chrome-text); background: var(--chrome-rule); }
+.psd-layer-grip:hover { color: var(--chrome-text); background: var(--chrome-hover); }
 .psd-layer-grip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
 .psd-layer-main { flex: 1; min-width: 0; }
@@ -85,9 +89,9 @@
 }
 /* Offset by nothing: the rows are tight enough that a ring outside the field
    struck through the line of type under it. */
-.psd-layer-name:focus { outline: 1px solid var(--color-accent); outline-offset: 0; }
+.psd-layer-name:focus { outline: 1px solid var(--color-accent); outline-offset: 0; border-radius: var(--radius-sm); }
 .psd-layer-name[readonly] { color: var(--chrome-dim); }
-.psd-layer-meta { font-size: 10px; color: var(--color-neutral-600); }
+.psd-layer-meta { font-size: var(--text-xs); color: var(--chrome-faint); }
 
 /* A layer the app owns the name of. The field reads as a fact rather than a
    control — which is what it is here — and the row carries whatever the app
@@ -100,16 +104,17 @@
   flex: none;
   width: 26px;
   align-self: stretch;
-  min-height: 32px;
+  min-height: 28px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-neutral-500);
+  color: var(--chrome-dim);
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.psd-layer-action:hover { color: #fff; background: var(--color-accent); }
+.psd-layer-action:hover { color: var(--chrome-text); background: var(--chrome-hover); }
 .psd-layer-action:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
@@ -123,21 +128,22 @@
   flex: none;
   width: 26px;
   align-self: stretch;
-  min-height: 32px;
+  min-height: 28px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-neutral-500);
+  color: var(--chrome-dim);
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.psd-layer-eye:hover:not(:disabled) { color: #fff; background: var(--color-accent); }
+.psd-layer-eye:hover:not(:disabled) { color: var(--chrome-text); background: var(--chrome-hover); }
 .psd-layer-eye:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
-.psd-layer-eye.off { color: var(--color-accent); }
+.psd-layer-eye.off { color: var(--chrome-faint); }
 .psd-layer-eye:disabled { cursor: default; opacity: 0.45; }
 /* Everything but the eye itself, which has to stay legible to be clicked. */
 .psd-layer-row:has(.psd-layer-eye.off) .psd-layer-main,
@@ -146,7 +152,7 @@
 /* A group. Its contents are indented under it by an inline padding set from
    the row's depth, so the only thing a rule has to carry is that the row
    itself is the heading of what follows. */
-.psd-layer-row.group { background: color-mix(in srgb, var(--chrome-rule) 45%, transparent); }
+.psd-layer-row.group { background: var(--chrome-row-hover); }
 .psd-layer-row.group .psd-layer-name { font-weight: 600; }
 
 /* The fold sits on the group's second line, so the name stays level with
@@ -160,9 +166,9 @@
   padding: 0;
   margin-left: -2px;
   background: transparent;
-  color: var(--color-neutral-600);
+  color: var(--chrome-faint);
   font: inherit;
-  font-size: 10px;
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 .psd-layer-fold > svg { flex: none; }
@@ -170,16 +176,17 @@
 .psd-layer-fold:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
 
 /* A layer psd-to-json will not export reads as an aside; the two orienting
-   marks are the app's own and say so in the accent. */
+   marks are the app's own and say so by being a step brighter than the
+   other layers' meta. */
 .psd-layer-row.ignored .psd-layer-name { color: var(--chrome-dim); }
 .psd-layer-row.point .psd-layer-meta,
-.psd-layer-row.zone .psd-layer-meta { color: var(--color-accent-300); }
+.psd-layer-row.zone .psd-layer-meta { color: var(--chrome-dim); }
 
 .psd-layer-list.reordering { cursor: grabbing; }
 .psd-layer-list.reordering .psd-layer-grip { cursor: grabbing; }
 .psd-layer-list.reordering .psd-layer-main { pointer-events: none; }
 .psd-layer-row.dragging {
-  background: var(--chrome-rule);
+  background: var(--chrome-hover);
   box-shadow: var(--shadow-md);
 }
 .psd-layers-foot:not(:empty) { margin-top: 4px; }
@@ -264,14 +271,15 @@
   cursor: pointer;
 }
 .psd-open-include:hover { color: var(--chrome-text); }
-.psd-open-include input { accent-color: var(--color-accent); width: 16px; height: 16px; margin: 0; }
+
 .psd-open-include:has(input:checked) { color: var(--chrome-text); }
 .psd-pixel-block { display: flex; flex-direction: column; gap: 6px; }
 .psd-pixel-block .psd-downsample-btn { margin-top: 0; }
 
 /* The Downsample sheet — see editor/psd-downsample.ts. Each preset carries
    the pixel size it makes under its fraction, and the once-per-PSD warning
-   sits under the group in the accent, where it is read before the press. */
+   sits under the group in the warning's colour, where it is read before the
+   press. */
 .downsample-sizes .opt-seg-btn {
   display: inline-flex;
   flex-direction: column;
@@ -287,7 +295,7 @@
 .downsample-dim:empty { display: none; }
 .options-group-note.downsample-once {
   padding: 8px 10px;
-  border-left: 2px solid var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  color: var(--color-accent-300);
+  border-radius: var(--radius-md);
+  background: var(--color-warn-soft);
+  color: var(--color-warn);
 }

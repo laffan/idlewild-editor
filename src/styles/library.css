@@ -52,13 +52,14 @@
 }
 .lib-section:last-child { border-bottom: 0; }
 .lib-section-title {
-  font-size: 10px;
+  font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--chrome-dim);
   margin-bottom: 8px;
 }
 
 .lib-hint {
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   color: var(--chrome-dim);
   margin: 6px 0;
@@ -82,11 +83,12 @@
 
 .lib-name {
   width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  padding: 6px 10px;
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--chrome-text);
-  font: 500 13px var(--font-body);
+  font: 500 var(--text-lg) var(--font-body);
 }
 .lib-name:focus { outline: none; border-color: var(--color-accent); }
 
@@ -113,30 +115,31 @@
   text-align: center;
   color: var(--chrome-dim);
 }
-.lib-section .seg-opt[aria-pressed="true"] { color: #fff; }
+.lib-section .seg-opt[aria-pressed="true"] { color: var(--chrome-text); }
 
 .lib-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .lib-chip {
   min-width: 34px;
   padding: 5px 6px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--chrome-control);
   color: var(--chrome-dim);
   font: 500 11px var(--font-body);
   cursor: pointer;
 }
-.lib-chip:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.lib-chip:hover { background: var(--chrome-hover); color: var(--chrome-text); }
 .lib-chip[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
+  background: var(--chrome-selected);
+  color: var(--chrome-text);
 }
 
 .lib-number {
   width: 60px;
   padding: 4px 6px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--chrome-text);
   font: 500 11px var(--font-mono);
 }
@@ -167,46 +170,47 @@
   height: 34px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
   cursor: pointer;
   padding: 0;
 }
-.lib-brush:hover { background: var(--chrome-rule); }
-.lib-brush[aria-pressed="true"] {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-}
+.lib-brush:hover { background: var(--chrome-hover); }
+.lib-brush[aria-pressed="true"] { background: var(--chrome-selected); }
 .lib-brush[disabled] { opacity: 0.3; cursor: default; }
 .lib-brush canvas { display: block; }
 
 .lib-toggle {
   width: 100%;
   padding: 7px 10px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
   color: var(--chrome-dim);
   font: 500 11px var(--font-body);
   cursor: pointer;
   margin: 4px 0;
 }
-.lib-toggle:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.lib-toggle:hover { background: var(--chrome-hover); color: var(--chrome-text); }
 .lib-toggle[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
+  background: var(--chrome-selected);
+  color: var(--chrome-text);
 }
 
 .lib-link {
   background: none;
   border: 0;
   padding: 4px 0;
-  color: var(--color-accent-400);
+  color: var(--chrome-text);
   font: 500 11px var(--font-body);
+  text-decoration: underline;
+  text-decoration-color: var(--chrome-faint);
+  text-underline-offset: 2px;
   text-align: left;
   cursor: pointer;
 }
-.lib-link:hover { text-decoration: underline; }
+.lib-link:hover { text-decoration-color: var(--chrome-text); }
 
 /* `display: flex` below outranks the browser's own rule for [hidden], so the
    two rows that come and go — the airbrush's density, and what to do with a
@@ -219,9 +223,9 @@
 .lib-row-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
 .lib-row-buttons .btn {
   flex: 1 1 auto;
-  padding: 6px 8px;
-  font-size: 11px;
-  min-height: 30px;
+  padding: 0 8px;
+  font-size: var(--text-md);
+  min-height: var(--ctl);
   text-align: center;
   justify-content: center;
 }
@@ -233,21 +237,14 @@
 }
 .lib-grid-3 .btn { padding: 6px 4px; font-size: 11px; }
 
-/* The plain `.btn` is the home screen's — dark ink on a light ground — and
-   the paint control also lives in the properties sidebar, which is the
-   chrome's dark end. A sheet has a rule of its own for this; the sidebar did
-   not, so the library's six actions came out near-black on near-black. */
+/* In the sidebar the library's actions are the panel's own buttons in size:
+   `.btn` is the app's one button, so all that changes is the height. */
 .side-panel .lib-row-buttons .btn,
 .side-panel .lib-grid-3 .btn {
-  border-color: var(--color-neutral-700);
-  color: var(--chrome-text);
-  background: transparent;
-  min-height: 0;
+  min-height: var(--ctl);
   text-align: center;
   justify-content: center;
 }
-.side-panel .lib-row-buttons .btn:hover,
-.side-panel .lib-grid-3 .btn:hover { background: var(--chrome-rule); }
 .side-panel .lib-row-buttons .btn[disabled] { opacity: 0.35; }
 
 /* The nudge pad: up over left-right over down, in a 3×3 with the middle out. */
@@ -263,12 +260,12 @@
   height: 26px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--color-neutral-700);
+  border: 1px solid var(--chrome-edge);
   background: transparent;
   color: var(--chrome-dim);
   cursor: pointer;
 }
-.lib-nudge-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.lib-nudge-btn:hover { background: var(--chrome-hover); color: var(--chrome-text); }
 .lib-nudge-btn:nth-child(1) { grid-column: 2; }
 .lib-nudge-btn:nth-child(2) { grid-column: 1; grid-row: 2; }
 .lib-nudge-btn:nth-child(3) { grid-column: 3; grid-row: 2; }
@@ -288,10 +285,11 @@
   align-items: center;
   gap: 4px;
   border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   padding: 2px 4px;
 }
-.lib-path-row[aria-selected="true"] { border-color: var(--color-neutral-700); }
-.lib-path-row[aria-current="true"] { border-color: var(--color-accent); }
+.lib-path-row[aria-selected="true"] { background: var(--chrome-row-hover); }
+.lib-path-row[aria-current="true"] { background: var(--chrome-row-active); border-color: var(--chrome-edge); }
 .lib-path-name {
   flex: 1 1 auto;
   text-align: left;
@@ -309,15 +307,15 @@
   height: 22px;
   display: grid;
   place-items: center;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--chrome-control);
   color: var(--chrome-dim);
   cursor: pointer;
 }
 .lib-path-add[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
+  background: var(--chrome-selected);
+  color: var(--chrome-text);
 }
 
 /* ── the paint control ──────────────────────────────────────────────────── */
@@ -339,15 +337,16 @@
 
 .paint-swatch {
   padding: 1px;
-  border: 1px solid var(--color-neutral-700);
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
   line-height: 0;
 }
-.paint-swatch:hover { border-color: var(--color-neutral-400); }
+.paint-swatch:hover { border-color: var(--chrome-dim); }
 .paint-swatch[aria-pressed="true"] {
-  border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  border-color: var(--chrome-text);
+  box-shadow: inset 0 0 0 1px var(--chrome-text);
 }
 .lib-swatch-canvas { display: block; image-rendering: pixelated; }
 

@@ -28,27 +28,33 @@
    foldable headings need something that says which three are the structure.
    So a zone heading carries a chip, a ground a shade off the panel's, and a
    2px rule over it — the system's own heavy rule, and the only one in here. */
-.inspect-zone { border-top: 2px solid var(--color-neutral-700); }
+/* Zones are separated by a 2px gap of the frame's own dark — the way a
+   creative tool stacks its panels — rather than by a drawn rule; a section
+   inside one is separated by a 1px hairline. The difference is what says
+   which three headings are the structure. */
+.inspect-zone { border-top: 2px solid var(--chrome-bg); }
 .inspect-zone:first-child { border-top: 0; }
 .inspect-zone-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 14px 16px;
-  font-size: 10px;
-  background: color-mix(in srgb, var(--chrome-text) 8%, transparent);
+  min-height: 30px;
+  padding: 0 10px 0 12px;
+  font-size: var(--text-sm);
+  background: var(--chrome-raised);
+  cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
 }
-.inspect-zone-head:hover {
-  background: color-mix(in srgb, var(--chrome-text) 13%, transparent);
+.inspect-zone-head:hover { background: var(--chrome-control); }
+@media (pointer: coarse) {
+  .inspect-zone-head { min-height: 40px; }
 }
 /* The chip, as quiet as the name is quiet: it is there to be recognised at a
    glance rather than read. */
 .inspect-zone-icon {
   flex: none;
-  color: var(--chrome-text);
-  opacity: 0.55;
+  color: var(--chrome-dim);
 }
 /* The same caret the sections carry, so the two folds read as one gesture. */
 .inspect-zone-head::after {
@@ -59,45 +65,52 @@
   height: 5px;
   border-right: 1px solid currentColor;
   border-bottom: 1px solid currentColor;
-  color: var(--chrome-dim);
+  color: var(--chrome-faint);
   transform: rotate(45deg);
 }
 .inspect-zone.collapsed > .inspect-zone-head::after { transform: rotate(-45deg); }
 .inspect-zone.collapsed > .inspect-zone-body { display: none; }
+/* The zone's name is the one label in the panel still set in capitals: there
+   are only ever three of them, and it is what marks them as the structure
+   rather than as three more sections. Small, tracked and dim, so the subject
+   beside it is what is read. */
 .inspect-zone-name {
   flex: none;
-  font-weight: 400;
-  letter-spacing: 0.12em;
-  color: var(--chrome-text);
-  opacity: 0.5;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--chrome-dim);
 }
 .inspect-zone-subject {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--chrome-text);
 }
-/* Nothing after the colon means no colon: a zone whose panel never named a
-   subject reads as its own name rather than as a name with a gap after it.
-   The colon goes with the name, not with the subject. */
+/* Nothing after the separator means no separator: a zone whose panel never
+   named a subject reads as its own name rather than as a name with a gap
+   after it. */
 .inspect-zone-subject:not(:empty)::before {
-  content: ": ";
+  content: "·";
+  margin: 0 6px 0 2px;
   font-weight: 400;
-  opacity: 0.5;
+  color: var(--chrome-faint);
 }
 
 /* Inspector */
 .inspect-head {
-  padding: 18px 16px 16px;
+  padding: 12px 12px 10px;
   border-bottom: 1px solid var(--chrome-rule);
 }
-.inspect-kicker { font-size: 10px; color: var(--color-neutral-600); }
+.inspect-kicker { font-size: var(--text-sm); color: var(--chrome-dim); }
 .inspect-title {
-  font: 600 19px/1.2 var(--font-heading);
+  font: 600 var(--text-xl)/1.25 var(--font-heading);
   color: var(--chrome-text);
-  margin-top: 6px;
+  margin-top: 2px;
 }
 
 /* An editable title: the field carries no box until it is focused, so the
@@ -109,6 +122,7 @@
   min-width: 0;
   padding: 0 2px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   font: inherit;
   color: inherit;
@@ -118,26 +132,29 @@
   -webkit-user-select: text;
   user-select: text;
 }
-.inspect-name:focus { background: var(--chrome-bg); outline: 1px solid var(--color-accent); }
+.inspect-name:focus { background: var(--chrome-field); box-shadow: inset 0 0 0 1px var(--color-accent); }
 .inspect-ext { flex: none; color: var(--chrome-dim); }
 
 .inspect-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 16px;
-  min-height: 28px;
+  padding: 0 12px;
+  min-height: 22px;
+}
+@media (pointer: coarse) {
+  .inspect-row { min-height: 30px; }
 }
 .inspect-key {
-  font-size: 10px;
-  color: var(--color-neutral-600);
+  font-size: var(--text-sm);
+  color: var(--chrome-dim);
   flex: none;
-  width: 106px;
+  width: 96px;
 }
 /* Set at the label's size: a row is a label and its value, and the value
    reading three sizes larger made every one of them look like a heading. */
 .inspect-value {
-  font: 500 10px var(--font-body);
+  font: 500 var(--text-sm) var(--font-body);
   color: var(--chrome-text);
   text-align: right;
   flex: 1;
@@ -147,7 +164,7 @@
 }
 
 .inspect-section {
-  padding: 18px 16px;
+  padding: 10px 12px 12px;
   border-top: 1px solid var(--chrome-rule);
 }
 /* The head already draws a rule under itself, and so does the zone heading a
@@ -160,7 +177,7 @@
    editor/inspect-text.ts. */
 .font-btn {
   justify-content: flex-start;
-  font-size: 15px;
+  font-size: var(--text-xl);
   /* Room for a face with a tall ascender, which several of the display ones
      have: the button's own line height would clip them. */
   min-height: 36px;
@@ -175,12 +192,12 @@
   min-height: 60px;
   resize: vertical;
   padding: 6px 8px;
-  border: var(--rule-chrome);
-  border-radius: 3px;
-  background: var(--chrome-bg);
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--chrome-text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-md);
   line-height: 1.4;
 }
 .inspect-textarea:focus {
@@ -198,9 +215,10 @@
    full-strength subject — so the structure still reads as three levels rather
    than two. */
 .inspect-section-title {
-  font-size: 10px;
+  font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--chrome-text);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 /* A section heading can carry a subject after a colon the way a zone heading
    does — `BRUSH : INK`. The pencil's panel used to say it twice: a *Brush*
@@ -214,9 +232,14 @@
   white-space: nowrap;
   color: var(--chrome-text);
 }
-.inspect-section-subject::before {
-  content: ": ";
+.inspect-section-subject {
+  font-weight: 400;
   color: var(--chrome-dim);
+}
+.inspect-section-subject::before {
+  content: "·";
+  margin: 0 5px 0 1px;
+  color: var(--chrome-faint);
 }
 
 /* A named section folds away, and its heading is the control that folds it.
@@ -265,7 +288,7 @@
   transform: rotate(-45deg);
 }
 /* Closed, the heading is all there is, so the room under it goes as well. */
-.inspect-section.collapsed { padding-top: 13px; padding-bottom: 13px; }
+.inspect-section.collapsed { padding-top: 9px; padding-bottom: 9px; }
 .inspect-section.collapsed > .inspect-section-fold { margin-bottom: 0; }
 .inspect-section.collapsed > *:not(.inspect-section-fold) { display: none; }
 /* Rows carry their own side padding for the panels that put them straight in
@@ -280,110 +303,121 @@
 .inspect-row[hidden] { display: none; }
 
 /* Editable values are set at the label's size, like the read-only ones they
-   sit among — a 16px field in a column of 10px rows reads as a heading. */
+   sit among. A field is a well — darker than the panel — so it reads as a
+   place to type rather than as one more button. */
 .inspect-input {
   flex: 1;
   min-width: 0;
   max-width: 96px;
   min-height: 22px;
   padding: 0 6px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
-  font: 500 10px var(--font-body);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
+  font: 500 var(--text-sm) var(--font-body);
   color: var(--chrome-text);
   text-align: right;
 }
+.inspect-input:hover { border-color: var(--chrome-edge); }
 .inspect-input:focus { border-color: var(--color-accent); outline: none; }
 
-.swatches { display: flex; border: 1px solid var(--color-neutral-700); width: max-content; }
+.swatches {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
+  width: max-content;
+}
 .swatch {
-  width: 56px;
-  height: 48px;
+  width: 48px;
+  height: 36px;
   border: 0;
-  border-left: 2px solid var(--color-neutral-700);
+  border-radius: var(--radius-sm);
   padding: 0;
 }
-.swatch:first-child { border-left: 0; }
-.swatch[aria-pressed="true"] { outline: 3px solid var(--chrome-text); outline-offset: -6px; }
+.swatch[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--chrome-text); }
 
-/* Half the height they were: these are inspector actions sitting under a
-   panel of 10px labels, and at 48px they outweighed everything they act on. */
+/* The panel's button: a raised grey with no outline, its words centred. A
+   button and a field are told apart by being lighter and darker than the
+   panel, which is how every control in this column says what it is. */
 .panel-btn {
   width: 100%;
-  min-height: 24px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  min-height: var(--ctl);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
   color: var(--chrome-text);
-  font: 600 11px var(--font-heading);
-  text-align: left;
-  padding: 0 8px;
+  font: 500 var(--text-md) var(--font-heading);
+  text-align: center;
+  padding: 0 10px;
   margin-top: 6px;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
-.panel-btn:hover { background: var(--chrome-rule); }
+.panel-btn:hover { background: var(--chrome-hover); }
+.panel-btn svg { color: var(--chrome-dim); }
 /* Offered but refused — the last layer of a scene, which cannot go. The
    hint beside it says why, so the button only has to look unavailable. */
 .panel-btn[disabled] { opacity: 0.4; }
-.panel-btn[disabled]:hover { background: transparent; }
+.panel-btn[disabled]:hover { background: var(--chrome-control); }
 
 /* Two halves of one action — Open PSD and its way back — share a row. */
-.panel-btn-row { display: flex; gap: 6px; }
+.panel-btn-row { display: flex; gap: 4px; }
 .panel-btn-row .panel-btn { justify-content: center; text-align: center; }
 .panel-btn.primary {
   background: var(--color-accent);
-  border-color: var(--chrome-bg);
   color: #fff;
 }
+.panel-btn.primary svg { color: #fff; }
 .panel-btn.primary:hover { background: var(--color-accent-600); }
 /* A panel button that is a switch rather than an action — Adjust layers,
-   which is on while the canvas has the PSD open. The rail's tools and the
-   mode bars' toggles read the same way, so this is the third of a set. */
-.panel-btn.pressed {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
-}
-.panel-btn.pressed:hover { background: var(--color-accent-600); }
-/* The same switch said the other way, for a panel button that reports its own
-   state rather than being told about it by a class someone has to remember to
-   keep in step. `Upright`, in the text panel, is the one left using it: `Use
-   as Eraser` was the other, and it is an `opt-switch-row` now — a setting that
-   takes effect as it is changed is a switch, not a button that looks pressed. */
+   which is on while the canvas has the PSD open. On is a lighter surface,
+   the same as a chosen segment: the accent is kept for the tool in hand. */
+.panel-btn.pressed,
 .panel-btn[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
+  background: var(--chrome-selected);
+  color: var(--chrome-text);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
 }
-.panel-btn[aria-pressed="true"]:hover { background: var(--color-accent-600); }
+.panel-btn.pressed:hover,
+.panel-btn[aria-pressed="true"]:hover { background: #5f5f5f; }
 /* A panel button that is only there when something is out of place — Reset
    Layer Position, drawn while a layer of a placed PSD is standing somewhere
-   the file does not put it. Outlined in the accent rather than filled with
-   it: the accent is what the editor draws its *own* marks in, and a filled
-   button would read as a mode that is switched on. `.inspect-note.warning`
-   says the same thing about the same kind of problem. */
+   the file does not put it. In the warning's colour, outlined rather than
+   filled, because it is a way to fix something rather than a mode.
+   `.inspect-note.warning` says the same thing about the same kind of
+   problem. */
 .panel-btn.warn {
-  border-color: var(--color-accent);
-  color: var(--color-accent-300);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warn) 60%, transparent);
+  color: var(--color-warn);
 }
-.panel-btn.warn:hover {
-  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-}
+.panel-btn.warn:hover { background: var(--color-warn-soft); }
 
 .inspect-empty {
-  padding: 18px 16px;
-  font-size: 13px;
+  padding: 12px;
+  font-size: var(--text-md);
   color: var(--chrome-dim);
   line-height: 1.5;
 }
 
 /* Brush controls, in the TOOL zone — whatever the tool in hand has to set. */
-.brush-row { display: flex; gap: 4px; margin-bottom: 10px; }
+.brush-row {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
+}
 .brush-btn {
   flex: 1;
-  min-height: 38px;
-  border: 1px solid var(--color-neutral-700);
+  min-height: 34px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--chrome-dim);
   padding: 0;
@@ -391,11 +425,10 @@
   align-items: center;
   justify-content: center;
 }
-.brush-btn:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.brush-btn:hover { background: var(--chrome-hover); color: var(--chrome-text); }
 .brush-btn[aria-pressed="true"] {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
+  background: var(--chrome-selected);
+  color: var(--chrome-text);
 }
 
 /* The tip itself on the button, rather than the brush's number.
@@ -428,36 +461,31 @@
 .brush-size {
   flex: 1;
   min-width: 0;
-  accent-color: var(--color-accent);
 }
 /* The slider takes the row's slack, so its readout is fixed rather than
    flexible — the shared .inspect-value rule pushes values right instead. */
 .inspect-row.brush-row-size .inspect-value { flex: none; width: 40px; }
 
 /* A standing fact about the selection, above its properties — a placement
-   that shares its PSD with another, and what to do about it. */
+   that shares its PSD with another, and what to do about it. A raised band
+   in the panel's own greys: it is information, and the accent is not for
+   information. */
 .inspect-note {
-  padding: 10px 16px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--chrome-rule);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  font: 600 10px var(--font-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-accent-300);
+  background: var(--chrome-raised);
+  font: 500 var(--text-sm)/1.45 var(--font-body);
+  color: var(--chrome-dim);
 }
-.inspect-note .panel-btn { text-transform: none; letter-spacing: 0; }
 
 /* A standing fact that is not a warning: how many layers a placed PSD has,
    and whether the canvas is treating them as one thing or as several. Drawn
-   in the panel's own neutrals until the PSD is actually opened up, at which
-   point it is a mode and says so in the accent. */
-.inspect-note.quiet {
-  background: transparent;
-  color: var(--chrome-dim);
-}
+   flat until the PSD is actually opened up, at which point it is a mode and
+   is lifted to the chosen state's grey. */
+.inspect-note.quiet { background: transparent; }
 .inspect-note.adjusting {
-  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
-  color: var(--color-accent-300);
+  background: var(--chrome-row-active);
+  color: var(--chrome-text);
 }
 
 /* One of several objects sharing a PSD: an *instance*. The canvas says the same
@@ -466,20 +494,16 @@
    reaches every one of them, and that Make Unique is the way out. Marked with a
    dashed left edge, so the panel and the canvas are making the same gesture. */
 .inspect-note.instance {
-  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  border-left: 2px dashed var(--color-accent);
-  padding-left: 14px;
+  border-left: 2px dashed var(--chrome-dim);
+  padding-left: 10px;
 }
 
-/* A standing fact that is a problem: the same note, in the accent, without a
-   button beside it. */
+/* A standing fact that is a problem: the same note, in the warning's
+   colour, without a button beside it. */
 .inspect-note.warning {
-  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-  text-transform: none;
-  letter-spacing: 0;
-  font: 500 12px var(--font-body);
-  line-height: 1.45;
-  color: var(--color-accent-300);
+  background: var(--color-warn-soft);
+  font: 500 var(--text-md)/1.45 var(--font-body);
+  color: var(--color-warn);
 }
 
 /* A pattern's numbers: a row of one or two fields with a label or a × between
@@ -494,11 +518,11 @@
 .field-num {
   flex: none;
   width: 72px;
-  min-height: 32px;
+  min-height: var(--ctl);
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
-.field-x { color: var(--color-neutral-600); font-size: 12px; }
+.field-x { color: var(--chrome-faint); font-size: var(--text-md); }
 
 /* One shape in the list of what a pattern is confined to. */
 .shape-row { gap: 8px; }
@@ -506,21 +530,19 @@
   flex: none;
   border: 0;
   background: transparent;
-  color: var(--color-neutral-600);
-  font: 600 10px var(--font-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--chrome-dim);
+  font: 500 var(--text-sm) var(--font-label);
 }
-.row-btn:hover { color: var(--color-accent-300); }
+.row-btn:hover { color: var(--chrome-text); }
 
 /* The inspector's segmented controls are the sheet's, at panel scale: the
    column is 260px and the sheet's 15px/20px option would wrap after two. */
 .side-panel .seg { width: 100%; }
 .side-panel .seg-opt {
   flex: 1;
-  min-height: 34px;
+  min-height: var(--ctl);
   padding: 0 8px;
-  font-size: 13px;
+  font-size: var(--text-md);
   text-align: center;
 }
 
@@ -543,7 +565,7 @@
 .side-panel .opt-seg-btn {
   flex: 1;
   min-width: 0;
-  min-height: 34px;
+  min-height: var(--ctl);
   padding: 0 6px;
   text-align: center;
 }
@@ -609,15 +631,15 @@
      reveals are the same shape — they are two ways of saying one number, and
      one of them being narrower would read as a different kind of control. */
   min-width: 84px;
-  min-height: 30px;
+  min-height: var(--ctl);
   padding: 0 8px;
-  border: 1px solid var(--opt-edge);
-  border-radius: 4px;
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--chrome-text);
-  font: 500 12px var(--font-mono);
+  font: 500 var(--text-md) var(--font-mono);
 }
-.inspect-pick:hover { background: var(--chrome-rule); }
+.inspect-pick:hover { border-color: var(--chrome-edge); }
 .inspect-pick::after {
   content: "";
   flex: none;
@@ -644,8 +666,9 @@
   gap: 4px;
   max-width: 100%;
   padding: 2px 2px 2px 8px;
-  border: 1px solid var(--chrome-rule);
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
+  font-size: var(--text-md);
   color: var(--chrome-text);
 }
 .project-font-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

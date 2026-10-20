@@ -105,7 +105,6 @@ export async function carryPlacements(
         "a palette rather than a copy of the artwork, so tiles left behind " +
         "by the file they were cut from draw nothing at all.",
       "Carry it over",
-      false,
     );
     if (!sure) return false;
   }

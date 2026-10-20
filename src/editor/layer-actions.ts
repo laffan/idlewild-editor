@@ -106,7 +106,6 @@ export async function confirmDeleteLayer(
       ? `${on} on it goes with it. The PSDs themselves stay in the project.`
       : "There is nothing on it.",
     "Delete",
-    false,
   );
   if (!ok) return false;
 

@@ -1,11 +1,12 @@
-/* Modals — "sheets" in the design canvas. One backdrop, one panel, 2px accent
-   border, actions flush left. Shared by home and editor. */
+/* Modals — "sheets" in the design canvas. One backdrop, one panel: the
+   sidebar's grey, rounded, lifted on a shadow rather than outlined in the
+   accent. Shared by home and editor, which are the same surface. */
 
 .sheet-backdrop {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(32, 30, 29, 0.4);
+  background: rgb(0 0 0 / 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -17,44 +18,43 @@
   width: 100%;
   max-width: 600px;
   max-height: 100%;
-  border: 1px solid var(--color-accent);
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-xl);
   background: var(--chrome-panel);
   color: var(--chrome-text);
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-}
-
-.sheet.light {
-  background: var(--color-neutral-100);
-  color: var(--color-text);
+  overflow: hidden;
 }
 
 .sheet-head {
-  padding: 20px 24px;
+  padding: 16px 20px 14px;
   border-bottom: var(--rule-chrome);
   flex: none;
 }
-.sheet.light .sheet-head { border-bottom-color: var(--color-neutral-300); }
 
-.sheet-title { font: 800 22px/1 var(--font-heading); }
+.sheet-title { font: 600 var(--text-xl)/1.2 var(--font-heading); }
 .sheet-sub {
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
-  margin-top: 8px;
+  margin-top: 4px;
 }
-.sheet.light .sheet-sub { color: var(--color-neutral-700); }
 
-.sheet-body { padding: 20px 24px; overflow: auto; }
+.sheet-body { padding: 16px 20px; overflow: auto; }
 /* The shared indeterminate bar (controls.css) sitting in a sheet's flow,
    with the stage line it belongs to underneath. */
 .sheet-body > .progress-bar { margin: 2px 0 12px; }
 .sheet-actions {
-  padding: 20px 24px;
+  padding: 12px 20px;
+  border-top: var(--rule-chrome);
+  background: var(--chrome-raised);
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex: none;
   flex-wrap: wrap;
 }
+.sheet-actions:empty { display: none; }
 /* A group held at the right-hand end of the action row.
    The two library editors put Undo and Redo on the left, where they are about
    the work, and the ways out on the right: Cancel, Save as a copy, Save. The
@@ -64,109 +64,111 @@
 .sheet-actions-end {
   margin-left: auto;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.sheet .btn { border-color: var(--color-neutral-700); color: var(--chrome-text); }
-.sheet .btn:hover { background: var(--chrome-rule); }
-.sheet .btn-ghost { border-color: var(--color-neutral-700); }
-.sheet .btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
-.sheet.light .btn { border-color: var(--color-neutral-400); color: var(--color-text); }
-.sheet.light .btn:hover { background: var(--color-neutral-200); }
-
 /* Fields */
-.field { margin-bottom: 20px; }
+.field { margin-bottom: 16px; }
 .field-label {
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
-.sheet.light .field-label { color: var(--color-neutral-700); }
 
 /* A line under a control saying what it means where that is not obvious —
    the grid scale, which is a size on two templates and a unit on the third. */
 .field-hint {
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--color-neutral-600);
-  margin-top: 8px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--chrome-dim);
+  margin-top: 6px;
   max-width: 46ch;
 }
 
+/* A field is a well: darker than the surface it is on, no outline until the
+   pointer or the caret is in it. */
 .input {
   width: 100%;
-  min-height: var(--hit);
-  padding: 0 14px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
-  font: 500 16px var(--font-body);
+  min-height: calc(var(--ctl) + 6px);
+  padding: 0 10px;
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
+  font: 400 var(--text-lg) var(--font-body);
   color: inherit;
 }
+.input:hover { border-color: var(--chrome-dim); }
 .input:focus { border-color: var(--color-accent); outline: none; }
+.input::placeholder { color: var(--chrome-faint); }
 
-/* Segmented choice — template and grid scale */
-.seg { display: flex; border: 1px solid var(--color-neutral-700); width: max-content; max-width: 100%; flex-wrap: wrap; }
+/* Segmented choice — the same trough as the options vocabulary's. */
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
+  width: max-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
 .seg-opt {
-  min-height: var(--hit);
-  padding: 0 20px;
+  min-height: var(--ctl);
+  padding: 0 14px;
   border: 0;
-  border-left: 1px solid var(--color-neutral-700);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: inherit;
-  font: 600 15px var(--font-heading);
+  color: var(--chrome-dim);
+  font: 500 var(--text-md) var(--font-heading);
   text-align: left;
 }
-.seg-opt:first-child { border-left: 0; }
-.seg-opt[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
-.seg-opt:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
-.sheet.light .seg-opt:not([aria-pressed="true"]):hover { background: var(--color-neutral-200); }
+.seg-opt[aria-pressed="true"] {
+  background: var(--chrome-selected);
+  color: var(--chrome-text);
+  box-shadow: var(--shadow-sm);
+}
+.seg-opt:not([aria-pressed="true"]):hover { background: var(--chrome-control); color: var(--chrome-text); }
 /* An option this template cannot have — an isometric platformer. Shown and
    greyed rather than removed, so the row does not change shape under the
    finger and it is clear the choice exists elsewhere. */
 .seg-opt[disabled] { opacity: 0.35; cursor: default; }
 .seg-opt[disabled]:hover { background: transparent; }
-.sheet.light .seg-opt[disabled]:hover { background: transparent; }
 
 /* A checkbox and its label, as one hit target — pixel perfect, and whether a
    character controller gets scaffolded. The whole row is a label so a thumb
-   aimed anywhere near the words still lands on the box. */
+   aimed anywhere near the words still lands on the box. The box itself is
+   the app's own, from controls.css. */
 .check {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-height: var(--hit);
   cursor: pointer;
 }
-.check-box {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  margin: 0;
-  accent-color: var(--color-accent);
-}
-.check-label { font: 600 15px var(--font-heading); }
+.check-label { font: 500 var(--text-lg) var(--font-heading); }
 
 /* A list of choices, as in Add Image */
-.sheet-list { display: flex; flex-direction: column; }
+.sheet-list { display: flex; flex-direction: column; padding: 4px 0; }
 .sheet-list-item {
-  min-height: 68px;
+  min-height: calc(var(--hit) + 8px);
   border: 0;
-  border-bottom: 1px solid var(--chrome-rule);
+  border-radius: 0;
   background: transparent;
   color: inherit;
-  font: 600 16px var(--font-heading);
+  font: 500 var(--text-lg) var(--font-heading);
   text-align: left;
-  padding: 0 24px;
+  padding: 0 20px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
-.sheet-list-item:hover { background: var(--chrome-rule); }
+.sheet-list-item svg { color: var(--chrome-dim); }
+.sheet-list-item:hover { background: var(--chrome-row-hover); }
 .sheet-list-hint {
   margin-left: auto;
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
 }
 
@@ -174,21 +176,21 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 60px;
-  padding: 0 24px;
+  min-height: 44px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--chrome-rule);
 }
 .sheet-row-key {
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
   flex: none;
-  width: 150px;
+  width: 140px;
 }
-.sheet-row-value { font: 500 15px var(--font-body); flex: 1; }
+.sheet-row-value { font: 400 var(--text-lg) var(--font-body); flex: 1; }
 /* A row that is a control rather than a fact — the rendering options. The
    label stays in the key column, so the switches line up with the values
    above them. */
-.sheet-row.control { min-height: 68px; }
+.sheet-row.control { min-height: 52px; }
 .sheet-row.control .sheet-row-value {
   display: flex;
   align-items: center;
@@ -198,9 +200,9 @@
 /* What the control does, beside it rather than under it: these rows are a
    list, and a line under each one would read as a row of its own. */
 .check-hint {
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1.4;
-  color: var(--color-neutral-600);
+  color: var(--chrome-dim);
 }
 /* One number, so a box the width of one. */
 .sheet-row-input { width: 104px; flex: none; }
@@ -219,20 +221,18 @@
 .psd-pick {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 48px;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--chrome-rule);
+  gap: 12px;
+  min-height: var(--hit);
+  padding: 0 20px;
   cursor: pointer;
 }
-.psd-pick:last-child { border-bottom: 0; }
-.psd-pick:hover { background: var(--chrome-rule); }
+.psd-pick:hover { background: var(--chrome-row-hover); }
 /* The filename, which is the thing being chosen, so it takes the room and the
    size beside it gives way. */
 .psd-pick-name {
   flex: 1;
   min-width: 0;
-  font: 500 14px var(--font-mono);
+  font: 400 var(--text-md) var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -285,13 +285,13 @@
 }
 .publish-side:first-child { border-left: 0; }
 .publish-side:not(.active) { opacity: 0.62; }
-.publish-side.active { background: color-mix(in srgb, var(--color-accent) 7%, transparent); }
+.publish-side.active { background: var(--chrome-raised); }
 
 .publish-side-head { display: flex; align-items: baseline; gap: 8px; }
 .publish-side-head svg { flex: none; align-self: center; color: var(--chrome-dim); }
-.publish-side.active .publish-side-head svg { color: var(--color-accent); }
-.publish-side-title { font: 600 15px var(--font-heading); }
-.publish-side-hint { font-size: 10px; }
+.publish-side.active .publish-side-head svg { color: var(--chrome-text); }
+.publish-side-title { font: 600 var(--text-lg) var(--font-heading); }
+.publish-side-hint { font-size: var(--text-sm); color: var(--chrome-dim); }
 
 /* The login in force, and the way through to the list that manages it. Above
    the picker, because the sheet reads top to bottom as login then
@@ -312,13 +312,15 @@
   border: 0;
   background: transparent;
   padding: 2px 0;
-  color: var(--color-accent-400);
-  font: 600 11px var(--font-body);
+  color: var(--chrome-text);
+  font: 500 var(--text-sm) var(--font-body);
   text-decoration: underline;
+  text-decoration-color: var(--chrome-faint);
+  text-underline-offset: 2px;
   cursor: pointer;
   flex: none;
 }
-.link-btn:hover { color: var(--color-accent); }
+.link-btn:hover { text-decoration-color: var(--chrome-text); }
 
 .publish-picker { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
 .publish-search { min-height: 34px; font-size: 13px; }
@@ -328,8 +330,10 @@
 .publish-list {
   max-height: 210px;
   min-height: 84px;
-  border: 1px solid var(--chrome-rule);
+  border: 1px solid var(--chrome-edge);
   border-top: 0;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--chrome-field);
 }
 
 .publish-row {
@@ -339,46 +343,42 @@
   gap: 8px;
   padding: 7px 10px;
   border: 0;
-  border-bottom: 1px solid var(--chrome-panel);
+  border-radius: 0;
   background: transparent;
   color: var(--chrome-text);
-  font: 400 12px var(--font-mono);
+  font: 400 var(--text-md) var(--font-mono);
   text-align: left;
   cursor: pointer;
 }
-.publish-row:hover { background: var(--chrome-rule); }
-.publish-row.active {
-  background: var(--color-accent);
-  color: var(--color-neutral-100);
-}
+.publish-row:hover { background: var(--chrome-row-hover); }
+.publish-row.active { background: var(--chrome-selected); }
 .publish-row.disabled { opacity: 0.45; cursor: default; }
 .publish-row.disabled:hover { background: transparent; }
 .publish-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* What the search matched. A weight change as well as a colour, because the
-   accent on an active row is the row's own background. */
+/* What the search matched: weight and full ink, against the dimmer rest of
+   the name. */
 .fuzzy-hit {
   background: transparent;
-  color: var(--color-accent-400);
+  color: #fff;
   font-weight: 700;
 }
-.publish-row.active .fuzzy-hit { color: var(--color-neutral-100); text-decoration: underline; }
+.publish-row.active .fuzzy-hit { text-decoration: underline; }
 
 /* A word about a row: private, read only, new, changed. */
 .publish-tag {
   flex: none;
   padding: 1px 6px;
-  border: 1px solid var(--chrome-rule);
+  border-radius: var(--radius-sm);
+  background: var(--chrome-control);
   font-family: var(--font-label);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font-size: var(--text-xs);
   color: var(--chrome-dim);
 }
-.publish-tag.warn { border-color: var(--color-accent-600); color: var(--color-accent-400); }
-.publish-tag.new { border-color: var(--color-accent); color: var(--color-accent-400); }
-.publish-tag.changed { border-color: var(--color-accent-600); color: var(--color-accent-400); }
-.publish-tag.unknown { border-color: var(--color-neutral-600); color: var(--color-neutral-400); }
+.publish-tag.warn { background: var(--color-warn-soft); color: var(--color-warn); }
+.publish-tag.new,
+.publish-tag.changed { background: var(--chrome-selected); color: var(--chrome-text); }
+.publish-tag.unknown { color: var(--chrome-faint); }
 
 /* The project-specific half of a destination — branch and path, or the
    directory. Indented under the picker it belongs to, so it reads as "and
@@ -395,12 +395,12 @@
    having the two places that ask for a hostname look the same is worth more
    than either of them being bespoke. See `styles/options.css`. */
 .publish-fields .options-field { padding: 0; }
-/* A branch name that is not one of the repository's. Said in the accent
+/* A branch name that is not one of the repository's. In the warning's colour
    because it is the one line in this sheet describing something that is about
    to be *made* rather than chosen, and because somebody who typed it by
    accident should notice before they publish. */
-.publish-fields .field-hint.new-branch { color: var(--color-accent-400); }
-.publish-fields .options-field .input { min-height: 36px; font-size: 13px; }
+.publish-fields .field-hint.new-branch { color: var(--color-warn); }
+.publish-fields .options-field .input { min-height: 32px; font-size: var(--text-lg); }
 
 .publish-empty {
   padding: 16px 4px;
@@ -420,7 +420,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 24px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--chrome-rule);
 }
 .publish-destination {
@@ -435,10 +435,11 @@
 /* Something the sheet has to say before anything else on it means anything —
    a far end that could be reached and not compared, or a failure. */
 .publish-note {
-  padding: 14px 24px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--chrome-rule);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  font-size: 12px;
+  background: var(--color-warn-soft);
+  color: var(--color-warn);
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 
@@ -460,7 +461,9 @@
   flex: 1 1 auto;
   min-height: 120px;
   max-height: 44vh;
-  border: 1px solid var(--chrome-rule);
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
 }
 
 /* A row is a label wrapping its own checkbox, so the whole width is the hit
@@ -469,16 +472,15 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--chrome-panel);
-  font: 400 11px var(--font-mono);
-  color: var(--color-neutral-300);
+  padding: 4px 10px;
+  font: 400 var(--text-sm) var(--font-mono);
+  color: var(--chrome-text);
   cursor: pointer;
 }
-.publish-file:hover { background: var(--chrome-rule); }
+.publish-file:hover { background: var(--chrome-row-hover); }
 /* Unchanged files are most of a site. They stay legible and stop competing. */
 .publish-file.same { opacity: 0.5; }
-.publish-file.dropped { color: var(--color-accent-400); }
+.publish-file.dropped { color: var(--color-danger); }
 .publish-file-name {
   flex: 1;
   min-width: 0;
@@ -493,7 +495,10 @@
 .publish-size { flex: none; font-size: 10px; }
 /* Where a row has no decision to make, the space the box would have taken —
    so every filename in the pane still starts at the same x. */
-.check-box-gap { flex: none; width: 22px; }
+.check-box-gap { flex: none; width: 16px; }
+@media (pointer: coarse) {
+  .check-box-gap { width: 22px; }
+}
 
 /* ── A publish, while it is happening ───────────────────────────────────────
 
@@ -518,9 +523,9 @@
   min-height: 42px;
   white-space: pre-wrap;
 }
-.publish-now.good { color: var(--color-accent-400); }
+.publish-now.good { color: var(--chrome-text); }
 .publish-now.bad {
-  color: var(--color-accent-400);
+  color: var(--color-danger);
   font-family: var(--font-mono);
   font-size: 12px;
 }
@@ -531,9 +536,10 @@
 .publish-trace {
   max-height: 34vh;
   min-height: 90px;
-  border: 1px solid var(--chrome-rule);
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   padding: 8px 10px;
-  font: 400 11px var(--font-mono);
+  font: 400 var(--text-sm) var(--font-mono);
   color: var(--chrome-dim);
 }
 .publish-trace-line { padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
@@ -546,7 +552,6 @@
 
 /* The list of logins is not drawn here. It is an options page — see
    `styles/options.css`, which is the settings vocabulary this app's other
-   options screens are meant to be built on, and which deliberately departs
-   from the modernist system the rest of the chrome uses. What used to be in
+   options screens are meant to be built on. What used to be in
    this space were three classes describing a kind chip, an add row and a
    fingerprint line; all three are rows and sub-lines over there now. */

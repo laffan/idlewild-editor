@@ -387,7 +387,6 @@ function libraryRow<T extends { id: string; name: string }>(
               ? "It is one of the built-in rows, so it only leaves this palette — Restore defaults brings it back. Anything already drawn with it keeps drawing."
               : "It goes for good. Anything already drawn with it keeps its color but loses the pattern.",
             "Remove",
-            false,
           );
           if (ok) options.library.remove(id);
         })();

@@ -74,8 +74,6 @@ export async function resetLayerPositions(
       `${displaced.length === 1 ? "move you made" : "moves you made"} to ` +
       `${displaced.length === 1 ? "it" : "them"} will be lost.`,
     "Reset",
-    // Dark: this sheet sits over the editor's canvas, not over the home screen.
-    false,
   );
   if (!ok) return;
 

@@ -1,22 +1,15 @@
 /* ── Options lists ──────────────────────────────────────────────────────────
 
-   A settings vocabulary, deliberately **not** the modernist design system the
-   rest of this app is drawn in. That system is flat, zero-radius, 2px rules
-   and uppercase micro-labels: right for chrome standing over a canvas, wrong
-   for a page of settings, where what you want is a list you can run your eye
-   down. So this departs on three counts, and only three:
+   The settings vocabulary: the same controls as the rest of the chrome —
+   the same corners, greys, segmented trough and switch — laid out for a page
+   you run your eye down rather than a panel you work in. Two things are its
+   own:
 
-   - **Rounded groups.** `--radius-md` is 0 everywhere else. A settings list
-     reads as cards of related rows, and the corner is what makes a group look
-     like a group rather than like four rules in a row.
-   - **Sentence case, body face.** No `--font-label` in uppercase. A row's
-     title is a name, and a name set in narrow capitals is a heading.
+   - **Cards.** A settings list reads as groups of related rows, and the
+     raised card is what makes a group look like a group.
    - **Two lines per row.** A title and a quiet second line under it, rather
      than a key column and a value. The second line is where a row says what
      it is *for*, which is the thing a settings list exists to tell you.
-
-   Everything else — the palette, the body face, the accent — is the system's,
-   because a settings page that is a different *colour* is a different app.
 
    ## Using it elsewhere
 
@@ -36,48 +29,38 @@
    this file works anywhere; a container that wants different numbers sets them
    on itself.
 
-   A page that wants the list on a light surface adds `.options.light`, which
-   is the one variant this carries, because the home screen's sheets are light
-   and the editor's are dark. */
+   There is no light variant: the home screen's sheets are the same dark
+   surface as the editor's. */
 
 :root {
   /* The shape of a row. */
-  --opt-row-min: 58px;
-  --opt-pad-x: 16px;
-  --opt-pad-y: 11px;
-  --opt-gap: 14px;
-  --opt-radius: 10px;
+  --opt-row-min: 46px;
+  --opt-pad-x: 14px;
+  --opt-pad-y: 8px;
+  --opt-gap: 12px;
+  --opt-radius: var(--radius-lg);
   /* The surfaces a group is drawn on. */
-  --opt-surface: color-mix(in srgb, var(--chrome-text) 5%, transparent);
-  --opt-surface-hover: color-mix(in srgb, var(--chrome-text) 10%, transparent);
-  --opt-rule: color-mix(in srgb, var(--chrome-text) 12%, transparent);
-  --opt-edge: color-mix(in srgb, var(--chrome-text) 16%, transparent);
+  --opt-surface: var(--chrome-raised);
+  --opt-surface-hover: var(--chrome-control);
+  --opt-rule: var(--chrome-edge);
+  --opt-edge: var(--chrome-edge);
   /* The three weights of text a row uses. */
   --opt-title: var(--chrome-text);
   --opt-sub: var(--chrome-dim);
-  --opt-accent: var(--color-accent-400);
+  /* What is *on* — a switch — and what is *chosen* — a segment. */
+  --opt-accent: var(--color-accent);
+  --opt-chosen: var(--chrome-selected);
 }
 
 .options {
   display: flex;
   flex-direction: column;
-  gap: 26px;
-}
-
-/* On a light sheet the same list, mixed against ink instead of paper. */
-.options.light {
-  --opt-surface: color-mix(in srgb, var(--color-text) 4%, transparent);
-  --opt-surface-hover: color-mix(in srgb, var(--color-text) 8%, transparent);
-  --opt-rule: color-mix(in srgb, var(--color-text) 12%, transparent);
-  --opt-edge: color-mix(in srgb, var(--color-text) 18%, transparent);
-  --opt-title: var(--color-text);
-  --opt-sub: var(--color-neutral-700);
-  --opt-accent: var(--color-accent-700);
+  gap: 20px;
 }
 
 /* ── A group ─────────────────────────────────────────────────────────────── */
 
-.options-group { display: flex; flex-direction: column; gap: 8px; }
+.options-group { display: flex; flex-direction: column; gap: 6px; }
 
 /* Above the group, quiet, in the body face. Not a `sheet-title`: a group
    heading is a label for what follows, and competing with the sheet's own
@@ -91,10 +74,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font: 600 12px var(--font-body);
-  letter-spacing: 0.02em;
+  font: 600 var(--text-sm) var(--font-body);
   color: var(--opt-sub);
-  padding: 0 4px;
+  padding: 0 2px;
 }
 
 /* Under it, in the same key: the sentence a group needs and a row cannot
@@ -193,7 +175,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: calc(var(--opt-radius) - 4px);
+  border-radius: var(--radius-md);
   background: var(--opt-surface-hover);
   color: var(--opt-sub);
 }
@@ -203,7 +185,7 @@
    rather than pushing the row's controls off the end. */
 .option-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .option-title {
-  font: 500 14px var(--font-body);
+  font: 500 var(--text-lg) var(--font-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -237,25 +219,28 @@
   flex: none;
   min-height: 30px;
   padding: 0 12px;
-  border: 1px solid var(--opt-edge);
-  border-radius: calc(var(--opt-radius) - 4px);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
   color: var(--opt-title);
-  font: 500 12px var(--font-body);
+  font: 500 var(--text-md) var(--font-body);
   cursor: pointer;
   white-space: nowrap;
 }
-.option-btn:hover { background: var(--opt-surface-hover); }
-.option-btn.accent { border-color: var(--opt-accent); color: var(--opt-accent); }
+.option-btn:hover { background: var(--chrome-hover); }
+.option-btn.accent { background: var(--opt-accent); color: #fff; }
+.option-btn.accent:hover { background: var(--color-accent-600); }
 /* The one that takes something away. Named rather than coloured red by hand,
    so a page can retune what "destructive" looks like in one place. */
-.option-btn.danger { color: var(--color-accent-500); border-color: transparent; }
-.option-btn.danger:hover { background: color-mix(in srgb, var(--color-accent) 16%, transparent); }
+.option-btn.danger { color: var(--color-danger); background: transparent; }
+.option-btn.danger:hover { background: var(--color-danger-soft); }
 
 /* A row that adds something, at the foot of its group: the lead is a `+` and
    the whole row is the button. */
-.option.add .option-lead { color: var(--opt-accent); }
-.option.add .option-title { color: var(--opt-accent); }
+.option.add .option-lead,
+.option.add .option-title { color: var(--opt-sub); }
+.option.add:hover .option-lead,
+.option.add:hover .option-title { color: var(--opt-title); }
 
 /* A group with nothing in it yet says so on a row of its own, so the card is
    never an empty box with a border round it. */
@@ -270,10 +255,8 @@
 .options-field-label { font: 600 12px var(--font-body); color: var(--opt-title); }
 .options-field-hint { font-size: 11px; line-height: 1.5; color: var(--opt-sub); max-width: 62ch; }
 .options-field .input {
-  min-height: 42px;
-  border-radius: calc(var(--opt-radius) - 4px);
-  border-color: var(--opt-edge);
-  font-size: 15px;
+  min-height: 34px;
+  font-size: var(--text-lg);
 }
 .options-field .input:focus { border-color: var(--color-accent); }
 /* A field with a button beside it — "choose a file", "test this". */
@@ -283,9 +266,9 @@
 /* Something the form has to say back: a failure, or what it is doing now. */
 .options-notice {
   padding: 10px 12px;
-  border-radius: calc(var(--opt-radius) - 4px);
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 .options-notice:empty { display: none; }
@@ -320,40 +303,44 @@
 .option-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .option-title-row .option-title { min-width: 0; }
 
-/* ── Segmented ───────────────────────────────────────────────────────────── */
+/* ── Segmented ───────────────────────────────────────────────────────────────
+
+   A trough — the field's own dark well — with the options inset in it, and
+   the chosen one lifted out as a lighter grey. Every segmented control in the
+   app is this one: Draw / Code / Play in the header, the inspector's fill
+   kind, the New Project template. */
 
 .opt-seg {
   display: flex;
   flex: none;
-  border: 1px solid var(--opt-edge);
-  border-radius: calc(var(--opt-radius) - 4px);
-  overflow: hidden;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
 }
 .opt-seg-btn {
   min-height: 30px;
   padding: 0 11px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--opt-sub);
-  font: 500 12px var(--font-body);
+  font: 500 var(--text-md) var(--font-body);
   cursor: pointer;
   white-space: nowrap;
 }
-.opt-seg-btn + .opt-seg-btn { border-left: 1px solid var(--opt-edge); }
-.opt-seg-btn:hover:not(:disabled) { background: var(--opt-surface-hover); }
+.opt-seg-btn:hover:not(:disabled) { background: var(--chrome-control); color: var(--opt-title); }
 .opt-seg-btn[aria-pressed="true"] {
-  background: var(--opt-accent);
-  color: var(--chrome-bg, #fff);
+  background: var(--opt-chosen);
+  color: var(--opt-title);
+  box-shadow: var(--shadow-sm);
 }
+.opt-seg-btn[aria-pressed="true"]:hover:not(:disabled) { background: var(--opt-chosen); }
 /* The one combination that is not offered — an isometric platformer — rather
    than an option that is simply missing. Greyed says "not with that", gone
    says "never existed". */
 .opt-seg-btn:disabled { color: var(--opt-sub); opacity: 0.4; cursor: not-allowed; }
 .opt-seg-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-
-/* A light sheet's pressed segment: the accent is a dark ink on paper, so what
-   sits on it is paper rather than the chrome's own background. */
-.options.light .opt-seg-btn[aria-pressed="true"] { color: var(--color-bg, #fff); }
 
 /* ── Switch ──────────────────────────────────────────────────────────────── */
 
@@ -362,9 +349,9 @@
   width: 44px;
   height: 26px;
   padding: 0;
-  border: 1px solid var(--opt-edge);
+  border: 1px solid transparent;
   border-radius: 13px;
-  background: var(--opt-surface-hover);
+  background: var(--chrome-control);
   cursor: pointer;
   position: relative;
   transition: background 120ms ease, border-color 120ms ease;
@@ -405,7 +392,7 @@
   cursor: pointer;
 }
 .opt-switch-label {
-  font: 500 11px var(--font-body);
+  font: 500 var(--text-md) var(--font-body);
   color: var(--chrome-text);
 }
 /* A row that is on but has nothing to act on yet — the palette switch over an
@@ -427,7 +414,7 @@
    from the left therefore travels 14. */
 .opt-switch-row.small { min-height: 24px; gap: 8px; }
 .opt-switch-row.small .opt-switch-label {
-  font-size: 10px;
+  font-size: var(--text-sm);
   color: var(--chrome-dim);
 }
 .opt-switch-row.small .opt-switch {
@@ -448,17 +435,9 @@
 /* ── Checkbox ────────────────────────────────────────────────────────────── */
 
 /* The exception to the switch, for a row that is one of several answers — the
-   two hint sources in Code Settings. Native, because a tick box is the one
-   control the platform draws better than we would; `accent-color` is the
-   whole of the theming, and the size is the row's rather than the form's. */
-.opt-check {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin: 0;
-  accent-color: var(--opt-accent);
-  cursor: pointer;
-}
+   two hint sources in Code Settings. Drawn by the app's own checkbox rule in
+   controls.css, like every other tick box. */
+.opt-check { flex: none; cursor: pointer; }
 
 /* ── Number ──────────────────────────────────────────────────────────────── */
 
@@ -472,9 +451,9 @@
   width: 66px;
   min-height: 30px;
   padding: 0 8px;
-  border: 1px solid var(--opt-edge);
-  border-radius: calc(var(--opt-radius) - 4px);
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--opt-title);
   font: 500 12px var(--font-mono);
   text-align: right;
@@ -491,9 +470,9 @@
   flex: none;
   min-height: 30px;
   padding: 0 10px 0 6px;
-  border: 1px solid var(--opt-edge);
-  border-radius: calc(var(--opt-radius) - 4px);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
   cursor: pointer;
 }
 .opt-swatch:hover { background: var(--opt-surface-hover); }
@@ -501,7 +480,7 @@
 .opt-swatch-chip {
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   /* An inset rule rather than a border, so a swatch of the surface colour is
      still a swatch rather than a hole. */
   box-shadow: inset 0 0 0 1px var(--opt-edge);
@@ -516,11 +495,11 @@
   max-width: 44vw;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid var(--opt-edge);
-  border-radius: calc(var(--opt-radius) - 4px);
-  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: var(--opt-title);
-  font: 500 13px var(--font-body);
+  font: 500 var(--text-md) var(--font-body);
 }
 .opt-text:focus { outline: none; border-color: var(--color-accent); }
 .opt-text::placeholder { color: var(--opt-sub); }

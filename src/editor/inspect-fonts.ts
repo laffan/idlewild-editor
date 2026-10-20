@@ -105,7 +105,6 @@ export function projectFontsRow(): HTMLElement {
                     label: "What the font menu calls it",
                     value: suggested,
                     confirmLabel: "Add font",
-                    light: false,
                   }),
                 );
               },

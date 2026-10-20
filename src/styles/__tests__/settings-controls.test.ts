@@ -9,12 +9,12 @@
  * settings list whose rows are all different heights is a list nobody can run
  * their eye down. Nothing throws when that drifts; the sheet just gets worse.
  *
- * A pressed segment and a switch that is on are the **settings system's**
- * accent (`--opt-accent`), which is the token that flips between the editor's
- * dark chrome and the home screen's paper. A colour written in by hand would
- * look right on whichever surface it was written against and wrong on the
- * other, and New Project is on the light one while the Logins sheet is on the
- * dark one.
+ * A pressed segment and a switch that is on take the **settings system's**
+ * tokens — `--opt-chosen` for a segment, `--opt-accent` for a switch — rather
+ * than colours written in by hand. They are two tokens because they are two
+ * meanings: a segment is one answer chosen from several, which is a lighter
+ * grey, and a switch is something turned on, which is the accent. Written in
+ * by hand, the two would drift back into one colour for both.
  *
  * And the bubble is `position: fixed`. Every group in this system is
  * `overflow: hidden` — that is what gives a card its corners — and a sheet's
@@ -67,9 +67,9 @@ describe("a control inside an options row", () => {
 });
 
 describe("what a chosen answer is coloured with", () => {
-  it("takes the settings system's accent rather than a colour of its own", () => {
+  it("takes the settings system's tokens rather than colours of its own", () => {
     expect(ruleIn(optionsCss, '.opt-seg-btn[aria-pressed="true"]').background).toBe(
-      "var(--opt-accent)",
+      "var(--opt-chosen)",
     );
     const on = ruleIn(optionsCss, '.opt-switch[aria-checked="true"]');
     expect(on.background).toBe("var(--opt-accent)");

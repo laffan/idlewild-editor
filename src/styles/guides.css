@@ -289,4 +289,4 @@
 /* The Overlays rows' own marks, beside their names — see overlays-panel.ts.
    Dim, so the name stays what is read, and dimmer still with the mark off. */
 .overlays-icon { flex: none; display: flex; color: var(--chrome-dim); }
-.overlays-row.off .overlays-icon { color: var(--color-neutral-600); }
+.overlays-row.off .overlays-icon { color: var(--chrome-faint); }

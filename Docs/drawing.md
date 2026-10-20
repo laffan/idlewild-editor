@@ -469,7 +469,7 @@ And it is asked of every scene, because `psd/` is one directory per project.
 
 The canvas says it in its own vocabulary: a selected instance is outlined with a
 **dashed** box rather than a solid one. A different kind of line rather than a
-different colour, because the accent is the only colour this design has, and
+different colour, because the accent is the only highlight colour this design has, and
 because dashed already reads as *shared with something else*. Phaser's Graphics
 has no dash pattern, so `dashedRect` walks the four sides a dash and a gap at a
 time, starting each side at a corner so the box reads as a box.

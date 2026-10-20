@@ -109,7 +109,6 @@ export async function changePixelScale(
       { id: "keep", label: "Keep the size", primary: true },
       { id: "grow", label: factor > before ? "Let it grow" : "Let it shrink" },
     ],
-    light: false,
   });
   if (!keep) return;
   try {
@@ -186,7 +185,6 @@ export function pixelScaleRow(
           label: `A whole number from 2 to ${MAX_PIXEL_SCALE}`,
           value: custom ? String(current) : "",
           confirmLabel: "Rescale",
-          light: false,
         }).then((text) => {
           if (text === null) return;
           const n = readCustomScale(text);

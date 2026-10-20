@@ -221,7 +221,6 @@ async function signOut(
     "The token is forgotten. Any project publishing as this account will need " +
       "another one.",
     "Sign out",
-    false,
   );
   if (!sure) return;
   try {
@@ -497,7 +496,6 @@ async function forgetHostKey(
       "it. Do this if you know the server was rebuilt — not to get past a " +
       "warning you were not expecting.",
     "Forget it",
-    false,
   );
   if (!sure) return;
   try {
@@ -526,7 +524,6 @@ async function removeServer(
     `Forget ${server.label || server.host}?`,
     "Any project publishing to it will need a new destination.",
     "Forget",
-    false,
   );
   if (!sure) return;
   try {

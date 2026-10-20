@@ -165,7 +165,6 @@ export class ScenesBar {
         "The last scene",
         "A project keeps at least one scene. Make another before deleting this one.",
         "OK",
-        false,
       );
       return;
     }
@@ -175,7 +174,6 @@ export class ScenesBar {
       `Its ${layers} ${layers === 1 ? "layer" : "layers"} and everything on ` +
         `them goes with it. The PSDs stay in the project.`,
       "Delete",
-      false,
     );
     if (ok) this.store.removeScene(sceneId);
   }

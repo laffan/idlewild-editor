@@ -1,4 +1,115 @@
-/* Resize handles and the colour picker. */
+/* Resize handles, the app's own checkbox and slider, and the colour picker. */
+
+/* ── checkbox and slider ─────────────────────────────────────────────────────
+
+   Drawn here rather than left to the platform, so a tick box in a sheet and a
+   slider in the overlays look like they belong to the same app as the switch
+   beside them. Element selectors on purpose: every checkbox and range input
+   gets them, including ones a module builds without a class, and a class that
+   sizes one still wins for layout because nothing here sets layout beyond
+   the control's own box. */
+input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--chrome-edge);
+  border-radius: var(--radius-sm);
+  background: var(--chrome-field);
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease;
+}
+/* The tick: two borders of a box turned 45°, drawn at zero size and grown in
+   when checked, so there is no asset and nothing to line up. */
+input[type="checkbox"]::before {
+  content: "";
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+  transition: transform 100ms ease;
+}
+input[type="checkbox"]:hover:not(:disabled) { border-color: var(--chrome-dim); }
+input[type="checkbox"]:checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+input[type="checkbox"]:checked::before { transform: translateY(-1px) rotate(-45deg) scale(1); }
+input[type="checkbox"]:indeterminate {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+input[type="checkbox"]:indeterminate::before {
+  width: 8px;
+  height: 0;
+  border-left: 0;
+  transform: none;
+}
+input[type="checkbox"]:disabled { opacity: 0.4; cursor: default; }
+input[type="checkbox"]:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (pointer: coarse) {
+  input[type="checkbox"] { width: 22px; height: 22px; }
+  input[type="checkbox"]::before { width: 11px; height: 5px; }
+}
+
+/* A slider: a thin well and a light knob. No fill to the knob's left — the
+   native control can only draw one in the accent, and a column of red bars
+   down the overlays is the opposite of quiet. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chrome-field);
+  box-shadow: inset 0 0 0 1px var(--chrome-edge);
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chrome-field);
+  box-shadow: inset 0 0 0 1px var(--chrome-edge);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chrome-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chrome-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+input[type="range"]:hover::-webkit-slider-thumb { background: #fff; }
+input[type="range"]:hover::-moz-range-thumb { background: #fff; }
+input[type="range"]:focus-visible { outline: none; }
+input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--color-accent); }
+input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--color-accent); }
+input[type="range"]:disabled { opacity: 0.4; cursor: default; }
+@media (pointer: coarse) {
+  input[type="range"] { height: 28px; }
+  input[type="range"]::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; }
+  input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; }
+}
 
 /* ── draggable dividers ──────────────────────────────────────────────────── */
 
@@ -22,11 +133,12 @@
   cursor: row-resize;
 }
 
-/* The visible hairline sits inside the wider touch target. */
+/* The hairline sits inside the wider touch target, and is only drawn while
+   the pointer is on it: at rest the panel's own edge is the divider. */
 .resize-handle::after {
   content: "";
   position: absolute;
-  background: var(--chrome-rule);
+  background: transparent;
   transition: background 120ms ease;
 }
 .resize-handle.vertical::after {
@@ -87,6 +199,7 @@
   grid-area: field;
   position: relative;
   height: 132px;
+  border-radius: var(--radius-md);
   touch-action: none;
   cursor: crosshair;
 }
@@ -102,6 +215,7 @@
   position: relative;
   flex: 1;
   height: 132px;
+  border-radius: var(--radius-sm);
   touch-action: none;
   cursor: ns-resize;
 }
@@ -129,6 +243,7 @@
 .cp-alpha-fade {
   position: absolute;
   inset: 0;
+  border-radius: inherit;
   pointer-events: none;
 }
 
@@ -137,7 +252,8 @@
   width: 14px;
   height: 14px;
   margin: -7px 0 0 -7px;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(32, 30, 29, 0.5);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgb(0 0 0 / 0.4);
   pointer-events: none;
 }
 .cp-thumb-hue {
@@ -145,6 +261,7 @@
   width: 100%;
   height: 6px;
   margin: -3px 0 0 -50%;
+  border-radius: 2px;
   background: transparent;
 }
 
@@ -165,6 +282,7 @@
   display: flex;
   align-items: center;
   padding: 0 10px;
+  border-radius: var(--radius-md);
   font: 500 11px var(--font-mono);
   letter-spacing: 0.04em;
   background-image: var(--cp-checker);
@@ -175,12 +293,13 @@
 .cp-hex {
   flex: 1;
   min-width: 0;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  min-height: var(--ctl);
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--chrome-field);
   color: inherit;
-  font: 400 13px var(--font-mono);
+  font: 400 var(--text-md) var(--font-mono);
   -webkit-user-select: text;
   user-select: text;
 }
@@ -196,9 +315,12 @@
 
 .cp-swatch {
   position: relative;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--color-neutral-700);
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
   padding: 0;
   background-image: var(--cp-checker);
   background-size: var(--cp-checker-size);
@@ -210,8 +332,8 @@
   inset: 0;
   display: block;
 }
-.cp-swatch:hover { border-color: var(--color-accent); }
-.cp-swatch[aria-pressed="true"] { border-color: var(--color-accent); }
+.cp-swatch:hover { box-shadow: 0 0 0 1px var(--chrome-dim); }
+.cp-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--chrome-text); }
 
 /* ── the eyedropper ──────────────────────────────────────────────────────── */
 
@@ -219,17 +341,18 @@
    row reads as one control rather than as a button with a form beside it. */
 .cp-dropper {
   flex: none;
-  width: 36px;
-  min-height: 36px;
+  width: var(--ctl);
+  min-height: var(--ctl);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--color-neutral-700);
-  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--chrome-control);
   color: inherit;
 }
-.cp-dropper:hover { border-color: var(--color-accent); }
+.cp-dropper:hover { background: var(--chrome-hover); }
 
 /* What covers the screen while a colour is being pointed at. Transparent —
    there is nothing to dim, because what is being looked at is the thing
@@ -281,9 +404,9 @@
   border-radius: 50%;
   border: 3px solid var(--eyedrop-ink);
   box-shadow:
-    0 0 0 1px rgba(32, 30, 29, 0.6),
+    0 0 0 1px rgb(0 0 0 / 0.6),
     var(--shadow-lg);
-  background: var(--color-neutral-900);
+  background: var(--chrome-bg);
   /* The canvas is drawn at one device pixel per magnified cell; this stops the
      browser smoothing the squares back into a gradient. */
   image-rendering: pixelated;
@@ -295,8 +418,9 @@
   top: 76px;
   transform: translateX(-50%);
   padding: 3px 7px;
-  background: var(--color-neutral-900);
-  border: 1px solid var(--color-neutral-700);
+  border-radius: var(--radius-sm);
+  background: var(--chrome-bg);
+  border: 1px solid var(--chrome-edge);
   font: 500 11px var(--font-mono);
   letter-spacing: 0.04em;
   color: var(--color-neutral-100);
@@ -324,11 +448,12 @@
 }
 
 /* The head of the row: `+` while the colour in hand is not in the palette,
-   `−` while it is. Accented rather than outlined, because it is the one
-   square in either row that is a verb. */
+   `−` while it is. Dashed, because it is the one square in either row that
+   is a verb rather than a colour. */
 .cp-palette-add {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -339,8 +464,8 @@
 }
 .cp-palette-add:hover:not(:disabled) {
   border-style: solid;
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--chrome-dim);
+  color: var(--chrome-text);
 }
 .cp-palette-add:disabled { opacity: 0.4; }
 
@@ -366,7 +491,7 @@
   position: relative;
   height: 2px;
   overflow: hidden;
-  background: var(--chrome-rule);
+  background: var(--chrome-hover);
 }
 .progress-bar::after {
   content: "";
@@ -423,8 +548,8 @@
 }
 .tip-trigger:hover,
 .tip-trigger[aria-expanded="true"] {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--chrome-dim);
+  color: var(--chrome-text);
 }
 .tip-trigger:focus-visible {
   outline: 2px solid var(--color-accent);
@@ -435,15 +560,15 @@
   position: fixed;
   z-index: 1200;
   max-width: 34ch;
-  padding: 9px 11px;
-  border-radius: 8px;
-  /* Ink whichever surface it is over: a hint opened from a light sheet and one
-     opened from the editor's dark chrome are the same object, and a bubble
-     that changed colour with the sheet under it would read as two. */
-  background: var(--color-neutral-900);
-  color: #fff;
-  font: 400 11.5px/1.5 var(--font-body);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 28%);
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--chrome-edge);
+  /* The frame's own dark, as a menu and a tool's tooltip are: everything that
+     floats over the interface is the same object. */
+  background: var(--chrome-bg);
+  color: var(--chrome-text);
+  font: 400 var(--text-sm)/1.5 var(--font-body);
+  box-shadow: var(--shadow-lg);
   pointer-events: none;
   /* A blank line in a hint is a paragraph break. Every hint in the app is one
      paragraph except the one on New Project's Scaffolding heading, which

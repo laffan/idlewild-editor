@@ -237,17 +237,13 @@ export function optionGroup(group: OptionGroup): HTMLElement {
 
 /**
  * The page itself: the element a sheet's body is filled with.
- *
- * `light` for the home screen's sheets, which are drawn on paper; the editor's
- * are dark and are the default.
  */
 export function optionsPage(
   groups: Array<HTMLElement | null>,
-  light = false,
 ): HTMLElement {
   return h(
     "div",
-    { class: `options${light ? " light" : ""}` },
+    { class: "options" },
     ...groups.filter((group): group is HTMLElement => group !== null),
   );
 }

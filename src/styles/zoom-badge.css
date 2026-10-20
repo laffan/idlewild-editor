@@ -11,21 +11,13 @@
    be. */
 .tool-rail-head:empty { display: none; }
 
-/* The first tool now follows the head rather than being `:first-child`, so
-   the rule that keeps a column's top edge clean has to say so. Left as a
-   sibling rule rather than reaching for a "first visible" selector, which
-   does not exist — the same constraint `ToolRail.setOffered` works around by
-   detaching withheld tools instead of hiding them. */
-.tool-rail-head + .tool-btn { border-top: 0; }
-
-/* Same 45px column as the buttons under it, and shorter, so it reads as a cap
-   on the rail rather than as a tool nobody drew an icon for. The rule along
-   the bottom is the one line between it and Select. */
+/* The column's width and shorter, so it reads as a cap on the rail rather
+   than as a tool nobody drew an icon for. */
 .zoom-badge {
-  width: 45px;
-  height: 26px;
+  width: 32px;
+  height: 20px;
   border: 0;
-  border-bottom: 1px solid var(--chrome-rule);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--chrome-dim);
   display: flex;
@@ -34,17 +26,20 @@
   cursor: pointer;
   padding: 0;
 }
-.zoom-badge:hover { background: var(--chrome-rule); color: var(--chrome-text); }
+.zoom-badge:hover { background: var(--chrome-hover); color: var(--chrome-text); }
+@media (pointer: coarse) {
+  .zoom-badge { width: 42px; height: 24px; }
+}
 
 /* The number in the monospace face, so a camera being pinched does not make
    the badge shuffle between 88% and 100% under the finger doing the
    pinching. */
 .zoom-badge-value {
-  font: 500 11px/1 var(--font-mono);
+  font: 500 10px/1 var(--font-mono);
 }
 
 /* At 1:1 the tap has nowhere to go. Dimmed rather than disabled: a disabled
    control is one somebody has to work out the rule behind, and the rule here
    is the number it is showing. */
-.zoom-badge.at-one { color: var(--chrome-rule); }
+.zoom-badge.at-one { color: var(--chrome-faint); }
 .zoom-badge.at-one:hover { color: var(--chrome-dim); }
