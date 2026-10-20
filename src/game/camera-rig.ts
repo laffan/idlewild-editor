@@ -241,7 +241,7 @@ export class CameraRig {
     if (this.phase === "pinch") {
       const spread = this.spread();
       if (this.pinchDistance > 0 && spread > 0) {
-        const centre = this.centre();
+        const centre = this.local(this.centre());
         this.events.onZoom(spread / this.pinchDistance, centre.x, centre.y);
         this.events.onChange();
       }
@@ -376,12 +376,24 @@ export class CameraRig {
     // Trackpad pinch reaches WebKit as a ctrl-wheel; a plain wheel scrolls.
     if (event.ctrlKey || event.metaKey) {
       const factor = Math.exp(-event.deltaY / 220);
-      this.events.onZoom(factor, event.clientX, event.clientY);
+      const at = this.local({ x: event.clientX, y: event.clientY });
+      this.events.onZoom(factor, at.x, at.y);
     } else {
       this.events.onPan(-event.deltaX, -event.deltaY);
     }
     this.events.onChange();
   };
+
+  /**
+   * A point on the page, measured from the canvas's own corner — which is
+   * what a zoom is centred on. Everything else here hands on page
+   * coordinates, and the scene converts them; the camera does not, so a
+   * pinch handed the page's point was centred a sidebar's width away.
+   */
+  private local(point: { x: number; y: number }): { x: number; y: number } {
+    const rect = this.el.getBoundingClientRect();
+    return { x: point.x - rect.left, y: point.y - rect.top };
+  }
 
   private spread(): number {
     const [a, b] = [...this.pointers.values()];

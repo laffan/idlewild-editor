@@ -611,7 +611,10 @@ Its sheet sits at the ink's z-index, kept just after the ink's own sheet in
 the canvas column (`PlanMode.sync`), so the plan draws over the scene's ink
 and under the rail and the artboards' labels. Out of the mode its surface is
 inert and only its strokes show, at the Overlays panel's Plan opacity; in
-the mode it takes the pointer, a tint goes between it and the scene, and the
+the mode it takes the pointer, a white wash goes between it and the scene —
+at the Overlays panel's Plan overlay switch and opacity, a row
+(`OverlaysPanel.showPlanTint`) that exists only while the mode is up and
+starts at half — and the
 canvas column wears `.planning`, which hides the rail, the drawing toolbar
 and the floating bars in favour of the plan's own Pencil, Eraser and Done.
 The pencil is the engine's pencil with the colour fixed to `PLAN_COLOR`; the

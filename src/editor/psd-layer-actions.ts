@@ -25,6 +25,7 @@
  */
 
 import { h } from "../lib/dom";
+import { EDIT_LAYERS, sectionTitle } from "./inspect-collapse";
 
 /**
  * What the canvas and the document have made of the placement a layer list
@@ -234,5 +235,25 @@ export function newLayerButton(busy: boolean, onAdd: () => void): HTMLElement {
       disabled: busy ? "true" : null,
       onClick: onAdd,
     }),
+  );
+}
+
+/**
+ * Edit Layers: the file's stack and New layer, as a fold of their own inside
+ * the PSD section, closed until somebody opens it.
+ *
+ * What stays outside is about the file rather than its stack — its size, the
+ * row of actions over it, what the list could not do — and so does Apply,
+ * because a staged edit is still waiting on it after the fold is closed. A
+ * nested `.inspect-section` so the inspector's one fold pass reaches it; it
+ * starts closed because `EDIT_LAYERS` is in `FOLDED_FIRST`.
+ */
+export function editLayersSection(list: HTMLElement, newRow: HTMLElement): HTMLElement {
+  return h(
+    "div",
+    { class: "inspect-section psd-edit-layers" },
+    sectionTitle(EDIT_LAYERS),
+    list,
+    newRow,
   );
 }

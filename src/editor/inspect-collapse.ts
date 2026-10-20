@@ -125,15 +125,39 @@ export function sectionTitle(
   return el;
 }
 
+/**
+ * A placed PSD's own layer stack, folded inside its PSD section — see
+ * `editLayersSection` in `psd-layer-actions.ts`.
+ */
+export const EDIT_LAYERS = "Edit Layers";
+
+/**
+ * The sections that start **folded**, where every other starts open.
+ *
+ * Edit Layers is the one: a file's stack is a list of rows as long as the
+ * file is deep, and selecting a PSD to move it put that list between you and
+ * everything under it. Opening it is remembered like any other fold — as an
+ * `open:` entry in the same store, since for these it is opening that is the
+ * thing somebody did.
+ */
+const FOLDED_FIRST: ReadonlySet<string> = new Set([EDIT_LAYERS]);
+
+/** What a section's fold is stored as, and whether being stored means shut. */
+function stored(name: string): { key: string; shut: boolean } {
+  return FOLDED_FIRST.has(name) ? { key: `open:${name}`, shut: false } : { key: name, shut: true };
+}
+
 /** Whether a section with this name is currently folded away. */
 export function isCollapsed(name: string): boolean {
-  return state().has(name);
+  const { key, shut } = stored(name);
+  return state().has(key) === shut;
 }
 
 /** Fold a section away, or open it, and remember which. */
 export function setCollapsed(name: string, collapse: boolean): void {
-  if (collapse) state().add(name);
-  else state().delete(name);
+  const { key, shut } = stored(name);
+  if (collapse === shut) state().add(key);
+  else state().delete(key);
   persist();
 }
 
@@ -218,17 +242,18 @@ export function namedSections(
  * the next selection would have said something about this PSD rather than
  * about how you are working.
  */
-export function isolateSection(within: HTMLElement, keep: string): void {
+export function isolateSection(within: HTMLElement, keep: readonly string[]): void {
   for (const { section, title, name } of namedSections(within)) {
-    const collapse = name !== keep;
+    const collapse = !keep.includes(name);
     setCollapsed(name, collapse);
     apply(section, title, name, collapse);
   }
 }
 
 /**
- * Open one section, fold the rest of `within` away, and scroll `scroller` to
- * it.
+ * Open some sections, fold the rest of `within` away, and scroll `scroller`
+ * to the first of them. Several because a section can sit inside another:
+ * the PSD section and the Edit Layers fold within it.
  *
  * The scroll is measured rather than delegated to `scrollIntoView`, which
  * walks every scrollable ancestor — in this panel that would take the shell's
@@ -236,11 +261,11 @@ export function isolateSection(within: HTMLElement, keep: string): void {
  */
 export function revealSection(
   within: HTMLElement,
-  name: string,
+  names: readonly string[],
   scroller: HTMLElement,
 ): void {
-  isolateSection(within, name);
-  const row = namedSections(within).find((s) => s.name === name);
+  isolateSection(within, names);
+  const row = namedSections(within).find((s) => s.name === names[0]);
   if (!row) return;
   scroller.scrollTop +=
     row.section.getBoundingClientRect().top -

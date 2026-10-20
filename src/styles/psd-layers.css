@@ -28,6 +28,13 @@
 .psd-layers-status[hidden] { display: none; }
 .psd-layers-status.blocked { color: var(--color-accent-300); }
 
+/* Edit Layers: the stack and New layer, folded inside the PSD section and
+   closed to begin with — see `editLayersSection`. It is a section in a
+   section, so the padding and the rule a section carries would double up. */
+.psd-layers .psd-edit-layers,
+.psd-layers .psd-edit-layers.collapsed { padding: 0; border-top: 0; margin-top: 4px; }
+.psd-edit-layers > .inspect-section-title { margin-bottom: 8px; }
+
 .psd-layer-list { border: 1px solid var(--color-neutral-700); }
 .psd-layer-row {
   display: flex;

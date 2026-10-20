@@ -39,14 +39,14 @@ export const FLOAT_MARGIN = 12;
 /**
  * And this far clear of its left edge, where the tool columns are.
  *
- * The rail's own 16px inset plus a 56px button plus a gap. It applies down
+ * The rail's own 16px inset plus a 45px button plus a gap. It applies down
  * the whole height rather than only where a column actually is: the rail
  * hangs from the top and the drawing toolbar stands on the bottom, so between
  * them they cover most of that edge, and a bound that came and went as a bar
  * moved up the screen would be harder to predict than one that is always
  * there.
  */
-export const FLOAT_GUTTER = 88;
+export const FLOAT_GUTTER = 77;
 
 function clamp(value: number, low: number, high: number): number {
   return Math.max(low, Math.min(value, high));

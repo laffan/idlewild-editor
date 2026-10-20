@@ -562,6 +562,16 @@ is really one file's insides leaking into the panel about the canvas. The rows
 are **units** now, one per placed file: `placedUnits` groups a layer's
 placements by `instance`, and the row carries every member id in `members`.
 
+A unit's row is named by the file's key alone — every row of that kind is a
+PSD, so `.psd` on each was the same four characters down the whole list — and
+it wears a **thumbnail** where the file icon was: `psd_flatten::psd_art_thumbnail`
+composites the file the way the merged tile palette is (visible layers, no
+orienting marks), crops it to the artwork so a canvas padded out to whole grid
+spaces is not a speck in a box, and shrinks it. That is a parse of the whole
+PSD, so `lib/psd-thumbs.ts` asks once per file and keeps the answer;
+`PsdPlacements.reload` and `rename`, which every rewrite comes home through,
+forget it.
+
 That list is what makes the row behave like the thing it names. The canvas
 selects whichever member the pointer landed on — a tap on the roof selects the
 roof's placement — so a row matching only the id inside its own selection went

@@ -99,7 +99,8 @@ Part of [the Idlewild manual](README.md).
 
 ## Points and boundaries
 
-- **Points**, from the rail: tap and a named place lands on that space, in
+- **Points** come in with a PSD's own `P |` layers; there is no Point tool on
+  the toolbar any more. One lands on its space, in
   the layer palette and on the canvas. Rename it in the inspector, drag it a
   space at a time, delete it. One point per scene can be its **start point** —
   the palette marks it with a flag and the canvas gives it a second ring — and
@@ -108,13 +109,10 @@ Part of [the Idlewild manual](README.md).
   the scene holds the designation rather than the point. Every point reaches
   the game in `config.layers[].points`, so a door or a trigger is a matter of
   reading back the one you named
-- **Boundary**, beside Point: sweep an outline on bare grid and it becomes a
-  blocking zone, named, selected and listed under its layer. A boundary could
-  only be made from strokes you had already drawn and lassoed, which is the
-  right gesture when there is a sketch to promote and no gesture at all when
-  there is not. Both routes meet in the middle — the same simplification, the
-  same naming — so a boundary swept here and one converted from a sketch of
-  the same shape are the same thing
+- **Boundaries** are made from strokes you have drawn and lassoed, or come in
+  with a PSD's `Z |` layers: either way a blocking zone, named, selected and
+  listed under its layer. The Boundary tool that swept one straight onto bare
+  grid is off the toolbar
 
 ## Undo, delete, and a PNG of what you have got
 

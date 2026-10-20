@@ -176,15 +176,12 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   the tool columns actually are. The rail hangs from the top and the drawing
   toolbar stands on the bottom, so between them they cover most of that edge
   and a constant is honest most of the time — but a bar over something in the
-  vertical middle of the canvas is pushed right by 88px for nothing.
-- The Boundary tool sweeps freehand and nothing else. There is no
-  point-to-point boundary the way there is a point-to-point fill, and the two
-  are the same shape of problem — a polygon tapped out and adjusted — so the
-  second one is a matter of reusing the first rather than of new thinking.
-- A boundary swept with the tool arrives blocking, and the only way to make it
-  passable is the inspector row afterwards. There is no modifier or toggle on
-  the tool itself, because a bar for one tool is chrome and the row is one tap
-  away.
+  vertical middle of the canvas is pushed right by 77px for nothing.
+- Point and Boundary are off the toolbar (`UNOFFERED` in `tool-rail.ts`), but
+  the routing behind them — the `ToolId`s, the rig's `point` mode, the drawing
+  layer's `zone` gesture, `addSweptZone` — is still there and now unreachable.
+  Kept so that putting either back is one line; if neither is coming back it
+  is worth deleting rather than carrying.
 - Mask mode sweeps rectangles and nothing else. A boundary that is genuinely
   diagonal is a staircase of sweeps, and the obvious answer — dragging a
   freehand path that paints the spaces under it — is one method away. The

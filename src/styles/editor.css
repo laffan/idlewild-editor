@@ -180,96 +180,6 @@
 .header-menu:hover,
 .header-menu[aria-expanded="true"] { background: var(--chrome-rule); }
 
-/* The tools: two columns down the left edge of the canvas.
-
-   Which end a column hangs from is the distinction a gap in the middle of one
-   column used to carry. The **rail** hangs from the top and is what you do to
-   the canvas — Select, Pan, Point, Boundary. The **drawing toolbar** stands
-   on the bottom and is the ink. Same width, same 56px buttons, so the two
-   read as one vocabulary held apart rather than as two kinds of chrome; and
-   the ink is at the corner a hand resting on an iPad's glass is nearest,
-   which is the right way round for the thing a hand is doing most often. */
-.tool-rail {
-  position: absolute;
-  left: 16px;
-  top: 16px;
-  border: 0;
-  background: var(--chrome-bg);
-  display: flex;
-  flex-direction: column;
-  z-index: 5;
-}
-/* The second column, standing on the bottom edge rather than hanging from the
-   top. `top: auto` undoes the rule above, which both columns share. */
-.tool-rail.draw-bar {
-  top: auto;
-  bottom: 16px;
-}
-.tool-btn {
-  /* `relative` for the eraser's slash, which is a pseudo-element over the
-     icon rather than a second glyph — see `.tool-btn.erasing`. */
-  position: relative;
-  width: 56px;
-  height: 56px;
-  border: 0;
-  border-top: 1px solid var(--chrome-rule);
-  background: transparent;
-  color: var(--chrome-dim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.tool-btn:first-child { border-top: 0; }
-.tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
-.tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
-.tool-btn[disabled] { opacity: 0.45; }
-/* A withheld tool, belt and braces. The rail takes one out of the DOM rather
-   than hiding it — see `ToolRail.setOffered`, which explains why — but the
-   rule that made hiding *not work* is right above this one: `display: flex`
-   is an author style and the browser's own `[hidden] { display: none }` is
-   not, so the attribute lost every time. A tool the rail withheld went on
-   showing, and a tile layer offered the whole ink column beside its own. */
-.tool-btn[hidden] { display: none; }
-
-/* A tool turned round: it takes out what it would have drawn.
-   The slash is one pseudo-element rather than a second icon per tool, so
-   every tool that grows an eraser gets the mark for free — and it falls the
-   *opposite* way from the pencil's own diagonal, or it would lie along the
-   glyph it is supposed to cross out.
-
-   Being an eraser is a state of the tool and it survives picking something
-   else up, so the mark has to be visible on a button that is not pressed —
-   in the accent there, and in white on the accent when the tool is in hand.
-   The fill still means "this is what you are holding", which it would stop
-   meaning if every armed tool were filled. */
-.tool-btn.erasing::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 30px;
-  height: 2px;
-  background: var(--color-accent);
-  transform: translate(-50%, -50%) rotate(45deg);
-  pointer-events: none;
-}
-.tool-btn.erasing { color: var(--color-accent); }
-.tool-btn.erasing[aria-pressed="true"] { color: #fff; }
-.tool-btn.erasing[aria-pressed="true"]::after { background: #fff; }
-
-.tool-name {
-  position: absolute;
-  left: 84px;
-  /* The middle of the rail's *first button*, which is the zoom badge's height
-     below the top of the column — see `zoom-badge.css`, which owns the token
-     and falls back to zero for a rail with no badge on it. */
-  top: calc(28px + var(--rail-head-h, 0px));
-  font-size: 10px;
-  color: var(--color-neutral-700);
-  z-index: 5;
-  pointer-events: none;
-}
-
 /* Floating action bar over a grid selection */
 .selection-actions {
   position: absolute;
@@ -578,15 +488,13 @@ button.terminal-level.linked:hover { color: var(--chrome-text); }
 /* The canvas tools, in both of the modes that run the game over the canvas.
 
    Code shows what Play shows — the project's own game, in a frame over this
-   canvas — so the tools, the tool name and the selection bar have nothing to
+   canvas — so the tools and the selection bar have nothing to
    act on in either. What Code keeps is the editor *around* the canvas: both
    sidebars, so the scene can be switched and the document adjusted while the
    game runs, and the panel the code is in. */
 .editor.play-mode .tool-rail,
-.editor.play-mode .tool-name,
 .editor.play-mode .selection-actions,
 .editor.code-mode .tool-rail,
-.editor.code-mode .tool-name,
 .editor.code-mode .selection-actions { display: none; }
 
 /* And the minimap, which is the same argument one step further out.

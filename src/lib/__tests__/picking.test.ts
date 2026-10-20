@@ -177,7 +177,7 @@ describe("layerItems", () => {
     );
 
     expect(items.map((i) => i.label)).toEqual([
-      "tower.psd",
+      "tower",
       "Color fill",
       "Dock edge",
     ]);
@@ -223,7 +223,7 @@ describe("layerItems", () => {
     const items = layerItems(layer("l1", { placements: members }));
 
     expect(items).toHaveLength(1);
-    expect(items[0].label).toBe("tower.psd");
+    expect(items[0].label).toBe("tower");
     expect(items[0].detail).toBe("3 layers");
     expect(items[0].members).toEqual(["tower", "roof", "sign"]);
   });

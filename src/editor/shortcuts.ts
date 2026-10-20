@@ -10,6 +10,14 @@
  * from wherever you are, and the tool comes back the moment the key is up.
  * An iPad has no space bar, which is why Pan is a rail tool as well.
  *
+ * **A letter picks a tool up**: V Select, T Text, L Lasso, P Pattern, S
+ * Stamp or Shape, E Slice — the table is `TOOL_KEYS` in `tool-rail.ts`, which
+ * the tooltips read too. Only a tool the toolbar is showing, and only while
+ * it is showing at all: a key for a button you cannot see would put a tool in
+ * hand that nothing on screen admits to, and the mode that hid the toolbar
+ * owns the pointer anyway. No modifiers, so ⌘S, ⌘V and the rest are left to
+ * whatever already answers them.
+ *
  * ⌘G and ⇧⌘G group and ungroup the placed PSDs that are selected — an
  * editor-only relationship that is saved with the project and never reaches
  * the game. There is no ⌘ on an iPad, so both are also buttons in the
@@ -38,12 +46,18 @@
 
 import type { ToolId } from "../lib/types";
 import { NUDGE_PX } from "./nudge-actions";
+import { toolForKey } from "./tool-rail";
 
 export interface ShortcutHost {
   /** What the rail is showing now. */
   currentTool: () => ToolId;
   /** Put a tool in the pointer's hands, silently. */
   applyTool: (tool: ToolId) => void;
+  /**
+   * The tools a letter may pick up: what the toolbar is showing, or nothing
+   * while it is down — in Code or Play, or under a mode that took it away.
+   */
+  pickable: () => readonly ToolId[];
   /** Whether Delete has anything to act on. */
   hasSelection: () => boolean;
   onDelete: () => void;
@@ -115,6 +129,27 @@ export function bindShortcuts(host: ShortcutHost): () => void {
       borrowed = host.currentTool();
       host.applyTool("pan");
       return;
+    }
+
+    // A letter for a tool. Auto-repeat is let through and does nothing new:
+    // the tool is already in hand. Not under a sheet — a letter typed at the
+    // pattern editor is about that sheet, not the canvas behind it.
+    if (
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      event.key.length === 1 &&
+      !document.querySelector('[aria-modal="true"]')
+    ) {
+      const tool = toolForKey(event.key, host.pickable());
+      if (tool) {
+        event.preventDefault();
+        // A letter pressed while space is held puts the new tool in hand for
+        // good, and letting go of space must not take it away again.
+        borrowed = null;
+        host.applyTool(tool);
+        return;
+      }
     }
 
     // The arrows, before Delete, because they are the busier key and neither

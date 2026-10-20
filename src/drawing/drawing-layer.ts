@@ -650,7 +650,10 @@ export class DrawingLayer {
       const spread = this.spread();
       const centre = this.centre();
       if (this.pinchSpread > 0 && spread > 0) {
-        this.callbacks.onZoom(spread / this.pinchSpread, centre.x, centre.y);
+        // From the sheet's corner, as the wheel's is: the camera zooms about
+        // a point on the canvas, and `centre` is on the page.
+        const rect = this.root.getBoundingClientRect();
+        this.callbacks.onZoom(spread / this.pinchSpread, centre.x - rect.left, centre.y - rect.top);
       }
       this.pinchSpread = spread;
       // The midpoint carries the pan while two fingers are down, so a

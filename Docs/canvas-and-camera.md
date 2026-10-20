@@ -229,6 +229,28 @@ drag on empty space does, what the cursor is, what the inspector describes —
 was four screens down a file that is otherwise wiring, and the pen rail's three
 tools belong with it because they are a brush swap wearing a tool's clothes.
 
+### The camera is settled before anything reads it
+
+A pan used to look like the canvas's layers moving at different speeds — the
+ink, the plan, the guides and the artboards trailing the PSDs and the lattice,
+and all of them catching up the moment the hand stopped. It was a frame of
+lag, and Phaser 4 is where it came from: the camera's matrix, and the
+`worldView` and `midPoint` worked out with it, are rebuilt in `preRender`,
+once a frame, just before the canvas is drawn. So everything that read the
+camera between those moments read where it had been a frame ago —
+`getWorldPoint`, through which `viewport()` publishes to every DOM sheet over
+the canvas, and the lattice, backdrops and PSD Edit mode's dim, all cut from
+`worldView` in the scene's `update`. The faster the pan, the further behind.
+
+`SceneCamera.settle` runs `preRender` straight after every move it makes and
+at the top of the scene's `update` (a resize moves the camera without going
+through any of its moves). For a camera with no follow target and no shake,
+which this one never has, `preRender` is that arithmetic and nothing else.
+The same staleness had been quietly breaking `zoomBy`: it reads the world
+point under the fingers before and after the zoom, and with one stale matrix
+behind both reads the correction always came out zero, so a pinch scaled
+about wherever the matrix last said rather than about the fingers.
+
 ---
 
 ## The origin, and the screen the game opens at
@@ -351,8 +373,8 @@ about the scene, and the code says so in three places.
   Play are the same answer, so switching between them changes nothing on the
   canvas — and a solid half pulled in extrude mode survives neither, because
   the game is about to cover the thing it was being pulled over.
-- **The stylesheet takes the tools down in both** — the rail, the tool name,
-  the selection bar, the ink's own layer, and the canvas's pointer events —
+- **The stylesheet takes the tools down in both** — the rail, the selection
+  bar, the ink's own layer, and the canvas's pointer events —
   the *right* sidebar in both, and the left one in Play only. All three are
   asserted in `styles/__tests__/styles.test.ts`, because "Code keeps the layer
   column" is most of the reason the mode exists and a rule is an easy thing to
@@ -462,8 +484,35 @@ one pressed state across them, because only one tool is ever in hand):
 
 | Column | Where | Tools | What they have in common |
 |---|---|---|---|
-| rail | hangs from the top left | Select, Pan, Point, Boundary | what you do *to* the canvas: the camera and the pointer, then the two that make something out of bare ground — nothing already on it can be promoted into either |
-| draw | stands on the bottom left | Pencil, Pattern, Shape, Slice, Lasso, Fill, Text | the ink |
+| rail | hangs from the top left | Select, Pan | what you do *to* the canvas: the pointer and the camera |
+| draw | stands on the bottom left | Lasso, Slice — then, 5px below, Pencil, Pattern, Shape, Fill, Text | the ink; the short group on top acts on strokes already there rather than laying one down |
+
+**Point and Boundary are off the toolbar.** They hung under Pan, and both are
+things a PSD already brings in from its own `P |` and `Z |` layers — and a
+boundary can still be made from lassoed strokes. `UNOFFERED` in `tool-rail.ts`
+withholds them on every layer and builds no button for them; the `ToolId`s,
+the routing and the document objects behind them are untouched, so putting
+either back is that one line.
+
+**The drawing toolbar is two groups in one element.** `ToolRail.drawBar` is
+still the one thing a mode lifts or hides, and inside it are two
+`.tool-group`s with the chrome on them and 5px of canvas between. A group with
+nothing offered in it — a tile layer has no Lasso or Slice — is `:empty` and
+not drawn, or the gap would stand over nothing.
+
+**Each button carries its own tooltip and its key**, as a child span rather
+than a `title`: the native tooltip waits a second, cannot be styled and shows a
+finger nothing. It is shown on `:hover` only under `@media (hover: hover)` —
+on an iPad a tap leaves `:hover` on the button it landed on — and on
+`:focus-visible`. The keys are `TOOL_KEYS` in `tool-rail.ts`, which the
+tooltips read too, so a key a tooltip names is a key that works; the listener
+is `shortcuts.ts`. **S is two tools that are never offered together** — Stamp
+on a tile layer, Shape everywhere else — and a key only ever picks up a tool
+the toolbar is showing, and none while Code, Play or a mode in `TOOLBARS_DOWN`
+has the canvas.
+
+There used to be a floating **tool name** beside the rail, saying what was in
+hand. It went: the pressed button says it, and the tooltip names it.
 
 ### The zoom badge, at the head of the rail
 
@@ -479,10 +528,7 @@ long as it has had a zoom of its own; this is that control for the camera.
 **In the rail's own head slot** (`ToolRail.head`, which `setOffered` keeps
 across a rebuild) rather than positioned over the column, so it moves with it
 and goes down with it in Code and Play — where the canvas is behind a running
-game and the number would be describing something nobody can see. The floating
-tool name beside the rail is positioned against the middle of the *first
-button*, so it moves down by the badge's height: `--rail-head-h` in
-`zoom-badge.css` is that one number, shared by the two rules that need it.
+game and the number would be describing something nobody can see.
 
 **A tap is 100%, not the zoom the project opens at.** Those are two different
 questions and the second already has an answer in Project Options. What this
@@ -502,8 +548,7 @@ doing the pinching; zoomed out, the camera spends most of its range between
 number.
 
 **Text is the exception on that column**, and it is worth saying why it is
-there rather than on the rail. Its gesture is a tap on bare ground, like
-Point's, and it is the one tool on the draw column that does not hand the
+there rather than on the rail. Its gesture is a tap on bare ground, and it is the one tool on the draw column that does not hand the
 pointer to the drawing layer. But the columns are about *ownership*, and a word
 on the canvas is a note in the margin of the artwork: what it is for is saying
 something on the drawing, and the next thing anybody does with one is turn it
@@ -517,10 +562,10 @@ Four of the seven can be **turned round and used as erasers** — Pencil,
 Pattern, Shape and Fill, which is `ERASABLE` in `tool-rail.ts`, the set of
 tools that lay a mark down. Slice is not one of them: it cuts a stroke in two rather than
 rubbing pixels out, which is a different thing that used to share the name
-*Eraser* and now has a knife for an icon. Lasso and the rail's four draw
+*Eraser* and now has a knife for an icon. Lasso and the rail's two draw
 nothing at all. See [Erasing is a flag, not a mode](drawing.md#erasing-is-a-flag-not-a-mode).
 
-Same class, same 56px buttons, same width: `.tool-rail.draw-bar` is the rail
+Same class, same 45px buttons, same width: `.tool-rail.draw-bar` is the rail
 turned the other way up, and `top: auto; bottom: 16px` is the whole of the
 difference. Keeping them the same shape is deliberate — they are one
 vocabulary held apart, not two kinds of chrome — and putting the ink at the
@@ -543,7 +588,8 @@ out PSD Edit mode's own session ink, offered as a toggle on that mode's bar —
 and `OFF_BAR` was a second table holding its label so that picking it up did
 not look like picking nothing up. Both are gone; see *Rub went, and the four
 brushes were already the answer*, below. `tool-bars.test.ts` now asserts the
-plain thing: every `ToolId` is in a column. A tool that is in none gets no
+plain thing: every `ToolId` is in a column — Point and Boundary included,
+which keeps their names while no layer offers them. A tool that is in none gets no
 button anywhere and a blank label the moment something puts it in your hand,
 and nothing else would say so.
 

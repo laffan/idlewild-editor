@@ -56,17 +56,8 @@ pub fn merge_psd_art(id: String, key: String) -> Result<MergedArt, String> {
 
 /// Composite the file and write it beside its layer sprites.
 pub fn write(project_id: &str, key: &str) -> Result<MergedArt, String> {
-    let path = psd_pipeline::psd_path(project_id, key)?;
-    let bytes = std::fs::read(&path)
-        .map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
-    let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot read {key}.psd: {e:?}"))?;
-
-    let (width, height) = (doc.width(), doc.height());
-    if width == 0 || height == 0 {
-        return Err(format!("{key}.psd has no canvas to merge"));
-    }
-    let mut canvas = RgbaImage::new(width, height);
-    paint(&doc, None, 255, &mut canvas);
+    let canvas = composite(project_id, key)?;
+    let (width, height) = canvas.dimensions();
 
     let out = psd_pipeline::output_dir(project_id, key)?;
     std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
@@ -80,6 +71,58 @@ pub fn write(project_id: &str, key: &str) -> Result<MergedArt, String> {
         width,
         height,
     })
+}
+
+/// The file as it looks, at its own size: every visible layer, without the
+/// two orienting marks — what the merged palette is and what a thumbnail
+/// shows.
+fn composite(project_id: &str, key: &str) -> Result<RgbaImage, String> {
+    let path = psd_pipeline::psd_path(project_id, key)?;
+    let bytes = std::fs::read(&path)
+        .map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
+    let doc = Psd::from_bytes(&bytes).map_err(|e| format!("Cannot read {key}.psd: {e:?}"))?;
+
+    let (width, height) = (doc.width(), doc.height());
+    if width == 0 || height == 0 {
+        return Err(format!("{key}.psd has no canvas to merge"));
+    }
+    let mut canvas = RgbaImage::new(width, height);
+    paint(&doc, None, 255, &mut canvas);
+    Ok(canvas)
+}
+
+/// A small picture of a placed file, for its row in the layer list.
+///
+/// The same composite as the merged palette, so the row shows what the canvas
+/// does — hidden layers and the orienting marks left out — then **cropped to
+/// the artwork** before it is shrunk: an import's canvas is padded out to
+/// whole grid spaces, and a thumbnail of the padding would be a speck in a
+/// box. Nothing is written; the answer is a PNG data URL, or an empty string
+/// for a file with nothing visible in it, which the row draws as its icon.
+#[tauri::command(async)]
+pub fn psd_art_thumbnail(id: String, key: String, max_size: u32) -> Result<String, String> {
+    let canvas = composite(&id, &key)?;
+    let Some((left, top, width, height)) = opaque_bounds(&canvas) else {
+        return Ok(String::new());
+    };
+    let art = image::imageops::crop_imm(&canvas, left, top, width, height).to_image();
+    let side = max_size.max(1);
+    crate::psd_write::png_data_url(&image::DynamicImage::ImageRgba8(art).thumbnail(side, side))
+}
+
+/// The smallest rectangle holding every pixel with any alpha, or None.
+fn opaque_bounds(canvas: &RgbaImage) -> Option<(u32, u32, u32, u32)> {
+    let (mut left, mut top, mut right, mut bottom) = (u32::MAX, u32::MAX, 0, 0);
+    for (x, y, pixel) in canvas.enumerate_pixels() {
+        if pixel.0[3] == 0 {
+            continue;
+        }
+        left = left.min(x);
+        top = top.min(y);
+        right = right.max(x);
+        bottom = bottom.max(y);
+    }
+    (left <= right).then(|| (left, top, right - left + 1, bottom - top + 1))
 }
 
 /// Rebuild it, but only for a file the document actually has one for.
@@ -250,4 +293,22 @@ fn is_mark(name: &str) -> bool {
         return false;
     }
     matches!(parts[0].to_uppercase().as_str(), "P" | "Z")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bounds_hold_every_visible_pixel_and_nothing_else() {
+        let mut canvas = RgbaImage::new(10, 8);
+        canvas.put_pixel(2, 3, image::Rgba([255, 0, 0, 255]));
+        canvas.put_pixel(6, 5, image::Rgba([0, 0, 255, 1]));
+        assert_eq!(opaque_bounds(&canvas), Some((2, 3, 5, 3)));
+    }
+
+    #[test]
+    fn an_empty_canvas_has_no_bounds() {
+        assert_eq!(opaque_bounds(&RgbaImage::new(4, 4)), None);
+    }
 }

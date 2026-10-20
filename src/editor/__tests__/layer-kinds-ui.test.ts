@@ -83,7 +83,7 @@ describe("a layer's rows", () => {
     const [row] = layerItems(layer({ placements: [placement("tower")] }), {
       isAnchored: () => false,
     });
-    expect(row.label).toBe("tower.psd");
+    expect(row.label).toBe("tower");
     expect(row.warning).toBe("No anchor");
     expect(row.selection).toEqual({
       kind: "placement",
@@ -127,7 +127,7 @@ describe("a layer's rows", () => {
    */
   it("carry the file's key, not only its filename", () => {
     const [row] = layerItems(layer({ placements: [placement("tower")] }));
-    expect(row.label).toBe("tower.psd");
+    expect(row.label).toBe("tower");
     expect(row.psdKey).toBe("tower");
   });
 
@@ -172,7 +172,7 @@ describe("a background layer's rows", () => {
         placements: [placement("hills")],
       }),
     );
-    expect(rows.map((r) => r.label)).toEqual(["Colour 1", "hills.psd"]);
+    expect(rows.map((r) => r.label)).toEqual(["Colour 1", "hills"]);
     expect(rows[0].selection).toEqual({
       kind: "background",
       layerId: "l1",

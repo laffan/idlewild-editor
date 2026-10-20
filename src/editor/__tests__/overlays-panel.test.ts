@@ -33,6 +33,8 @@ describe("the remembered switches", () => {
       centre: true,
       // A print project's guides; a game never shows the row.
       guides: true,
+      // Plan mode's wash, which only has a row while the mode is up.
+      planTint: true,
       // The open scene's plan, which only has a row while there is one.
       plan: true,
       minimap: true,
@@ -44,6 +46,8 @@ describe("the remembered switches", () => {
       gridColor: "#a9c2d3",
       gridOpacity: 1,
       planOpacity: 1,
+      // Half: tracing paper over the scene rather than a sheet laid on it.
+      planTintOpacity: 0.5,
     });
   });
 
@@ -53,12 +57,14 @@ describe("the remembered switches", () => {
       boundary: false,
       centre: true,
       guides: false,
+      planTint: false,
       plan: false,
       minimap: false,
       open: false,
       gridColor: "#ff0000",
       gridOpacity: 0.4,
       planOpacity: 0.5,
+      planTintOpacity: 0.8,
     };
     expect(readOverlays(JSON.stringify(stored))).toEqual(stored);
   });
@@ -100,6 +106,12 @@ describe("the remembered switches", () => {
     expect(
       readOverlays('{"boundary":true,"centre":true,"minimap":true,"open":true}').grid,
     ).toBe(true);
+  });
+
+  it("keeps the wash's weight in range, and falls back to half", () => {
+    expect(readOverlays('{"planTintOpacity":0}').planTintOpacity).toBe(0.1);
+    expect(readOverlays('{"planTintOpacity":3}').planTintOpacity).toBe(1);
+    expect(readOverlays('{"planTintOpacity":"a lot"}').planTintOpacity).toBe(0.5);
   });
 
   it("ignores values that are not booleans", () => {

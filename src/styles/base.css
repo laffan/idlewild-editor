@@ -8,11 +8,13 @@
 @import "./options.css";
 @import "./menu.css";
 @import "./editor.css";
+@import "./tools.css";
 @import "./zoom-badge.css";
 @import "./guides.css";
 @import "./print.css";
 @import "./modes.css";
 @import "./panels.css";
+@import "./layer-items.css";
 @import "./strokes.css";
 @import "./plan.css";
 @import "./stroke-transform.css";

@@ -33,6 +33,7 @@ import sheetsCss from "../sheets.css?raw";
 import optionsCss from "../options.css?raw";
 import menuCss from "../menu.css?raw";
 import guidesCss from "../guides.css?raw";
+import toolsCss from "../tools.css?raw";
 import { ruleIn, withoutComments } from "./rules";
 
 /** The declarations of one rule of the editor's own stylesheet. */
@@ -53,7 +54,7 @@ function rule(selector: string): Record<string, string> {
  */
 describe("a tool the rail is withholding", () => {
   it("is not drawn, whatever `.tool-btn` says about display", () => {
-    expect(ruleIn(css, ".tool-btn[hidden]").display).toBe("none");
+    expect(ruleIn(toolsCss, ".tool-btn[hidden]").display).toBe("none");
   });
 });
 
@@ -496,10 +497,9 @@ describe("the floating fill bar", () => {
 /**
  * The drawing toolbar, and the one rule that keeps it reachable.
  *
- * It is the same column as the rail — same class, same 56px buttons — turned
+ * It is the same column as the rail — same class, same 45px buttons — turned
  * the other way up: `top: auto; bottom: 16px` is the whole difference, and
- * dropping either half leaves it hanging from the top *over* the rail, which
- * is a stack of nine buttons where there should be four.
+ * dropping either half leaves it hanging from the top *over* the rail.
  *
  * A canvas mode then puts a 52px bar along the bottom edge it stands on, at a
  * higher z-index — so without the lift the toolbar is *behind* it, which in
@@ -508,13 +508,32 @@ describe("the floating fill bar", () => {
  */
 describe("the drawing toolbar", () => {
   it("stands on the bottom-left corner rather than hanging from the top", () => {
-    const rail = rule(".tool-rail");
+    const rail = ruleIn(toolsCss, ".tool-rail");
     expect(rail.position).toBe("absolute");
     expect(rail.left).toBe("16px");
     expect(rail["flex-direction"]).toBe("column");
-    const draw = rule(".tool-rail.draw-bar");
+    const draw = ruleIn(toolsCss, ".tool-rail.draw-bar");
     expect(draw.top).toBe("auto");
     expect(draw.bottom).toBe("16px");
+  });
+
+  it("holds Lasso and Slice 5px above the brushes, and drops an empty group", () => {
+    // The column is see-through so the gap is canvas, and each group carries
+    // the chrome itself. A tile layer offers neither Lasso nor Slice, and a
+    // group left standing empty would be a 5px gap over nothing.
+    expect(ruleIn(toolsCss, ".tool-rail.draw-bar").gap).toBe("5px");
+    expect(ruleIn(toolsCss, ".tool-group").background).toBe("var(--chrome-bg)");
+    expect(ruleIn(toolsCss, ".tool-group:empty").display).toBe("none");
+  });
+
+  it("shows a tool's tooltip on keyboard focus, and on hover only where there is hover", () => {
+    // A tap on an iPad leaves `:hover` on the button it landed on, so an
+    // unguarded hover rule would leave every picked tool wearing its name.
+    expect(ruleIn(toolsCss, ".tool-tip").visibility).toBe("hidden");
+    expect(ruleIn(toolsCss, ".tool-btn:focus-visible .tool-tip").visibility).toBe("visible");
+    expect(withoutComments(toolsCss)).toMatch(
+      /@media \(hover: hover\)\s*\{\s*\.tool-btn:hover \.tool-tip/,
+    );
   });
 
   it("lifts clear of PSD Edit mode's bar", () => {

@@ -20,10 +20,13 @@
  * - **OBJECT** — the thing selected on the canvas: a grid region, a fill, a
  *   placed PSD, a point, a boundary, a backdrop, a sketch.
  *
- * Always in that order, and a zone with nothing to say is not drawn at all —
- * an empty labelled box is the thing the old single heading was doing wrong.
- * The order is the answer to the question the old panel could not settle:
- * what is in my hand, where is it going, what is it on top of.
+ * A zone with nothing to say is not drawn at all — an empty labelled box is
+ * the thing the old single heading was doing wrong. With nothing selected the
+ * order is what is in my hand, then where it is going. **Once something is
+ * picked — a layer, an object, an artboard — its name leads**, and the tool's
+ * settings follow it: a layer picked in the left sidebar used to open under
+ * Select's two switches, so the name of the thing you had just chosen was
+ * the third thing down the panel. See `render`.
  *
  * All three fold, and each is marked as the thing that is *not* a section — a
  * chip, a tinted ground, a heavier rule — because the sections inside them
@@ -34,6 +37,7 @@
 import { clear, h } from "../lib/dom";
 import type { StrokeStyle } from "../drawing";
 import {
+  EDIT_LAYERS,
   makeSectionsCollapsible,
   revealSection,
   sectionTitle,
@@ -307,9 +311,13 @@ export class Inspector {
     // The caret, if somebody is typing in here — see `inspect-focus.ts`.
     const editing = captureFocus(this.body);
     clear(this.body);
-    this.renderTool();
+    // The thing picked leads, and what the tool in hand sets follows it — see
+    // the header. With nothing picked the tool is the subject, so it is first.
+    const picked = this.selection.kind !== "none" || this.artboard !== null;
+    if (!picked) this.renderTool();
     this.renderLayerZone();
     const object = this.renderObject();
+    if (picked) this.renderTool();
     // The one thing the old empty state said that nothing else does: how to
     // put something in the OBJECT zone. Kept as a quiet line under the two
     // zones that are there rather than as a zone of its own, because an
@@ -344,7 +352,7 @@ export class Inspector {
    */
   private showPsdSection(): void {
     const zone = this.body.querySelector<HTMLElement>(".inspect-zone.zone-object");
-    if (zone) revealSection(zone, PSD_SECTION, this.body);
+    if (zone) revealSection(zone, [PSD_SECTION, EDIT_LAYERS], this.body);
   }
 
   /**

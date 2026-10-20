@@ -515,6 +515,13 @@ export const psd = {
     invoke<string>("psd_thumbnail", { path, maxSize }),
   preview: (id: string, key: string) =>
     invoke<string>("psd_preview", { id, key }),
+  /**
+   * The file as it looks, cropped to its artwork and shrunk to `maxSize` —
+   * a PNG data URL, or empty for a file with nothing visible. See
+   * `psd_flatten::psd_art_thumbnail`, and `lib/psd-thumbs.ts` for the cache.
+   */
+  artThumbnail: (id: string, key: string, maxSize: number) =>
+    invoke<string>("psd_art_thumbnail", { id, key, maxSize }),
   assetUrl: (id: string, relative: string) =>
     invoke<string>("read_asset_data_url", { id, relative }),
 };

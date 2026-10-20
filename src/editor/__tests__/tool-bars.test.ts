@@ -8,16 +8,20 @@
  * anywhere and a blank label when something else puts it in your hand, and a
  * tool put in the wrong column reads as belonging to a group it does not.
  *
- * The split is the whole point of the rearrangement, so both halves are
+ * The split is the whole point of the rearrangement, so every column is
  * written out rather than derived: what you do *to* the canvas hangs from the
- * top, and the ink stands on the bottom.
+ * top, the ink stands on the bottom, and the two tools that act on strokes
+ * already there stand just above it.
  */
 
 import { describe, expect, it } from "vitest";
 import {
   canErase,
   ERASABLE,
+  shortcutFor,
   tileVerbOf,
+  TOOL_KEYS,
+  toolForKey,
   TOOLS,
   toolName,
   toolsFor,
@@ -27,15 +31,34 @@ import { Grid } from "../../lib/grid";
 import { TOOL_IDS, type ToolId } from "../../lib/types";
 
 /** The ids in one column, in the order they are drawn. */
-function bar(name: "rail" | "draw"): ToolId[] {
+function bar(name: "rail" | "strokes" | "draw"): ToolId[] {
   return TOOLS.filter((tool) => tool.bar === name).map((tool) => tool.id);
 }
 
 describe("the two columns", () => {
   it("hangs what you do to the canvas from the top", () => {
-    // The camera's two, then the two that make something out of bare ground —
-    // nothing already on the canvas can be promoted into either.
+    // The pointer and the camera. Point and Boundary still have a column so
+    // they keep a name, but no layer offers them — see the next test.
     expect(bar("rail")).toEqual(["select", "pan", "point", "zone"]);
+    expect(toolsFor("object").filter((id) => bar("rail").includes(id))).toEqual([
+      "select",
+      "pan",
+    ]);
+  });
+
+  it("offers Point and Boundary on no layer at all", () => {
+    for (const kind of ["object", "pattern", "background", "tile"] as const) {
+      for (const editing of [false, true]) {
+        const offered = toolsFor(kind, editing);
+        expect(offered, `${kind}, editing: ${editing}`).not.toContain("point");
+        expect(offered, `${kind}, editing: ${editing}`).not.toContain("zone");
+      }
+    }
+  });
+
+  it("stands Lasso and Slice in a group of their own, over the ink", () => {
+    // Neither lays a mark down: both act on strokes that are already there.
+    expect(bar("strokes")).toEqual(["lasso", "eraser"]);
   });
 
   it("stands the ink on the bottom", () => {
@@ -54,8 +77,6 @@ describe("the two columns", () => {
       "pencil",
       "pattern",
       "shape",
-      "eraser",
-      "lasso",
       "fill",
       "text",
       // A tile layer's three, which stand with the ink for the same reason
@@ -197,19 +218,14 @@ describe("what a tile layer offers", () => {
 
   it("keeps the two that are the canvas rather than the document", () => {
     // Pan is the camera; Select catches a run of tiles there the way it
-    // catches placed images elsewhere. Point and Boundary make a document
-    // object on the layer they are used on, and a tile layer is ground.
+    // catches placed images elsewhere.
     expect(toolsFor("tile")).toContain("select");
     expect(toolsFor("tile")).toContain("pan");
-    expect(toolsFor("tile")).not.toContain("point");
-    expect(toolsFor("tile")).not.toContain("zone");
   });
 
   it("offers the ordinary set on the three kinds that are not tile layers", () => {
-    const tileOnly: readonly ToolId[] = ["stamp", "sweep", "shapefill"];
-    const ink = TOOLS.map((tool) => tool.id).filter(
-      (id) => !tileOnly.includes(id),
-    );
+    const left: readonly ToolId[] = ["stamp", "sweep", "shapefill", "point", "zone"];
+    const ink = TOOLS.map((tool) => tool.id).filter((id) => !left.includes(id));
     expect(toolsFor("object")).toEqual(ink);
     expect(toolsFor("pattern")).toEqual(ink);
     expect(toolsFor("background")).toEqual(ink);
@@ -261,5 +277,48 @@ describe("what a tile layer offers", () => {
     expect(canErase("stamp")).toBe(true);
     expect(canErase("sweep")).toBe(true);
     expect(canErase("shapefill")).toBe(true);
+  });
+});
+
+/**
+ * The letters that pick a tool up, and what each tooltip says about them.
+ *
+ * One table feeds both, so a key the tooltip names is a key that works; what
+ * is asserted is the table and the two reads of it.
+ */
+describe("the tool keys", () => {
+  it("is the six letters asked for", () => {
+    expect(Object.keys(TOOL_KEYS).sort()).toEqual(["e", "l", "p", "s", "t", "v"]);
+    expect(toolForKey("v", toolsFor("object"))).toBe("select");
+    expect(toolForKey("t", toolsFor("object"))).toBe("text");
+    expect(toolForKey("l", toolsFor("object"))).toBe("lasso");
+    expect(toolForKey("p", toolsFor("object"))).toBe("pattern");
+    expect(toolForKey("e", toolsFor("object"))).toBe("eraser");
+  });
+
+  it("reads S as Stamp on a tile layer and Shape everywhere else", () => {
+    expect(toolForKey("s", toolsFor("tile"))).toBe("stamp");
+    expect(toolForKey("s", toolsFor("object"))).toBe("shape");
+  });
+
+  it("picks up nothing the toolbar is not showing", () => {
+    // A tile layer has no Pattern brush, Text or Lasso; and with the toolbars
+    // down nothing is on offer at all.
+    expect(toolForKey("p", toolsFor("tile"))).toBeNull();
+    expect(toolForKey("t", toolsFor("tile"))).toBeNull();
+    expect(toolForKey("l", toolsFor("tile"))).toBeNull();
+    expect(toolForKey("v", [])).toBeNull();
+  });
+
+  it("does not care about case, so Caps Lock does not turn the keys off", () => {
+    expect(toolForKey("V", toolsFor("object"))).toBe("select");
+  });
+
+  it("puts each key on the tooltip of every tool it picks up", () => {
+    for (const [key, tools] of Object.entries(TOOL_KEYS)) {
+      for (const tool of tools) expect(shortcutFor(tool)).toBe(key.toUpperCase());
+    }
+    expect(shortcutFor("pan")).toBe("Hold Space");
+    expect(shortcutFor("pencil")).toBe("");
   });
 });

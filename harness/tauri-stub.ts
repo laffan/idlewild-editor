@@ -728,6 +728,11 @@ export async function invoke(
     case "rasterize_psd_grid_align":
     case "add_psd_anchor":
       return psdManifest((args as any)?.key ?? "tower");
+    // A placed file's picture in the layer list: any small image does here.
+    case "psd_art_thumbnail":
+      return "data:image/svg+xml;utf8," + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="64"><rect x="4" y="16" width="32" height="48" fill="#b0784a"/><path d="M0 18 20 0 40 18z" fill="#c0392b"/></svg>',
+      );
     case "save_staging": return null;
     case "save_print_file": case "save_print_files": return undefined;
     case "reimport_psd":

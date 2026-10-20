@@ -2,7 +2,7 @@
  * Plan mode: tracing paper over the scene.
  *
  * The pencil beside the scene dropdown opens it. The canvas — artboards and
- * all — takes a faint blue cast, the toolbars give way to two tools, a Pencil
+ * all — goes under a white wash, the toolbars give way to two tools, a Pencil
  * that draws only in the plan's blue and an Eraser, and whatever is drawn
  * goes on the scene's plan rather than on a layer (`lib/plan.ts`). A Lasso
  * catches plan strokes to move, scale and turn in the box they then wear
@@ -17,7 +17,8 @@
  * alone, without the tint, over the scene's own ink and taking no pointer, so
  * nothing about drawing or arranging the scene changes with a plan on top of
  * it. The Overlays section in the left sidebar gets a Plan row — a switch and
- * an opacity slider — whenever the open scene has a plan to show.
+ * an opacity slider — whenever the open scene has a plan to show, and a Plan
+ * overlay row for the wash, the same pair, while the mode is up.
  *
  * It is the same ink engine as every other stroke, a second `DrawingLayer`
  * reading the plan through a `StrokeSource` rather than a layer. Its sheet
@@ -77,6 +78,8 @@ export class PlanMode {
   private readonly layer: DrawingLayer;
   /** The tint and the sheet, together just over the scene's own ink. */
   private readonly sheet: HTMLElement;
+  /** The wash over the scene while planning. */
+  private readonly tint: HTMLElement;
   private readonly bar: HTMLElement;
   private readonly buttons = new Map<PlanTool, HTMLButtonElement>();
   private activeValue = false;
@@ -91,6 +94,9 @@ export class PlanMode {
   /** The Overlays panel's Plan switch and slider, for outside the mode. */
   private shown = true;
   private opacity = 1;
+  /** And its Plan overlay switch and slider, for the wash in the mode. */
+  private tintShown = true;
+  private tintOpacity = 0.5;
   private hadPlan: boolean;
   private readonly stop: Array<() => void> = [];
 
@@ -114,7 +120,8 @@ export class PlanMode {
       planSource(store),
     );
     this.layer.root.classList.add("plan-surface");
-    this.sheet = h("div", { class: "plan-sheet" }, h("div", { class: "plan-tint" }), this.layer.root);
+    this.tint = h("div", { class: "plan-tint" });
+    this.sheet = h("div", { class: "plan-sheet" }, this.tint, this.layer.root);
 
     this.toggle = h(
       "button",
@@ -205,6 +212,13 @@ export class PlanMode {
   setOverlay(shown: boolean, opacity: number): void {
     this.shown = shown;
     this.opacity = opacity;
+    this.paint();
+  }
+
+  /** The Overlays panel's Plan overlay switch and opacity, for the wash. */
+  setTint(shown: boolean, opacity: number): void {
+    this.tintShown = shown;
+    this.tintOpacity = opacity;
     this.paint();
   }
 
@@ -352,5 +366,7 @@ export class PlanMode {
     }
     this.sheet.classList.toggle("hidden", !on && !this.shown);
     this.layer.root.style.opacity = on ? "" : String(this.opacity);
+    this.tint.classList.toggle("hidden", !this.tintShown);
+    this.tint.style.opacity = String(this.tintOpacity);
   }
 }

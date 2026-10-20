@@ -26,7 +26,7 @@ import { createHistoryUi, type HistoryUi } from "./history";
 import { startIntake } from "./intake";
 import { GameFrame } from "./game-frame";
 import { Terminal } from "./terminal";
-import { ToolRail } from "./tool-rail";
+import { ToolRail, TOOLBARS_DOWN } from "./tool-rail";
 import { ZoomBadge } from "./zoom-badge";
 import { createShell } from "./shell";
 import { createPsdFileActions, createPsdLayersFactory } from "./psd-actions";
@@ -302,9 +302,8 @@ export async function mountEditor(
   });
   const { extrude, collider, psdEdit } = modes;
 
-  // The ink's tools and the boundary sweep hand the pointer to the drawing
-  // layer; select, pan and point leave it with the game canvas and its gesture
-  // arbiter. What each of them means to the pointer — a tap, and a long press,
+  // The ink's tools hand the pointer to the drawing layer; select, pan and
+  // text leave it with the game canvas and its gesture arbiter. What each of them means to the pointer — a tap, and a long press,
   // which turns a brush round into an eraser — is `tool-routing.ts`; `tools`
   // is read through a closure because the bars are built before it.
   const rail = new ToolRail(
@@ -361,13 +360,9 @@ export async function mountEditor(
   // than a second implementation of it.
   const gameFrame = new GameFrame(meta);
 
-  // The header is a row of the shell, not chrome floating over the canvas, so
-  // only the tools and the selection bar are inside the canvas wrapper — the
-  // rail hanging from the top-left corner and the drawing toolbar standing on
-  // the bottom-left one. The two edge toggles go in too, from `createShell` —
-  // they are layout.
-  canvasWrap.append(rail.root, rail.drawBar, rail.label);
-  canvasWrap.append(actions.root, fillBar.root, gameFrame.root);
+  // Only the tools and the floating bars are inside the canvas wrapper — the
+  // header is a row of the shell — and the edge toggles, from `createShell`.
+  canvasWrap.append(rail.root, rail.drawBar, actions.root, fillBar.root, gameFrame.root);
 
   // The rows and columns, and the dividers between them — see `shell.ts`.
   const layout = createShell({
@@ -442,6 +437,8 @@ export async function mountEditor(
   const stopShortcuts = bindShortcuts({
     currentTool: () => rail.tool,
     applyTool: (tool) => tools.apply(tool, false),
+    pickable: () =>
+      modeSwitch.mode() === "draw" && !canvasWrap.matches(TOOLBARS_DOWN) ? rail.offeredTools : [],
     hasSelection: () => {
       const selection = handle?.scene.getSelection();
       return !!selection && selection.kind !== "none" && selection.kind !== "layer";

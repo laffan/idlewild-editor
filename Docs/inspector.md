@@ -18,7 +18,8 @@ the layer's facts away, and picking up the pencil took both away.
 The heading was the fault. *Inspector* names the furniture rather than what is
 in it, so nothing on screen ever said which of the three you were looking at,
 and there was no reading of it under which you could look at two. So it is
-gone, and in its place are three zones, always in this order:
+gone, and in its place are three zones, in this order while nothing is
+selected:
 
 | Zone | Subject | Shown when |
 |---|---|---|
@@ -27,12 +28,19 @@ gone, and in its place are three zones, always in this order:
 | **OBJECT** | what is selected on the canvas | something is |
 
 The order is the answer the old panel could not give: what is in my hand,
-where is it going, what is it on top of. Read down the column and it is the
-same sentence every time.
+where is it going, what is it on top of.
+
+**Once something is picked, it leads.** A layer chosen in the left sidebar,
+an object on the canvas, an artboard: its zone goes first and TOOL follows it.
+Picking a layer used to open the panel on Select's two switches with the
+layer's name under them, so the thing you had just chosen was the third thing
+down. With nothing picked the tool is the only subject there is, so it stays
+on top — the brush is still the first thing under a hand that is drawing.
+That is `picked` in `Inspector.render`.
 
 **A zone with nothing in it is never mounted.** `createZone` hands back an
 element and a `mount` that refuses when the body is empty, so a tool that does
-one thing with one gesture — Select, Pan, Point, Boundary, Slice, the
+one thing with one gesture — Pan, Slice, the
 Lasso — gets no TOOL zone rather than a heading over a sentence that never
 changes. That sentence is exactly what the single *Inspector* heading was, and
 reintroducing it once per tool would have been the same mistake nine times.

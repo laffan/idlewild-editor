@@ -10,18 +10,21 @@
  * Two columns now, and which end of the screen a column hangs from is the
  * distinction the gap was carrying:
  *
- * **The rail**, from the top, is what you do *to* the canvas: Select, Pan,
- * Point and Boundary. The first two are the camera and the pointer, which is
- * what the canvas does when nothing else is chosen. The other two make
- * something out of bare ground — nothing already on the canvas can be
- * promoted into either, so putting one down has to be a thing you do to a
- * patch of empty grid.
+ * **The rail**, from the top, is what you do *to* the canvas: Select and
+ * Pan, the pointer and the camera, which is what the canvas does when nothing
+ * else is chosen. Point and Boundary used to hang under them and are off the
+ * toolbar now — see `UNOFFERED`.
  *
  * **The drawing toolbar**, from the bottom, is the ink: Pencil, Pattern,
- * Shape, Slice, Lasso, Fill and Text. Fill and Pattern used to be reachable
- * only inside PSD Edit mode, from that second rail. They are the same tools
- * everywhere, so they are on the toolbar with the rest of the ink, and PSD
- * Edit mode borrows them rather than owning them.
+ * Shape, Fill and Text. Fill and Pattern used to be reachable only inside PSD
+ * Edit mode, from that second rail. They are the same tools everywhere, so
+ * they are on the toolbar with the rest of the ink, and PSD Edit mode borrows
+ * them rather than owning them.
+ *
+ * **Lasso and Slice stand just above it, as a group of their own.** Neither
+ * lays a mark down: both act on strokes that are already there, one picking
+ * them up and the other cutting them, so they are held a few pixels apart
+ * from the brushes rather than mixed in among them.
  *
  * **Text is on the ink column rather than the rail**, although what it makes
  * is a document object and its gesture is a tap, the way Point's is. The two
@@ -36,7 +39,7 @@
  * are set from the same control in the inspector's TOOL zone. See
  * `editor/paint-picker.ts`.
  *
- * Both are columns, and both are 56px buttons, so the two read as one
+ * Both are columns of the same 45px buttons, so the two read as one
  * vocabulary held apart rather than as two kinds of chrome. A hand resting on
  * an iPad's glass is nearer the bottom corner than the top one, which is the
  * right way round: the ink is what a hand is doing most of the time.
@@ -50,14 +53,15 @@ import { h, ICONS, icon } from "../lib/dom";
 import type { TileVerb } from "../lib/tile-tools";
 import type { LayerKind, ToolId } from "../lib/types";
 
-/** Which column a tool sits in. */
-export type Bar = "rail" | "draw";
+/**
+ * Which column a tool sits in. `strokes` is the short group standing on top
+ * of the drawing toolbar — see the header.
+ */
+export type Bar = "rail" | "strokes" | "draw";
 
 export interface ToolSpec {
   id: ToolId;
   name: string;
-  /** What the button's tooltip says after the name, when there is more. */
-  hint?: string;
   path: string | readonly string[];
   bar: Bar;
 }
@@ -65,107 +69,85 @@ export interface ToolSpec {
 export const TOOLS: ToolSpec[] = [
   { id: "select", name: "Select", bar: "rail", path: ICONS.select },
   { id: "pan", name: "Pan", bar: "rail", path: ICONS.hand },
-  {
-    id: "point",
-    name: "Point",
-    hint: "Tap to put a named place down; a drag still pans",
-    bar: "rail",
-    path: ICONS.point,
-  },
-  {
-    id: "zone",
-    name: "Boundary",
-    hint: "Sweep an outline and it becomes a blocking zone",
-    bar: "rail",
-    path: ICONS.boundary,
-  },
+  { id: "point", name: "Point", bar: "rail", path: ICONS.point },
+  { id: "zone", name: "Boundary", bar: "rail", path: ICONS.boundary },
+  { id: "lasso", name: "Lasso", bar: "strokes", path: ICONS.lasso },
+  // Its id is still "eraser" — a document says nothing about tools, but the
+  // type and the routing do, and renaming those would be churn for a label.
+  { id: "eraser", name: "Slice", bar: "strokes", path: ICONS.slice },
   { id: "pencil", name: "Pencil", bar: "draw", path: ICONS.pencil },
-  {
-    id: "pattern",
-    name: "Pattern",
-    hint: "Reveal a pixel pattern, pinned to the world",
-    bar: "draw",
-    path: ICONS.pixels,
-  },
-  {
-    id: "shape",
-    name: "Shape",
-    hint: "Stamp a shape into every grid space you cross",
-    bar: "draw",
-    path: ICONS.shape,
-  },
-  {
-    // Its id is still "eraser" — a document says nothing about tools, but the
-    // type and the routing do, and renaming those would be churn for a label.
-    id: "eraser",
-    name: "Slice",
-    hint: "Drag across a stroke to cut it in two where the blade passes",
-    bar: "draw",
-    path: ICONS.slice,
-  },
-  {
-    id: "lasso",
-    name: "Lasso",
-    hint: "Sweep around strokes to select them",
-    bar: "draw",
-    path: ICONS.lasso,
-  },
-  {
-    id: "fill",
-    name: "Fill",
-    hint: "Sweep a closed shape, or tap its corners out",
-    bar: "draw",
-    path: ICONS.fill,
-  },
-  {
-    id: "text",
-    name: "Text",
-    hint: "Tap to write on the canvas; it becomes a PSD when you say so",
-    bar: "draw",
-    path: ICONS.text,
-  },
-  // A tile layer's two, and nowhere else's. They stand where the ink does,
+  { id: "pattern", name: "Pattern", bar: "draw", path: ICONS.pixels },
+  { id: "shape", name: "Shape", bar: "draw", path: ICONS.shape },
+  { id: "fill", name: "Fill", bar: "draw", path: ICONS.fill },
+  { id: "text", name: "Text", bar: "draw", path: ICONS.text },
+  // A tile layer's three, and nowhere else's. They stand where the ink does,
   // on the bottom column, because they are what a hand is doing most of the
   // time on a tile layer — the same argument that put the brushes there.
-  {
-    id: "stamp",
-    name: "Stamp",
-    hint: "Put the tiles picked in the palette down; drag to lay a run",
-    bar: "draw",
-    path: ICONS.stamp,
-  },
-  {
-    id: "sweep",
-    name: "Sweep fill",
-    hint: "Draw a shape freehand and every space inside it is filled",
-    bar: "draw",
-    path: ICONS.sweep,
-  },
-  {
-    id: "shapefill",
-    name: "Shape fill",
-    hint: "Drag out a rectangle or a circle and fill it",
-    bar: "draw",
-    path: ICONS.shapefill,
-  },
+  { id: "stamp", name: "Stamp", bar: "draw", path: ICONS.stamp },
+  { id: "sweep", name: "Sweep fill", bar: "draw", path: ICONS.sweep },
+  { id: "shapefill", name: "Shape fill", bar: "draw", path: ICONS.shapefill },
 ];
+
+/**
+ * The tools no toolbar offers.
+ *
+ * Point and Boundary hung under Select and Pan, and came off the toolbar
+ * because neither earned the room: both are things the PSD pipeline already
+ * brings in from a file's own `P |` and `Z |` layers, and a button for
+ * putting one down by hand was two more glyphs on a column whose job is the
+ * pointer and the camera. What they leave behind is untouched — a point or a
+ * boundary already in the document still draws, selects and inspects — and
+ * so is the routing behind them, so putting either back is this line.
+ */
+const UNOFFERED: readonly ToolId[] = ["point", "zone"];
+
+/**
+ * The letter that picks a tool up, keyed by the letter.
+ *
+ * **S is two tools, and never both at once.** Stamp is a tile layer's and
+ * Shape is everywhere else's — `toolsFor` never offers the two together — so
+ * the key means whichever of them the layer has, the way the brush in hand
+ * already follows the layer. The first one offered wins.
+ *
+ * Pan has no letter: it is the space bar, held, which `shortcuts.ts` owns,
+ * and the tooltip says so.
+ */
+export const TOOL_KEYS: Readonly<Record<string, readonly ToolId[]>> = {
+  v: ["select"],
+  t: ["text"],
+  l: ["lasso"],
+  p: ["pattern"],
+  s: ["stamp", "shape"],
+  e: ["eraser"],
+};
+
+/**
+ * The canvas states that take the toolbars away, or the pointer with them:
+ * Plan mode, which has its own bar, and the three modes that own every
+ * gesture. A tool key does nothing under any of them.
+ */
+export const TOOLBARS_DOWN = ".planning, .extruding, .colliding, .masking";
+
+/** Which tool a key picks up among those on offer, if any. */
+export function toolForKey(
+  key: string,
+  offered: readonly ToolId[],
+): ToolId | null {
+  const tools = TOOL_KEYS[key.toLowerCase()];
+  return tools?.find((tool) => offered.includes(tool)) ?? null;
+}
+
+/** What a tool's tooltip names as its shortcut, or "" for one with none. */
+export function shortcutFor(tool: ToolId): string {
+  if (tool === "pan") return "Hold Space";
+  for (const [key, tools] of Object.entries(TOOL_KEYS)) {
+    if (tools.includes(tool)) return key.toUpperCase();
+  }
+  return "";
+}
 
 /** The three a tile layer offers, and the three nothing else does. */
 const TILE_TOOLS: readonly ToolId[] = ["stamp", "sweep", "shapefill"];
-
-/**
- * What is left of the rail on a tile layer.
- *
- * **Select and Pan, and not Point or Boundary.** The first two are what the
- * canvas does when nothing else is chosen — Pan is the camera, and Select
- * catches a run of tiles there the way it catches placed images elsewhere,
- * so both do something. The other two make a *document object* on the layer
- * they are used on, and a tile layer is ground rather than a place things
- * stand: a named place belongs on the layer the thing it names is on, and a
- * boundary belongs with the objects it blocks. Showing them would be showing
- * two buttons whose result is invisible on the layer you used them on.
- */
-const TILE_RAIL: readonly ToolId[] = ["select", "pan"];
 
 /**
  * Which tools a layer of this kind offers.
@@ -178,10 +160,12 @@ const TILE_RAIL: readonly ToolId[] = ["select", "pan"];
  * Stamp, Sweep fill and Shape fill arrive — three tools that are exactly what
  * they are called, with their own options and their own panel.
  *
- * **And the rail is cut to the two that do something there** — see
- * `TILE_RAIL`. A toolbar is a list of what you can do; a button that cannot
- * act on the layer you are looking at is a question the user has to answer by
- * pressing it.
+ * **The rail is the same on every layer**: Select and Pan, the pointer and
+ * the camera, both of which do something on a tile layer too — Select
+ * catches a run of tiles there the way it catches placed images elsewhere.
+ * A toolbar is a list of what you can do; a button that cannot act on the
+ * layer you are looking at is a question the user has to answer by pressing
+ * it.
  *
  * **`psdEditing` is the one exception, and it is not one really.** A PSD
  * opened in PSD Edit mode over a tile layer is ordinary artwork being drawn
@@ -196,7 +180,8 @@ const TILE_RAIL: readonly ToolId[] = ["select", "pan"];
 export function toolsFor(kind: LayerKind, psdEditing = false): ToolId[] {
   const tiling = kind === "tile" && !psdEditing;
   return TOOLS.filter((tool) => {
-    if (tool.bar === "rail") return !tiling || TILE_RAIL.includes(tool.id);
+    if (UNOFFERED.includes(tool.id)) return false;
+    if (tool.bar === "rail") return true;
     return TILE_TOOLS.includes(tool.id) === tiling;
   }).map((tool) => tool.id);
 }
@@ -205,7 +190,7 @@ export function toolsFor(kind: LayerKind, psdEditing = false): ToolId[] {
  * What the tool in hand means for tiles, if anything.
  *
  * `null` is every other tool, and it is what makes a tile layer still
- * selectable, pannable and pointable — see `toolsFor`.
+ * selectable and pannable — see `toolsFor`.
  */
 export function tileVerbOf(tool: ToolId): TileVerb {
   if (tool === "stamp") return "stamp";
@@ -260,11 +245,11 @@ export function canErase(tool: ToolId): boolean {
 export const ERASE_HOLD_MS = 500;
 
 /**
- * What the label beside the canvas calls a tool.
+ * What a tool is called, on its tooltip and to a screen reader.
  *
  * Empty for a tool nothing names, which is what the test guards against: a
  * tool added to `ToolId` and forgotten in `TOOLS` is a tool with no button
- * anywhere and a blank label the moment something puts it in your hand, and
+ * anywhere and a blank name the moment something puts it in your hand, and
  * nothing else would say so.
  *
  * There used to be a second table under this one for the tools with no button
@@ -289,9 +274,12 @@ export class ToolRail {
    * The rail keeps it across `setOffered`, which replaces the buttons.
    */
   readonly head: HTMLElement;
-  /** The ink, standing on the bottom-left corner. */
+  /**
+   * The ink, standing on the bottom-left corner: two groups in one column,
+   * Lasso and Slice a gap above the brushes. One element, so a mode that
+   * lifts or hides the toolbar moves both groups together.
+   */
   readonly drawBar: HTMLElement;
-  readonly label: HTMLElement;
   private readonly buttons = new Map<ToolId, HTMLButtonElement>();
   /** Which column each tool hangs in, so `setOffered` can put it back. */
   private readonly hosts: Record<Bar, HTMLElement>;
@@ -315,16 +303,19 @@ export class ToolRail {
     this.root = h("div", { class: "tool-rail" });
     this.head = h("div", { class: "tool-rail-head" });
     this.root.appendChild(this.head);
-    this.label = h("div", { class: "tool-name m", text: "Select" });
-    this.drawBar = h("div", { class: "tool-rail draw-bar" });
+    const strokes = h("div", { class: "tool-group" });
+    const draw = h("div", { class: "tool-group" });
+    this.drawBar = h("div", { class: "tool-rail draw-bar" }, strokes, draw);
 
     const hosts: Record<Bar, HTMLElement> = {
       rail: this.root,
-      draw: this.drawBar,
+      strokes,
+      draw,
     };
     this.hosts = hosts;
 
     for (const tool of TOOLS) {
+      if (UNOFFERED.includes(tool.id)) continue;
       // A press held on an erasable tool turns it round. The timer is armed
       // on the way down and cancelled by anything that ends the press; when
       // it does fire, the click that follows is swallowed, or letting go
@@ -337,12 +328,13 @@ export class ToolRail {
         timer = null;
       };
 
+      const shortcut = shortcutFor(tool.id);
       const button = h(
         "button",
         {
           class: "tool-btn",
-          title: tool.hint ? `${tool.name} — ${tool.hint}` : tool.name,
           "aria-label": tool.name,
+          "aria-keyshortcuts": tool.id === "pan" ? "Space" : shortcut || null,
           "aria-pressed": String(tool.id === this.current),
           onPointerDown: () => {
             if (!hold) return;
@@ -372,7 +364,16 @@ export class ToolRail {
             onPick(tool.id);
           },
         },
-        icon(tool.path, 21),
+        icon(tool.path, 17),
+        // The tooltip: the name, and the key that picks the tool up. A child
+        // rather than a `title`, which takes a second to appear, cannot be
+        // styled, and shows a finger nothing — see `.tool-tip`.
+        h(
+          "span",
+          { class: "tool-tip", "aria-hidden": "true" },
+          tool.name,
+          shortcut ? h("kbd", { text: shortcut }) : null,
+        ),
       );
       this.buttons.set(tool.id, button);
       hosts[tool.bar].appendChild(button);
@@ -408,7 +409,8 @@ export class ToolRail {
     this.offered = wanted;
     // The head survives, because what is in it is not a tool: see `head`.
     this.root.replaceChildren(this.head);
-    this.drawBar.replaceChildren();
+    this.hosts.strokes.replaceChildren();
+    this.hosts.draw.replaceChildren();
     for (const tool of TOOLS) {
       if (!tools.includes(tool.id)) continue;
       const button = this.buttons.get(tool.id);
@@ -421,7 +423,11 @@ export class ToolRail {
     for (const [id, button] of this.buttons) {
       button.setAttribute("aria-pressed", String(id === tool));
     }
-    this.label.textContent = toolName(tool);
+  }
+
+  /** What this layer's toolbar has on it right now. */
+  get offeredTools(): ToolId[] {
+    return this.offered ? (this.offered.split(",") as ToolId[]) : [];
   }
 
   /**

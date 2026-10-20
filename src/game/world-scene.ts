@@ -309,6 +309,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   override update(_time: number, _delta: number): void {
+    this.cam.settle(); // as this frame will draw it — see `SceneCamera.settle`
     this.gridRenderer.update(this.cameras.main);
     // Both of these are worked out from the camera rather than stored, the
     // way the lattice is: a backdrop is wherever you are looking, and a
@@ -321,9 +322,8 @@ export class WorldScene extends Phaser.Scene {
     const view = this.gridRenderer.visibleRange(this.cameras.main);
     this.patterns.sync(view);
     this.tiling.sync(view);
-    // PSD Edit mode's dim is cut out of what the camera can see, so it follows the
-    // camera the way the lattice does — a pan moves it as surely as a zoom.
-    // A no-op while the mode is down.
+    // PSD Edit mode's dim is cut out of what the camera can see, so it follows
+    // the camera the way the lattice does. A no-op while the mode is down.
     this.modes.psdEdit.refresh();
     this.cam.publish();
   }

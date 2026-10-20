@@ -10,22 +10,30 @@ Part of [the Idlewild manual](README.md).
 ## The two columns of tools
 
 - **The tools are two columns down the left edge.** The **rail** hangs from
-  the top corner and is what you do *to* the canvas: Select, Pan, Point and
-  Boundary — the camera and the pointer, then the two that make something out
-  of bare ground. The **drawing toolbar** stands on the bottom corner and is
-  the ink: Pencil, Pattern, Shape, Slice, Lasso, Fill and Text. They were one column with a
+  the top corner and is what you do *to* the canvas: Select and Pan, the
+  pointer and the camera. The **drawing toolbar** stands on the bottom corner
+  and is the ink: Pencil, Pattern, Shape, Fill and Text, with **Lasso and
+  Slice** in a short group of their own just above it — both act on strokes
+  that are already there rather than laying one down. They were one column with a
   gap in the middle doing the work of saying that Select and Pencil answer to
   different owners, and it grew a second column under it whenever PSD Edit
   mode was up. Which end a column hangs from carries that now — and the ink is
   at the corner a hand resting on an iPad's glass is nearest, which is the
   right way round for the thing a hand is doing most often
+- **Every tool has a tooltip and most have a key.** Rest the pointer on a
+  button, or tab to it, and it names itself and its key: **V** Select, **T**
+  Text, **L** Lasso, **P** Pattern, **S** Shape (Stamp on a tile layer, where
+  there is no Shape brush), **E** Slice, and Pan is the space bar held. A key
+  only picks up a tool the toolbar is showing, and does nothing while you are
+  typing in a field or while a mode — Plan, Extrude, Collider, Mask — has the
+  canvas
 - **On a tile layer the ink column is a different column.** All seven brushes
   step out of the way — none of them has anything to do with a grid of tiles —
   and three take their place: **Stamp**, which puts the tiles picked in the
   palette down, **Sweep fill**, which fills a shape you draw freehand, and
   **Shape fill**, which fills a rect or a circle you drag out.
-  The rail above is unchanged, because Select, Pan, Point and Boundary are
-  about the canvas rather than about what is drawn on it. The brushes come
+  The rail above is unchanged, because Select and Pan are about the canvas
+  rather than about what is drawn on it. The brushes come
   back while a PSD is open in PSD Edit mode, since a file you are drawing into
   is artwork like any other. See [Tile layers](tile-layers.md)
 
@@ -218,7 +226,7 @@ Part of [the Idlewild manual](README.md).
 ## Plan mode
 
 - **The pencil beside the scene's name** opens plan mode: tracing paper over
-  the scene. The canvas takes a faint blue tint, artboards and all, and the
+  the scene. The canvas goes under a white wash, artboards and all, and the
   toolbars give way to **Pencil**, **Eraser**, **Lasso** and **Done**. The
   pencil only draws in bright blue; the eraser takes plan ink out. The right
   sidebar's TOOL zone has the pencil's and the eraser's brush, size and
@@ -234,8 +242,9 @@ Part of [the Idlewild manual](README.md).
 - **Out of plan mode the plan stays on the canvas** — just the blue strokes,
   without the tint — over everything, and it never takes a tap or a click.
   While the open scene has a plan, Overlays has a **Plan** row with its own
-  switch and an opacity slider. Fingers pan and pinch in plan mode as they do
-  everywhere else
+  switch and an opacity slider; while plan mode is up it also has **Plan
+  overlay**, the same pair for the white wash, which starts at half and is
+  remembered. Fingers pan and pinch in plan mode as they do everywhere else
 
 ## Loose strokes
 

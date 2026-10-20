@@ -75,17 +75,22 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
   deps.overlays.setGuide(guide);
   const stops: Array<() => void> = [];
   // The scene's plan: the pencil beside the scene's name, the sheet over the
-  // canvas, and its row in Overlays while there is a plan to show.
+  // canvas, its row in Overlays while there is a plan to show, and the
+  // wash's row while the mode is up.
+  const planRows = () => {
+    deps.overlays.showPlanSwitch(plan.present, (shown, o) => plan.setOverlay(shown, o));
+    deps.overlays.showPlanTint(plan.active, (shown, o) => plan.setTint(shown, o));
+  };
   const plan: PlanMode = new PlanMode({
     store: deps.store,
     wrap: deps.canvasWrap,
     projectId: deps.meta.id,
     inspector: deps.inspector,
     camera: deps.camera,
-    onChange: () => deps.overlays.showPlanSwitch(plan.present, (shown, o) => plan.setOverlay(shown, o)),
+    onChange: planRows,
   });
   deps.layers.addSceneAction(plan.toggle);
-  deps.overlays.showPlanSwitch(plan.present, (shown, o) => plan.setOverlay(shown, o));
+  planRows();
   stops.push(() => plan.destroy());
   if (isPrint(deps.meta)) {
     const chrome = new ArtboardChrome({ preview: (board) => guide.previewBoard(board) });

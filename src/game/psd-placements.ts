@@ -42,6 +42,7 @@ import { unitMembers, unitOf } from "./unit";
 import { migrateLayerPath, repairDocument } from "./psd-migrate";
 import { ensureProcessed, evictPsd, loadPsd } from "./psd-loader";
 import { reconcilePlacements } from "./reconcile";
+import { forgetPsdThumb } from "../lib/psd-thumbs";
 
 /** What placing a PSD needs from the scene around it. */
 export interface PsdHost {
@@ -353,8 +354,9 @@ export class PsdPlacements {
     // Undo stops here. The file on disk is a different file now, so every
     // document state before this one names layers it may no longer have, and
     // a placement restored onto one can never render — see
-    // `UndoHistory.clear`.
+    // `UndoHistory.clear`. Its row's thumbnail is of the file before, too.
     this.host.store.history.clear();
+    forgetPsdThumb(key);
     reconcilePlacements(
       this.host.store,
       this.host.grid,
@@ -393,6 +395,8 @@ export class PsdPlacements {
     // And here, for the same reason: the file has moved, so a placement
     // restored to the old key points at nothing.
     this.host.store.history.clear();
+    forgetPsdThumb(from);
+    forgetPsdThumb(to);
 
     // Both names, for the whole of it. The copies on screen were made under
     // the old one and the new one is about to be loaded — and the rewrite

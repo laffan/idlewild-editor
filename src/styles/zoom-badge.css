@@ -3,15 +3,7 @@
 
    Its own stylesheet for the reason guides.css is one — editor.css is at the
    line limit — and because this is one control rather than a piece of the
-   shell's furniture. See editor/zoom-badge.ts.
-
-   The height is a token because two rules need it and they are in different
-   files: the badge itself, and the floating tool name in editor.css, which is
-   positioned against the middle of the rail's *first button* and would
-   otherwise point at the badge. */
-:root {
-  --rail-head-h: 26px;
-}
+   shell's furniture. See editor/zoom-badge.ts. */
 
 /* The slot the rail keeps across `setOffered`. Nothing of its own, and gone
    entirely when nothing is in it — a rail built without a badge (the tool-bar
@@ -26,12 +18,12 @@
    detaching withheld tools instead of hiding them. */
 .tool-rail-head + .tool-btn { border-top: 0; }
 
-/* Same 56px column as the buttons under it, and shorter, so it reads as a cap
+/* Same 45px column as the buttons under it, and shorter, so it reads as a cap
    on the rail rather than as a tool nobody drew an icon for. The rule along
    the bottom is the one line between it and Select. */
 .zoom-badge {
-  width: 56px;
-  height: var(--rail-head-h);
+  width: 45px;
+  height: 26px;
   border: 0;
   border-bottom: 1px solid var(--chrome-rule);
   background: transparent;

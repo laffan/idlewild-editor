@@ -1,0 +1,125 @@
+/* The tools: two columns down the left edge of the canvas — see
+   editor/tool-rail.ts. Their own stylesheet since editor.css reached the line
+   limit, when the drawing toolbar became two groups and grew tooltips.
+
+   Which end a column hangs from is the distinction a gap in the middle of one
+   column used to carry. The **rail** hangs from the top and is what you do to
+   the canvas — Select and Pan. The **drawing toolbar** stands on the bottom
+   and is the ink. Same width, same 45px buttons, so the two read as one
+   vocabulary held apart rather than as two kinds of chrome; and
+   the ink is at the corner a hand resting on an iPad's glass is nearest,
+   which is the right way round for the thing a hand is doing most often. */
+.tool-rail {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  border: 0;
+  background: var(--chrome-bg);
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+/* The second column, standing on the bottom edge rather than hanging from the
+   top. `top: auto` undoes the rule above, which both columns share.
+
+   It is two groups — Lasso and Slice, then the brushes — and the column
+   itself is see-through so the 5px between them is canvas. A group with
+   nothing offered in it (a tile layer has no Lasso) is not drawn at all,
+   or the gap would stand over nothing. */
+.tool-rail.draw-bar {
+  top: auto;
+  bottom: 16px;
+  background: transparent;
+  gap: 5px;
+}
+.tool-group { display: flex; flex-direction: column; background: var(--chrome-bg); }
+.tool-group:empty { display: none; }
+.tool-btn {
+  /* `relative` for the eraser's slash, which is a pseudo-element over the
+     icon rather than a second glyph — see `.tool-btn.erasing`; and for the
+     tooltip, which hangs off the button's right edge. */
+  position: relative;
+  width: 45px;
+  height: 45px;
+  border: 0;
+  border-top: 1px solid var(--chrome-rule);
+  background: transparent;
+  color: var(--chrome-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tool-btn:first-child { border-top: 0; }
+.tool-btn[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
+.tool-btn:not([aria-pressed="true"]):hover { background: var(--chrome-rule); }
+.tool-btn[disabled] { opacity: 0.45; }
+/* A withheld tool, belt and braces. The rail takes one out of the DOM rather
+   than hiding it — see `ToolRail.setOffered`, which explains why — but the
+   rule that made hiding *not work* is right above this one: `display: flex`
+   is an author style and the browser's own `[hidden] { display: none }` is
+   not, so the attribute lost every time. A tool the rail withheld went on
+   showing, and a tile layer offered the whole ink column beside its own. */
+.tool-btn[hidden] { display: none; }
+
+/* A tool turned round: it takes out what it would have drawn.
+   The slash is one pseudo-element rather than a second icon per tool, so
+   every tool that grows an eraser gets the mark for free — and it falls the
+   *opposite* way from the pencil's own diagonal, or it would lie along the
+   glyph it is supposed to cross out.
+
+   Being an eraser is a state of the tool and it survives picking something
+   else up, so the mark has to be visible on a button that is not pressed —
+   in the accent there, and in white on the accent when the tool is in hand.
+   The fill still means "this is what you are holding", which it would stop
+   meaning if every armed tool were filled. */
+.tool-btn.erasing::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 2px;
+  background: var(--color-accent);
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+.tool-btn.erasing { color: var(--color-accent); }
+.tool-btn.erasing[aria-pressed="true"] { color: #fff; }
+.tool-btn.erasing[aria-pressed="true"]::after { background: #fff; }
+
+/* A tool's name and its key, beside it on hover or keyboard focus.
+
+   Hover only where there is hovering: on an iPad a tap leaves `:hover`
+   behind on the button it landed on, and every tool picked would wear its
+   tooltip until the next tap somewhere else. */
+.tool-tip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--color-neutral-900);
+  color: #fff;
+  font: 500 11px/1 var(--font-body);
+  white-space: nowrap;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  z-index: 10;
+}
+.tool-tip kbd {
+  font: 500 10px/1 var(--font-mono);
+  color: rgb(255 255 255 / 0.6);
+}
+@media (hover: hover) {
+  .tool-btn:hover .tool-tip {
+    visibility: visible;
+    opacity: 1;
+    transition: opacity 80ms ease 300ms, visibility 0s linear 300ms;
+  }
+}
+.tool-btn:focus-visible .tool-tip { visibility: visible; opacity: 1; }

@@ -9,6 +9,12 @@ Part of [the Idlewild manual](README.md).
 
 ## The stack, in the inspector
 
+- **Edit Layers**, inside the PSD section, holds the stack and New layer, and
+  is **folded** until you open it — the stack is as long as the file is deep,
+  and it stood between a placed PSD you had only selected to move and
+  everything under it. Opened once, it stays open for the next PSD, as any
+  section does. Making a PSD (an extrusion, a sketch converted) opens it for
+  you
 - The selected PSD's own layer stack, in the inspector: drag by the grip to
   reorder it, rename in place, then Apply to rewrite the file and re-run the
   pipeline. Renaming is how a sprite becomes a tileset, so it is worth having

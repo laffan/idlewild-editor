@@ -84,6 +84,29 @@ export class SceneCamera {
     return this.camera.zoom;
   }
 
+  /**
+   * Bring what Phaser works out *from* the scroll and the zoom up to date.
+   *
+   * Phaser 4 builds the camera's matrix — and `worldView` and `midPoint` with
+   * it — in `preRender`, which runs once a frame just before the canvas is
+   * drawn. Everything that reads the camera between those moments was reading
+   * where it stood a frame ago: `getWorldPoint`, so every DOM sheet slaved
+   * through `onViewport` (the ink, the plan, the guides, the artboards) and
+   * the lattice and backdrops cut from `worldView`. While a pan was moving
+   * each of them trailed the canvas by a frame's worth of travel, and they
+   * caught up the moment it stopped — which looked like layers panning at
+   * different speeds. The same staleness made `zoomBy` read *before* and
+   * *after* off one matrix, so the correction that keeps the point under the
+   * fingers fixed always came out as zero.
+   *
+   * `preRender` has nothing in it but that arithmetic for a camera with no
+   * follow target and no shake, which this one never has, so it is safe to
+   * run as often as the camera moves.
+   */
+  settle(): void {
+    this.camera.preRender();
+  }
+
   /** How the world maps onto the screen right now. */
   viewport(): Viewport {
     const topLeft = this.camera.getWorldPoint(0, 0);
@@ -119,17 +142,23 @@ export class SceneCamera {
   pan(dxScreen: number, dyScreen: number): void {
     this.camera.scrollX -= dxScreen / this.camera.zoom;
     this.camera.scrollY -= dyScreen / this.camera.zoom;
+    this.settle();
   }
 
-  /** Scale about a point on screen, keeping what is under it fixed. */
+  /**
+   * Scale about a point on screen, keeping what is under it fixed. The point
+   * is measured from the canvas's corner, not the page's.
+   */
   zoomBy(factor: number, screenX: number, screenY: number): void {
     const before = this.camera.getWorldPoint(screenX, screenY);
     this.camera.setZoom(
       Phaser.Math.Clamp(this.camera.zoom * factor, MIN_ZOOM, MAX_ZOOM),
     );
+    this.settle();
     const after = this.camera.getWorldPoint(screenX, screenY);
     this.camera.scrollX += before.x - after.x;
     this.camera.scrollY += before.y - after.y;
+    this.settle();
     this.config.onInvalidate();
     this.config.onScaled();
   }
@@ -153,6 +182,7 @@ export class SceneCamera {
     const middle = this.camera.midPoint.clone();
     this.camera.setZoom(Phaser.Math.Clamp(zoom, MIN_ZOOM, MAX_ZOOM));
     this.camera.centerOn(middle.x, middle.y);
+    this.settle();
     this.config.onInvalidate();
     this.config.onScaled();
   }
@@ -166,6 +196,7 @@ export class SceneCamera {
    */
   centreOn(worldX: number, worldY: number): void {
     this.camera.centerOn(worldX, worldY);
+    this.settle();
     this.config.onInvalidate();
     this.persist();
   }
@@ -174,6 +205,7 @@ export class SceneCamera {
   centreOnOrigin(): void {
     this.camera.setZoom(this.config.defaultZoom());
     this.camera.centerOn(0, 0);
+    this.settle();
     this.config.onInvalidate();
     this.persist();
   }
@@ -190,6 +222,7 @@ export class SceneCamera {
     this.placed = true;
     this.camera.setZoom(saved?.zoom ?? this.config.defaultZoom());
     this.camera.centerOn(saved?.x ?? 0, saved?.y ?? 0);
+    this.settle();
     this.config.onInvalidate();
     this.config.onChange();
   }

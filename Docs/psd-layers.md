@@ -22,6 +22,17 @@ Photoshop and back.
 `psd-layer-owner.ts` for whose names the app owns, and
 `psd-layer-actions.ts` for the buttons around it.
 
+**The list is folded until it is asked for.** The stack and New layer sit in
+**Edit Layers**, a section nested inside the PSD section
+(`editLayersSection` in `psd-layer-actions.ts`), so the inspector's one fold
+pass reaches it. It is the one section that starts *closed* — `FOLDED_FIRST`
+in `inspect-collapse.ts`, which stores opening it as `open:Edit Layers` in the
+same per-install store every other fold uses — because the stack is as long as
+the file is deep and it stood between a PSD selected to be moved and the rest
+of the panel. What is about the file rather than its stack stays outside it,
+and so does Apply: an edit staged before the fold was closed is still waiting
+on it. `Inspector.revealPsdLayers`, after a PSD is made, opens both.
+
 **Every button about the file is one row over the list.** Adjust layers used
 to be a note near the top of the inspector, beside the filename; Open PSD and
 Re-parse were at the very bottom, under the stack. Three buttons about the

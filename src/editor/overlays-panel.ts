@@ -30,7 +30,9 @@
  * A project with no lattice — the blank template, whose cells are single
  * pixels — gets no row rather than a dead one: see `hasLattice`. A print
  * project gets one more, **Guides**, for the ruler guides on its artboards;
- * see `addGuidesSwitch`.
+ * see `addGuidesSwitch`. A scene with a plan gets **Plan**, and while plan
+ * mode is up there is **Plan overlay** too — the white wash it lays over the
+ * scene, with its own opacity; see `showPlanSwitch` and `showPlanTint`.
  *
  * **The rest of the order is not the order they were asked for.** Boundary and
  * centre point are the two marks `screen-guide.ts` draws — one subject, so
@@ -87,7 +89,14 @@ const STORAGE_KEY = "idlewild.overlays";
  * project's alone — the ruler guides on its artboards, see
  * `artboard-chrome.ts` — and its row is only added there (`addGuidesSwitch`).
  */
-export type OverlaySwitch = "grid" | "boundary" | "centre" | "guides" | "plan" | "minimap";
+export type OverlaySwitch =
+  | "grid"
+  | "boundary"
+  | "centre"
+  | "planTint"
+  | "plan"
+  | "guides"
+  | "minimap";
 
 /**
  * What the panel remembers: the four marks, the lattice's own two settings,
@@ -101,6 +110,8 @@ export type OverlayState = Record<OverlaySwitch, boolean> & {
   gridOpacity: number;
   /** How strongly a scene's plan shows outside plan mode, 0.1 to 1. */
   planOpacity: number;
+  /** How strongly plan mode's white wash covers the scene, 0.1 to 1. */
+  planTintOpacity: number;
 };
 
 /**
@@ -119,20 +130,29 @@ export const OVERLAY_DEFAULTS: OverlayState = {
   boundary: true,
   centre: true,
   guides: true,
+  planTint: true,
   plan: true,
   minimap: true,
   open: false,
   ...GRID_STYLE_DEFAULTS,
   planOpacity: 1,
+  // Enough to push the scene back behind the plan's blue without losing it:
+  // the wash is tracing paper, not a sheet laid over the work.
+  planTintOpacity: 0.5,
 };
 
-/** The keys that are plainly switches, which is how a stored one is read. */
+/**
+ * The keys that are plainly switches, which is how a stored one is read — and
+ * the order their rows stand in, which is how a row that comes and goes finds
+ * its place again.
+ */
 const SWITCHES: readonly OverlaySwitch[] = [
   "grid",
   "boundary",
   "centre",
-  "guides",
+  "planTint",
   "plan",
+  "guides",
   "minimap",
 ];
 
@@ -163,6 +183,10 @@ export function readOverlays(raw: string | null): OverlayState {
     state.gridOpacity = readGridOpacity(record.gridOpacity);
     state.planOpacity =
       typeof record.planOpacity === "number" ? clampGridOpacity(record.planOpacity) : 1;
+    state.planTintOpacity =
+      typeof record.planTintOpacity === "number"
+        ? clampGridOpacity(record.planTintOpacity)
+        : OVERLAY_DEFAULTS.planTintOpacity;
     return state;
   } catch {
     return { ...OVERLAY_DEFAULTS };
@@ -216,6 +240,14 @@ const PLAN_ROW: Row = {
   icon: ICONS.pencil,
 };
 
+/** Plan mode's wash over the scene, while the mode is up — `showPlanTint`. */
+const PLAN_TINT_ROW: Row = {
+  key: "planTint",
+  label: "Plan overlay",
+  title: "The white wash plan mode lays over the scene",
+  icon: ICONS.layerBackground,
+};
+
 /** A print project's extra row, put in by `addGuidesSwitch`. */
 const GUIDES_ROW: Row = {
   key: "guides",
@@ -250,8 +282,13 @@ export class OverlaysPanel {
   private guides: ((on: boolean) => void) | null = null;
   /** What the Plan row switches and dims — see `showPlanSwitch`. */
   private plan: ((shown: boolean, opacity: number) => void) | null = null;
-  /** The plan's opacity row, under its switch. */
-  private planStyle: HTMLElement | null = null;
+  /** And the Plan overlay row — see `showPlanTint`. */
+  private planTint: ((shown: boolean, opacity: number) => void) | null = null;
+  /**
+   * The opacity rows under the switches that come and go, keyed by switch,
+   * so each folds away with its own.
+   */
+  private readonly styles = new Map<OverlaySwitch, HTMLElement>();
 
   /**
    * @param hasLattice whether this project's grid draws one — `Grid.snaps`.
@@ -345,27 +382,54 @@ export class OverlaysPanel {
    */
   showPlanSwitch(present: boolean, apply: (shown: boolean, opacity: number) => void): void {
     this.plan = apply;
-    const button = this.buttons.get("plan");
+    this.showRow(PLAN_ROW, present, "planOpacity", "Plan opacity");
+  }
+
+  /**
+   * The Plan overlay row and its opacity, while plan mode is up.
+   *
+   * Only then, because the wash is only drawn then: outside the mode the plan
+   * sits on the canvas as strokes alone, and a slider for a wash nobody can
+   * see would be adjusting nothing. The weight is remembered for the next
+   * time the mode is entered.
+   */
+  showPlanTint(active: boolean, apply: (shown: boolean, opacity: number) => void): void {
+    this.planTint = apply;
+    this.showRow(PLAN_TINT_ROW, active, "planTintOpacity", "Plan overlay opacity");
+  }
+
+  /**
+   * Put a row that comes and goes — a switch and an opacity slider under it —
+   * in its place in `SWITCHES` order, or take it out.
+   */
+  private showRow(
+    row: Row,
+    present: boolean,
+    weight: "planOpacity" | "planTintOpacity",
+    label: string,
+  ): void {
+    const button = this.buttons.get(row.key);
     if (present && !button) {
-      const row = this.rowButton(PLAN_ROW);
-      this.planStyle = h(
+      const added = this.rowButton(row);
+      const style = h(
         "div",
         { class: "overlays-grid-style" },
-        opacityRow(this.state.planOpacity, "Plan opacity", (opacity) =>
-          this.setStyle({ planOpacity: opacity }),
-        ),
+        opacityRow(this.state[weight], label, (opacity) => this.setStyle({ [weight]: opacity })),
       );
-      const before = this.buttons.get("guides") ?? this.buttons.get("minimap") ?? null;
-      this.body.insertBefore(row, before);
-      this.body.insertBefore(this.planStyle, before);
-      const at = this.rows.findIndex((r) => r.key === "guides" || r.key === "minimap");
-      this.rows = [...this.rows.slice(0, at), PLAN_ROW, ...this.rows.slice(at)];
+      this.styles.set(row.key, style);
+      const rank = SWITCHES.indexOf(row.key);
+      const next = this.rows.find((r) => SWITCHES.indexOf(r.key) > rank);
+      const before = (next && this.buttons.get(next.key)) ?? null;
+      this.body.insertBefore(added, before);
+      this.body.insertBefore(style, before);
+      const at = next ? this.rows.indexOf(next) : this.rows.length;
+      this.rows = [...this.rows.slice(0, at), row, ...this.rows.slice(at)];
     } else if (!present && button) {
       button.remove();
-      this.planStyle?.remove();
-      this.planStyle = null;
-      this.buttons.delete("plan");
-      this.rows = this.rows.filter((r) => r.key !== "plan");
+      this.styles.get(row.key)?.remove();
+      this.styles.delete(row.key);
+      this.buttons.delete(row.key);
+      this.rows = this.rows.filter((r) => r.key !== row.key);
     }
     this.paint();
     this.apply();
@@ -454,7 +518,7 @@ export class OverlaysPanel {
     // A colour for a mark nobody is drawing is two rows of chrome about
     // nothing, so the lattice's settings go with its switch.
     if (this.gridStyle) this.gridStyle.hidden = !this.state.grid;
-    if (this.planStyle) this.planStyle.hidden = !this.state.plan;
+    for (const [key, style] of this.styles) style.hidden = !this.state[key];
     for (const row of this.rows) {
       const button = this.buttons.get(row.key);
       if (!button) continue;
@@ -473,6 +537,7 @@ export class OverlaysPanel {
     this.guide?.setMarksVisible(this.state.boundary, this.state.centre);
     this.guides?.(this.state.guides);
     this.plan?.(this.state.plan, clampGridOpacity(this.state.planOpacity));
+    this.planTint?.(this.state.planTint, clampGridOpacity(this.state.planTintOpacity));
     this.lattice?.setGridVisible(this.state.grid);
     this.lattice?.setGridStyle(
       hexToNumber(this.state.gridColor),

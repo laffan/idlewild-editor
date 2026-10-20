@@ -27,6 +27,7 @@ import type { LayerKind } from "../lib/types";
 import type { Layer, Placement, Selection } from "../lib/types";
 import { describeFill } from "../lib/doc-shape";
 import { paintLabel } from "../lib/paint";
+import { psdThumb, readyPsdThumb } from "../lib/psd-thumbs";
 
 export interface LayerItem {
   /** What selecting this row means. */
@@ -55,10 +56,10 @@ export interface LayerItem {
   /**
    * The file this row stands for, when it stands for one.
    *
-   * The label already says `<key>.psd`, but a name with an extension glued on
-   * is a thing to read rather than a key to ask questions with — and Code
-   * mode's directory asks one: what is inside this file. See
-   * `layer-directory.ts`.
+   * The label says the key too, but a label is a thing to read rather than a
+   * key to ask questions with — and Code mode's directory asks one: what is
+   * inside this file. See `layer-directory.ts`. It is also what the row's
+   * thumbnail is drawn from.
    */
   psdKey?: string;
   /**
@@ -256,7 +257,9 @@ function unitItem(
     kind === "object" && context.isAnchored?.(first.psdKey) === false;
   return {
     selection: { kind: "placement", layerId: layer.id, placementId: first.id },
-    label: `${first.psdKey}.psd`,
+    // The key alone: every row of this kind is a PSD, and `.psd` on each of
+    // them was the same four characters said down the whole list.
+    label: first.psdKey,
     detail: describeUnit(unit),
     path: ICONS.file,
     members: unit.map((p) => p.id),
@@ -347,7 +350,9 @@ export function renderLayerItem(
           // a background *image*, and the shorthand would take it off.
           style: { backgroundColor: item.swatch },
         })
-      : icon(item.path, 13),
+      : item.psdKey && !item.groupId
+        ? thumbnail(item.psdKey, item.path)
+        : icon(item.path, 13),
     onRename && item.psdKey
       ? nameField(item.psdKey, onRename, select)
       : h("span", { class: "layer-item-label", text: item.label }),
@@ -385,8 +390,27 @@ export function renderLayerItem(
 }
 
 /**
+ * A placed PSD's picture, in place of the file icon every row used to carry.
+ *
+ * The icon stands in until the picture arrives, and stays for a file with
+ * nothing visible in it. A thumbnail already fetched is drawn at once, so a
+ * list rebuilt by an edit does not blink back to icons — see
+ * `lib/psd-thumbs.ts`.
+ */
+function thumbnail(key: string, fallback: string | readonly string[]): HTMLElement {
+  const box = h("span", { class: "layer-item-thumb" }, icon(fallback, 13));
+  const show = (url: string) => {
+    if (url) box.replaceChildren(h("img", { src: url, alt: "", draggable: "false" }));
+  };
+  const ready = readyPsdThumb(key);
+  if (ready !== undefined) show(ready);
+  else void psdThumb(key).then(show);
+  return box;
+}
+
+/**
  * A placed PSD's name, typed in place the way a layer's is: the file's key in
- * a field, `.psd` after it. A tap selects the row as well as putting the caret
+ * a field. A tap selects the row as well as putting the caret
  * in; the name is written on Enter or when the field is left, and Escape puts
  * it back. Rust has the last word on the key — see `PsdFileActions.rename`.
  */
@@ -418,7 +442,7 @@ function nameField(
       if (value && value !== key) onRename(value);
     },
   });
-  return h("span", { class: "layer-item-label naming" }, input, h("span", { class: "layer-item-ext", text: ".psd" }));
+  return h("span", { class: "layer-item-label naming" }, input);
 }
 
 /** Whether a selection points at this item, so the row can show as current. */

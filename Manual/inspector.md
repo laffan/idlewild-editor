@@ -9,8 +9,10 @@ Part of [the Idlewild manual](README.md).
 
 ## Three zones
 
-- **The properties sidebar is three zones, always in that order: TOOL, LAYER,
-  OBJECT.** It used to be one panel headed *Inspector* that showed exactly one
+- **The properties sidebar is three zones: TOOL, LAYER, OBJECT** — in that
+  order while nothing is selected, and with **the thing you picked first**
+  once something is: pick a layer in the left sidebar and its name heads the
+  panel, with Select's switches under it rather than over it. It used to be one panel headed *Inspector* that showed exactly one
   thing at a time — the brush while a drawing tool held the pointer, a layer
   while a layer was selected, a placed PSD while one was — so picking a PSD
   took the layer's facts away and picking up the pencil took both away. The
@@ -18,8 +20,7 @@ Part of [the Idlewild manual](README.md).
   in it, so nothing on screen ever said which of the three you were looking
   at, and there was no way to look at two. Now **TOOL** is whatever the thing
   in your hand has to set, **LAYER** is the layer the next thing you do will
-  land on, and **OBJECT** is what is selected on the canvas — read down the
-  column and it is the same sentence every time. A zone with nothing to say is
+  land on, and **OBJECT** is what is selected on the canvas. A zone with nothing to say is
   not drawn at all: a tool that does one thing with one gesture gets no TOOL
   zone, because a heading over a sentence that never changes is the thing the
   single heading was doing wrong. Inside them, the sections are what they

@@ -41,6 +41,7 @@ import {
   moveBlock,
 } from "./psd-layer-tree";
 import {
+  editLayersSection,
   newLayerButton,
   psdHeadRow,
   resetPositionsRow,
@@ -184,8 +185,7 @@ export class PsdLayerEditor {
       this.head,
       this.status,
       this.resetRow,
-      this.list,
-      this.newRow,
+      editLayersSection(this.list, this.newRow),
       this.foot,
     );
     // Before the file has been read, so the buttons that are about the file

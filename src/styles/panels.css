@@ -457,7 +457,7 @@
 }
 .layer-item:hover .layer-item-grip { color: var(--chrome-text); }
 /* A placed PSD's name, typed in place like a layer's — see `nameField` in
-   editor/layer-items.ts. The field is the key; `.psd` sits after it. */
+   editor/layer-items.ts. The field is the key, and nothing after it. */
 .layer-item-label.naming { display: flex; align-items: center; overflow: visible; }
 .layer-item-name {
   flex: 1;
@@ -473,7 +473,6 @@
   user-select: text;
 }
 .layer-item-name:focus { background: var(--chrome-bg); color: var(--chrome-text); }
-.layer-item-ext { flex: none; color: var(--color-neutral-600); }
 
 /* Carrying one. The rows do not move as the finger travels — there is one
    legal drop per layer rather than a position in a list — so the destination
@@ -504,22 +503,7 @@
   font-size: 10px;
   color: var(--color-neutral-600);
 }
-/* Over a checker, so a colour somebody has made half transparent reads as
-   half transparent rather than as a paler colour it is not. Small enough that
-   one 6px square in each corner is all the checker there is room for. */
-.layer-item-swatch {
-  flex: none;
-  width: 13px;
-  height: 13px;
-  border: 1px solid var(--color-neutral-600);
-  background-image:
-    linear-gradient(45deg, var(--color-neutral-600) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--color-neutral-600) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--color-neutral-600) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--color-neutral-600) 75%);
-  background-size: 6px 6px;
-  background-position: 0 0, 0 3px, 3px -3px, -3px 0;
-}
+
 .layer-name {
   width: 100%;
   height: 24px;

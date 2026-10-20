@@ -153,9 +153,7 @@ place down the left edge.
   land on. **Delete** clears them, as it clears anything else selected. Only
   spaces with something on them are caught — there is no point selecting bare
   ground on a layer that is about what is standing on it.
-- **Pan** is unchanged. Point and Boundary are not offered on a tile layer:
-  what they make belongs to the layer it is made on, and a tile layer is
-  ground rather than a place things stand.
+- **Pan** is unchanged.
 
 Each gesture is one press of undo, however many spaces it covered.
 

@@ -13,6 +13,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  EDIT_LAYERS,
   isCollapsed,
   resetCollapsedForTests,
   sectionName,
@@ -86,6 +87,33 @@ describe("what closing one is remembered as", () => {
     // And it can still be written afterwards.
     setCollapsed("Collider", true);
     expect(isCollapsed("Collider")).toBe(true);
+  });
+});
+
+/**
+ * Edit Layers is the one section that starts shut: a file's stack is as long
+ * as the file is deep, and selecting a PSD to move it put the whole list in
+ * the way. Opening it is what is remembered, the way closing is for the rest.
+ */
+describe("a section that starts folded", () => {
+  it("is shut before anybody has touched it", () => {
+    expect(EDIT_LAYERS).toBe("Edit Layers");
+    expect(isCollapsed(EDIT_LAYERS)).toBe(true);
+  });
+
+  it("stays open once opened, across the panel and the app", () => {
+    setCollapsed(EDIT_LAYERS, false);
+    expect(isCollapsed(EDIT_LAYERS)).toBe(false);
+    resetCollapsedForTests();
+    expect(isCollapsed(EDIT_LAYERS)).toBe(false);
+    setCollapsed(EDIT_LAYERS, true);
+    resetCollapsedForTests();
+    expect(isCollapsed(EDIT_LAYERS)).toBe(true);
+  });
+
+  it("leaves every other section starting open", () => {
+    setCollapsed(EDIT_LAYERS, false);
+    expect(isCollapsed("PSD")).toBe(false);
   });
 });
 

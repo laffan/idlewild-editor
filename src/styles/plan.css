@@ -11,12 +11,14 @@
   pointer-events: none;
 }
 
-/* The faint blue over the scene while planning: tracing paper, not a wash. */
+/* The white over the scene while planning: tracing paper, pushing the scene
+   back behind the plan's blue. How strongly is the Plan overlay row's slider
+   in Overlays, set inline on the element — see editor/plan-mode.ts. */
 .plan-tint {
   position: absolute;
   inset: 0;
   display: none;
-  background: rgb(10 132 255 / 0.1);
+  background: #fff;
   pointer-events: none;
 }
 .editor-canvas-wrap.planning .plan-tint { display: block; }
@@ -45,10 +47,9 @@
 }
 
 /* Everything else on the canvas column steps aside while planning: the rail
-   and the drawing toolbar, the tool's name, and the bars that float over a
+   and the drawing toolbar, and the bars that float over a
    selection — there is nothing selected, and nothing but the plan to draw. */
 .editor-canvas-wrap.planning > .tool-rail:not(.plan-bar),
-.editor-canvas-wrap.planning > .tool-name,
 .editor-canvas-wrap.planning > .selection-actions,
 .editor-canvas-wrap.planning > .canvas-float { display: none; }
 
