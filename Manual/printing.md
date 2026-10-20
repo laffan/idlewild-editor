@@ -58,8 +58,9 @@ Part of [the Idlewild manual](README.md).
   stronger. The pencil opens Page Setup for it — its **name**, its paper and
   which way round. The cross removes it, after asking; the last one stays.
   **Add artboard** puts a copy of the picked one to the right of the rest
-- **Drag a label to move that artboard.** Tapping a label picks it: its row
-  in the list, its frame drawn stronger, and the artboard in the right-hand
+- **Drag a label to move that artboard.** Tapping a label picks it — and puts
+  the Select tool in hand, as picking its row in the list does: its row in
+  the list, its frame drawn stronger, and the artboard in the right-hand
   inspector like any other selected thing — its name to retype, its size and
   corner, and **Resize**, **Page Setup…** and **Remove artboard**. Selecting
   anything on the canvas, or tapping empty canvas, puts it down

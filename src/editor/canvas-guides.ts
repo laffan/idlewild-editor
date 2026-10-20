@@ -46,6 +46,8 @@ export interface CanvasGuidesDeps {
   centreOn: (x: number, y: number) => void;
   /** Put down whatever the canvas has selected. */
   clearSelection: () => void;
+  /** Put the Select tool in hand. */
+  selectTool: () => void;
 }
 
 export interface CanvasGuides {
@@ -118,6 +120,9 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
         inspector.setArtboard(null);
         return;
       }
+      // Select, as for anything else picked: under a brush a tap on the
+      // canvas draws, and the artboard's own handles are Select's to use.
+      deps.selectTool();
       deps.clearSelection();
       inspector.setArtboard({
         id,

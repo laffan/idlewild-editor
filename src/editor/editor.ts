@@ -463,7 +463,7 @@ export async function mountEditor(
     camera: () => handle?.scene ?? null,
     defaultZoom: () => render.options.defaultZoom,
     centreOn: (x, y) => handle?.scene.centreOn(x, y),
-    // Picking an artboard puts down whatever the canvas had selected.
+    selectTool: () => tools?.apply("select", false), // as an artboard is picked
     clearSelection: () => handle?.scene.setSelection({ kind: "none" }),
   });
   const guide = guides.guide;
@@ -570,7 +570,7 @@ export async function mountEditor(
   drawing.style = libraryStyle(grid, drawing.style);
   canvasWrap.appendChild(drawing.root);
   drawing.sync(handle.scene.viewport());
-  guides.sync(handle.scene.viewport()); // and the plan's sheet goes over the ink
+  guides.sync(handle.scene.viewport()); // the plan's sheet goes over the ink, too
   if (import.meta.env.DEV) exposeDevHooks(handle.scene, inspector);
   log.info(`Opened ${meta.name} · ${meta.projection} · ${meta.gridSize}px grid`);
   reportAssetServer(base);

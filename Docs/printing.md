@@ -206,7 +206,8 @@ not a canvas `Selection`: the scene has no artboards, and every switch over
 selection kinds would have grown an arm for a thing only a print project has.
 So the inspector holds it beside the canvas selection, puts it down the moment
 the canvas selects anything, and `canvas-guides.ts` puts it down on a tap on
-empty canvas. Picking one clears the canvas selection first.
+empty canvas. Picking one puts the Select tool in hand — under a brush a tap
+on the canvas would draw — and clears the canvas selection first.
 
 **The shade** is an SVG in the labels' layer — over the ink, under the rail —
 masked by one black rectangle per artboard, so overlapping and scattered
