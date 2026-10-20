@@ -44,6 +44,7 @@ import { TransformBox } from "./transform-box";
 import { transformSome, type Affine } from "./transform";
 import { drawToolCursor, hasToolCursor } from "./cursor";
 import { onFrame } from "./frame";
+import { setInking } from "./inking";
 import { beginShapeStamp, freeStampBox, type StampBox, type StampBoxAt } from "./tools-stamp";
 import {
   DEFAULT_STYLE,
@@ -466,6 +467,7 @@ export class DrawingLayer {
     const { x, y } = this.local(event);
     this.lock = LOCKS.has(this.tool) ? new AxisLock(x, y) : null;
     this.session = this.open(this.tool, x, y, this.pressure(event));
+    setInking(this, true);
     event.preventDefault();
   };
 
@@ -631,6 +633,7 @@ export class DrawingLayer {
   };
 
   private endSession(): void {
+    setInking(this, false);
     this.session?.end();
     this.session = null;
     this.sessionPointer = null;
@@ -665,6 +668,8 @@ export class DrawingLayer {
 
   private onWheel = (event: WheelEvent): void => {
     event.preventDefault();
+    // A scroll moves the camera, so the canvas under the ink has to draw again.
+    if (this.session) setInking(this, false);
     const rect = this.root.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;

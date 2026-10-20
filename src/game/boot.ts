@@ -12,6 +12,7 @@ import PsdToPhaser from "psd-to-phaser";
 import type { GameOptions } from "../lib/types";
 import * as log from "../lib/log";
 import { WorldScene, type WorldSceneConfig } from "./world-scene";
+import { onInking } from "../drawing/inking";
 
 export interface GameHandle {
   game: Phaser.Game;
@@ -147,10 +148,18 @@ export function bootGame(
         );
       }
       game.scene.start("World", config);
+      // No frames while a pen is down: nothing on this canvas changes during
+      // a stroke, and its render competes with the ink's — see `inking.ts`.
+      const stopPausing = onInking((inking) =>
+        inking ? game.loop.sleep() : game.loop.wake(),
+      );
       resolve({
         game,
         scene,
         destroy: async () => {
+          // Awake to go: destroying happens on the loop's next step.
+          stopPausing();
+          game.loop.wake();
           scene.shutdownScene();
           await destroyGame(game);
         },

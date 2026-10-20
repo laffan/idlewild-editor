@@ -25,7 +25,7 @@ selection out.
 | `drawing-layer*.ts`, `re-anchor.ts` | `surface.ts`, `drawing-layer.ts` |
 | `stroke-paint.ts` | `rasterise.ts` — strokes → RGBA → PSD |
 | `engine/stroke.js`'s rAF batching (delta #24) | `frame.ts` — one repaint a frame |
-| — | `live-ink.ts`, `tail-canvas.ts` — a stroke in flight drawn a frame at a time, not re-laid |
+| — | `live-ink.ts`, `tail-canvas.ts` — a stroke in flight drawn a frame at a time, not re-laid; `inking.ts` — Phaser sleeps while a pen is down |
 
 Not coming across, because none of it is drawing: the shelf, the pocket,
 splits, proof pages, flowcharts, markdown, text and image shapes, brush slots
@@ -423,7 +423,7 @@ tile index. The first two are about panning and re-anchoring rather than about
 drawing; the third pays off on a layer with thousands of strokes, where a
 re-bake's bbox cull is currently the only thing narrowing the work.
 
-### The stroke in flight, and the three more things that were paying for it
+### The stroke in flight, and the four more things that were paying for it
 
 The five above made a stroke cheap to *land*. Drawing one still got slower the
 longer it got, and a quick hand felt it first — *on an M1 iPad it is fine
@@ -434,7 +434,7 @@ Measured with a scripted scribble four samples a frame for three hundred
 frames (headless Chromium, software raster, so the absolute numbers are a
 desktop's and only the shape carries to an iPad): the plain pencil went from
 4 ms a frame at the start to 81 ms at the end; the plan's pencil from 6 to
-121; the plan's eraser from 51 to 213. After the three below, every one of
+121; the plan's eraser from 51 to 213. After the four below, every one of
 them is under a millisecond a frame and stays there.
 
 **6. Every frame re-laid the whole stroke.** Batching to one paint a frame (1)
@@ -482,6 +482,14 @@ then in the canvas and not the document). The cost is the tail: a hole cannot
 go on a canvas of its own, so the last fraction of one sample's travel is cut
 when the pen comes up rather than shown. A translucent eraser does not have
 the identity — per stamp it compounds — and keeps the whole-stroke path.
+
+**9. Phaser drew a frame nobody needed, every frame.** Its loop renders the
+whole scene on every animation frame — every `Graphics` object, the lattice
+included, tessellated again — and nothing on it changes while a pen is down.
+`inking.ts` says when a pen is down, and `game/boot.ts` sleeps the loop for
+the length of the stroke and wakes it when the stroke ends. A finger landing
+ends the stroke already, and a wheel scroll mid-stroke wakes it, so the
+camera never moves under a sleeping loop.
 
 What still takes the whole-stroke path, and is the next thing to look at if
 it matters: **smoothing above zero**. Its last stage pulls every point towards
