@@ -104,6 +104,17 @@ export function installPrint(game, config) {
   const waiting = new Map();
   let next = 0;
   rememberSources();
+  // What the scaffold redraws every frame because it follows the camera —
+  // backdrops and pattern layers, `updateCanvas` in `canvas.js`. An artboard
+  // is read inside one frame, so it has to be asked for by hand once the
+  // camera is on it; see `readBoards`. Imported here rather than at the top
+  // so a project whose `canvas.js` has been taken apart still prints.
+  let followView = null;
+  import("./canvas.js")
+    .then((canvas) => {
+      if (typeof canvas.updateCanvas === "function") followView = canvas.updateCanvas;
+    })
+    .catch(() => {});
 
   window.ExportForPrint = (options = {}) =>
     new Promise((resolve, reject) => {
@@ -116,7 +127,7 @@ export function installPrint(game, config) {
         const chosen = pickBoards(boards, options.artboard);
         let pages;
         try {
-          pages = await readBoards(game, sheet, boards[0], chosen);
+          pages = await readBoards(game, sheet, boards[0], chosen, followView);
         } catch (err) {
           reject(err);
           return;
@@ -183,21 +194,34 @@ function pickBoards(boards, asked) {
  * read, and the cameras are put back before anything is awaited, so the
  * running game never draws a frame from anywhere else.
  */
-async function readBoards(game, sheet, first, chosen) {
-  const cameras = game.scene
-    .getScenes(false)
-    .map((scene) => scene.cameras?.main)
-    .filter(Boolean);
+async function readBoards(game, sheet, first, chosen, followView) {
+  const scenes = game.scene.getScenes(false).filter((scene) => scene.cameras?.main);
+  const cameras = scenes.map((scene) => scene.cameras.main);
+  // Backdrops and patterns are drawn for the camera's view, so they are
+  // redrawn for each artboard's — and then for the game's own again.
+  const follow = () => {
+    if (!followView) return;
+    for (const scene of scenes) {
+      try {
+        followView(scene);
+      } catch (err) {
+        console.warn("ExportForPrint(): could not redraw the view:", err);
+      }
+    }
+  };
   const reads = [];
   for (const board of chosen) {
     const dx = (board.x ?? 0) - (first.x ?? 0);
     const dy = (board.y ?? 0) - (first.y ?? 0);
+    const size = { width: board.width, height: board.height };
     const saved = cameras.map((camera) => [camera, camera.scrollX, camera.scrollY]);
-    for (const [camera, x, y] of saved) aim(camera, x + dx, y + dy);
+    for (const [camera, x, y] of saved) aim(camera, x + dx, y + dy, size);
+    follow();
     // The synchronous half of the read — every matrix and every capture —
     // runs inside this call; only the readbacks are left to await.
     const page = readPage(game, { width: board.width, height: board.height, dpi: sheet.dpi });
     for (const [camera, x, y] of saved) aim(camera, x, y);
+    follow();
     reads.push(page.then((p) => ({ page: p, board })));
   }
   return Promise.all(reads);
@@ -213,14 +237,26 @@ async function readBoards(game, sheet, first, chosen) {
  * came out as a copy of the first. This rebuilds the two matrices the way
  * `preRender` does, without its follow, bounds or effects: an artboard is
  * read where it is, wherever the game's own camera rules would put it.
+ *
+ * `worldView` too, which is what backdrops and patterns are drawn over — and
+ * the size of the page being read when one is given rather than the game's
+ * own: the game is the first artboard's size, and a larger one after it
+ * would otherwise get a backdrop only as big as the first.
  */
-function aim(camera, x, y) {
+function aim(camera, x, y, page) {
   camera.setScroll(x, y);
   const originX = camera.width * camera.originX;
   const originY = camera.height * camera.originY;
   camera.matrix.applyITRS(originX, originY, camera.rotation, camera.zoomX, camera.zoomY);
   camera.matrix.translate(-x - originX, -y - originY);
   camera.matrixExternal.multiply(camera.matrix, camera.matrixCombined);
+  const zoomX = camera.zoomX || 1;
+  const zoomY = camera.zoomY || 1;
+  const left = x + camera.width / 2 - camera.width / zoomX / 2;
+  const top = y + camera.height / 2 - camera.height / zoomY / 2;
+  const width = (page?.width ?? camera.width) / zoomX;
+  const height = (page?.height ?? camera.height) / zoomY;
+  camera.worldView?.setTo(left, top, width, height);
 }
 
 /** `<name>-<artboard>`, for a project with more than one artboard. */

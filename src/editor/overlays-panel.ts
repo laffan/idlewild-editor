@@ -28,7 +28,9 @@
  * scene.
  *
  * A project with no lattice — the blank template, whose cells are single
- * pixels — gets no row rather than a dead one: see `hasLattice`.
+ * pixels — gets no row rather than a dead one: see `hasLattice`. A print
+ * project gets one more, **Guides**, for the ruler guides on its artboards;
+ * see `addGuidesSwitch`.
  *
  * **The rest of the order is not the order they were asked for.** Boundary and
  * centre point are the two marks `screen-guide.ts` draws — one subject, so
@@ -79,8 +81,12 @@ export interface LatticeHost {
 
 const STORAGE_KEY = "idlewild.overlays";
 
-/** The four marks, each of which is a switch and nothing more. */
-export type OverlaySwitch = "grid" | "boundary" | "centre" | "minimap";
+/**
+ * The marks, each of which is a switch and nothing more. `guides` is a print
+ * project's alone — the ruler guides on its artboards, see
+ * `artboard-chrome.ts` — and its row is only added there (`addGuidesSwitch`).
+ */
+export type OverlaySwitch = "grid" | "boundary" | "centre" | "guides" | "minimap";
 
 /**
  * What the panel remembers: the four marks, the lattice's own two settings,
@@ -109,6 +115,7 @@ export const OVERLAY_DEFAULTS: OverlayState = {
   grid: true,
   boundary: true,
   centre: true,
+  guides: true,
   minimap: true,
   open: false,
   ...GRID_STYLE_DEFAULTS,
@@ -119,6 +126,7 @@ const SWITCHES: readonly OverlaySwitch[] = [
   "grid",
   "boundary",
   "centre",
+  "guides",
   "minimap",
 ];
 
@@ -184,6 +192,13 @@ const ROWS: readonly Row[] = [
   { key: "minimap", label: "Minimap", title: "Where you are standing" },
 ];
 
+/** A print project's extra row, put in by `addGuidesSwitch`. */
+const GUIDES_ROW: Row = {
+  key: "guides",
+  label: "Guides",
+  title: "The guides pulled from the artboards' rulers, with the rulers or without",
+};
+
 export class OverlaysPanel {
   /** The whole bottom of the sidebar: these switches, and the map under them. */
   readonly root: HTMLElement;
@@ -191,7 +206,7 @@ export class OverlaysPanel {
   private readonly minimap: Minimap;
   private readonly section: HTMLElement;
   private readonly body: HTMLElement;
-  private readonly rows: readonly Row[];
+  private rows: readonly Row[];
   private readonly buttons = new Map<Row["key"], HTMLElement>();
   /**
    * The lattice's own two controls, or null for a project with no lattice.
@@ -206,6 +221,8 @@ export class OverlaysPanel {
   private guide: ScreenGuide | null = null;
   /** And the canvas, once it has booted — see `setLattice`. */
   private lattice: LatticeHost | null = null;
+  /** What the Guides row switches, on a print project — see `addGuidesSwitch`. */
+  private guides: ((on: boolean) => void) | null = null;
 
   /**
    * @param hasLattice whether this project's grid draws one — `Grid.snaps`.
@@ -217,20 +234,7 @@ export class OverlaysPanel {
 
     this.body = h("div", { class: "overlays-body" });
     for (const row of this.rows) {
-      // The whole width is the switch. Nothing else is on the row — no name to
-      // type into, no grip — so a finger should be able to land anywhere, which
-      // is the same argument Code's layer directory makes about its own rows.
-      const button = h(
-        "button",
-        {
-          class: "overlays-row",
-          title: row.title,
-          onClick: () => this.set(row.key, !this.state[row.key]),
-        },
-        h("span", { class: "overlays-name", text: row.label }),
-        h("span", { class: "overlays-eye" }),
-      );
-      this.buttons.set(row.key, button);
+      const button = this.rowButton(row);
       this.body.appendChild(button);
       // Directly under the switch they belong to, rather than at the foot of
       // the list: they are settings *for* the Grid row, and a colour four
@@ -279,6 +283,46 @@ export class OverlaysPanel {
   setGuide(guide: ScreenGuide): void {
     this.guide = guide;
     this.apply();
+  }
+
+  /**
+   * A print project's Guides row, and what it switches.
+   *
+   * Added by the artboards' wiring rather than by the constructor, because
+   * only a print project has guides and the panel is built before anybody
+   * knows what the canvas holds. It goes above Minimap, which stays last
+   * against its own map.
+   */
+  addGuidesSwitch(apply: (on: boolean) => void): void {
+    this.guides = apply;
+    if (!this.buttons.has("guides")) {
+      const button = this.rowButton(GUIDES_ROW);
+      this.body.insertBefore(button, this.buttons.get("minimap") ?? null);
+      const at = this.rows.findIndex((row) => row.key === "minimap");
+      this.rows = [...this.rows.slice(0, at), GUIDES_ROW, ...this.rows.slice(at)];
+    }
+    this.paint();
+    this.apply();
+  }
+
+  /**
+   * The whole width is the switch. Nothing else is on the row — no name to
+   * type into, no grip — so a finger should be able to land anywhere, which
+   * is the same argument Code's layer directory makes about its own rows.
+   */
+  private rowButton(row: Row): HTMLElement {
+    const button = h(
+      "button",
+      {
+        class: "overlays-row",
+        title: row.title,
+        onClick: () => this.set(row.key, !this.state[row.key]),
+      },
+      h("span", { class: "overlays-name", text: row.label }),
+      h("span", { class: "overlays-eye" }),
+    );
+    this.buttons.set(row.key, button);
+    return button;
   }
 
   /**
@@ -345,6 +389,7 @@ export class OverlaysPanel {
   private apply(): void {
     this.minimap.setVisible(this.state.minimap);
     this.guide?.setMarksVisible(this.state.boundary, this.state.centre);
+    this.guides?.(this.state.guides);
     this.lattice?.setGridVisible(this.state.grid);
     this.lattice?.setGridStyle(
       hexToNumber(this.state.gridColor),

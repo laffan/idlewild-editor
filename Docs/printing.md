@@ -221,6 +221,13 @@ a copied artboard keeps its guides. `PagePatch` grew `rulers`, `guidesX` and
 rounded, in order, without repeats (`clean_guides`). The ticks are drawn on a
 canvas covering only the part of the ruler on screen, in the artboard's unit
 (`ruler-scale.ts`). Neither the game config nor any export reads either field.
+The guides themselves have a switch in Overlays (`addGuidesSwitch`, added only
+on a print project), independent of the rulers; their handles live on the
+rulers, so they come and go with them. A handle carries its own value tag,
+shown on hover by the stylesheet so nothing is rebuilt under the pointer, and
+the layer wears `.command` while ⌘ or Control is held, which turns every handle
+into an ×. Camera boundary hides the frames, labels and shade and leaves the
+rulers and guides alone.
 
 **Resize** puts eight handles on the picked artboard; `ScreenGuide.previewBoard`
 draws the sheet at the size being dragged to, and one `changePage` on release
@@ -257,7 +264,15 @@ a camera is `aim`, not `setScroll`: Phaser 4 bakes the scroll into
 `copyWithScrollFactorFrom` for a raster — go through that matrix, so a scroll
 set between frames moved nothing and every artboard came out as the first.
 `aim` rebuilds the matrix the way `preRender` does, without its follow or
-bounds (`src/game/__tests__/print-aim.test.ts`). The
+bounds (`src/game/__tests__/print-aim.test.ts`). It sets `worldView` as well,
+to the rectangle of the artboard being read rather than the game's own size,
+and `readBoards` then calls the project's `updateCanvas` on every scene:
+backdrops and pattern layers are drawn for the camera's view each frame, so
+without a redraw an artboard after the first was read with no backdrop under
+it. `updateCanvas` is reached by a dynamic import of `./canvas.js` at
+install, so a project that has taken that file apart still prints. The
+cameras are aimed back and the view redrawn once more before anything is
+awaited. The
 matrices and the captures are all synchronous, and only the readbacks are
 left to settle — so the running game never draws a frame from anywhere else.
 Every page but the last is posted as a snapshot, so the editor's run ends where

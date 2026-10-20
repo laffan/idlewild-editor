@@ -31,6 +31,8 @@ describe("the remembered switches", () => {
       grid: true,
       boundary: true,
       centre: true,
+      // A print project's guides; a game never shows the row.
+      guides: true,
       minimap: true,
       open: false,
       // And the lattice as the renderer draws it when nobody has said
@@ -47,6 +49,7 @@ describe("the remembered switches", () => {
       grid: false,
       boundary: false,
       centre: true,
+      guides: false,
       minimap: false,
       open: false,
       gridColor: "#ff0000",

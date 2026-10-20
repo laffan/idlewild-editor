@@ -348,7 +348,9 @@ export class ScreenGuide {
     // Nothing to say yet: the observer fires before the first camera push, and
     // a collapsed row has no viewport to describe.
     if (!view || !screen || screen.width <= 0 || screen.height <= 0) return;
-    if (!this.showing) {
+    // A print project's rulers and guides have switches of their own, so with
+    // artboards on the canvas the layer is drawn whatever these two say.
+    if (!this.showing && !this.chrome) {
       this.labels.classList.add("hidden");
       return;
     }
@@ -386,7 +388,11 @@ export class ScreenGuide {
     // Under the rail, once the guide is in the wrapper — see `labels`.
     const wrap = this.root.parentElement;
     if (!this.labels.isConnected && wrap) wrap.prepend(this.labels);
-    this.labels.classList.toggle("hidden", !this.framesOn);
+    this.labels.classList.remove("hidden");
+    // The Boundary switch takes the frames, their labels and the shade with
+    // it, and leaves the rulers and guides to their own switches.
+    this.labelList.classList.toggle("hidden", !this.framesOn);
+    this.shade.classList.toggle("hidden", !this.framesOn);
 
     const list = this.labelList;
     while (this.boards.children.length > boards.length) this.boards.lastElementChild?.remove();

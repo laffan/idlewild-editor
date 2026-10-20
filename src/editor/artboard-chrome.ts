@@ -76,6 +76,9 @@ export class ArtboardChrome {
     null;
   /** A ruler is being pressed, so the pointer leaving it does not take the guide away. */
   private pressing = false;
+  /** The Overlays panel's Guides switch: the lines, with the rulers or without. */
+  private guidesOn = true;
+  private readonly stopKeys: () => void;
 
   constructor(host: ArtboardChromeHost) {
     this.host = host;
@@ -85,11 +88,19 @@ export class ArtboardChrome {
       this.redraw();
     });
     this.observer.observe(this.root);
+    this.stopKeys = watchCommand((held) => this.root.classList.toggle("command", held));
   }
 
   destroy(): void {
     this.observer.disconnect();
+    this.stopKeys();
     this.root.remove();
+  }
+
+  /** Show the guides or hide them — the Overlays panel's Guides switch. */
+  setGuidesVisible(on: boolean): void {
+    this.guidesOn = on;
+    this.redraw();
   }
 
   get rulers(): boolean {
@@ -119,7 +130,8 @@ export class ArtboardChrome {
       }
     }
     for (const board of boards) {
-      const wanted = rulers || board.id === this.resizingId;
+      const guides = (board.guidesX?.length ?? 0) + (board.guidesY?.length ?? 0) > 0;
+      const wanted = rulers || board.id === this.resizingId || (this.guidesOn && guides);
       let group = this.groups.get(board.id);
       if (!wanted) {
         group?.remove();
@@ -152,29 +164,38 @@ export class ArtboardChrome {
         h("div", { class: "artboard-ruler-corner" }),
         this.ruler(board, "x", left, width, zoom),
         this.ruler(board, "y", top, height, zoom),
-        ...this.guides(board, zoom, width, height),
       );
     }
+    parts.push(...this.guides(board, zoom, width, height, rulers));
     if (board.id === this.resizingId) parts.push(...this.handles(board, zoom, width, height));
     group.replaceChildren(...parts);
   }
 
-  /** The guides on one artboard, its handles, and the one the pointer is offering. */
-  private guides(board: PlacedArtboard, zoom: number, width: number, height: number): HTMLElement[] {
+  /**
+   * The guides on one artboard, while the Guides switch is on; their handles,
+   * which live on the rulers; and the one the pointer is offering.
+   */
+  private guides(
+    board: PlacedArtboard,
+    zoom: number,
+    width: number,
+    height: number,
+    rulers: boolean,
+  ): HTMLElement[] {
     const out: HTMLElement[] = [];
-    for (const axis of ["x", "y"] as const) {
+    for (const axis of this.guidesOn ? (["x", "y"] as const) : []) {
       const list = this.guideList(board, axis);
       for (const [index, value] of list.entries()) {
         const moving = this.moving?.id === board.id && this.moving.axis === axis && this.moving.index === index;
         const at = moving ? this.moving!.value : value;
         const off = moving && this.moving!.off;
         out.push(this.line(axis, at * zoom, width, height, off ? "removing" : ""));
-        out.push(this.handle(board, axis, index, at * zoom, off));
+        if (rulers) out.push(this.handle(board, axis, index, at, zoom, off, !moving));
         if (moving) out.push(this.tag(axis, at * zoom, off ? "Remove" : guideLabel(at, board.unit)));
       }
     }
     const hover = this.hover;
-    if (hover && hover.id === board.id && !this.moving) {
+    if (rulers && hover && hover.id === board.id && !this.moving) {
       out.push(this.line(hover.axis, hover.value * zoom, width, height, "preview"));
       out.push(this.tag(hover.axis, hover.value * zoom, guideLabel(hover.value, board.unit)));
     }
@@ -203,12 +224,33 @@ export class ArtboardChrome {
     return tag;
   }
 
-  /** A guide's handle on its ruler: drag it, ⌘-click it, or drag it off. */
-  private handle(board: PlacedArtboard, axis: Axis, index: number, at: number, off: boolean): HTMLElement {
-    const handle = h("div", {
-      class: `artboard-guide-handle ${axis === "x" ? "v" : "h"}${off ? " removing" : ""}`,
-      title: "Drag to move · ⌘-click or drag off the end to remove",
-    });
+  /**
+   * A guide's handle on its ruler: drag it, ⌘-click it, or drag it off.
+   *
+   * Pointing at one shows where its guide is, in the tag the ruler shows
+   * before a guide is placed — the tag is the handle's own child, shown on
+   * hover by the stylesheet, so nothing is rebuilt under the pointer. And
+   * while ⌘ (or Control) is held every handle wears an ×, which is what a
+   * click on it will then do.
+   */
+  private handle(
+    board: PlacedArtboard,
+    axis: Axis,
+    index: number,
+    value: number,
+    zoom: number,
+    off: boolean,
+    withTag: boolean,
+  ): HTMLElement {
+    const at = value * zoom;
+    const handle = h(
+      "div",
+      { class: `artboard-guide-handle ${axis === "x" ? "v" : "h"}${off ? " removing" : ""}` },
+      h("span", { class: "artboard-guide-handle-x", "aria-hidden": "true" }),
+    );
+    if (withTag) {
+      handle.appendChild(h("span", { class: "artboard-guide-tag on-handle", text: guideLabel(value, board.unit) }));
+    }
     handle.style.transform = axis === "x" ? `translateX(${at}px)` : `translateY(${at}px)`;
     handle.addEventListener("pointerdown", (event) => {
       event.preventDefault();
@@ -470,4 +512,31 @@ export function resized(
     y = start.y + start.height - height;
   }
   return { x, y, width, height };
+}
+
+/**
+ * Whether ⌘ or Control is held, told as it changes. Read off every key and
+ * pointer event that carries it, because a key pressed while another window
+ * had the focus never arrives here as a keydown; and dropped on blur, because
+ * neither does its keyup.
+ */
+function watchCommand(onChange: (held: boolean) => void): () => void {
+  let held = false;
+  const set = (next: boolean) => {
+    if (next === held) return;
+    held = next;
+    onChange(held);
+  };
+  const read = (event: KeyboardEvent | PointerEvent) => set(event.metaKey || event.ctrlKey);
+  const blur = () => set(false);
+  window.addEventListener("keydown", read, true);
+  window.addEventListener("keyup", read, true);
+  window.addEventListener("pointermove", read, true);
+  window.addEventListener("blur", blur);
+  return () => {
+    window.removeEventListener("keydown", read, true);
+    window.removeEventListener("keyup", read, true);
+    window.removeEventListener("pointermove", read, true);
+    window.removeEventListener("blur", blur);
+  };
 }

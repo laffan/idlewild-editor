@@ -68,10 +68,15 @@ Part of [the Idlewild manual](README.md).
 - **Show ruler**, in the artboard's inspector, puts a ruler along the top
   and left edges of every artboard, in the artboard's own unit. Hover a ruler
   for a blue guide across the sheet with its position beside it; click or tap
-  to keep it, which leaves a handle on the ruler. Drag the handle to move the
-  guide; ⌘-click it, or drag it off either end of the ruler, to remove it.
-  Guides belong to their artboard, move with it, and never print. Turning the
-  ruler off hides the guides with it
+  to keep it, which leaves a handle on the ruler. Point at a handle to see
+  where its guide is. Drag the handle to move the guide; hold ⌘ and the
+  handles turn into an ×, and a click removes that guide — or drag a handle
+  off either end of the ruler. Guides belong to their artboard, move with it,
+  and never print
+- **Guides** in Overlays shows or hides the guides. They stay on the canvas
+  with the rulers turned off; their handles are on the rulers, so moving or
+  removing one needs the rulers showing. Camera boundary hides the frames,
+  labels and shading, and leaves the rulers and guides to their own switches
 - **Resize** puts handles on the picked artboard's edges and corners until it
   is pressed again (it reads **Done resizing** meanwhile). Dragging one makes
   the sheet a custom size, in whole points; dragging the left or top edge
@@ -81,9 +86,11 @@ Part of [the Idlewild manual](README.md).
   first
 - **One `ExportForPrint()` captures every artboard.** The camera is moved onto
   each in turn — by how far it is from the first — and each page is read
-  where its own artboard is (an earlier build read the first artboard's
-  part of the canvas for every page; opening the project brings its
-  `print.js` up to date). With more than one
+  where its own artboard is, backdrops and pattern layers included, which
+  are drawn for whatever the camera is looking at (an earlier build read the
+  first artboard's part of the canvas for every page, and then left the
+  backdrop off the others; opening the project brings its `print.js` up to
+  date). With more than one
   artboard each page is saved as `<name>-<artboard>`: `page-Cover`,
   `page-Back`. `artboard: "Cover"` (or a list of names) captures only those
 

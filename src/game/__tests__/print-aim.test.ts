@@ -25,10 +25,15 @@ interface Matrix {
   f: number;
 }
 
-type Aim = (camera: unknown, x: number, y: number) => void;
+type Aim = (
+  camera: unknown,
+  x: number,
+  y: number,
+  page?: { width: number; height: number },
+) => void;
 
 function loadAim(): Aim {
-  const match = printSource.match(/function aim\(camera, x, y\) \{[\s\S]*?\n\}/);
+  const match = printSource.match(/function aim\(camera, x, y, page\) \{[\s\S]*?\n\}/);
   if (!match) throw new Error("print.js has no aim()");
   return new Function(`${match[0]}; return aim;`)() as Aim;
 }
@@ -58,6 +63,15 @@ function camera(zoom = 1) {
     matrix: new TransformMatrix(),
     matrixExternal: new TransformMatrix(),
     matrixCombined: new TransformMatrix(),
+    worldView: {
+      x: 0,
+      y: 0,
+      width: 0,
+      height: 0,
+      setTo(x: number, y: number, width: number, height: number) {
+        Object.assign(cam.worldView, { x, y, width, height });
+      },
+    },
     setScroll(x: number, y: number) {
       cam.scrollX = x;
       cam.scrollY = y;
@@ -91,5 +105,16 @@ describe("aim", () => {
     aim(cam, 900, 40);
     aim(cam, 0, 0);
     expect(onPage(cam, 15, 25)).toEqual([15, 25]);
+  });
+
+  it("moves the world view onto the artboard, at the artboard's size", () => {
+    // Backdrops and patterns are drawn over the world view, so an artboard
+    // read without moving it had none.
+    const cam = camera();
+    const aim = loadAim();
+    aim(cam, 684, 0, { width: 792, height: 612 });
+    expect(cam.worldView).toMatchObject({ x: 684, y: 0, width: 792, height: 612 });
+    aim(cam, 0, 0);
+    expect(cam.worldView).toMatchObject({ x: 0, y: 0, width: 612, height: 792 });
   });
 });

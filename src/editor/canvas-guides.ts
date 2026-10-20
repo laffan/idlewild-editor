@@ -63,6 +63,8 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
   if (isPrint(deps.meta)) {
     const chrome = new ArtboardChrome({ preview: (board) => guide.previewBoard(board) });
     guide.setChrome(chrome);
+    // The guides have a switch of their own, beside the canvas's other marks.
+    deps.overlays.addGuidesSwitch((on) => chrome.setGuidesVisible(on));
     stops.push(() => chrome.destroy());
     artboards = new ArtboardsPanel(deps.meta, {
       centreOn: deps.centreOn,

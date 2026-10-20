@@ -227,6 +227,40 @@
 .artboard-guide-handle.h { left: -16px; top: -5px; width: 16px; height: 11px; }
 .artboard-guide-handle.removing { opacity: 0.4; }
 
+/* Pointing at a handle says where its guide is, in the tag a ruler shows
+   before a guide is placed — the handle's own child, set beside the guide
+   rather than on the ruler: 9px along and 20px in from the handle's corner
+   puts it where the ruler's own tag would be. */
+.artboard-guide-tag.on-handle { display: none; }
+.artboard-guide-handle:hover > .artboard-guide-tag.on-handle { display: block; }
+.artboard-guide-handle.v > .on-handle { left: 9px; top: 20px; }
+.artboard-guide-handle.h > .on-handle { left: 20px; top: 9px; }
+
+/* ⌘ held: every handle is an ×, which is what a click on it will do. */
+.artboard-guide-handle-x { display: none; }
+.artboard-chrome.command .artboard-guide-handle {
+  background: var(--canvas-guide);
+  cursor: pointer;
+}
+.artboard-chrome.command .artboard-guide-handle-x {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+.artboard-guide-handle-x::before,
+.artboard-guide-handle-x::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 2px;
+  margin: -1px 0 0 -4.5px;
+  background: #fff;
+  transform: rotate(45deg);
+}
+.artboard-guide-handle-x::after { transform: rotate(-45deg); }
+
 /* Resize: a square on each edge and corner, centred on the point. */
 .artboard-resize {
   position: absolute;
