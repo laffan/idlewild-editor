@@ -15,6 +15,7 @@
 @import "./panels.css";
 @import "./strokes.css";
 @import "./plan.css";
+@import "./stroke-transform.css";
 @import "./inspect.css";
 @import "./library.css";
 @import "./tiles.css";

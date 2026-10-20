@@ -91,6 +91,16 @@ import type { ArtboardSubject } from "./inspect-artboard";
 export type { InspectorCallbacks } from "./inspect-callbacks";
 
 /**
+ * A TOOL zone that is not the rail's tool — plan mode's pencil, eraser and
+ * lasso, which draw on no layer. See `editor/plan-mode.ts`.
+ */
+export interface ToolOverride {
+  subject: string;
+  hint?: string;
+  rows: () => HTMLElement[];
+}
+
+/**
  * The heading the file's own layer list carries — `psd-layers.ts` writes it.
  *
  * Named here as well because `revealPsdLayers` folds the panel down to it, and
@@ -147,6 +157,8 @@ export class Inspector {
    * beside one, and put down when the canvas selects anything.
    */
   private artboard: ArtboardSubject | null = null;
+  /** Plan mode's tool panel, while it is up — see `setToolOverride`. */
+  private toolOverride: ToolOverride | null = null;
 
   constructor(store: DocStore, grid: Grid, callbacks: InspectorCallbacks) {
     this.lastPaint.patternScale = defaultPatternScale(grid);
@@ -209,6 +221,16 @@ export class Inspector {
   setSelection(selection: Selection): void {
     this.selection = selection;
     if (selection.kind !== "none") this.setArtboard(null);
+    this.render();
+  }
+
+  /**
+   * Put a panel that is not the rail's tool's in the TOOL zone, or take it
+   * away. While one is up the LAYER zone is not drawn: what it is about is on
+   * no layer.
+   */
+  setToolOverride(override: ToolOverride | null): void {
+    this.toolOverride = override;
     this.render();
   }
 
@@ -292,7 +314,8 @@ export class Inspector {
     // put something in the OBJECT zone. Kept as a quiet line under the two
     // zones that are there rather than as a zone of its own, because an
     // instruction is not an object.
-    if (!object) {
+    // Not under a panel lent by plan mode, whose canvas is the plan.
+    if (!object && !this.toolOverride) {
       this.body.appendChild(
         h("div", {
           class: "inspect-empty",
@@ -333,6 +356,13 @@ export class Inspector {
    * rearranged to stop. See `inspect-brush.ts`.
    */
   private renderTool(): void {
+    if (this.toolOverride) {
+      const { subject, hint, rows } = this.toolOverride;
+      this.open("TOOL", { subject, hint: hint ?? ZONE_HINTS.TOOL });
+      this.zone.body.append(...rows());
+      this.zone.mount(this.body);
+      return;
+    }
     // A tile tool first, because it is the one kind whose panel is not about
     // a stroke style at all — there is no size, no tip and no colour on it,
     // and the style may not even have been built yet. See
@@ -405,7 +435,7 @@ export class Inspector {
    */
   private renderLayerZone(): void {
     // An artboard is on the canvas rather than on a layer.
-    if (this.artboard || !layerZoneApplies(this.selection)) return;
+    if (this.artboard || this.toolOverride || !layerZoneApplies(this.selection)) return;
     const layerId = layerOf(this.selection) || this.callbacks.activeLayerId();
     const layer = this.store.layer(layerId);
     if (!layer) return;

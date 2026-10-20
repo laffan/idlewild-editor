@@ -38,6 +38,9 @@ import {
   type ToolSession,
 } from "./tools";
 import { PointFill } from "./fill-points";
+import { strokesBox } from "./geometry";
+import { TransformBox } from "./transform-box";
+import { transformSome, type Affine } from "./transform";
 import { drawToolCursor, hasToolCursor } from "./cursor";
 import { onFrame } from "./frame";
 import { beginShapeStamp, type StampBox, type StampBoxAt } from "./tools-stamp";
@@ -131,6 +134,9 @@ export class DrawingLayer {
   private sessionPointer: number | null = null;
   /** The erase drag's uncommitted stroke list; null outside one. */
   private working: Stroke[] | null = null;
+  /** What the lasso caught, and the box it wears — see `transform-box.ts`. */
+  private selection: ReadonlySet<string> = new Set();
+  private readonly transform: TransformBox;
 
   /**
    * Where the pointer is hovering, and the frame that paints the tool there.
@@ -167,6 +173,19 @@ export class DrawingLayer {
       this.callbacks.onFillPoints(this.pointFill.count),
     );
 
+    this.transform = new TransformBox({
+      bounds: () => strokesBox(this.strokesById([...this.selection])),
+      offered: () => this.tool === null || this.tool === "lasso",
+      toScreen: (x, y) => this.surface.worldToScreen(x, y),
+      toWorld: (event) => this.local(event),
+      preview: (m) => this.previewTransform(m),
+      commit: (m) => {
+        this.working = null;
+        this.store.replace(transformSome(this.store.strokes, this.selection, m));
+      },
+    });
+    this.root.appendChild(this.transform.root);
+
     // A brush's PNG replaces its procedural tip mid-session; the ink already
     // on screen was baked with the fallback and has to be laid again.
     this.unlistenAtlas = this.atlas.onLoad(() => this.repaint());
@@ -179,6 +198,7 @@ export class DrawingLayer {
       // and the one that usually is — a stroke finished — is an append, which
       // is stamped rather than re-laid. See the note at the top.
       if (!this.working) this.surface.apply(this.strokes());
+      this.transform.refresh();
     });
 
     const el = this.root;
@@ -224,6 +244,7 @@ export class DrawingLayer {
     this.pointFill.clear();
     this.store.setLayer(layerId);
     this.repaint();
+    this.transform.refresh();
   }
 
   /**
@@ -241,6 +262,7 @@ export class DrawingLayer {
     // `repaint` re-cuts it — and is what stops a hole outliving the tool.
     this.surface.endErase();
     this.surface.setInteractive(tool !== null);
+    this.transform.refresh();
     // Every tool that paints its own pointer hides the system one — a
     // crosshair sitting on top of a six-pixel tip is most of what you were
     // trying to look at. See `previews`, and `cursor.ts` for what is drawn
@@ -303,6 +325,7 @@ export class DrawingLayer {
   /** Follow the game camera. Cheap unless the backing has to move. */
   sync(view: Viewport): void {
     this.surface.sync(view, this.strokes());
+    this.transform.refresh();
     // A re-anchor clears the live canvas, and a shape half tapped out lives
     // there rather than in the ink. Nothing else on that layer has to survive
     // a pan, because nothing else on it outlives the gesture that drew it.
@@ -360,6 +383,18 @@ export class DrawingLayer {
 
   removeStrokes(ids: readonly string[]): void {
     this.store.remove(ids);
+  }
+
+  /** The strokes the lasso caught — or the canvas selected — on this layer. */
+  select(ids: readonly string[]): void {
+    this.selection = new Set(ids);
+    this.transform.refresh();
+  }
+
+  /** Draw the selection moved through `m`, or as it is — the box's preview. */
+  private previewTransform(m: Affine | null): void {
+    this.working = m ? transformSome(this.store.strokes, this.selection, m) : null;
+    this.surface.repaint(this.strokes());
   }
 
   destroy(): void {
@@ -494,7 +529,10 @@ export class DrawingLayer {
     if (tool === "zone") {
       return beginZone(this.surface, this.callbacks.onZone, x, y);
     }
-    return beginLasso(this.store, this.surface, this.callbacks.onSelect, x, y);
+    return beginLasso(this.store, this.surface, (ids) => {
+      this.select(ids);
+      this.callbacks.onSelect(ids);
+    }, x, y);
   }
 
   /**

@@ -76,6 +76,7 @@ export function createCanvasGuides(deps: CanvasGuidesDeps): CanvasGuides {
   const plan: PlanMode = new PlanMode({
     store: deps.store,
     wrap: deps.canvasWrap,
+    inspector: deps.inspector,
     camera: deps.camera,
     onChange: () => deps.overlays.showPlanSwitch(plan.present, (shown, o) => plan.setOverlay(shown, o)),
   });

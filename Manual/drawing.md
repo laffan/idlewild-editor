@@ -190,13 +190,27 @@ Part of [the Idlewild manual](README.md).
   file: `Recoleta-Bold.otf` is *Recoleta-Bold*. The cross on a font's chip
   takes it out of the project
 
+## Moving, scaling and turning a sketch
+
+- **What the Lasso catches wears a box.** Drag inside it to move the strokes,
+  drag a corner to scale them — in proportion; hold Shift to stretch one way
+  — and drag the round knob above it to turn them, in 15° steps with Shift.
+  The strokes follow as you drag, and the change is one step to undo. A
+  stroke scaled up is drawn heavier, as if it had been drawn at that size
+- The box is there under the Lasso and under Select, Pan and the other tools
+  that do not draw — so strokes picked from the Strokes list can be moved
+  with Select in hand — and goes while a brush is up
+
 ## Plan mode
 
 - **The pencil beside the scene's name** opens plan mode: tracing paper over
   the scene. The canvas takes a faint blue tint, artboards and all, and the
-  toolbars give way to **Pencil**, **Eraser** and **Done**. The pencil only
-  draws in bright blue; the eraser takes plan ink out. Done, the pencil again
-  or Esc puts it away
+  toolbars give way to **Pencil**, **Eraser**, **Lasso** and **Done**. The
+  pencil only draws in bright blue; the eraser takes plan ink out. The right
+  sidebar's TOOL zone has the pencil's and the eraser's brush, size and
+  smoothing — everything but the colour — and each remembers its own. The
+  Lasso catches plan strokes to move, scale and turn in the same box as
+  above, or to remove with Delete. Done, the pencil again or Esc puts it away
 - **The plan is on no layer.** It belongs to the scene, saves with the
   project and undoes like anything else, but it is not in any layer's
   strokes, not in what the game is sent and not on any page that prints

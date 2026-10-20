@@ -1,0 +1,56 @@
+/* The box a lasso selection wears — see src/drawing/transform-box.ts. Inside
+   the drawing layer's own sheet, which takes no pointer unless a tool is up,
+   so everything here that is meant to be pressed says so itself. The outline
+   is the move target, the corners scale and the knob turns. */
+.stroke-transform {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.stroke-transform-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.stroke-transform-outline {
+  fill: rgb(236 48 19 / 0.04);
+  stroke: var(--color-accent);
+  stroke-width: 1.5;
+  pointer-events: all;
+  cursor: move;
+  touch-action: none;
+}
+.stroke-transform-stem { stroke: var(--color-accent); stroke-width: 1.5; }
+.stroke-transform.busy .stroke-transform-outline { stroke-dasharray: 5 4; }
+
+.stroke-transform-handle,
+.stroke-transform-knob {
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  background: #fff;
+  border: 2px solid var(--color-accent);
+  pointer-events: auto;
+  touch-action: none;
+}
+.stroke-transform-handle.nw,
+.stroke-transform-handle.se { cursor: nwse-resize; }
+.stroke-transform-handle.ne,
+.stroke-transform-handle.sw { cursor: nesw-resize; }
+.stroke-transform-knob { border-radius: 50%; cursor: grab; }
+@media (pointer: coarse) {
+  .stroke-transform-handle,
+  .stroke-transform-knob { left: -11px; top: -11px; width: 22px; height: 22px; }
+}
+
+/* On the plan, in the plan's blue. */
+.plan-surface .stroke-transform-outline { fill: rgb(10 132 255 / 0.05); stroke: #0a84ff; }
+.plan-surface .stroke-transform-stem { stroke: #0a84ff; }
+.plan-surface .stroke-transform-handle,
+.plan-surface .stroke-transform-knob { border-color: #0a84ff; }

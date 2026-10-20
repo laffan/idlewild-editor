@@ -601,6 +601,7 @@ export async function mountEditor(
 
   function onSelection(selection: Selection): void {
     inspector.setSelection(selection);
+    drawing?.select(selection.kind === "strokes" ? selection.ids : []); // its transform box
     // A note just put down is selected, and Select is the tool that edits it.
     if (selection.kind === "text" && rail.tool === "text") tools?.apply("select", false);
     // Fired for a change of mode as well as of selection, which is how the

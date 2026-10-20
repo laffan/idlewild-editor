@@ -233,6 +233,7 @@ These pages refer to each other by section name — *see the PSD pipeline*,
 | The minimap | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | The origin, and the screen the game opens at | [`Docs/canvas-and-camera.md`](Docs/canvas-and-camera.md) |
 | The page around the game | [`Docs/exported-game.md`](Docs/exported-game.md) |
+| The box a lasso selection wears | [`Docs/drawing.md`](Docs/drawing.md) |
 | The plan, which is ink on no layer | [`Docs/drawing.md`](Docs/drawing.md) |
 | The palette, and the two rows of swatches | [`Docs/colour.md`](Docs/colour.md) |
 | The pattern and shape libraries | [`Docs/pattern-and-shape-libraries.md`](Docs/pattern-and-shape-libraries.md) |

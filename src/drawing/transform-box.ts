@@ -1,0 +1,202 @@
+/**
+ * The box a lasso selection wears: drag inside it to move what was caught, a
+ * corner to scale it, the knob above it to turn it.
+ *
+ * In the drawing layer's own sheet, so it goes wherever that layer does — the
+ * scene's ink, and the plan's (`editor/plan-mode.ts`) — and it takes the
+ * pointer only on itself. Every gesture is one matrix (`transform.ts`): the
+ * strokes are previewed through it as the pointer moves, once a frame, and
+ * written once, on release, so a move is one step to undo however far it went.
+ *
+ * Corners scale in proportion — a sketch stretched one way is rarely what was
+ * meant — and Shift lets each axis go its own way. The knob turns about the
+ * middle of the box, in 15° steps with Shift. While a gesture is under way
+ * the outline turns and grows with it; once it lands, the box is the bounds
+ * of where the strokes now are.
+ */
+
+import { onFrame } from "./frame";
+import type { Bounds } from "./types";
+import {
+  IDENTITY,
+  applyPoint,
+  rotationAbout,
+  scalingAbout,
+  translation,
+  type Affine,
+} from "./transform";
+
+/** How far the turning knob stands above the box, on screen. */
+const KNOB_GAP_PX = 28;
+/** The smallest a proportional scale may shrink the selection to. */
+const MIN_SCALE = 0.02;
+const SNAP = Math.PI / 12;
+
+export interface TransformBoxHost {
+  /** The selection's bounds in the world, or null for nothing selected. */
+  bounds(): Bounds | null;
+  /** Whether the box should be offered — not while a brush is in hand. */
+  offered(): boolean;
+  /** World to the sheet's own pixels, and a pointer to the world. */
+  toScreen(x: number, y: number): { x: number; y: number };
+  toWorld(event: PointerEvent): { x: number; y: number };
+  /** Draw the selection through `m` without writing it, or stop. */
+  preview(m: Affine | null): void;
+  /** Write the selection through `m`. */
+  commit(m: Affine): void;
+}
+
+const SVG = "http://www.w3.org/2000/svg";
+const CORNERS = ["nw", "ne", "se", "sw"] as const;
+
+export class TransformBox {
+  readonly root: HTMLElement;
+  private readonly host: TransformBoxHost;
+  private readonly outline: SVGPolygonElement;
+  private readonly stem: SVGLineElement;
+  private readonly handles = new Map<(typeof CORNERS)[number], HTMLElement>();
+  private readonly knob: HTMLElement;
+  /** The gesture under way: the bounds it started from and where it has got to. */
+  private gesture: { box: Bounds; m: Affine } | null = null;
+  private readonly frame = onFrame(() => this.host.preview(this.gesture?.m ?? null));
+
+  constructor(host: TransformBoxHost) {
+    this.host = host;
+    const svg = document.createElementNS(SVG, "svg");
+    svg.setAttribute("class", "stroke-transform-lines");
+    this.outline = document.createElementNS(SVG, "polygon");
+    this.outline.setAttribute("class", "stroke-transform-outline");
+    this.stem = document.createElementNS(SVG, "line");
+    this.stem.setAttribute("class", "stroke-transform-stem");
+    svg.append(this.stem, this.outline);
+    this.knob = document.createElement("div");
+    this.knob.className = "stroke-transform-knob";
+    this.knob.title = "Turn — Shift for 15° steps";
+    this.root = document.createElement("div");
+    this.root.className = "stroke-transform hidden";
+    this.root.append(svg, this.knob);
+    for (const corner of CORNERS) {
+      const handle = document.createElement("div");
+      handle.className = `stroke-transform-handle ${corner}`;
+      handle.title = "Scale — Shift to stretch";
+      this.handles.set(corner, handle);
+      this.root.appendChild(handle);
+      handle.addEventListener("pointerdown", (e) => this.begin(e, (box, _from, at, free) => scaleFrom(box, corner, at, free)));
+    }
+    this.outline.addEventListener("pointerdown", (e) =>
+      this.begin(e, (_box, from, at) => translation(at.x - from.x, at.y - from.y)),
+    );
+    this.knob.addEventListener("pointerdown", (e) =>
+      this.begin(e, (box, from, at, free) => {
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+        let angle = Math.atan2(at.y - cy, at.x - cx) - Math.atan2(from.y - cy, from.x - cx);
+        if (free) angle = Math.round(angle / SNAP) * SNAP;
+        return rotationAbout(cx, cy, angle);
+      }),
+    );
+  }
+
+  /** Put the box where the selection is now. */
+  refresh(): void {
+    const box = this.gesture?.box ?? this.host.bounds();
+    const shown = box !== null && this.host.offered();
+    this.root.classList.toggle("hidden", !shown);
+    if (!shown || !box) return;
+    const m = this.gesture?.m ?? IDENTITY;
+    const corner = (x: number, y: number) => {
+      const w = applyPoint(m, x, y);
+      return this.host.toScreen(w.x, w.y);
+    };
+    const at = {
+      nw: corner(box.x, box.y),
+      ne: corner(box.x + box.width, box.y),
+      se: corner(box.x + box.width, box.y + box.height),
+      sw: corner(box.x, box.y + box.height),
+    };
+    this.outline.setAttribute("points", CORNERS.map((c) => `${at[c].x},${at[c].y}`).join(" "));
+    for (const c of CORNERS) {
+      this.handles.get(c)!.style.transform = `translate(${at[c].x}px, ${at[c].y}px)`;
+    }
+    // The knob stands off the top edge's middle, along the box's own "up".
+    const top = { x: (at.nw.x + at.ne.x) / 2, y: (at.nw.y + at.ne.y) / 2 };
+    const side = { x: at.nw.x - at.sw.x, y: at.nw.y - at.sw.y };
+    const length = Math.hypot(side.x, side.y) || 1;
+    const knob = { x: top.x + (side.x / length) * KNOB_GAP_PX, y: top.y + (side.y / length) * KNOB_GAP_PX };
+    this.stem.setAttribute("x1", String(top.x));
+    this.stem.setAttribute("y1", String(top.y));
+    this.stem.setAttribute("x2", String(knob.x));
+    this.stem.setAttribute("y2", String(knob.y));
+    this.knob.style.transform = `translate(${knob.x}px, ${knob.y}px)`;
+  }
+
+  /** Whether a gesture is under way — the layer holds its own repaints meanwhile. */
+  get busy(): boolean {
+    return this.gesture !== null;
+  }
+
+  private begin(
+    down: PointerEvent,
+    shape: (box: Bounds, from: { x: number; y: number }, at: { x: number; y: number }, free: boolean) => Affine,
+  ): void {
+    const box = this.host.bounds();
+    if (!box) return;
+    // The sheet under the box would otherwise take this as the start of a
+    // stroke, or the first finger of a pan.
+    down.preventDefault();
+    down.stopPropagation();
+    const from = this.host.toWorld(down);
+    this.gesture = { box, m: IDENTITY };
+    this.root.classList.add("busy");
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== down.pointerId || !this.gesture) return;
+      this.gesture = { box, m: shape(box, from, this.host.toWorld(e), e.shiftKey) };
+      this.refresh();
+      this.frame.request();
+    };
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== down.pointerId) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      this.frame.cancel();
+      const m = this.gesture?.m ?? IDENTITY;
+      this.gesture = null;
+      this.root.classList.remove("busy");
+      if (e.type === "pointerup" && !isIdentity(m)) this.host.commit(m);
+      else this.host.preview(null);
+      this.refresh();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  }
+}
+
+/**
+ * A corner dragged to `at`: scaled about the opposite corner, in proportion
+ * unless `free`, never turned inside out.
+ */
+export function scaleFrom(
+  box: Bounds,
+  corner: "nw" | "ne" | "se" | "sw",
+  at: { x: number; y: number },
+  free: boolean,
+): Affine {
+  const ax = corner.includes("w") ? box.x + box.width : box.x;
+  const ay = corner.includes("n") ? box.y + box.height : box.y;
+  const v0 = { x: (corner.includes("w") ? box.x : box.x + box.width) - ax, y: (corner.includes("n") ? box.y : box.y + box.height) - ay };
+  const v = { x: at.x - ax, y: at.y - ay };
+  if (free) {
+    const sx = v0.x !== 0 ? Math.max(MIN_SCALE, v.x / v0.x) : 1;
+    const sy = v0.y !== 0 ? Math.max(MIN_SCALE, v.y / v0.y) : 1;
+    return scalingAbout(ax, ay, sx, sy);
+  }
+  const length = v0.x * v0.x + v0.y * v0.y;
+  const s = length > 0 ? Math.max(MIN_SCALE, (v.x * v0.x + v.y * v0.y) / length) : 1;
+  return scalingAbout(ax, ay, s, s);
+}
+
+function isIdentity(m: Affine): boolean {
+  return m.every((v, i) => Math.abs(v - IDENTITY[i]) < 1e-9);
+}

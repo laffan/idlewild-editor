@@ -332,6 +332,27 @@ function inkPanel(
   style: StrokeStyle,
   actions: ToolPanelActions,
 ): HTMLElement[] {
+  return [
+    brushSection(style, actions.onStyle),
+    paintSection(
+      "Colour",
+      style,
+      actions,
+      ["color"],
+      "What the ink is made of. Recent swatches are under the wheel.",
+    ),
+  ];
+}
+
+/**
+ * The pencil's Brush section — the tip, the size and the smoothing — on its
+ * own, for plan mode, whose pencil has every control but the colour: a plan is
+ * blue. See `editor/plan-mode.ts`.
+ */
+export function brushSection(
+  style: StrokeStyle,
+  onStyle: (patch: Partial<StrokeStyle>) => void,
+): HTMLElement {
   // The tip's name is the section's own subject — `BRUSH : INK` — rather
   // than a title of its own above it. It was both, which is one fact
   // written twice and a 19px heading in a column of 10px labels.
@@ -364,7 +385,7 @@ function inkPanel(
           // Written here rather than waiting for a re-render: picking a tip
           // does not touch the document, so nothing rebuilds this panel.
           if (subject) subject.textContent = brush.name;
-          actions.onStyle({ brushId: brush.id });
+          onStyle({ brushId: brush.id });
         },
       },
       stamp,
@@ -372,23 +393,14 @@ function inkPanel(
     brushes.appendChild(button);
   }
 
-  return [
-    h(
-      "div",
-      { class: "inspect-section" },
-      heading,
-      brushes,
-      sizeRow(style, actions),
-      smoothingRow(style.smoothing, (next) => actions.onStyle({ smoothing: next })),
-    ),
-    paintSection(
-      "Colour",
-      style,
-      actions,
-      ["color"],
-      "What the ink is made of. Recent swatches are under the wheel.",
-    ),
-  ];
+  return h(
+    "div",
+    { class: "inspect-section" },
+    heading,
+    brushes,
+    sizeRow(style, onStyle),
+    smoothingRow(style.smoothing, (next) => onStyle({ smoothing: next })),
+  );
 }
 
 /** The tip's own name, which is what the Brush heading says after the colon. */
@@ -511,9 +523,12 @@ function segment(
   });
 }
 
-function sizeRow(style: StrokeStyle, actions: ToolPanelActions): HTMLElement {
+function sizeRow(
+  style: StrokeStyle,
+  onStyle: (patch: Partial<StrokeStyle>) => void,
+): HTMLElement {
   return slider("Size", style.size, 1, 48, (next) => `${next} px`, (next) =>
-    actions.onStyle({ size: next }),
+    onStyle({ size: next }),
   );
 }
 

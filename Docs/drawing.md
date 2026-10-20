@@ -557,6 +557,25 @@ Both consume the strokes. The PSD and the zone are the same shape in a better
 form, and leaving the ink behind means every sketch you convert is drawn
 twice, in the same place, at the same size.
 
+### The box a lasso selection wears
+
+`drawing/transform-box.ts` belongs to the `DrawingLayer`, so the scene's ink
+and the plan's both have it. The layer keeps its own selection (`select`):
+the lasso sets it, and `editor.ts` sets it from the canvas selection, so a
+`strokes` selection made any other way — the Strokes list, the layer list —
+gets the box too. It is offered while no drawing tool is up or the Lasso is,
+and lives in the layer's sheet with only its outline, handles and knob
+taking the pointer (they stop the event, so the sheet does not start a
+stroke under them). Every gesture is one affine matrix (`drawing/transform.ts`):
+move, scale about the opposite corner (proportional, Shift for free), or turn
+about the middle (Shift snaps to 15°). The strokes are previewed through the
+erase drag's `working` copy once a frame and written once on release, so a
+gesture is one undo step; ids are kept, so the selection survives. A
+stroke's width follows the size of the change, and a shape stamp's box is
+scaled but never turned — it is a grid space. The scene's own accent box
+around lassoed strokes (`selection-overlay.ts`) went: two boxes, one of which
+stayed put while the other moved, said nothing true.
+
 ### The plan, which is ink on no layer
 
 Plan mode (`editor/plan-mode.ts`) draws a scene's plan: `Scene.plan`, a list
@@ -576,7 +595,11 @@ the mode it takes the pointer, a tint goes between it and the scene, and the
 canvas column wears `.planning`, which hides the rail, the drawing toolbar
 and the floating bars in favour of the plan's own Pencil, Eraser and Done.
 The pencil is the engine's pencil with the colour fixed to `PLAN_COLOR`; the
-eraser is the same pencil turned round. Entering clears the canvas selection,
+eraser is the same pencil turned round; each keeps its own tip, size and
+smoothing, edited through `Inspector.setToolOverride` with `brushSection`
+from `inspect-brush.ts` — the pencil's panel without its colour — which also
+keeps the LAYER zone down, since the plan is on no layer. The Lasso is the
+engine's lasso, with the box above, and Delete removes what it caught. Entering clears the canvas selection,
 so Delete has nothing on the scene to reach. Overlays' Plan row exists only
 while the open scene has a plan (`OverlaysPanel.showPlanSwitch`).
 
