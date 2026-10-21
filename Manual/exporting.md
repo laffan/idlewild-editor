@@ -27,9 +27,10 @@ Part of [the Idlewild manual](README.md).
 - **Import Assets**, beside it, is the way in for more than one file at a time.
   Add Image asks for a file, a paste carries one and a drop lands one, so a
   tileset drawn as nine PSDs somewhere else was nine trips through a picker.
-  Two routes: **Files**, where you pick as many as you like, and **another
-  project in this app** — choose the project, tick its PSDs, and they arrive as
-  the files they are, anchor marks and all. They land in a row across the middle
+  It opens on **another project in this app** — choose the project, tick its
+  PSDs, and they arrive as the files they are, anchor marks and all — with
+  **Import File…** at the bottom left for the filesystem instead, where you
+  pick as many as you like. They land in a row across the middle
   of the view rather than in a heap on one space, and nothing is written over:
   a second `roof` becomes `roof-2`, because two files that happen to share a
   name are two files rather than one coming home

@@ -331,11 +331,12 @@ store. The photo library and the clipboard are deliberately absent: both are one
 image at a time by their nature, and both already have a route of their own in
 Add Image and in ⌘V, which is where anybody looks for them.
 
-The sheet is a **list of routes** rather than a form, the way Add Image, Publish
-and Re-parse are, because what somebody came here to say is *where from* and each
-answer needs something different next. Files needs a picker and nothing else; a
-project needs a project and a set of ticks, so that route opens two more steps in
-the same sheet. The project list leaves *this* project out rather than greying it
+The sheet **opens on another project** — the project list, then the PSDs of
+the one picked — with **Import File…** at the bottom left of that first step.
+It was a list of the two routes, and the route that needs the sheet is the
+project one: Files is a picker and nothing else, so it is a button rather than
+a step in front of the projects, and Cancel keeps the right-hand end of the
+row (`.sheet-actions-end`) where every sheet's way out is. The project list leaves *this* project out rather than greying it
 in: copying a file over itself is not what this is for, and a second copy inside
 one project already has a route in **Make Unique**, which gives it a name that
 reads as a copy of what it came from.

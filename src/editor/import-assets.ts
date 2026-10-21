@@ -17,11 +17,12 @@
  * have a route of their own in Add Image and in ⌘V, which is where anybody
  * looks for them.
  *
- * The sheet is a list of routes rather than a form, the way Add Image, Publish
- * and Re-parse are: what somebody came here to say is *where from*, and each
- * answer needs something different next. Files needs a picker and nothing else;
- * a project needs a project and a set of ticks, so that route opens two more
- * steps in the same sheet.
+ * The sheet **opens on another project**: the projects as the home screen
+ * shows them, then the PSDs of the one picked. Files is a picker and nothing
+ * else, so it is a button at the bottom left of that first step — **Import
+ * File…** — rather than a step of its own in front of it; the project list is
+ * the half that needs the sheet. Cancel keeps the right-hand end, where every
+ * sheet's way out is.
  *
  * Every file then takes the route every other import takes. One off the
  * filesystem goes through the paste path — bytes, the two orienting marks, the
@@ -92,7 +93,7 @@ interface Wizard {
 export function openImportAssets(deps: ImportAssetsDeps): void {
   const sheet = openSheet({
     title: "Import Assets",
-    subtitle: "Artwork from the filesystem, or from another project",
+    subtitle: "Artwork from another project, or from the filesystem",
     width: 620,
   });
   let step = 0;
@@ -104,37 +105,12 @@ export function openImportAssets(deps: ImportAssetsDeps): void {
       return () => mine !== step;
     },
   };
-  showRoutes(wizard);
-}
-
-/** The first thing the sheet asks, and the only thing it always asks. */
-function showRoutes(wizard: Wizard): void {
-  const { sheet, deps } = wizard;
-  wizard.enter();
-  clear(sheet.body);
-  clear(sheet.actions);
-
-  const list = h("div", { class: "sheet-list" });
-  list.append(
-    option("Import from Files", "PSDs and images · as many as you like", () => {
-      sheet.close();
-      void fromFiles(deps);
-    }),
-    option(
-      "Import from another project",
-      "The PSDs somebody drew over there, as the files they are",
-      () => void showProjects(wizard),
-    ),
-  );
-
-  sheet.body.appendChild(list);
-  sheet.actions.appendChild(
-    h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
-  );
+  void showProjects(wizard);
 }
 
 /**
- * The second step of the project route: which project.
+ * The first step, and where the sheet opens: which project. Import File… is
+ * at the bottom left of it, for artwork off the filesystem instead.
  *
  * This one is left out of the list rather than greyed in it. Copying a file
  * over itself is not what this is for, and a second copy *inside* one project
@@ -149,9 +125,21 @@ async function showProjects(wizard: Wizard): Promise<void> {
   sheet.body.appendChild(
     h("div", { class: "sheet-list-hint", text: "Reading the project list…" }),
   );
-  sheet.actions.appendChild(back(() => showRoutes(wizard)));
-  sheet.actions.appendChild(
-    h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
+  sheet.actions.append(
+    h("button", {
+      class: "btn btn-ghost",
+      text: "Import File…",
+      title: "PSDs and images from the filesystem · as many as you like",
+      onClick: () => {
+        sheet.close();
+        void fromFiles(deps);
+      },
+    }),
+    h(
+      "div",
+      { class: "sheet-actions-end" },
+      h("button", { class: "btn btn-ghost", text: "Cancel", onClick: sheet.close }),
+    ),
   );
 
   let all: ProjectMeta[] = [];
@@ -169,8 +157,8 @@ async function showProjects(wizard: Wizard): Promise<void> {
       h("div", {
         class: "sheet-list-hint",
         text:
-          "There is only this project. Import from Files instead, or open a " +
-          "project file with Open on the home screen.",
+          "There is only this project. Use Import File… below for artwork " +
+          "off the filesystem, or open a project file with Open on the home screen.",
       }),
     );
     return;
@@ -505,16 +493,6 @@ async function pickFiles(os: string): Promise<string[]> {
   });
   if (Array.isArray(picked)) return picked;
   return typeof picked === "string" ? [picked] : [];
-}
-
-/** One row of a sheet's list — the same shape Add Image and Publish use. */
-function option(label: string, hint: string, onClick: () => void): HTMLElement {
-  return h(
-    "button",
-    { class: "sheet-list-item", onClick },
-    h("span", { text: label }),
-    h("span", { class: "sheet-list-hint m", text: hint }),
-  );
 }
 
 /** The way back a step, which every step but the first one has. */
