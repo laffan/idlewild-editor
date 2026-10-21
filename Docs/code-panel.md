@@ -467,9 +467,12 @@ the rest, and links the block again with its new text.
 **Draw sees the same set.** Each pass's diverged set is the open scene's, and
 Draw reads it twice: as a broken link at the right-hand end of a placed PSD's
 row in the layer list (`unlinkMark` in `layer-directory.ts`, passed to
-`renderLayerItem` after the size), and as a mark beside each such unit's top
-right-hand corner on the canvas (`editor/code-marks.ts` — divs over the
-canvas, moved off the viewport push the guides use, hidden in Code and Play).
+`renderLayerItem` after the size), and as a mark beside such a unit's top
+right-hand corner on the canvas while it is selected (`editor/code-marks.ts` —
+divs over the canvas, moved off the viewport push the guides use, hidden in
+Code and Play; `CodeSync.select` is told each selection). Only the selected,
+because a mark on every hand-edited unit at once is noise over the artwork,
+and the list says it for the rest.
 Both open Code at the block's declaration (`CodeSync.reveal`). The pass also
 runs once the scene's PSDs have loaded, so the marks are right before any save
 — and a pass leaves alone a linked block whose placement is still there but

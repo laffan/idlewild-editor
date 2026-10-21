@@ -32,7 +32,7 @@ import * as log from "../lib/log";
 import { textureKey } from "../lib/manifest";
 import { unitOf } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
-import type { Layer } from "../lib/types";
+import type { Layer, Selection } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import { sceneParts, type PlacementSource } from "../code/placement-code";
 import type { LinkRecords } from "../code/code-links";
@@ -73,6 +73,8 @@ export interface CodeSync {
   reveal: (placementId: string, path?: string) => void;
   /** The camera moved: the canvas's marks move with it. */
   sync: (view: Viewport) => void;
+  /** What is selected on the canvas — the only units a mark is drawn beside. */
+  select: (selection: Selection) => void;
   /**
    * A PSD or a layer was renamed: rename it in the code and in the links in
    * one step, so no pass in between reads a renamed block as a hand edit.
@@ -96,6 +98,7 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   let posted = "";
   let held: { name: string; kind: "position" | "scale" } | null = null;
   let refreshTimer = 0;
+  let selected = new Set<string>();
   let runs: Promise<void> = projects
     .codeLinks(projectId)
     .then((text) => {
@@ -179,18 +182,25 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
     placeMarks();
   }
 
-  /** A mark beside every unit of the open scene that has gone its own way. */
+  /**
+   * A mark beside every selected unit of the open scene that has gone its own
+   * way. Only the selected: on every one at once the marks would be noise over
+   * the artwork, where the sidebar's row already says it for the rest.
+   */
   function placeMarks(): void {
     const units = new Map<string, Array<{ id: string; x: number; y: number; width: number; height: number }>>();
+    const picked = new Set<string>();
     for (const layer of store.layers) {
       for (const p of layer.placements) {
         const unit = unitOf(p);
+        if (selected.has(p.id)) picked.add(unit);
         if (!off.has(`unit:${unit}`)) continue;
         const held = units.get(unit) ?? [];
         held.push(p);
         units.set(unit, held);
       }
     }
+    for (const unit of [...units.keys()]) if (!picked.has(unit)) units.delete(unit);
     marks.set(
       [...units.values()].map((members) => {
         const left = Math.min(...members.map((p) => p.x));
@@ -343,6 +353,16 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
     },
     reveal: (placementId, path) => void reveal(placementId, path),
     sync: (view) => marks.sync(view),
+    select: (selection) => {
+      selected = new Set(
+        selection.kind === "placement"
+          ? [selection.placementId]
+          : selection.kind === "placements"
+            ? selection.ids
+            : [],
+      );
+      placeMarks();
+    },
     renamed: (rename) => {
       runs = runs.then(async () => {
         await renameInCode({ projectId, code, gameFrame }, rename);

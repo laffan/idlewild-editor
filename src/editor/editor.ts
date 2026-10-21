@@ -594,11 +594,11 @@ export async function mountEditor(
 
   function onSelection(selection: Selection): void {
     inspector.setSelection(selection);
+    codeSync?.select(selection); // a hand-edited PSD's mark is on the canvas while selected
     drawing?.select(selection.kind === "strokes" ? selection.ids : []); // its transform box
     // A note just put down is selected, and Select is the tool that edits it.
     if (selection.kind === "text" && rail.tool === "text") tools?.apply("select", false);
-    // Fired for a change of mode as well as of selection, which is how the
-    // panel learns that the canvas has opened a PSD up.
+    // Fired for a change of mode too: how the panel learns a PSD opened up.
     inspector.setAdjusting(handle?.scene.adjustingUnit ?? null);
     actions.update(selection, handle?.scene.selectionScreenAnchor() ?? null);
     // Pattern Shape is the one button on that bar that is not about turning

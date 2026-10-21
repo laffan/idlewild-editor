@@ -1,7 +1,8 @@
 /**
- * A broken link beside each placed PSD on the canvas whose code no longer
- * follows Draw — one the author edited by hand, which Code's sidebar carries
- * a reset for. Pressing it opens the code at the line that places it.
+ * A broken link beside a selected placed PSD on the canvas whose code no
+ * longer follows Draw — one the author edited by hand, which Code's sidebar
+ * carries a reset for. Pressing it opens the code at the line that places it.
+ * Which units are marked is `code-sync.ts`'s to say.
  *
  * Divs over the canvas rather than paint in it, for the reasons
  * `screen-guide.ts` gives for its boundary: a mark drawn into the scene would
