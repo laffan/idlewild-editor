@@ -148,4 +148,5 @@ body.code-dragging, body.code-dragging * { cursor: grabbing !important; user-sel
   cursor: pointer;
   pointer-events: auto;
 }
-.code-mode .code-marks, .play-mode .code-marks { display: none; }
+.code-mode .code-marks,
+.play-mode .code-marks { display: none; }
