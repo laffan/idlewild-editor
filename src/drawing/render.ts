@@ -16,6 +16,7 @@ import type { AtlasCache } from "./atlas";
 import { STRIDE, streamlineFor, type StreamPoint } from "./geometry";
 import { stampAngle } from "./geometry";
 import { drawnPart, lands } from "./stamp-cull";
+import { scratchOf } from "./scratch-pool";
 import { alphaOf, opaqueHex } from "../lib/color";
 import type { Bounds, StrokeStyle } from "./types";
 
@@ -573,10 +574,21 @@ function composited(
   body: (target: CanvasRenderingContext2D) => void,
 ): void {
   // Only the part of the mark that can land, while a slide's strips are drawn.
-  const part = drawnPart(whole);
-  if (!part) return;
-  const box = part;
-  const scratch = scratchBusy ? null : scratchFor(ctx);
+  const box = drawnPart(whole);
+  if (!box) return;
+  // The box in the target's own pixels — whole pixels, and only the part on
+  // the canvas — which is the size of the scratch (`scratch-pool.ts`). The
+  // transform is a scale and a translation, so this is those two applied.
+  const t = ctx.getTransform();
+  const x0 = Math.max(0, Math.floor(box.x * t.a + t.e));
+  const y0 = Math.max(0, Math.floor(box.y * t.d + t.f));
+  const x1 = Math.min(ctx.canvas.width, Math.ceil((box.x + box.width) * t.a + t.e));
+  const y1 = Math.min(ctx.canvas.height, Math.ceil((box.y + box.height) * t.d + t.f));
+  const w = x1 - x0;
+  const h = y1 - y0;
+  if (!(w > 0 && h > 0)) return;
+
+  const scratch = scratchBusy ? null : scratchOf(w, h);
   if (!scratch) {
     // No second context to be had, which is a browser this app does not run
     // in. Drawing straight on is wrong in the overlaps and right everywhere
@@ -589,75 +601,27 @@ function composited(
     return;
   }
 
-  const t = ctx.getTransform();
   scratchBusy = true;
   try {
-    scratch.setTransform(t.a, t.b, t.c, t.d, t.e, t.f);
+    scratch.setTransform(1, 0, 0, 1, 0, 0);
+    scratch.clearRect(0, 0, w, h);
+    // The target's transform, moved so the box's corner is the scratch's.
+    scratch.setTransform(t.a, t.b, t.c, t.d, t.e - x0, t.f - y0);
     scratch.save();
     scratch.globalCompositeOperation = "source-over";
     scratch.globalAlpha = 1;
-    // Only the box, so what is left elsewhere in the scratch is harmless.
-    scratch.clearRect(box.x, box.y, box.width, box.height);
     body(scratch);
     scratch.restore();
   } finally {
     scratchBusy = false;
   }
 
-  // The same rectangle in the scratch's raw pixels: the transform is a scale
-  // and a translation, so this is that scale and that translation applied.
-  const sx = box.x * t.a + t.e;
-  const sy = box.y * t.d + t.f;
-  const sw = box.width * t.a;
-  const sh = box.height * t.d;
-
   ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = composite;
   ctx.globalAlpha = alpha;
-  ctx.drawImage(
-    scratch.canvas,
-    sx,
-    sy,
-    sw,
-    sh,
-    box.x,
-    box.y,
-    box.width,
-    box.height,
-  );
+  ctx.drawImage(scratch.canvas, 0, 0, w, h, x0, y0, w, h);
   ctx.restore();
-}
-
-/**
- * A scratch canvas at least as big as the target, kept between strokes.
- *
- * **Grow-only.** Assigning `canvas.width` reallocates the backing store — the
- * churn Hush's delta #27 is about — and the three targets this renders into
- * are different sizes: the drawing surface's two four-thousand-pixel backings,
- * and whatever `rasterise.ts` asks for when ink is written into a PSD. Letting
- * it shrink would reallocate twice per Apply for no benefit; the extra pixels
- * cost nothing to have and are never read.
- */
-let scratchCanvas: HTMLCanvasElement | null = null;
-let scratchCtx: CanvasRenderingContext2D | null = null;
-
-function scratchFor(
-  ctx: CanvasRenderingContext2D,
-): CanvasRenderingContext2D | null {
-  const target = ctx.canvas;
-  if (!scratchCanvas) {
-    scratchCanvas = document.createElement("canvas");
-    scratchCtx = scratchCanvas.getContext("2d");
-    if (!scratchCtx) return null;
-  }
-  if (
-    scratchCanvas.width < target.width ||
-    scratchCanvas.height < target.height
-  ) {
-    scratchCanvas.width = Math.max(scratchCanvas.width, target.width);
-    scratchCanvas.height = Math.max(scratchCanvas.height, target.height);
-  }
-  return scratchCtx;
 }
 
 /**

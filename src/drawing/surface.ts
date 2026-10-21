@@ -49,8 +49,9 @@ import type { AtlasCache } from "./atlas";
 import { appended, boxesOverlap, strokeBox } from "./geometry";
 import { renderStroke } from "./render";
 import { PixelBackup } from "./pixel-backup";
-import { slideBacking } from "./backing-slide";
-import { context, stageCanvas, TailCanvas } from "./tail-canvas";
+import { redrawStrips, stripsFor } from "./backing-slide";
+import { DonePair } from "./done-pair";
+import { LiveLayer } from "./live-layer";
 import type { Bounds } from "./types";
 import { screenToWorld, worldToScreen, type Viewport } from "./viewport";
 
@@ -83,13 +84,10 @@ export class Surface {
   readonly root: HTMLElement;
 
   private readonly stage: HTMLElement;
-  private readonly done: HTMLCanvasElement;
-  private readonly doneCtx: CanvasRenderingContext2D;
-  private readonly live: HTMLCanvasElement;
-  private readonly liveCtx: CanvasRenderingContext2D;
-  /** The live canvas and the tail over it, which a stroke's opacity is set on. */
-  private readonly ink: HTMLElement;
-  private readonly tail = new TailCanvas();
+  /** The baked canvas and its spare — see `done-pair.ts`. */
+  private readonly pair = new DonePair();
+  /** The live canvas and the tail over it — see `live-layer.ts`. */
+  private readonly live = new LiveLayer();
   private readonly atlas: AtlasCache;
 
   /** World rect the backing covers, and the zoom its ink was baked at. */
@@ -107,21 +105,6 @@ export class Surface {
    * the append test has something to compare lengths with on the first pass.
    */
   private painted: readonly Stroke[] = [];
-
-  /**
-   * Whether the live canvas has a backing store — see the note at the top.
-   *
-   * False is 1 × 1, on which every `clearRect` is a correct no-op and a
-   * `drawImage` would land nowhere. Nothing paints into it without going
-   * through `beginLive`, which is what makes that safe.
-   */
-  private liveBacked = false;
-  /**
-   * The rectangle the live canvas was last painted into, in backing pixels,
-   * or null for "the whole thing" — which is what a caller that did not say
-   * gets, and what a resize leaves behind.
-   */
-  private liveDirty: Bounds | null = null;
 
   /**
    * Artwork baked **under** the ink, in world units.
@@ -144,6 +127,9 @@ export class Surface {
    * mark's own rectangle, not the backing. See `beginErase`.
    */
   private erasing: PixelBackup | null = null;
+  /** Whether the backdrop is on the canvas, and whether a resize just wiped it. */
+  private backdropShown = false;
+  private resized = false;
 
   // See `generation`; inside `adoptAppend`; an eraser in flight has cut into
   // the done canvas (`continueDone`), so a pan has to re-bake, not slide.
@@ -162,21 +148,14 @@ export class Surface {
   constructor(atlas: AtlasCache) {
     this.atlas = atlas;
 
-    this.done = stageCanvas("draw-done");
-    this.live = stageCanvas("draw-live");
     this.stage = document.createElement("div");
     this.stage.className = "draw-stage";
-    this.ink = document.createElement("div");
-    this.ink.className = "draw-ink";
-    this.ink.append(this.live, this.tail.el);
-    this.stage.append(this.done, this.ink);
+    this.stage.append(...this.pair.els, this.live.el);
 
     this.root = document.createElement("div");
     this.root.className = "draw-surface";
     this.root.appendChild(this.stage);
 
-    this.doneCtx = context(this.done);
-    this.liveCtx = context(this.live);
   }
 
   /**
@@ -205,8 +184,8 @@ export class Surface {
    */
   setInteractive(interactive: boolean): void {
     this.root.classList.toggle("active", interactive);
-    if (interactive) this.backLive();
-    else this.releaseLive();
+    if (interactive) this.live.back(this.pixels, this.dpr);
+    else this.live.release();
   }
 
   /**
@@ -255,7 +234,7 @@ export class Surface {
     }
     if (added.length > 0) {
       this.applyWorldTransform(this.doneCtx);
-      this.layStrokes(added, [this.backingBounds()]);
+      this.layStrokes(this.doneCtx, added, [this.backingBounds()]);
       this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
     }
     this.painted = strokes;
@@ -277,12 +256,20 @@ export class Surface {
     // A re-bake is the baked state, so any backup taken before it describes
     // nothing — see `restoreErased`.
     this.erasing?.drop();
-    this.clearAll(this.doneCtx);
-    this.applyWorldTransform(this.doneCtx);
-    this.layBackdrop();
-    this.layStrokes(strokes, [this.backingBounds()]);
-    this.doneCtx.setTransform(1, 0, 0, 1, 0, 0);
+    // Nothing on it and nothing to put on it — a plan nobody drew, a layer
+    // with no ink — costs nothing, not a clear of four thousand pixels.
+    // A resize wipes the canvas, so it is blank after one whatever it held.
+    const blank = (this.painted.length === 0 && !this.backdropShown) || this.resized;
+    this.resized = false;
+    this.backdropShown = this.backdrop !== null;
     this.painted = strokes;
+    if (blank && strokes.length === 0 && !this.backdrop) return;
+    // Aside and swapped in, so the canvas on screen is never fully dirtied.
+    this.pair.paintAside((ctx) => {
+      this.applyWorldTransform(ctx);
+      this.layBackdrop(ctx);
+      this.layStrokes(ctx, strokes, [this.backingBounds()]);
+    });
   }
 
   /**
@@ -303,7 +290,7 @@ export class Surface {
     this.erasing ??= new PixelBackup();
     // The mark's rectangle in backing pixels, clamped to the backing: a stroke
     // run off the edge has nothing out there to put back.
-    this.erasing.take(this.done, this.backingRect(box));
+    this.erasing.take(this.pair.canvas, this.backingRect(box));
     this.applyWorldTransform(this.doneCtx);
     return this.doneCtx;
   }
@@ -342,9 +329,10 @@ export class Surface {
 
   /** `beginLive` without the clear, for `live-ink.ts`. Close it with `endLive`. */
   continueLive(): CanvasRenderingContext2D {
-    this.backLive();
-    this.applyWorldTransform(this.liveCtx);
-    return this.liveCtx;
+    this.live.back(this.pixels, this.dpr);
+    this.live.touched();
+    this.applyWorldTransform(this.live.ctx);
+    return this.live.ctx;
   }
 
   /** A world box as whole backing pixels, clamped to the backing; null if off it. */
@@ -366,7 +354,7 @@ export class Surface {
    * mark every frame. Back to 1 when the stroke is over, by whoever set it.
    */
   setInkOpacity(opacity: number): void {
-    this.ink.style.opacity = opacity < 1 ? String(opacity) : "";
+    this.live.setOpacity(opacity);
   }
 
   /**
@@ -376,7 +364,7 @@ export class Surface {
   beginTail(box: Bounds | null): CanvasRenderingContext2D | null {
     const scale = this.pixels / this.worldSize;
     const rect = box ? this.backingRect(box) : null;
-    return this.tail.begin(rect, scale, this.anchorX, this.anchorY, this.dpr);
+    return this.live.beginTail(rect, scale, this.anchorX, this.anchorY, this.dpr);
   }
 
   /** The done canvas in world coordinates, for `live-ink.ts`'s eraser. Close with `endEraseFrame`. */
@@ -408,10 +396,10 @@ export class Surface {
 
   /** Put the live context into world coordinates, cleared and ready. */
   beginLive(): CanvasRenderingContext2D {
-    this.backLive();
-    this.clearLiveDirty();
-    this.applyWorldTransform(this.liveCtx);
-    return this.liveCtx;
+    this.live.back(this.pixels, this.dpr);
+    this.live.clear();
+    this.applyWorldTransform(this.live.ctx);
+    return this.live.ctx;
   }
 
   /**
@@ -423,15 +411,12 @@ export class Surface {
    * clear per frame. Omitting it is safe and says "clear the lot".
    */
   endLive(bounds?: Bounds): void {
-    this.liveCtx.setTransform(1, 0, 0, 1, 0, 0);
-    this.liveDirty =
-      bounds && this.worldSize > 0 ? this.toBacking(bounds) : null;
+    this.live.painted(bounds && this.worldSize > 0 ? this.toBacking(bounds) : null);
   }
 
   clearLive(): void {
-    this.clearLiveDirty();
-    this.tail.clear();
-    this.liveCtx.setTransform(1, 0, 0, 1, 0, 0);
+    this.live.clear();
+    this.live.clearTail();
   }
 
   /** One world unit, in the CSS pixels the live layer is drawn with. */
@@ -544,16 +529,17 @@ export class Surface {
       // delta #27, where the pointless reallocation measured most of a second
       // of IOSurface churn on an iPad.
       this.pixels = pixels;
-      this.size(this.done, pixels, dpr);
+      this.pair.size(pixels, dpr);
+      this.resized = true;
       // And the live canvas only when it is holding something. Sizing an
       // unbacked one here would allocate the very megabytes the sentinel
       // exists to avoid.
-      if (this.liveBacked) this.size(this.live, pixels, dpr);
+      this.live.resize(pixels, dpr);
     }
     // Whether or not the pixels moved: the rectangle is remembered in
     // *backing* coordinates, and re-anchoring is the world→backing mapping
     // changing under it. Clearing a stale one would leave ink behind.
-    this.liveDirty = null;
+    this.live.forgetDirty();
 
     if (slides && Math.abs(dx) < pixels && Math.abs(dy) < pixels) {
       this.slideBy(dx, dy, strokes);
@@ -566,21 +552,34 @@ export class Surface {
   private slideBy(dx: number, dy: number, strokes: readonly Stroke[]): void {
     // What was drawn against the old anchor is somewhere else now.
     this.generationValue++;
+    // A blank canvas moved is the same blank canvas.
+    if (strokes.length === 0 && !this.backdropShown) return;
+    this.pair.shift(dx, dy);
     const world = { x: this.anchorX, y: this.anchorY, scale: this.pixels / this.worldSize };
-    slideBacking(this.doneCtx, this.pixels, dx, dy, world, (reach) => {
-      this.applyWorldTransform(this.doneCtx);
-      this.layBackdrop();
-      this.layStrokes(strokes, reach);
+    const ctx = this.doneCtx;
+    redrawStrips(ctx, stripsFor(this.pixels, dx, dy), world, (reach) => {
+      this.applyWorldTransform(ctx);
+      this.layBackdrop(ctx);
+      this.layStrokes(ctx, strokes, reach);
     });
   }
 
   /** Stamp the strokes that reach into any of `within`, in order. */
-  private layStrokes(strokes: readonly Stroke[], within: readonly Bounds[]): void {
+  private layStrokes(
+    ctx: CanvasRenderingContext2D,
+    strokes: readonly Stroke[],
+    within: readonly Bounds[],
+  ): void {
     for (const stroke of strokes) {
       const box = strokeBox(stroke);
       if (box && !within.some((r) => boxesOverlap(box, r))) continue;
-      renderStroke(this.doneCtx, stroke, this.atlas);
+      renderStroke(ctx, stroke, this.atlas);
     }
+  }
+
+  /** The baked canvas on screen — resolved each time, because a swap moves it. */
+  private get doneCtx(): CanvasRenderingContext2D {
+    return this.pair.ctx;
   }
 
 
@@ -591,51 +590,16 @@ export class Surface {
    * rectangle does its own clipping, and the whole point of the backing is
    * that it covers rather more world than fits on the screen.
    */
-  private layBackdrop(): void {
+  private layBackdrop(ctx: CanvasRenderingContext2D): void {
     if (!this.backdrop) return;
     const { image, box, smooth } = this.backdrop;
-    const held = this.doneCtx.imageSmoothingEnabled;
+    const held = ctx.imageSmoothingEnabled;
     // A pixel-art project's artwork is pixels, and a smoothed one is a smudge
     // that happens to be the right size — the same call `paint-render.ts`
     // makes about a pattern.
-    this.doneCtx.imageSmoothingEnabled = smooth;
-    this.doneCtx.drawImage(image, box.x, box.y, box.width, box.height);
-    this.doneCtx.imageSmoothingEnabled = held;
-  }
-
-  private size(el: HTMLCanvasElement, pixels: number, dpr: number): void {
-    el.width = pixels;
-    el.height = pixels;
-    el.style.width = `${pixels / dpr}px`;
-    el.style.height = `${pixels / dpr}px`;
-  }
-
-  /** Give the live canvas a backing store, if it has not got one. */
-  private backLive(): void {
-    if (this.liveBacked || this.pixels === 0) return;
-    this.liveBacked = true;
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    this.size(this.live, this.pixels, dpr);
-    this.liveDirty = null;
-  }
-
-  /**
-   * Hand the backing store back.
-   *
-   * A 1 × 1 canvas, which is the same sentinel the size pass reads. Every
-   * other site that touches the live context is a clear, and a clear on a
-   * 1 × 1 canvas is a correct no-op — which is what keeps this from needing a
-   * guard anywhere else.
-   */
-  private releaseLive(): void {
-    if (!this.liveBacked) return;
-    this.liveBacked = false;
-    this.live.width = 1;
-    this.live.height = 1;
-    this.live.style.width = "1px";
-    this.live.style.height = "1px";
-    this.liveDirty = null;
-    this.tail.release();
+    ctx.imageSmoothingEnabled = smooth;
+    ctx.drawImage(image, box.x, box.y, box.width, box.height);
+    ctx.imageSmoothingEnabled = held;
   }
 
   /** World → backing pixels, for both canvases. */
@@ -659,30 +623,6 @@ export class Surface {
     const width = bounds.width * scale + CLEAR_PAD * 2;
     const height = bounds.height * scale + CLEAR_PAD * 2;
     return { x, y, width, height };
-  }
-
-  private clearAll(ctx: CanvasRenderingContext2D): void {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, this.pixels, this.pixels);
-  }
-
-  /**
-   * Clear what the live canvas was last painted into, and only that.
-   *
-   * The whole point of tracking the rectangle: a stroke covers a few hundred
-   * pixels of a four-thousand-pixel canvas, and the upload that follows a
-   * clear is charged on the region dirtied rather than on the region that
-   * held anything.
-   */
-  private clearLiveDirty(): void {
-    const ctx = this.liveCtx;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const rect = this.liveDirty;
-    if (!rect) {
-      ctx.clearRect(0, 0, this.live.width, this.live.height);
-      return;
-    }
-    ctx.clearRect(rect.x, rect.y, rect.width, rect.height);
   }
 
   /**

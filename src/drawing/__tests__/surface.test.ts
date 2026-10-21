@@ -63,6 +63,7 @@ function fakeCanvas(): Record<string, unknown> {
     width: 1,
     height: 1,
     style: {} as Record<string, string>,
+    classList: { add: vi.fn(), remove: vi.fn(), toggle: vi.fn() },
     getContext: () => ctx,
   };
   ctx.canvas = el;
@@ -377,5 +378,63 @@ describe("a pan past the backing's edge", () => {
     const surface = ready(held);
     surface.sync(panned, [held[0]]);
     expect(drawn.map((s) => s.id)).toEqual(["near"]);
+  });
+});
+
+/**
+ * WebKit's cost model, from Hush's measurements on an iPad (its deltas #28,
+ * #29 and #31): a full-surface write to a *visible* canvas is a quarter of a
+ * second of upload at commit, and a canvas drawn onto itself is a
+ * quarter-second readback. Neither may happen on a pan or a re-bake.
+ */
+describe("what a re-anchor costs the canvas on screen", () => {
+  type Ctx = { canvas: unknown; clearRect: { mock: { calls: unknown[] } }; drawImage: { mock: { calls: unknown[][] } } };
+  const pairOf = (surface: InstanceType<typeof Surface>) =>
+    (surface as unknown as { pair: { ctx: Ctx } }).pair;
+  function at(id: string, x: number): Stroke {
+    return { ...stroke(id), points: [x, 0, 0.5, x + 10, 10, 0.5] };
+  }
+
+  it("slides by copying across to the spare, never the canvas onto itself", () => {
+    const held = [at("near", 0), at("far", 1100)];
+    const surface = ready(held);
+    const shown = pairOf(surface).ctx;
+    surface.sync({ ...view, originX: 200 }, held);
+    const now = pairOf(surface).ctx;
+    expect(now).not.toBe(shown);
+    // The copy: the spare drew the old canvas, at an offset.
+    const copy = now.drawImage.mock.calls[0];
+    expect(copy[0]).toBe(shown.canvas);
+    expect(shown.drawImage.mock.calls.every((c) => c[0] !== shown.canvas)).toBe(true);
+  });
+
+  it("re-bakes into the spare and swaps, leaving the canvas on screen unwritten", () => {
+    const held = [at("near", 0)];
+    const surface = ready(held);
+    const shown = pairOf(surface).ctx;
+    const clears = shown.clearRect.mock.calls.length;
+    surface.repaint(held);
+    expect(shown.clearRect.mock.calls.length).toBe(clears);
+    expect(pairOf(surface).ctx).not.toBe(shown);
+  });
+
+  /** A plan nobody drew, a layer with no ink: a pan should cost nothing. */
+  it("does nothing to a canvas with nothing on it", () => {
+    const surface = ready([]);
+    surface.sync({ ...view, originX: 200 }, []);
+    surface.sync({ ...view, zoom: 2 }, []);
+    surface.repaint([]);
+    expect(calls).toEqual([]);
+  });
+
+  it("does not clear a live canvas that holds nothing", () => {
+    const surface = ready([]);
+    surface.setInteractive(true);
+    surface.clearLive();
+    surface.beginLive();
+    expect(calls).toEqual([]);
+    surface.endLive({ x: 0, y: 0, width: 10, height: 10 });
+    surface.clearLive();
+    expect(calls).toEqual(["clear"]);
   });
 });

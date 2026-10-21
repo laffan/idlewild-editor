@@ -19,6 +19,11 @@
  * are drawn: the strokes that reach into them, clipped to them. A stroke
  * laid again under a clip lands on exactly the pixels the whole bake would
  * have put there, because inside the strip it *is* the whole bake.
+ *
+ * The move itself is `DonePair.shift` — across to a spare canvas and a swap,
+ * never the canvas onto itself, and never a full dirty of the one on screen
+ * (`done-pair.ts`). What is drawn here is the strips, onto the canvas now
+ * showing: a dirty region a few hundred pixels wide.
  */
 
 import { drawingOnly } from "./stamp-cull";
@@ -28,23 +33,10 @@ import type { Bounds } from "./types";
 const SEAM = 8;
 
 /**
- * Move every pixel of `ctx`'s canvas by `dx`, `dy` and answer the strips the
- * move left empty, in the canvas's own pixels. Leaves the identity transform.
+ * The strips a move of `dx`, `dy` pixels leaves to be drawn on a square
+ * canvas `size` across, in its own pixels.
  */
-export function slideCanvas(
-  ctx: CanvasRenderingContext2D,
-  size: number,
-  dx: number,
-  dy: number,
-): Bounds[] {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.save();
-  // `copy` replaces the whole canvas with the moved picture, so whatever the
-  // move uncovers is left transparent rather than holding the old pixels.
-  ctx.globalCompositeOperation = "copy";
-  ctx.drawImage(ctx.canvas, dx, dy);
-  ctx.restore();
-
+export function stripsFor(size: number, dx: number, dy: number): Bounds[] {
   // Each strip reaches a little way into the moved picture: those pixels
   // were the old canvas's edge, where a stroke running off it was cut, and an
   // edge rasterises a shade differently from the same pixels mid-canvas.
@@ -54,27 +46,26 @@ export function slideCanvas(
   if (dx < 0) strips.push({ x: size - w(dx), y: 0, width: w(dx), height: size });
   if (dy > 0) strips.push({ x: 0, y: 0, width: size, height: w(dy) });
   if (dy < 0) strips.push({ x: 0, y: size - w(dy), width: size, height: w(dy) });
-  for (const s of strips) ctx.clearRect(s.x, s.y, s.width, s.height);
   return strips;
 }
 
 /**
- * Slide the canvas by `dx`, `dy` and have `lay` draw what that uncovered:
- * `lay` is handed the uncovered strips in world units, with drawing already
- * clipped to them and stamps outside them skipped (`stamp-cull.ts`), and
- * leaves its own transform — this puts identity back.
- * `world` is where the canvas's top-left now is, and its pixels per unit.
+ * Clear `strips` (canvas pixels) and have `lay` draw them again: `lay` is
+ * handed the strips in world units, with drawing clipped to them and stamps
+ * outside them skipped (`stamp-cull.ts`), and leaves its own transform —
+ * this puts identity back. `world` is where the canvas's top-left is, and its
+ * pixels per unit.
  */
-export function slideBacking(
+export function redrawStrips(
   ctx: CanvasRenderingContext2D,
-  size: number,
-  dx: number,
-  dy: number,
+  strips: readonly Bounds[],
   world: { x: number; y: number; scale: number },
   lay: (reach: readonly Bounds[]) => void,
 ): void {
-  const strips = slideCanvas(ctx, size, dx, dy);
+  if (strips.length === 0) return;
   const { x, y, scale } = world;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (const s of strips) ctx.clearRect(s.x, s.y, s.width, s.height);
   ctx.save();
   ctx.beginPath();
   for (const r of strips) ctx.rect(r.x, r.y, r.width, r.height);
