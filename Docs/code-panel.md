@@ -404,6 +404,27 @@ nothing to place for one. See `backdropCode` in `placement-code.ts`. Its
 with no file behind it, so new lines go after it and a scene holding only
 backdrops is not taken for an empty one.
 
+### Renames follow into the code
+
+A PSD renamed (`psd-actions.rename`) or a layer renamed in the inspector's
+layer list (`applyLayers`, whose `renames` map old names to new) is renamed in
+every `.js` file of `game/` but `Backups/` — `editor/code-renames.ts`, on every
+scaffold, before the game restarts on the change. Each file goes through
+`editor/code-edit.ts`, the same panel-or-disk write the placement code uses.
+
+What is rewritten is decided per string literal, by what is around it, in
+`code/rename-refs.ts`: a scanner finds the literals (skipping comments and any
+template with `${…}` in it), and each one's statement — back to the last `;`,
+`{` or `}`, with the other literals in it reduced to placeholders — says
+whether it is a key (first or second argument of a call on `P2P`, or a
+`key:`), a path (the argument after a key literal of that file), or the path
+of a `.target`/`.remove` on a name declared from `P2P.place` of that file, read
+relative to where it was placed. `assets/<key>` prefixes and texture keys —
+`<key>_<layer>`, with the layer one the file has — are recognised by their
+shape. A `const NAME = "…"` is followed forward: its literal is rewritten when
+`NAME` is handed to a call as the key or the path. Layer names are rewritten a
+path segment at a time.
+
 `editor/code-sync.ts` is everything else that bridges a PSD to Phaser
 project's scene files and its canvas, and `code/scene-code.ts` is how it reads
 a scene file: a **block** is a `const name = this.P2P.place(this, "key",

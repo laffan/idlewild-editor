@@ -352,6 +352,26 @@ Part of [the Idlewild manual](README.md).
   front. Two of the same file swapped on the canvas swap which line each
   answers to
 
+## Renaming a PSD or a layer renames it in the code
+
+- **Rename a PSD** — in the sidebar or the properties panel — or **a layer
+  inside one** in the properties panel's layer list, and every `.js` file in
+  the project is rewritten where it names that file or that layer. On any
+  scaffold, and however the code is written:
+  - the key in any psd-to-phaser call — `this.P2P.place(this, "tree", …)`,
+    `getTexture`, `getData`, split over lines or not — a `key:` handed to
+    `loadMultiple`, a path into `assets/tree/`, and a texture key made from the
+    file, `"tree_trunk"`
+  - a layer's name in the path of a call on that file, in the path handed to
+    `.target(…)` or `.remove(…)` on something placed from it, and at the end
+    of its texture key
+  - either one held in a name first — `const KEY = "tree";` used as
+    `this.P2P.place(this, KEY, …)` — at the line that names it
+- The same word anywhere else is left alone: `"tree"` as a scene's key, a
+  label or a log line is not the file, and comments are not touched. Nor is
+  `Backups/`. The console lists the files that changed, and a running game
+  restarts on them
+
 ## Dragging a sprite by its `setPosition` or `setScale`
 
 - **With the caret inside a `setScale(…)`** the same sprite is outlined with a

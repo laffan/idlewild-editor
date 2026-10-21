@@ -20,6 +20,8 @@
  * now rather than being a thing only a Mac could do.
  */
 
+import type { CodeRename } from "./code-renames";
+import { layerName } from "../lib/manifest";
 import { carryDownsampleKept, openDownsample } from "./psd-downsample";
 import type { Placement } from "../lib/types";
 import { contextPicture, type ContextDeps } from "./psd-context";
@@ -312,6 +314,8 @@ export interface PsdFileActionsOptions {
    * game to restart can leave it out.
    */
   onPsdChanged?: () => void;
+  /** A file or a layer was renamed — to rename it in the code, `code-renames.ts`. */
+  onRenamed?: (rename: CodeRename) => Promise<void> | void;
 }
 
 export interface PsdFileActions {
@@ -382,6 +386,9 @@ export function createPsdFileActions(
     // Reordering renumbers every layer, so the next edit has to be made
     // against the file as it is now rather than as it was.
     inspector.reloadPsdLayers(key);
+    // Before the restart below, so the game comes back up on code that names
+    // the layers as they are now.
+    if (renames.size > 0) await options.onRenamed?.({ kind: "layers", key, names: renames });
     changed();
   }
 
@@ -400,6 +407,8 @@ export function createPsdFileActions(
       carryDownsampleKept(key, result.key, true);
       carrySendChoice(key, result.key, true);
       await scene()?.renamePsd(key, result.key);
+      const layerNames = (scene()?.psdLayers(result.key) ?? []).map((l) => layerName(l.path));
+      await options.onRenamed?.({ kind: "psd", from: key, to: result.key, layerNames });
       changed();
       log.info(`${key}.psd → ${result.key}.psd`);
     } catch (err) {

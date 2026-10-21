@@ -51,6 +51,7 @@ import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
 import { openScaffoldSwitch } from "./scaffold-switch";
 import { createCodeSync } from "./code-sync";
+import { renameInCode } from "./code-renames";
 import { Minimap } from "./minimap";
 import { OverlaysPanel } from "./overlays-panel";
 import { addSweptZone } from "./zone-actions";
@@ -222,6 +223,7 @@ export async function mountEditor(
     scene: () => handle?.scene ?? null,
     ...{ inspector, drawing: () => drawing },
     onPsdChanged: psdChanged,
+    onRenamed: (rename) => renameInCode({ projectId: meta.id, code, gameFrame }, rename),
   });
 
   // The four ways something on the canvas becomes something else — a sketch
@@ -355,8 +357,7 @@ export async function mountEditor(
   // than a second implementation of it.
   const gameFrame = new GameFrame(meta);
 
-  // Only the tools and the floating bars are inside the canvas wrapper — the
-  // header is a row of the shell — and the edge toggles, from `createShell`.
+  // Only the tools and the floating bars are inside the canvas wrapper.
   canvasWrap.append(rail.root, rail.drawBar, actions.root, fillBar.root, gameFrame.root);
 
   // The rows and columns, and the dividers between them — see `shell.ts`.

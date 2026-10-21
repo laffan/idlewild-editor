@@ -30,7 +30,6 @@
  */
 
 import { gameFiles } from "../lib/ipc";
-import * as log from "../lib/log";
 import { textureKey } from "../lib/manifest";
 import { unitOf } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
@@ -58,6 +57,7 @@ import {
 } from "../code/scene-code";
 import type { CodePanel } from "./code-panel";
 import type { GameFrame } from "./game-frame";
+import { createCodeEditor, replaceIn } from "./code-edit";
 
 export interface CodeSyncDeps {
   projectId: string;
@@ -91,7 +91,6 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   let off = new Set<string>();
   let posted = "";
   let held: { name: string; kind: "position" | "scale" } | null = null;
-  let queue: Promise<void> = Promise.resolve();
   let refreshTimer = 0;
 
   const source = (layers: readonly Layer[]): PlacementSource => ({
@@ -120,26 +119,7 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
     return gameFiles.read(projectId, path).catch(() => null);
   }
 
-  /**
-   * Change a file, one at a time and saved: through the panel when it has
-   * the file open, so its history and caret survive, and on disk otherwise.
-   */
-  function edit(path: string, change: (text: string) => string | null): Promise<void> {
-    queue = queue.then(async () => {
-      const open = code.editing;
-      if (open?.path === path) {
-        if (!replaceIn(open.view, change(open.view.state.doc.toString()))) return;
-        await code.save();
-        return;
-      }
-      const text = await gameFiles.read(projectId, path).catch(() => null);
-      const next = text === null ? null : change(text);
-      if (next === null || next === text) return;
-      await gameFiles.write(projectId, path, next);
-      if (gameFrame.isRunning) gameFrame.reload();
-    });
-    return queue.catch((err) => log.error(`Could not update ${path}:`, err));
-  }
+  const { edit } = createCodeEditor({ projectId, code, gameFrame });
 
   /** Lines for pieces, after the last placing block in a scene's file. */
   async function place(sceneId: string, pieces: PlacedPiece[], backdrops: BackdropPiece[]): Promise<void> {
@@ -346,33 +326,4 @@ function idsOf(layers: readonly Layer[]): string[] {
 
 function allPlacementIds(store: DocStore): string[] {
   return store.scenes.flatMap((scene) => idsOf(scene.layers));
-}
-
-/**
- * Put `next` into an editor as the one change between it and what is there,
- * so the caret and the history move as little as they can. False when there
- * is nothing to change.
- */
-function replaceIn(
-  view: import("@codemirror/view").EditorView,
-  next: string | null,
-  caret?: number,
-): boolean {
-  const text = view.state.doc.toString();
-  if (next === null || next === text) return false;
-  let from = 0;
-  while (from < text.length && from < next.length && text[from] === next[from]) from++;
-  let end = 0;
-  while (
-    end < text.length - from &&
-    end < next.length - from &&
-    text[text.length - 1 - end] === next[next.length - 1 - end]
-  ) {
-    end++;
-  }
-  view.dispatch({
-    changes: { from, to: text.length - end, insert: next.slice(from, next.length - end) },
-    ...(caret !== undefined ? { selection: { anchor: caret } } : {}),
-  });
-  return true;
 }
