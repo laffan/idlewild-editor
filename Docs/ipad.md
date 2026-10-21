@@ -36,8 +36,35 @@ and auto-hides the home indicator. That needs
 with it, so while a trackpad or mouse pointer is in the top-left corner the
 bar comes back, drawn over the page rather than pushing it down
 (`CornerHover`, and a negative `additionalSafeAreaInsets.top` for the length
-of the peek). A windowed scene keeps its bar. On a Mac the window simply opens
+of the peek) — into the strip the page keeps clear for the menu bar, below. A windowed scene keeps its bar. On a Mac the window simply opens
 in native full screen (`lib.rs`'s setup).
+
+### Room for the menu bar, while a pointer is attached
+
+A full-screen window shows no status bar and no window controls, but from
+iPadOS 26 the system's **menu bar** — window controls included — comes down
+over the top of the page whenever a trackpad or mouse pointer reaches the top
+edge. That is where the header's buttons are, and the back arrow under the
+controls is the first one lost. There is no API to turn the reveal off:
+iPadOS 27 adds a user setting to keep the bar *always* shown (Settings →
+Multitasking & Gestures), and nothing to keep it hidden.
+
+So the page keeps the strip clear instead. `lib/window-chrome.ts` sets
+`html.menu-bar-room` while the window fills its screen **and** a pointer is
+attached — `(any-pointer: fine)`, or the first `mouse`-type pointer event,
+which is what an iPad reports for a trackpad — and `tokens.css` makes
+`--safe-top` the larger of the real inset and `--menu-bar-room` (28px). Every
+top inset already reads `--safe-top`, so the header, the home screen's bar,
+the sheets and the floating code panel all stand below the strip, and the bar
+comes down over the header's own colour. A finger never reveals the bar, so a
+touch-only iPad keeps the whole screen. The 28px is measured rather than
+reported, and is worth checking against each new iPadOS.
+
+`CornerHover`, the plugin's own peek that shows the status bar while the
+pointer is in the top-left corner, used to trigger anywhere in the corner's
+top 40pt — over the back arrow, so reaching for the arrow brought the bar down
+on top of it. It now triggers only in the top 10pt and holds within the 28pt
+strip.
 
 ### Room for the window controls
 

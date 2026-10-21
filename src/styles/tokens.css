@@ -162,8 +162,10 @@
      status bar and home indicator included, so every piece of chrome that
      touches an edge has to inset itself back out of them. These are the
      insets as four tokens rather than raw `env()` calls, so a rule can do
-     arithmetic on them and a browser without them falls back to zero. */
-  --safe-top: env(safe-area-inset-top, 0px);
+     arithmetic on them and a browser without them falls back to zero.
+
+     The top is the larger of the inset and --menu-bar-room, below. */
+  --safe-top: max(env(safe-area-inset-top, 0px), var(--menu-bar-room));
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
@@ -174,6 +176,10 @@
      Zero everywhere else. Read with `max()` against --safe-left, because
      both are a claim on the same edge. */
   --window-controls: 0px;
+
+  /* Room for the iPadOS menu bar over a full-screen window, while a trackpad
+     or mouse is attached — see `html.ipad.menu-bar-room` below. */
+  --menu-bar-room: 0px;
 }
 
 /* A finger: everything it hits is at least 44px, which is Apple's floor. */
@@ -189,4 +195,16 @@
 
 html.ipad-windowed {
   --window-controls: 84px;
+}
+
+/* The iPadOS menu bar, which a pointer at the top edge of a full-screen
+   window brings down over the page — and which, with it, brings the window
+   controls. No app can turn that off, and nothing reports the room it takes,
+   so while a pointer is attached the top inset is held open by the bar's
+   height and the bar comes down over the header's own colour rather than
+   over its buttons. Touch alone never reveals it, so a finger keeps the whole
+   screen. `lib/window-chrome.ts` sets the class; the height is measured, not
+   reported, and is the number worth checking against a new iPadOS. */
+html.ipad.menu-bar-room {
+  --menu-bar-room: 28px;
 }

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { fillsScreen, isIpad } from "../window-chrome";
+import { fillsScreen, isAttachedPointer, isIpad } from "../window-chrome";
 
 const IPAD_PRO = { width: 1024, height: 1366 };
 
@@ -34,5 +34,13 @@ describe("isIpad", () => {
 
   it("is not a Windows touch screen", () => {
     expect(isIpad({ userAgent: "Mozilla/5.0 (Windows NT 10.0)", platform: "Win32", maxTouchPoints: 10 })).toBe(false);
+  });
+});
+
+describe("isAttachedPointer", () => {
+  it("is a trackpad or a mouse, and never a finger or a pencil", () => {
+    expect(isAttachedPointer({ pointerType: "mouse" })).toBe(true);
+    expect(isAttachedPointer({ pointerType: "touch" })).toBe(false);
+    expect(isAttachedPointer({ pointerType: "pen" })).toBe(false);
   });
 });

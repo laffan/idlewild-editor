@@ -15,6 +15,16 @@
  * which `tauri-plugin-ipad-chrome` hides, and needs none.
  *
  * iPad only. A Mac's window has a title bar of its own above the page.
+ *
+ * **And room for the menu bar.** A full-screen window has neither status bar
+ * nor window controls showing, and iPadOS brings its menu bar — controls and
+ * all — down over the page whenever a trackpad or mouse pointer reaches the
+ * top edge, which is where the header's buttons are. No app can turn that
+ * off. So while the window fills the screen and a pointer is attached,
+ * `html.menu-bar-room` holds the top inset open by the bar's height — see
+ * `tokens.css`. "Attached" is a fine pointer the media query reports, or the
+ * first mouse-type pointer event seen, whichever comes first; a trackpad
+ * stays attached for the session once it has been used.
  */
 
 /** A point or two of slack: the two sizes are measured by different parts of the system. */
@@ -42,18 +52,36 @@ export function fillsScreen(
   );
 }
 
-/** Keep `html.ipad-windowed` true to the window, for as long as the page is up. */
+/**
+ * Whether a pointer event came from a trackpad or a mouse — the only kind
+ * that reveals the menu bar. An iPad reports both as `mouse`; a finger is
+ * `touch` and an Apple Pencil `pen`.
+ */
+export function isAttachedPointer(event: Pick<PointerEvent, "pointerType">): boolean {
+  return event.pointerType === "mouse";
+}
+
+/** Keep `html.ipad-windowed` and `html.menu-bar-room` true to the window. */
 export function watchWindowChrome(): void {
   if (!isIpad(navigator)) return;
   const root = document.documentElement;
   root.classList.add("ipad");
+  let pointer = window.matchMedia?.("(any-pointer: fine)").matches ?? false;
   const update = () => {
     const windowed = !fillsScreen(
       { width: window.innerWidth, height: window.innerHeight },
       { width: window.screen.width, height: window.screen.height },
     );
     root.classList.toggle("ipad-windowed", windowed);
+    root.classList.toggle("menu-bar-room", !windowed && pointer);
   };
   update();
   window.addEventListener("resize", update);
+  const seen = (event: PointerEvent) => {
+    if (pointer || !isAttachedPointer(event)) return;
+    pointer = true;
+    update();
+  };
+  window.addEventListener("pointermove", seen, { capture: true, passive: true });
+  window.addEventListener("pointerdown", seen, { capture: true, passive: true });
 }

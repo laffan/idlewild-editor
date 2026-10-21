@@ -26,8 +26,12 @@ import ObjectiveC.runtime
 // bar, so hiding the bar hides them with it, and the system only brings
 // them back on its own menu-bar reveal — which reads as them turning up
 // at random. There is no API to show the controls themselves, so while
-// the pointer sits in the top-left corner the bar is shown again
-// (`CornerHover`), and the controls come with it.
+// the pointer sits at the very top of the top-left corner the bar is
+// shown again (`CornerHover`), and the controls come with it. Only the top
+// edge: the page holds a strip that tall open above its header while a
+// pointer is attached (`html.menu-bar-room`, src/styles/tokens.css), and a
+// peek that started any lower would come down over the header's back arrow
+// as the pointer went to press it.
 //
 // A peek must not move the page. A status bar coming in grows the root
 // view's top safe area by its height, and the page reads that inset
@@ -255,11 +259,13 @@ enum ChromeControl {
 /// included — the page still gets every `pointermove` — and a hover
 /// recognizer never sees a touch, so drawing is untouched.
 final class CornerHover: UIHoverGestureRecognizer, UIGestureRecognizerDelegate {
-    /// Entering this box from the top-left corner shows the bar.
-    static let enter = CGSize(width: 120, height: 40)
+    /// Entering this box from the top-left corner shows the bar: the top
+    /// edge only, above the header — see the note at the top of the file.
+    static let enter = CGSize(width: 120, height: 10)
     /// Once shown, it stays while the pointer is anywhere in this larger
-    /// box — the controls, once expanded, reach past the entry box.
-    static let keep = CGSize(width: 280, height: 80)
+    /// box — the controls, once expanded, reach past the entry box. No
+    /// deeper than the strip the page keeps clear, `--menu-bar-room`.
+    static let keep = CGSize(width: 280, height: 28)
     static let hideDelay: TimeInterval = 0.6
 
     private(set) var peeking = false
