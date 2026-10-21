@@ -16,7 +16,9 @@
  * zoom has moved far enough that the baked ink would show its resolution;
  * everything else is a transform. A re-anchor for a pan slides the baked
  * pixels and draws only the strips that uncovers (`backing-slide.ts`); one
- * for a change of zoom or size re-bakes what is visible.
+ * for a change of zoom or size re-bakes what is visible. Both go through a
+ * spare canvas and a swap (`done-pair.ts`), never a full write to the canvas
+ * on screen — see Docs/drawing.md, "What a pan costs, on WebKit's terms".
  *
  * ## Three things that are about cost rather than about drawing
  *

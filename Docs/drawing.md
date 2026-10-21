@@ -295,23 +295,48 @@ presenting it would visibly stretch. The pixel budget is fixed — viewport ×
 zoom, which is what keeps the ink at screen resolution however far in the
 user has gone without the backing growing without bound when they go out.
 
-A re-anchor for a pan is Hush's blit-forward (its delta #25,
-`backing-slide.ts`): the baked pixels slide by the pan, a whole number of
-backing pixels, and only the strips that uncovers are drawn — the strokes that
-reach into them, clipped to them, with stamps that land wholly outside skipped
-(`stamp-cull.ts`). It used to re-bake everything in view, and that cost was
-the stroke count: about 8 ms for an empty layer and over a second for a few
-hundred strokes in headless Chromium, once per re-centre, for the ink and the
-plan both. With the sidebars hidden the backing is at its 4096 cap and covers
-less of the world past the screen, so it re-centres more often — which is how
-a session of quick sketching followed by a pan froze the iPad for seconds.
+### What a pan costs, on WebKit's terms
 
-What still re-bakes: a change of zoom past the tolerance, a change of backing
-size, a canvas that holds other strokes than the ones handed in, and an eraser
-mid-stroke that has cut into the canvas. A slid canvas can differ from a fresh
-bake by a few levels on a handful of pixels where a stamp crosses a seam;
-strips reach 8 pixels back over the old edge, where a stroke run off the
-canvas rasterised a shade differently, and the next re-bake evens it out.
+Panning froze the iPad for seconds once a layer or the plan had a few hundred
+strokes on it, and the first attempt at a fix measured well in Chromium and
+did nothing on the device. The cost model is WebKit's, and Hush had already
+measured it on an iPad (its `README-DRAWING.md`, deltas #28–#31):
+
+- WebKit rasterises Canvas2D on the CPU and uploads the **dirtied region of a
+  visible canvas** at commit, at about 280 MB/s. Fully dirtying a 4096² canvas
+  is about 235 ms, however cheap the drawing was.
+- A canvas used as **its own `drawImage` source** is snapshotted whole: about
+  230 ms of readback, even for a 1 × 1 rectangle.
+- A canvas at **1 % opacity** is still composited — GPU-backed — but its
+  writes skip the upload.
+
+A re-anchor used to clear and re-bake the visible canvas, which is the full
+upload plus every stroke in view; for the ink and again for the plan. The
+first slide copied the canvas onto itself and dirtied all of it — both costs
+at once. What it does now:
+
+- **The baked canvas has a spare** (`done-pair.ts`, Hush #29 and #31), at 1 %
+  opacity. A pan copies the picture across into the spare, moved by a whole
+  number of backing pixels, and a re-bake paints into it; then the two swap
+  roles — an opacity flip, a class flip and a context rebind. The canvas on
+  screen is never fully dirtied and never its own source.
+- **Only the uncovered strips are drawn** onto the canvas now showing
+  (`backing-slide.ts`, Hush #25): the strokes that reach into them, clipped
+  to them, with stamps landing wholly outside skipped (`stamp-cull.ts`).
+  Measured against a fresh bake after eight slides, not a pixel differs.
+- **Nothing is cleared that holds nothing** (`live-layer.ts`, Hush #28). A
+  re-anchor forgets the live canvas's dirty rectangle, so the first clear
+  after every pan was the whole live canvas. And a surface with nothing on it
+  — a plan nobody drew — re-anchors without touching a pixel.
+- **A translucent or erasing mark is flattened in a scratch its own size**
+  (`scratch-pool.ts`). The 90 % plan ink and every eraser stroke go through
+  `composited`, whose scratch was as big as the backing: a detached,
+  CPU-backed 4096² canvas used as a `drawImage` source, read whole for every
+  such stroke on every re-bake. A plan of a few dozen strokes was seconds.
+
+What still re-bakes in full, into the spare: a zoom past the tolerance, a
+change of backing size, a canvas holding other strokes than the ones handed
+in, and an eraser mid-stroke that has cut into the canvas.
 
 ### What a stroke costs, and the five things that were paying for it
 
@@ -431,11 +456,12 @@ nothing else. Omitting the bounds means "clear the lot", which is what a
 re-anchor leaves behind: the rectangle is remembered in *backing* pixels, and
 re-anchoring is the world-to-backing mapping changing under it.
 
-**Still outstanding**, and named so it is not mistaken for done: Hush's
-blit-forward re-anchor (#25), its opacity-swap double buffer (#29/#31) and its
-tile index. The first two are about panning and re-anchoring rather than about
-drawing; the third pays off on a layer with thousands of strokes, where a
-re-bake's bbox cull is currently the only thing narrowing the work.
+**Still outstanding**, and named so it is not mistaken for done: Hush's tile
+index, which pays off on a layer with thousands of strokes, where a re-bake's
+bbox cull is currently the only thing narrowing the work; and its size
+hysteresis and settle (#40), which keep a pinch from re-baking at every 1.4×
+step. The blit-forward re-anchor (#25) and the double buffer (#29/#31) are in —
+see **What a pan costs, on WebKit's terms**.
 
 ### The stroke in flight, and the four more things that were paying for it
 
