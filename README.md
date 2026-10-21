@@ -17,11 +17,17 @@ into them, export a patch as a transparent PNG. On a blank canvas nothing snaps
 and a selection is exactly the rectangle you dragged.
 
 Then you pick how much code you want written for you, which is a separate
-question: **Top Down** and **Platformer** are whole games, **Blank PSD to
-Phaser** is the plugin wired up and your artwork on screen with nothing moving
-over it, and **Vanilla** is a page, a stylesheet and a script beside the
-exported assets. Drawing is identical on all four — what the choice decides is
-the program on the other side of the export, not the canvas in front of you.
+question with four answers, from most to least. A **Game** is a whole game,
+**Top Down** or **Platformer**. **PSD to Phaser** is the plugin wired up and
+none of the editor's own code: every PSD loaded before the first scene, and
+each scene placing its artwork with `this.P2P.place` in its own `create` — and
+dragging a layer or a PSD out of the sidebar onto the code writes those lines
+for you. **Phaser** is a page with a Phaser game running on it and nothing
+loaded, and **Vanilla** is a page, a stylesheet and a script beside the
+exported assets. Drawing is identical on all of them — what the choice decides
+is the program on the other side of the export, not the canvas in front of
+you — and Project Options can switch it later, backing up every file it
+replaces.
 
 And a project can make a **page** instead of a game. After its name, the New
 Project sheet asks **Web** or **Print**; Print asks for a resolution — 150,

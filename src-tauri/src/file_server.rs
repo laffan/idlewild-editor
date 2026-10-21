@@ -240,7 +240,9 @@ fn store_path(decoded: &str) -> String {
 /// Both layouts answer. The scaffold keeps them in `js/lib/` now, beside the
 /// code that uses them, and a project made before that still asks for `lib/`
 /// — its `game/` tree is its own copy, and nothing rewrites a page someone
-/// may have edited. Only these two exact names, in either place.
+/// may have edited. Only these exact names, in either place: the two
+/// runtimes, and a print project's `ExportForPrint()` — see
+/// `templates::PRINT_RUNTIME`.
 fn vendored_runtime(decoded: &str) -> Option<&'static str> {
     let (_id, rest) = decoded.split_once('/')?;
     let name = rest.strip_prefix("game/").and_then(|rest| {
@@ -250,6 +252,7 @@ fn vendored_runtime(decoded: &str) -> Option<&'static str> {
     match name {
         "phaser.min.js" => Some(crate::templates::PHASER),
         "psd-to-phaser.umd.js" => Some(crate::templates::P2P_UMD),
+        name if name == crate::templates::PRINT_RUNTIME => Some(crate::templates::print_js()),
         _ => None,
     }
 }

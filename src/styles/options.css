@@ -135,11 +135,11 @@
    already its label. The trail stops being `flex: none` and takes the width,
    and a segmented control in one shares that width between its buttons rather
    than sitting in a huddle at the right-hand edge — which is what four labels
-   as long as "Blank PSD to Phaser" want anyway.
+   as long as "PSD to Phaser" want anyway.
 
    `1 1 auto` rather than `flex: 1`, and that is the whole of it. The shorthand
    is `1 1 0%`, which throws the labels away and gives every button an equal
-   quarter — and a quarter is not enough for "Blank PSD to Phaser", which is
+   quarter — and a quarter is not enough for "PSD to Phaser", which is
    `white-space: nowrap` and so spills over the divider into its neighbour.
    With `auto` each button starts at its own text and the *leftover* is what is
    shared, so the row fills and every label still fits. */

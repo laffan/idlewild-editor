@@ -31,16 +31,18 @@ js/shared/…              the character's own module: navigation.js or physics.
 js/prefabs/character.js  the body, the walk and the artwork — the author's
 ```
 
-**That is the whole tree, and two of the four scaffolds write less of it.**
-A **Blank PSD to Phaser** project stops at `js/shared/grid.js`: the plugin is
-registered, every PSD is loaded and the document is placed, and the three
-files under `character.js` are not written at all — so a project that wants
-something to move in it has nothing to read past first. A **Vanilla** project
-is not in this table at all. It is `index.html`, `style.css`, `script.js` and
-`game.config.json` at the root of `game/`, with no `js/` for the config to sit
-under and no Phaser on the page; `publish` ships it neither runtime, because
-1.5 MB of JavaScript nothing includes is 1.5 MB somebody has to work out they
-can delete.
+**That is a Game's tree, and the three simpler scaffolds write less of it.**
+A **PSD to Phaser** project has no `js/shared/` and no `js/prefabs/`: its
+`js/main.js` loads every PSD in a `Load` scene and then starts the opening
+scene, and each `js/scenes/<Scene>.js` places artwork with `this.P2P.place` in
+its own `create` — the shape of psd-to-phaser's own demos, with none of the
+editor's machinery to read past. A **Phaser** project and a **Vanilla** one
+are not in this table at all. Each is `index.html`, `style.css`, `script.js`
+and `game.config.json` at the root of `game/`, with no `js/` for the config to
+sit under; the Phaser page loads `lib/phaser.min.js` and nothing else, the
+vanilla one no runtime at all. `publish` ships each only what its page loads,
+because 1.5 MB of JavaScript nothing includes is 1.5 MB somebody has to work
+out they can delete.
 
 **Every scaffold gets the same `assets/`.** The PSD pipeline writes its output
 beside `game/` rather than inside it, so what a scaffold decides is the code
@@ -70,8 +72,12 @@ would not put anything back — a project holding the old thousand-line scene
 keeps it, keeps running it, and owns every line of it from now on. Nothing in
 `sync_scene_files` touches such a project either: the test there is whether
 `js/shared/canvas.js` exists, which only the new scaffold writes — and that
-same test is what keeps a vanilla project out of it, correctly, since a tree
-with no `canvas.js` is a tree with no scene for a scene file to be.
+test also passes a PSD to Phaser tree, whose scaffold writes an empty
+`js/scenes/index.js` for it to find, and the scaffold itself keeps a Phaser
+or vanilla project out — neither has scenes. A PSD to Phaser project made
+while that scaffold still wrote `js/shared/canvas.js` gets the scene it was
+made with for a scene added to it (`templates::legacy_scene_file_for`),
+because its `main.js` has no `Load` scene.
 
 That file is the document, in the shape `shared/canvas.js` reads it. Everything
 else in `game/` is the user's source — the code modal edits it, and an export
@@ -507,9 +513,10 @@ neither file. Its `index.html` and `style.css` are the author's outright from
 the moment they are scaffolded, so a sheet that wrote six values nothing reads
 would be the editor claiming a page it does not own. `header-wiring.ts` leaves
 `onPageSetup` undefined for one, and `header.ts` takes the item off the menu
-rather than showing it doing nothing. The three Phaser scaffolds keep it,
-Blank PSD to Phaser included: that one writes the same `main.js` and the same
-`styles.css` as a whole game does.
+rather than showing it doing nothing — and the same for a Phaser project,
+which is vanilla with Phaser on the page. A Game and PSD to Phaser keep it:
+their `main.js` carries the same `presentation` block, and both write the same
+`styles.css`.
 
 ### Why it is not `GameOptions`
 

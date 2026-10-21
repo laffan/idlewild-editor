@@ -149,6 +149,11 @@ are derived from the paths, plus any empty one somebody made in `game/` —
 which has no file to be derived from and would otherwise make New Folder look
 as though it had done nothing.
 
+**One thing is listed that a publish does not send:** `Backups/`, where a
+scaffold switch copies every file it overwrites or takes away. Salvaging code
+from it is the reason it exists, so it is in the column, editable, and left
+out of the site — see [Switching scaffolds](data-model.md#switching-scaffolds).
+
 **Shown is not editable, and each row says which it is.** `assets/` is
 rewritten from the PSD on every re-parse, the libraries are vendored into the
 binary (see `file_server.rs`, which serves them from there) and the README is
@@ -352,6 +357,42 @@ not an inconsistency: a switch says *this is on*, and a pair of boxes says
 *these are the ones I want*.
 
 ---
+
+### Dragging rows onto the code
+
+In a PSD to Phaser project, Code's left column — the directory of layers,
+placed PSDs and the layers inside each (`editor/layer-directory.ts`) — is a
+source of code. A row dragged sideways and let go over the canvas area or the
+panel writes the `this.P2P.place` lines for what it stands for into the open
+file **at the caret** (`editor/code-drag.ts`, `code/insert-snippet.ts`).
+
+**The caret and not the drop point**, because the drop point is over a
+running game or somewhere in a file, and neither says where the code belongs.
+A blank line is replaced; anywhere else the lines go after the caret's line,
+so a drop never splits one; the indent is the caret line's, or the line
+above's and one deeper after an opening brace. A caret in the wrong place
+writes the lines in the wrong place, which is the honest result.
+
+**The lines are `code/placement-code.ts`'s**, which is also what writes a
+whole scene when a project is switched onto PSD to Phaser — so one row's lines
+are the lines the whole scene would have had. One `place` per piece of
+artwork: psd-to-phaser's `setPosition` on a group puts every child on one
+point, so a placement standing on a group is written as each layer inside it
+at its own offset, the way `applyTransform` places parts on the canvas. Then
+`setPosition`, `setScale` where it was resized, `setDepth` as the piece's rank
+back to front across the whole scene (a sprite otherwise keeps the depth its
+layer had inside its own file, and two files interleave), and
+`setVisible(false)` where it is hidden. Names come from the layer, and never
+one the open file already declares.
+
+**Pointer events, and sideways only.** The iPad is a target and `dragstart`
+does not fire for touch; the rows are `touch-action: pan-y`, so a finger moving
+down the column still scrolls it and one moving across starts a drag. The
+click that ends a drag is swallowed so the row does not also open.
+
+Only PSD to Phaser takes it. A Game scene draws the document from the config
+already and runs `create` before the PSDs have loaded, and Phaser and Vanilla
+load no psd-to-phaser.
 
 ## The reference along the bottom of the code modal
 

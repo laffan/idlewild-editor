@@ -27,24 +27,27 @@ export type Projection = "isometric" | "orthogonal" | "blank";
 /**
  * What a project scaffolds into `game/`.
  *
- * It was `Genre` and it was two answers. Two more sit beside them now and
- * neither is a genre — they are how *much* scaffold a project wants, which is
- * what the New Project sheet calls Scaffolding.
+ * It was `Genre` and it was two answers. It is five now, and only two of them
+ * are genres — the rest are how *much* scaffold a project wants. The sheets
+ * offer them as four categories, simplest last; see `CATEGORIES`.
  *
  * - `topdown` is the original: a character walks the grid over A*, and the
  *   camera follows it.
  * - `platformer` is side-on — gravity, ground, a jump — and reads the same
  *   document, taking non-walkable fills and blocking zones as the ground it
  *   stands on rather than as obstacles to route around.
- * - `p2p` is **Blank PSD to Phaser**: the plugin registered, every PSD loaded
- *   and the document placed, and nothing above that. No character, no
- *   pathfinder, no physics.
+ * - `p2p` is **PSD to Phaser**: psd-to-phaser registered, every PSD loaded by
+ *   a `Load` scene in `js/main.js`, and each scene placing its artwork with
+ *   `this.P2P.place` in its own `create`. No `js/shared/`, so none of the
+ *   editor's own machinery is in the tree.
+ * - `phaser` is Vanilla with a Phaser game running in it, and no assets
+ *   loaded.
  * - `vanilla` is not a Phaser project at all — an `index.html`, a `style.css`
  *   and a `script.js` beside the exported `assets/`.
  *
- * **Drawing is the same on all four.** Nothing about the canvas, the tools or
- * what a selection does reads this; what it decides is the program on the
- * other side of the export. That is the whole reason the last two exist.
+ * **Drawing is the same on all of them.** Nothing about the canvas, the tools
+ * or what a selection does reads this; what it decides is the program on the
+ * other side of the export.
  *
  * Projects written before this existed carry nothing and are top down, which
  * is what they have always been. The field that carries one is still called
@@ -52,43 +55,74 @@ export type Projection = "isometric" | "orthogonal" | "blank";
  * src-tauri/src/project.rs for why renaming a key every project already has is
  * not a trade worth making.
  */
-export type Scaffold = "topdown" | "platformer" | "p2p" | "vanilla";
+export type Scaffold = "topdown" | "platformer" | "p2p" | "phaser" | "vanilla";
 
 /**
- * The scaffolds, in the order the sheet offers them, with what to call each.
+ * The four categories the sheets offer, simplest last, and the scaffolds
+ * under each. Only Game has a second tier.
+ */
+export type ScaffoldCategory = "game" | "p2p" | "phaser" | "vanilla";
+
+export const CATEGORIES: ReadonlyArray<{
+  value: ScaffoldCategory;
+  label: string;
+  scaffolds: ReadonlyArray<{ value: Scaffold; label: string }>;
+}> = [
+  {
+    value: "game",
+    label: "Game",
+    scaffolds: [
+      { value: "topdown", label: "Top Down" },
+      { value: "platformer", label: "Platformer" },
+    ],
+  },
+  { value: "p2p", label: "PSD to Phaser", scaffolds: [{ value: "p2p", label: "PSD to Phaser" }] },
+  { value: "phaser", label: "Phaser", scaffolds: [{ value: "phaser", label: "Phaser" }] },
+  { value: "vanilla", label: "Vanilla", scaffolds: [{ value: "vanilla", label: "Vanilla" }] },
+];
+
+/** The category a scaffold is offered under. */
+export function categoryOf(scaffold: Scaffold | undefined): ScaffoldCategory {
+  const value = scaffold ?? "topdown";
+  return CATEGORIES.find((c) => c.scaffolds.some((s) => s.value === value))?.value ?? "game";
+}
+
+/**
+ * Every scaffold, with what to call it — the Game ones by their second tier.
  *
  * Here rather than in `new-project.ts` because three sheets read it: New
- * Project builds its segmented control from it, Project Options reports which
- * one a project was made with, and the home screen's card line names it. A
- * fourth reader is the label in a log line when a project is created.
+ * Project builds its controls from `CATEGORIES`, Project Options names the one
+ * a project has, and the home screen's card line names it.
  */
-export const SCAFFOLDS: ReadonlyArray<{ value: Scaffold; label: string }> = [
-  { value: "topdown", label: "Top Down" },
-  { value: "platformer", label: "Platformer" },
-  { value: "p2p", label: "Blank PSD to Phaser" },
-  { value: "vanilla", label: "Vanilla" },
-];
+export const SCAFFOLDS: ReadonlyArray<{ value: Scaffold; label: string }> =
+  CATEGORIES.flatMap((category) => category.scaffolds);
 
 /** What to call a scaffold, including one this build does not know. */
 export function scaffoldLabel(scaffold: Scaffold | undefined): string {
   return SCAFFOLDS.find((row) => row.value === scaffold)?.label ?? "Top Down";
 }
 
-/**
- * Whether the scaffold is a Phaser game: everything but `vanilla`.
- *
- * What it gates in the editor is Page Setup, which describes the page
- * `js/main.js` writes custom properties onto — a file a vanilla project does
- * not have. Mirrors `Scaffold::is_phaser` in src-tauri/src/project.rs.
- */
+/** Whether the scaffold puts Phaser on the page: everything but `vanilla`. */
 export function isPhaserScaffold(scaffold: Scaffold | undefined): boolean {
   return (scaffold ?? "topdown") !== "vanilla";
 }
 
 /**
- * Whether the scaffold writes a character controller.
+ * Whether the scaffold loads the project's PSDs with psd-to-phaser — the two
+ * games and PSD to Phaser. What it gates is Page Setup, which describes the
+ * page `js/main.js` writes custom properties onto, and the placement code a
+ * row dragged out of the sidebar writes. Mirrors `Scaffold::uses_p2p` in
+ * src-tauri/src/project.rs.
+ */
+export function usesP2p(scaffold: Scaffold | undefined): boolean {
+  const value = scaffold ?? "topdown";
+  return value === "topdown" || value === "platformer" || value === "p2p";
+}
+
+/**
+ * Whether the scaffold writes a character controller: the two Game ones.
  *
- * The switch is a switch on the two that do; on the other two there is no
+ * The switch is a switch on those; elsewhere there is no
  * `js/shared/character.js` to read it and no prefab for one to spawn, so both
  * sheets leave the row out rather than offering a setting with nothing behind
  * it. Rust clamps the stored value to match — see `store::create_project`.
@@ -108,9 +142,9 @@ export function hasCharacter(scaffold: Scaffold | undefined): boolean {
  * resolved when the files were written, so a project either had a character
  * in it or no way back to one. `js/shared/character.js` is scaffolded either
  * way now and reads `config.character`, so the box is a box — on the two
- * scaffolds that have that file. On `p2p` and `vanilla` there is nothing for
- * it to reach, so both sheets leave the row out and Rust stores `false`
- * whatever arrives; see `hasCharacter` above.
+ * Game scaffolds, which have that file. Elsewhere there is nothing for it to
+ * reach, so both sheets leave the row out and Rust stores `false` whatever
+ * arrives; see `hasCharacter` above.
  *
  * Mirrored by `GameOptions` in src-tauri/src/project.rs.
  */

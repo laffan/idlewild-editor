@@ -201,6 +201,16 @@ export class CodePanel {
     return this.modal?.canRedo ?? false;
   }
 
+  /** The panel itself while it is up — a place a sidebar row can be dropped. */
+  get root(): HTMLElement | null {
+    return this.modal?.root ?? null;
+  }
+
+  /** The open file and its editor, or null with the panel down or empty. */
+  get editing(): CodeModal["editing"] {
+    return this.modal?.editing ?? null;
+  }
+
   /** Whether the focus is in here, which is what decides who ⌘Z belongs to. */
   contains(node: Node | null): boolean {
     return this.modal?.contains(node) ?? false;

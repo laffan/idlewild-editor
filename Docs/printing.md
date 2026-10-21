@@ -57,12 +57,12 @@ screenshot, edge for edge. The reading is the caller's (`clipboardImage` and
 `lib/image-size.ts`, which reads a PSD's header and hands anything else to
 `createImageBitmap`), so the rows stay free of the shell.
 
-**A print project is Blank PSD to Phaser.** `ExportForPrint()` reads the page
+**A print project is PSD to Phaser.** `ExportForPrint()` reads the page
 off a running Phaser scene, and a character or gravity is a game's, so the New
 Project sheet — whose first question is now Web or Print — takes the
 Scaffolding and Rendering groups away under Print and sends `p2p` with the
-default options. `project_create::create_project_for` refuses a vanilla print
-project for any other way in, and stores the game's default zoom as 1: a page
+default options. `project_create::create_project_for` refuses any other
+scaffold for a print project, and so does a scaffold switch, and it stores the game's default zoom as 1: a page
 is looked at at one point to the pixel.
 
 `project_create.rs` holds creation and `set_paper`. It was split out of
@@ -241,12 +241,29 @@ custom size and corner as Resize is pressed, and **Cancel** writes them back.
 
 ## ExportForPrint()
 
-`templates/print/js/shared/print.js`, written into every print project and
-installed by `main.js` on the game it starts. The print variant of `main.js` is
-three anchored replacements of the common one (`templates::print_main`) rather
-than a second copy, and a test pins each anchor. Each scene of a new print
-project calls it once its artwork has loaded — `templates::scene_file_for`
-writes the line in, live, so Output shows a page the first time it opens.
+`templates/print/idlewild-print.js`, served to a print project as
+`js/lib/idlewild-print.js` beside Phaser and psd-to-phaser — by `file_server`
+while it plays and by `publish` into a site — and installed by `main.js` on the
+game it starts. It is the editor's code, and a print project is a PSD to
+Phaser project, which carries none of that in its tree. A print project made
+before has its own copy at `js/shared/print.js`, which `refresh_print_js`
+keeps up to date. The print variant of `main.js` is three anchored
+replacements of the PSD to Phaser one (`templates::print_main`) rather than a
+second copy, and a test pins each anchor in both `main.js` templates. Each
+scene of a new print project calls it at the end of `create` — every PSD is
+loaded by the `Load` scene before a scene starts, so there is nothing to wait
+for — and `templates::scene_file_with` writes the line in, live, so Output
+shows a page the first time it opens.
+
+**It puts the camera on the page.** A Game's `applyCamera` used to scroll each
+scene's camera onto the first artboard, and a PSD to Phaser scene has no
+`applyCamera`. So the runtime does it, at `PRE_RENDER`: once per camera, on a
+running scene, and only to a camera still at the origin — a scene that moves
+its own camera in `create` keeps where it put it. `ExportForPrint()` does the
+same before it reads, for a scene started in the frame it was called in.
+Backdrops and pattern layers are redrawn per artboard only where a
+`../shared/canvas.js` exists to redraw them, which is a print project made
+before; a new one draws neither.
 
 ```js
 ExportForPrint({ name, folder, formats, snapshot, stop })   // → Promise<{ page, pages }>

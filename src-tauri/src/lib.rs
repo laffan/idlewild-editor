@@ -56,6 +56,7 @@ mod psd_resolution;
 mod publish;
 mod publish_targets;
 mod save_staging;
+mod scaffold_switch;
 mod scene_names;
 mod site_files;
 mod site_listing;
@@ -437,6 +438,7 @@ pub fn run() {
             projects::list_projects,
             projects::create_project,
             projects::set_project_options,
+            projects::switch_scaffold,
             projects::set_project_presentation,
             projects::set_project_page,
             print_pdf::export_print_pdf,

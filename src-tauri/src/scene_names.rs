@@ -28,10 +28,14 @@ use std::collections::HashSet;
 /// renaming the *second* of two Caves is the only thing that moves.
 ///
 /// `Index` is reserved because `js/scenes/index.js` is the generated list
-/// beside them, and a scene called Index would be written over it.
+/// beside them, and a scene called Index would be written over it. `Load` is
+/// reserved because it is the key of the scene a PSD to Phaser project's
+/// `js/main.js` loads every PSD in before the first of these starts, and two
+/// scenes under one key is one scene Phaser quietly declines.
 pub fn scene_file_names(scenes: &[Scene]) -> Vec<String> {
     let mut taken: HashSet<String> = HashSet::new();
     taken.insert("Index".into());
+    taken.insert("Load".into());
     let mut out = Vec::with_capacity(scenes.len());
     for scene in scenes {
         let base = scene_file_name(&scene.name);

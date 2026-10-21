@@ -22,6 +22,7 @@ import type { Selection } from "../lib/types";
 import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import { selectionCentre } from "./selection-focus";
+import { attachCodeDrag, type CodeDragDeps } from "./code-drag";
 
 export interface LayersWiringDeps {
   /** The live scene, or null before it has booted. */
@@ -40,6 +41,8 @@ export interface LayersWiringDeps {
   renamePsd?: (key: string, name: string) => void;
   /** Put the Select tool in hand — see `onSelectStrokes`. */
   selectTool: () => void;
+  /** Where Code mode's rows are dragged onto the code, if the project takes it. */
+  codeDrag?: Omit<CodeDragDeps, "source">;
 }
 
 export function layersPanelCallbacks(
@@ -90,5 +93,19 @@ export function layersPanelCallbacks(
       openNewBackground(anchor, layerId, deps.backgrounds()),
     onImportTiled: (layerId) => void importTiledMap(deps.tiles(), layerId),
     onRenamePsd: deps.renamePsd,
+    dragToCode: (row, source, label) => {
+      const drag = deps.codeDrag;
+      if (!drag) return;
+      const { store } = deps;
+      attachCodeDrag(row, source, label, {
+        ...drag,
+        source: () => ({
+          layers: store.layers,
+          isometric: store.projection === "isometric",
+          psdLayers: (key) => deps.scene()?.psdLayers(key) ?? [],
+          colliders: store.colliders,
+        }),
+      });
+    },
   };
 }

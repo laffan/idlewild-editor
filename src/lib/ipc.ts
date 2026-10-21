@@ -258,6 +258,17 @@ export const projects = {
    */
   setPresentation: (id: string, presentation: Presentation) =>
     invoke<ProjectMeta>("set_project_presentation", { id, presentation }),
+  /**
+   * Move the project onto another scaffold. Every file it overwrites or takes
+   * away is copied into `game/Backups/` first — see `scaffold_switch.rs`.
+   * `placements` is each scene's placement code, by scene id, for a PSD to
+   * Phaser scene's `create`.
+   */
+  switchScaffold: (id: string, scaffold: Scaffold, placements: Record<string, string>) =>
+    invoke<{ meta: ProjectMeta; backup: string | null; backedUp: string[] }>(
+      "switch_scaffold",
+      { id, genre: scaffold, placements },
+    ),
   rename: (id: string, name: string) =>
     invoke<ProjectMeta>("rename_project", { id, name }),
   remove: (id: string) => invoke<void>("delete_project", { id }),

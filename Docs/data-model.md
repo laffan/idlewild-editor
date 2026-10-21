@@ -111,36 +111,45 @@ shared with three neighbours, so navigation was blocking a cell either side of
 every wall until this existed. `grid.js` in the templates carries the same
 distinction, for the same reason.
 
-### Four scaffolds, one document
+### Five scaffolds, four categories, one document
 
 The second axis decides what a project writes into `game/`, and so — since
 Play runs that tree — the game the editor plays. Nothing else. It used to be
-two answers and it is four:
+two answers and it is five, offered as four categories of progressive
+simplicity (`CATEGORIES` in `project-types.ts`); only Game has a second tier:
 
-| value | what lands in `game/` |
-| --- | --- |
-| `topdown` | a whole game: the document placed, and a character that walks the grid over A\* |
-| `platformer` | a whole game seen from the side: gravity, ground, a jump |
-| `p2p` | the wiring and nothing above it — Phaser 4 with psd-to-phaser registered, every PSD loaded and the document placed |
-| `vanilla` | no Phaser at all: `index.html`, `style.css`, `script.js`, and the config beside them |
+| category | value | what lands in `game/` |
+| --- | --- | --- |
+| Game | `topdown` | a whole game: the document placed, and a character that walks the grid over A\* |
+| Game | `platformer` | a whole game seen from the side: gravity, ground, a jump |
+| PSD to Phaser | `p2p` | Phaser 4 with psd-to-phaser registered; `main.js` loads every PSD in a `Load` scene, and each scene places its artwork with `this.P2P.place` in its own `create`. No `js/shared/` |
+| Phaser | `phaser` | `index.html`, `style.css`, `script.js` with a Phaser game running, and the config — no psd-to-phaser, nothing loaded |
+| Vanilla | `vanilla` | no Phaser at all: `index.html`, `style.css`, `script.js`, and the config beside them |
 
-All four read the same document, and **all four are drawn the same way**. A
-fill marked not-walkable, a boundary marked blocking and a placed PSD's
+**Only a Game draws the document from the config.** Its `js/shared/canvas.js`
+loads every PSD, places every placement, paints fills and backdrops and
+generates pattern layers, because the character walking it needs the whole
+document as data. Everything simpler keeps the editor's own machinery out of
+the tree: the user should not be reading the code that makes the editor run.
+In a PSD to Phaser project the canvas is an asset editor — what is placed
+there reaches the game when a line of the scene file places it, written out
+whole when a project is switched onto the scaffold or dragged in a row at a
+time from the sidebar (see [Dragging rows onto the code](code-panel.md#dragging-rows-onto-the-code)).
+Fills, backdrops and pattern layers are not drawn by it.
+
+A fill marked not-walkable, a boundary marked blocking and a placed PSD's
 collider are what a top-down character routes *around* and what a side-on
 character stands *on* — a floor plan or a cross-section, the same geometry
-either way — and they are inert data in the two that scaffold no character.
-Nothing in the canvas, the tools or the selection reads this field. It is the
-only choice on the New Project sheet that the editor itself does not use,
-which is the point of the last two: what you drew stops deciding how you
-implement it.
+either way — and they are inert data everywhere else. Nothing in the canvas,
+the tools or the selection reads this field.
 
 Isometric and platformer is the one pair not offered. Gravity has no
 direction on a diamond grid seen from above, so the New Project sheet greys the
 option out and `create_project` refuses it rather than scaffolding something
-that cannot work. The two that scaffold no character have nothing to fall, so
+that cannot work. The scaffolds with no character have nothing to fall, so
 they pair with any template.
 
-**The type is `Scaffold` and the field is `genre`.** Two more answers made the
+**The type is `Scaffold` and the field is `genre`.** More answers made the
 old name wrong — vanilla is not a genre — but the key is in every `meta.json`,
 every `doc.json`, every generated config and every `.idlewild` manifest ever
 written, and the scaffold's own `canvas.js` reads it. Renaming a key on disk
@@ -148,17 +157,44 @@ to say the same thing a better way is not a trade worth making; see
 `Placement.instance` in `types.ts` for the same argument. Both fields are
 optional on disk (`#[serde(default)]` on the Rust side, `genre?:` on the
 TypeScript one) so every project written before the choice existed still
-loads, as top down — which is what it has always been.
+loads, as top down — which is what it has always been. `p2p` is still `p2p`
+for the same reason, though the sheet stopped saying "Blank".
 
-Two things in the editor do read it, and both are a row they withhold rather
-than a behaviour they change. **Page Setup** is not on the menu for a vanilla
-project: its six settings ride in the generated config for `js/main.js` to
-write onto the document as the custom properties `styles.css` consumes, and a
-vanilla project has neither file. The **character controller** is not on
-either sheet for `p2p` or `vanilla`: the switch is read by
-`js/shared/character.js`, which those two do not write, so `store` clamps the
-stored value to `false` and `game_config` writes `false` whatever a
-hand-edited `meta.json` says.
+Two things in the editor read it as a row they withhold. **Page Setup** is on
+the menu only where `Scaffold::uses_p2p` — a Game or PSD to Phaser: its six
+settings ride in the generated config for `js/main.js` to write onto the
+document as the custom properties `styles.css` consumes, and a Phaser or
+vanilla project has neither file. The **character controller** is on either
+sheet only for a Game: the switch is read by `js/shared/character.js`, so
+`store` clamps the stored value to `false` elsewhere and `game_config` writes
+`false` whatever a hand-edited `meta.json` says.
+
+#### Switching scaffolds
+
+A scaffold is not fixed any more. Project Options' **Change…** beside
+Scaffolding opens `editor/scaffold-switch.ts`, and `scaffold_switch.rs` does
+the work: the new scaffold's files are written, the old one's that it does not
+write are removed, and **every file overwritten or removed is first copied to
+`game/Backups/<UTC time>-<old scaffold>/`** at the path it had. "The old
+one's" is the old scaffold's `template_files`, the files a PSD to Phaser
+scaffold wrote before it stopped writing `js/shared/`, and every scene file on
+disk; a file no scaffold writes is left alone. A file the switch would write
+unchanged is neither rewritten nor backed up, and the generated config and
+scene list are never backed up — the next save produces them again. The meta,
+the document's own `genre` and the config move together, and the editor is
+closed and reopened round the switch, because the open one holds the document
+with the old scaffold in it and would save it back.
+
+Switching onto PSD to Phaser writes each scene's placements into its `create`
+— the frontend sends them, as `code/placement-code.ts` writes them, and
+`templates::scene_file_with` puts them under the `// Place PSDs here.` line.
+That is the only time the editor writes a scene's placements out whole.
+
+`Backups/` is listed in the code panel's column, because salvaging code is
+what it is for, and left out of a publish (`publish::collect`).
+
+A print project cannot switch: it is always PSD to Phaser, and both
+`create_project_for` and the switch refuse anything else.
 
 ### Output: a game or a page
 

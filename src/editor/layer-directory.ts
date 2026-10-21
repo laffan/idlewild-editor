@@ -24,6 +24,11 @@
  *
  * The names are selectable text, which they are nowhere else in the shell —
  * the whole point of a lookup is copying what you looked up.
+ *
+ * And in a PSD to Phaser project a row can be **dragged onto the code**: a
+ * layer, a placed PSD or a layer inside one, let go over the canvas area or
+ * the code panel, writes the `this.P2P.place` lines for it at the caret. See
+ * `code-drag.ts`.
  */
 
 import { h, ICONS, icon } from "../lib/dom";
@@ -34,6 +39,7 @@ import { count, describe, emptyText, KIND_ICONS, layerItems } from "./layer-item
 import { layerGlyph } from "./psd-layer-row";
 import { psdLayerThumbBox, psdThumbBox, thumbsByPath } from "./psd-thumb-box";
 import type { Layer } from "../lib/types";
+import type { CodeSource } from "./code-drag";
 
 export interface DirectoryContext {
   store: DocStore;
@@ -47,6 +53,8 @@ export interface DirectoryContext {
   isOpen: (id: string) => boolean;
   /** Open it, or shut it, and redraw. */
   toggle: (id: string) => void;
+  /** Make a row draggable onto the code, where the project takes it. */
+  dragToCode?: (row: HTMLElement, source: CodeSource, label: string) => void;
 }
 
 /**
@@ -80,7 +88,7 @@ export function renderDirectory(body: HTMLElement, ctx: DirectoryContext): void 
 function layerRow(layer: Layer, ctx: DirectoryContext): HTMLElement {
   const kind = layerKind(layer);
   const open = ctx.isOpen(layer.id);
-  return h(
+  const row = h(
     "button",
     {
       class: `layer-row browse kind-${kind}`,
@@ -100,6 +108,8 @@ function layerRow(layer: Layer, ctx: DirectoryContext): HTMLElement {
       h("span", { class: "layer-meta m", text: describe(layer) }),
     ),
   );
+  ctx.dragToCode?.(row, { kind: "layer", layerId: layer.id }, layer.name);
+  return row;
 }
 
 /** Everything on a layer, listed under it. */
@@ -129,7 +139,10 @@ function fillLayer(
     }
     group.appendChild(psdRow(layer.id, item.selection.placementId, item, ctx));
     const id = psdRowId(layer.id, item.selection.placementId);
-    if (ctx.isOpen(id)) fillPsd(group, item.psdKey, ctx.psdLayers(item.psdKey));
+    if (ctx.isOpen(id)) {
+      const at = { layerId: layer.id, placementId: item.selection.placementId };
+      fillPsd(group, item.psdKey, ctx.psdLayers(item.psdKey), ctx, at);
+    }
   }
 
   if (layer.strokes.length > 0) {
@@ -148,7 +161,7 @@ function psdRow(
 ): HTMLElement {
   const id = psdRowId(layerId, placementId);
   const open = ctx.isOpen(id);
-  return h(
+  const row = h(
     "button",
     {
       class: "layer-item browse",
@@ -167,6 +180,8 @@ function psdRow(
       text: item.warning ?? item.detail,
     }),
   );
+  ctx.dragToCode?.(row, { kind: "placed", layerId, placementId }, item.label);
+  return row;
 }
 
 /**
@@ -179,7 +194,13 @@ function psdRow(
  * tells a developer whether a row has a texture behind it or is a point the
  * config carries.
  */
-function fillPsd(group: HTMLElement, key: string, layers: readonly ManifestLayer[]): void {
+function fillPsd(
+  group: HTMLElement,
+  key: string,
+  layers: readonly ManifestLayer[],
+  ctx: DirectoryContext,
+  at: { layerId: string; placementId: string },
+): void {
   if (layers.length === 0) {
     group.appendChild(
       h("div", {
@@ -194,7 +215,7 @@ function fillPsd(group: HTMLElement, key: string, layers: readonly ManifestLayer
   }
 
   for (const layer of layers) {
-    group.appendChild(
+    const row = group.appendChild(
       h(
         "div",
         {
@@ -209,6 +230,7 @@ function fillPsd(group: HTMLElement, key: string, layers: readonly ManifestLayer
         h("span", { class: "psd-layer-kind m", text: layer.category }),
       ),
     );
+    ctx.dragToCode?.(row, { kind: "psd-layer", ...at, psdKey: key, path: layer.path }, layer.name);
   }
 }
 

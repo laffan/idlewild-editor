@@ -26,8 +26,8 @@ Part of [the Idlewild manual](README.md).
     a 1920 × 1080 screenshot at 300 DPI is a 6.4 × 3.6 inch page. Page Setup
     has the same row
 - **Scaffolding and Rendering go away under Print.** A print project is always
-  **Blank PSD to Phaser** — your artwork placed and nothing written over it but
-  what you write — because `ExportForPrint()` reads the page off a running
+  **PSD to Phaser** — each scene placing your artwork in its own `create`, and
+  nothing else written for you — because `ExportForPrint()` reads the page off a running
   Phaser scene, and a character or gravity is a game's. A page is looked at
   one point to the pixel, so it has no default zoom
 - What a page is written as — PDF, PSD, PNG or JPG — is not asked here. It
@@ -122,18 +122,26 @@ Part of [the Idlewild manual](README.md).
   the next frame, and it appears in the Output preview straight away. Nothing
   is written until you press **Save**. By default the scenes stop — tweens,
   timers, physics, animation — and the page stays on screen as it was captured
-- **A new print project calls it for you**, once its artwork has loaded — this
-  line is in each scene:
+- **A new print project calls it for you**, at the end of each scene's
+  `create`. Every PSD is loaded before a scene starts, so there is nothing to
+  wait for:
 
   ```js
-  // Wait for PSDs to load
-  whenPsdsReady(this, () => {
-    // This following line stops the script and prepares it for print output.
-    // Every option is optional — see js/shared/print.js.
+  create() {
+    // Place PSDs here.
 
+    // Print the page: this stops the scenes and sends the page to Output.
+    // Every option is optional — see Printing in the manual.
     ExportForPrint({ name: "page", formats: "png" });
-  });
+  }
   ```
+
+  Placing artwork is code too: drag a layer or a PSD out of Code's sidebar to
+  write its `this.P2P.place` lines at the caret — see
+  [Dragging placement code](code-and-play.md#dragging-placement-code-out-of-the-sidebar).
+  A print project made before this has its `ExportForPrint()` in
+  `js/shared/print.js` and keeps it; a new one is served it beside Phaser, so
+  none of the editor's own code is in the project
 
 - What prints is what your code made of the scene, not the document as you
   drew it. Move, rotate, scale, flip, fade, tint or clone sprites — a sprite

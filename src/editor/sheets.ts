@@ -404,22 +404,24 @@ export type RenderOptions = GameOptions;
  * Project Options: what the project is, and the things about it that can still
  * be changed.
  *
- * The template, the scaffolding and the grid scale are facts — the document is
- * addressed in the first, the third measures it, and the second was written
- * into `game/` once and became the project's own copy the moment it was — so
- * they are read out rather than offered. The rest are not: pixel art,
+ * The template and the grid scale are facts — the document is addressed in
+ * the first and the second measures it — so they are read out rather than
+ * offered. The scaffolding is read out too, with a **Change** beside it that
+ * opens its own sheet, because switching it rewrites files in `game/` and
+ * deserves a warning a row in here could not give — see `scaffold-switch.ts`.
+ * A print project has no Change: it is always PSD to Phaser. The rest are not: pixel art,
  * whole-pixel drawing, the zoom a scene opens at and whether anything walks
  * reach the canvas and the game through values either of them reads at the
  * time, so they are controls, and each one takes effect as it is changed
  * rather than on the way out. There is no Cancel because there is no pending
  * state to abandon.
  *
- * **The character controller is a control on two scaffolds and absent on the
- * other two.** It used to be a fact everywhere: it was resolved when the files
+ * **The character controller is a control on the two Game scaffolds and
+ * absent on the rest.** It used to be a fact everywhere: it was resolved when the files
  * were written, so this sheet could only say which way it had gone.
  * `js/shared/character.js` reads `config.character` now, so where that file
- * exists the row is a switch. Where it does not — Blank PSD to Phaser and
- * Vanilla scaffold no character module and no prefab — there is nothing for a
+ * exists the row is a switch. Where it does not — every scaffold but a Game
+ * writes no character module and no prefab — there is nothing for a
  * switch to reach, and a row that changed a value no code reads would be the
  * one thing a settings page must not be.
  */
@@ -427,6 +429,7 @@ export function openProjectOptions(
   meta: ProjectMeta,
   layerCount: number,
   onApply: (options: RenderOptions) => void,
+  onChangeScaffold?: () => void,
 ): void {
   const sheet = openSheet({
     title: "Project Options",
@@ -469,7 +472,7 @@ export function openProjectOptions(
   // which way it had gone. `js/shared/character.js` is written either way now
   // and reads the answer out of the generated config, so turning it on is a
   // save rather than a file appearing in somebody's project — on the two
-  // scaffolds that have that file. The other two have no character module to
+  // scaffolds that have that file. The rest have no character module to
   // answer the switch, so it is left out rather than shown doing nothing.
   if (hasCharacter(meta.genre)) {
     sheet.body.appendChild(
@@ -500,12 +503,23 @@ export function openProjectOptions(
     ["PSD pipeline", "psd-to-json (Rust) → psd-to-phaser"],
   ];
   for (const [key, value] of rows) {
+    const change =
+      key === "Scaffolding" && onChangeScaffold
+        ? h("button", {
+            class: "btn btn-ghost sheet-row-action",
+            text: "Change…",
+            onClick: () => {
+              sheet.close();
+              onChangeScaffold();
+            },
+          })
+        : null;
     sheet.body.appendChild(
       h(
         "div",
         { class: "sheet-row" },
         h("div", { class: "sheet-row-key m", text: key }),
-        h("div", { class: "sheet-row-value", text: value }),
+        h("div", { class: "sheet-row-value", text: value }, change),
       ),
     );
   }

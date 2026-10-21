@@ -58,10 +58,16 @@
 // so what was printed stays on screen. A snapshot does not stop unless it is
 // asked to.
 //
+// **The camera is put on the page.** Each scene's main camera starts on the
+// first artboard — the world's origin until the frame is dragged somewhere
+// else in the editor — unless your own code has already moved it.
+//
 // Inside the editor the page goes to the editor. Anywhere else — a published
 // site, a file opened from disk — there is no editor to send it to, and the
-// promise settles at once. This file is the editor's; it is written into every
-// print project and read by `js/main.js`.
+// promise settles at once. This file is the editor's: it is served to a print
+// project as `js/lib/idlewild-print.js`, beside Phaser, and written into the
+// export the same way. A print project made before that has its own copy in
+// `js/shared/print.js`.
 
 /** What the editor listens for, what it sends to ask for a page, and what it
  *  answers with once it has the page. */
@@ -115,12 +121,19 @@ export function installPrint(game, config) {
   // is read with its own part of it rather than the whole of it.
   let followView = null;
   let backdrops = null;
-  import("./canvas.js")
-    .then((canvas) => {
-      if (typeof canvas.updateCanvas === "function") followView = canvas.updateCanvas;
-      if (typeof canvas.drawBackdrops === "function") backdrops = canvas.drawBackdrops;
-    })
-    .catch(() => {});
+  // Only as `js/shared/print.js`, beside a `canvas.js`, which is where a print
+  // project made before this was served keeps it. Served from `js/lib/`, the
+  // project has no `canvas.js` and nothing to redraw, so it is not asked for.
+  if (!new URL(import.meta.url).pathname.includes("/lib/")) {
+    import("./canvas.js")
+      .then((canvas) => {
+        if (typeof canvas.updateCanvas === "function") followView = canvas.updateCanvas;
+        if (typeof canvas.drawBackdrops === "function") backdrops = canvas.drawBackdrops;
+      })
+      .catch(() => {});
+  }
+
+  onPage(game, boards[0]);
 
   window.ExportForPrint = (options = {}) =>
     new Promise((resolve, reject) => {
@@ -128,6 +141,7 @@ export function installPrint(game, config) {
       // this has just changed has been through a render, and every object
       // the document placed is standing where it will be drawn.
       game.events.once(Phaser.Core.Events.POST_RENDER, async () => {
+        aimAll(game, boards[0]);
         const snapshot = options.snapshot === true;
         if (options.stop ?? !snapshot) freeze(game);
         const chosen = pickBoards(boards, options.artboard);
@@ -185,6 +199,28 @@ export function installPrint(game, config) {
     if (data.error) held.reject(new Error(data.error));
     else held.resolve({ page: data.page ?? 0, pages: data.pages ?? 0 });
   });
+}
+
+/**
+ * Put every scene's camera on the first artboard as it starts, before it is
+ * drawn — once per camera, and only one still at the origin, so a scene that
+ * moves its own camera in `create` keeps where it put it.
+ */
+const aimed = new WeakSet();
+
+function onPage(game, first) {
+  game.events.on(Phaser.Core.Events.PRE_RENDER, () => aimAll(game, first));
+}
+
+function aimAll(game, first) {
+  for (const scene of game.scene.getScenes(true)) {
+    const camera = scene.cameras?.main;
+    if (!camera || aimed.has(camera)) continue;
+    aimed.add(camera);
+    if (camera.scrollX === 0 && camera.scrollY === 0) {
+      camera.setScroll(first.x ?? 0, first.y ?? 0);
+    }
+  }
 }
 
 /** The artboards a call asked for, by name — all of them when it named none. */

@@ -34,9 +34,9 @@ use std::collections::{HashMap, HashSet};
 /// and the code modal, which shows a generated file read-only.
 pub const CONFIG_REL: &str = "js/game.config.json";
 
-/// Where it lives in a `Vanilla` project, which has no `js/`.
+/// Where it lives in a `Phaser` or a `Vanilla` project, which have no `js/`.
 ///
-/// A vanilla tree is `index.html`, `style.css` and `script.js` at the root of
+/// Those trees are `index.html`, `style.css` and `script.js` at the root of
 /// `game/`, and a `js/` directory holding one JSON file and nothing else would
 /// be a directory that exists to satisfy a constant. The file is the same file
 /// — the same generator, the same shape, rewritten on the same saves — so the
@@ -45,7 +45,7 @@ pub const VANILLA_CONFIG_REL: &str = "game.config.json";
 
 /// Where this project's generated config goes.
 pub fn config_rel(scaffold: Scaffold) -> &'static str {
-    if scaffold.is_phaser() {
+    if scaffold.uses_p2p() {
         CONFIG_REL
     } else {
         VANILLA_CONFIG_REL

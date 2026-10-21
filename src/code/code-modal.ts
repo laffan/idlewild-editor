@@ -80,6 +80,10 @@ export class CodeModal {
   /** The one row of chrome: the file on the left, the panel's own on the right. */
   private readonly bar: CodeBar;
 
+  /** The open file and its editor, for what writes into it from outside. */
+  get editing(): { view: EditorView; path: string } | null {
+    return this.view && this.openPath ? { view: this.view, path: this.openPath } : null;
+  }
   /** Put a control in the file bar, before the pin. See `CodeBar.addControl`. */
   addBarControl(control: HTMLElement): void {
     this.bar.addControl(control);

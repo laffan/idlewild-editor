@@ -22,6 +22,7 @@ import type { GameHandle } from "../game/boot";
 import { projects } from "../lib/ipc";
 import * as log from "../lib/log";
 import { projectOptions, type GameOptions, type ProjectMeta } from "../lib/types";
+import { isPrint } from "../lib/print";
 import { openProjectOptions, type RenderOptions } from "./sheets";
 
 export interface RenderSettings {
@@ -39,6 +40,8 @@ export function createRenderSettings(
   meta: ProjectMeta,
   game: () => GameHandle | null,
   onChanged: () => void = () => {},
+  /** Project Options' Change beside Scaffolding — see `scaffold-switch.ts`. */
+  onChangeScaffold?: () => void,
 ): RenderSettings {
   let options = projectOptions(meta);
 
@@ -93,6 +96,11 @@ export function createRenderSettings(
       return options;
     },
     open: (layerCount) =>
-      openProjectOptions({ ...meta, options }, layerCount, apply),
+      openProjectOptions(
+        { ...meta, options },
+        layerCount,
+        apply,
+        isPrint(meta) ? undefined : onChangeScaffold,
+      ),
   };
 }

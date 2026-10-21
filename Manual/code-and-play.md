@@ -18,11 +18,10 @@ Part of [the Idlewild manual](README.md).
   in between. The machinery is in `js/shared/` — `canvas.js` puts the document
   on screen, `character.js` wires up whatever moves in it — and a scene file is
   a short one that calls six of them and is otherwise yours, with nothing in it
-  marked at all. `canvas.js` is the same file for every Phaser scaffold; what
-  differs between a game seen from above and one seen from the side is the
-  character, which is what `character.js` is — and a **Blank PSD to Phaser**
-  project has no `character.js` at all, so its scene file calls five of the six
-  and nothing moves
+  marked at all. `canvas.js` is the same file for both games; what differs
+  between a game seen from above and one seen from the side is the character,
+  which is what `character.js` is. A **PSD to Phaser** project has no
+  `js/shared/` at all — see below
 - **One file per scene, named after it.** Add a scene in the sidebar and
   `js/scenes/<Name>.js` appears beside the others; rename it and the file, the
   class and the Phaser key all move together, carrying whatever you wrote in
@@ -42,9 +41,10 @@ Part of [the Idlewild manual](README.md).
   rather than something the editor does. A platformer reads
   the same document from the side: every non-walkable fill, blocking boundary
   and placed PSD's collider is the ground it stands on rather than an obstacle
-  to route around. A **Blank PSD to Phaser** project plays too, and what it
-  plays is your artwork placed and nothing else; a **Vanilla** one plays its
-  own page, which is whatever you have written in `script.js`
+  to route around. A **PSD to Phaser** project plays what its scene files
+  place, and nothing else — artwork you drew but have not placed in code is in
+  `assets/`, loaded and waiting; a **Phaser** or **Vanilla** one plays its own
+  page, which is whatever you have written in `script.js`
 - **A file you change while the game is running restarts it**, the way saving
   code does: ink applied in PSD Edit mode, a layer renamed or turned off, a
   re-parse, a PSD replaced by a drop. Code runs the game beside the canvas,
@@ -239,11 +239,44 @@ Part of [the Idlewild manual](README.md).
   this layout keeps the one it was made with — your `game/` tree is your copy —
   and plays and publishes from wherever its own `index.html` says
 
-- **Blank PSD to Phaser** is that tree with the bottom four lines gone. No
-  `shared/character.js`, no `shared/navigation.js` or `physics.js`, no
-  `prefabs/character.js` — the plugin is registered, every PSD is loaded, the
-  document is placed, and the scene file stops there. Nothing to read past
-  before you start, and nothing to delete either
+- **PSD to Phaser** has no `js/shared/` and no `js/prefabs/` at all — none of
+  the editor's own code:
+
+  ```text
+  index.html
+  styles.css
+  js/main.js              loads every PSD in a Load scene, then starts yours
+  js/game.config.json     the document, generated on every save
+  js/lib/                 Phaser and psd-to-phaser
+  js/scenes/index.js      the scene list, written by the editor
+  js/scenes/Scene1.js     one per scene — and yours
+  ```
+
+  A scene places its own artwork, in `create`, the way psd-to-phaser's demos
+  do — one `place` per piece, then where it stands, its size and its depth:
+
+  ```js
+  create() {
+    // Place PSDs here.
+    const tree = this.P2P.place(this, "tree", "tree");
+    tree.setPosition(120, 80);
+    tree.setScale(0.5);
+    tree.setDepth(3);
+  }
+  ```
+
+  `setDepth` is the draw order, counted back to front across the scene, so a
+  file's layers and the files around it stack the way the canvas shows them.
+  What Draw makes is the artwork, not the program: placing something on the
+  canvas does not write a line here. Lines get here two ways — **dragged in**
+  from the sidebar (below), or written out for every scene at once when a
+  project is switched onto PSD to Phaser in Project Options. Fills, backdrops
+  and pattern layers are not drawn by this scaffold; a Game draws them
+
+- **Phaser** is Vanilla with Phaser on the page: `index.html`, `style.css`,
+  `script.js` with a running game in it, and `game.config.json`. No
+  psd-to-phaser and nothing loaded — the PNGs psd-to-json wrote are in
+  `assets/` for Phaser's own loader
 
 - **Vanilla** is four files and no Phaser:
 
@@ -263,8 +296,25 @@ Part of [the Idlewild manual](README.md).
 - **Every scaffold gets the same `assets/`.** Importing a PSD writes its output
   beside `game/` rather than inside it, so what you picked on the New Project
   sheet decides the code around your artwork and never the artwork. A
-  published site carries the assets either way; a vanilla one simply does not
-  carry Phaser with them
+  published site carries the assets either way; a Phaser one carries Phaser
+  and not the plugin, and a vanilla one neither
+
+## Dragging placement code out of the sidebar
+
+- In a **PSD to Phaser** project, Code's sidebar is a source of code as well
+  as a list of names. Pick up a **layer**, a **placed PSD** or a **layer inside
+  one** by dragging it sideways, let go anywhere over the canvas area or the
+  code panel, and the lines that place it are written into the open file **at
+  the caret** — a whole layer's worth, a whole file's, or one layer's. Up and
+  down the column is still a scroll
+- Where the lines go is the caret, not where you let go: on a blank line they
+  take its place, anywhere else they go on the lines after it, indented to
+  match. A caret outside `create` writes them outside `create`, so put it
+  where the code belongs first
+- The names are taken from the layers and never clash with one the file
+  already declares — a second tree is `tree2`. The depth is the one it would
+  have among everything else in the scene, so a dragged layer stacks where
+  the canvas draws it
 
 ## Page Setup
 
@@ -272,8 +322,9 @@ Part of [the Idlewild manual](README.md).
   its orientation, and the resolution, reported. The rest
   of this section is about a game's page. See [Printing](printing.md)
 
-- **Page Setup**, beside Project Options in the menu — on every scaffold but
-  Vanilla, which has no scaffolded page for it to describe — is the HTML and
+- **Page Setup**, beside Project Options in the menu — on a Game and on PSD to
+  Phaser, but not on Phaser or Vanilla, which have no scaffolded page for it to
+  describe — is the HTML and
   CSS *around* the game rather than the game. Six settings: a **fixed size** with a
   width and a height — or the window, which is what every project has done until
   now — **centered** or top left, a **margin**, a **corner radius**, and the

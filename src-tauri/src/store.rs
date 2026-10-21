@@ -312,13 +312,16 @@ pub fn sync_game_config(id: &str) -> Result<(), String> {
 /// **Projects made before per-scene files are left alone.** They have one
 /// `js/scenes/WorldScene.js` and a `main.js` that imports it by name, and
 /// writing a second scene file beside it would be a file nothing loads. The
-/// test is `js/shared/canvas.js`, which only the new scaffold writes.
+/// test is `js/shared/canvas.js`, which a Game scaffold writes, or the scene
+/// list itself, which a PSD to Phaser scaffold writes empty for this to find.
 ///
-/// The same test is what keeps a **vanilla** project out of here, and it is
-/// the right one by accident rather than by luck: a tree with no `canvas.js`
-/// is a tree with no scene for a scene file to be. A vanilla project has
-/// `index.html`, `style.css` and `script.js`, and the editor writes exactly
-/// one file into it — the generated config, above.
+/// A **Phaser** or **vanilla** project is kept out by its scaffold: it has
+/// `index.html`, `style.css` and `script.js`, and the editor writes exactly one
+/// file into it — the generated config, above.
+///
+/// A scene added to a PSD to Phaser project that still has `canvas.js` — one
+/// made before the scaffold stopped writing it — gets the scene that project
+/// was made with, which draws the document through it.
 fn sync_scene_files(
     id: &str,
     meta: &ProjectMeta,
@@ -326,9 +329,12 @@ fn sync_scene_files(
     config: &Value,
 ) -> Result<(), String> {
     let dir = game_dir(id)?;
-    if !dir.join(safe_relative("js/shared/canvas.js")?).exists() {
+    let canvas = dir.join(safe_relative("js/shared/canvas.js")?).exists();
+    let listed = dir.join(safe_relative(crate::templates::SCENE_INDEX_REL)?).exists();
+    if !meta.genre.uses_p2p() || !(canvas || listed) {
         return Ok(());
     }
+    let legacy = canvas && !meta.genre.has_character();
     let scenes_dir = dir.join(safe_relative(crate::templates::SCENES_DIR)?);
     fs::create_dir_all(&scenes_dir).map_err(|e| e.to_string())?;
 
@@ -352,7 +358,12 @@ fn sync_scene_files(
                 let _ = fs::remove_file(&from);
             }
             _ if !path.exists() => {
-                fs::write(&path, crate::templates::scene_file_for(file, &meta))
+                let body = if legacy {
+                    crate::templates::legacy_scene_file_for(file, meta)
+                } else {
+                    crate::templates::scene_file_for(file, meta)
+                };
+                fs::write(&path, body)
                     .map_err(|e| format!("Cannot write {file}.js: {e}"))?;
             }
             _ => {}

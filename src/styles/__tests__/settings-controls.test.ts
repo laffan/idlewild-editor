@@ -82,7 +82,7 @@ describe("what a chosen answer is coloured with", () => {
  *
  * New Project's Scaffolding group is the first: a row titled the same word as
  * the heading above it would spend half the row repeating it, and four labels
- * as long as "Blank PSD to Phaser" want the width. Two rules carry it, and
+ * as long as "PSD to Phaser" want the width. Two rules carry it, and
  * both fail as a squashed huddle at the right-hand edge rather than as an
  * error.
  */
@@ -95,7 +95,7 @@ describe("a row that is nothing but its control", () => {
   /**
    * And the buttons share the *leftover* rather than the whole width. `flex:
    * 1` is `1 1 0%`, which gives four buttons an equal quarter each and throws
-   * the labels away — "Blank PSD to Phaser" is `nowrap` and spills straight
+   * the labels away — "PSD to Phaser" is `nowrap` and spills straight
    * over the divider into Vanilla. `auto` starts each one at its own text.
    */
   it("sizes each segment from its label, not from an equal share", () => {

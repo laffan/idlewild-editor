@@ -125,7 +125,7 @@ another in the export. `grid.js` turns a collider into spaces or boxes —
 character read it the way each needs to: a top-down `shared/character.js` builds the blocked set once when it
 spawns, because `isWalkable` runs per node of every search and the document
 does not change under a running game, and `physics.js` adds the boxes to the
-ground the character stands on. A Blank PSD to Phaser or a Vanilla project
+ground the character stands on. A PSD to Phaser, Phaser or Vanilla project
 carries the same colliders in its config and reads none of them, because what
 would read them is the part it does not scaffold.
 

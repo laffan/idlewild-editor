@@ -39,10 +39,10 @@ pub fn create_project(
 
 /// The same, for a project that says what it is for — a game or a page.
 ///
-/// A print project needs a Phaser scaffold, because `ExportForPrint()` reads
-/// the page off a running Phaser scene and a vanilla page has none to read.
-/// The sheet greys Vanilla out under Print; this is the same answer for any
-/// other way in.
+/// A print project is always PSD to Phaser: `ExportForPrint()` reads the page
+/// off a running Phaser scene with the PSDs placed in it, and a character or
+/// gravity is a game's. The sheet offers no scaffold under Print; this is the
+/// same answer for any other way in.
 pub fn create_project_for(
     name: &str,
     projection: Projection,
@@ -51,8 +51,8 @@ pub fn create_project_for(
     options: GameOptions,
     output: Output,
 ) -> Result<ProjectMeta, String> {
-    if output.is_print() && !scaffold.is_phaser() {
-        return Err("A print project needs a Phaser scaffold".into());
+    if output.is_print() && scaffold != Scaffold::P2p {
+        return Err("A print project is always PSD to Phaser".into());
     }
     let id = uuid::Uuid::new_v4().to_string();
     let dir = project_dir(&id)?;

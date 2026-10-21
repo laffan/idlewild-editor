@@ -79,3 +79,21 @@
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* A row that can be dragged onto the code — see `editor/code-drag.ts`. Down
+   the column is still a scroll; across it is a drag. */
+.code-draggable { touch-action: pan-y; cursor: grab; }
+body.code-dragging, body.code-dragging * { cursor: grabbing !important; user-select: none; }
+.code-drag-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  pointer-events: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--color-accent, #3d7eff);
+  color: #fff;
+  font: 500 12px var(--font-mono, monospace);
+  white-space: nowrap;
+}

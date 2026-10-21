@@ -11,46 +11,54 @@
 //! reads it out of `game.config.json`. It is what the editor draws, and every
 //! scaffold below gets the same drawing.
 //!
-//! The *scaffold* is how much program the drawing is handed to, and there are
-//! four answers. `Topdown` and `Platformer` are whole games, and they need a
-//! file each because a character that walks a floor plan and one that runs
-//! along a cross-section are different programs. `P2p` is the wiring and
-//! nothing above it. `Vanilla` is not a Phaser project at all.
+//! The *scaffold* is how much program the drawing is handed to, offered as
+//! four categories of progressive simplicity. **Game** is `Topdown` or
+//! `Platformer`, whole games that need a file each because a character that
+//! walks a floor plan and one that runs along a cross-section are different
+//! programs. **PSD to Phaser** (`P2p`) is psd-to-phaser wired up and the
+//! artwork placed in each scene's own `create`. **Phaser** is a Phaser game
+//! running and nothing loaded into it. **Vanilla** is not a Phaser project at
+//! all.
 //!
-//! ## Four trees
+//! ## Five trees
 //!
 //! ```text
-//! Topdown / Platformer            P2p                     Vanilla
-//! ────────────────────────────    ────────────────────    ────────────────
-//! index.html                      index.html              index.html
-//! styles.css                      styles.css              style.css
-//! js/main.js                      js/main.js              script.js
-//! js/game.config.json             js/game.config.json     game.config.json
-//! js/lib/                         js/lib/
-//! js/scenes/index.js              js/scenes/index.js
-//! js/scenes/<Scene>.js            js/scenes/<Scene>.js
-//! js/shared/canvas.js             js/shared/canvas.js
-//! js/shared/grid.js               js/shared/grid.js
+//! Topdown / Platformer      P2p                   Phaser          Vanilla
+//! ──────────────────────    ──────────────────    ────────────    ────────────
+//! index.html                index.html            index.html      index.html
+//! styles.css                styles.css            style.css       style.css
+//! js/main.js                js/main.js            script.js       script.js
+//! js/game.config.json       js/game.config.json   game.config…    game.config…
+//! js/lib/                   js/lib/               lib/
+//! js/scenes/index.js        js/scenes/index.js
+//! js/scenes/<Scene>.js      js/scenes/<Scene>.js
+//! js/shared/canvas.js
+//! js/shared/grid.js
 //! js/shared/character.js
 //! js/shared/navigation.js
 //!   — or physics.js
 //! js/prefabs/character.js
 //! ```
 //!
-//! `js/main.js` registers the scenes and starts the game; `js/shared/canvas.js`
-//! draws the document — loading, camera, fills, placements, patterns — and is
-//! the same file whichever of the three Phaser scaffolds wrote it;
-//! `js/shared/grid.js` is the projection and the document's geometry;
-//! `js/shared/character.js` is the wiring between the document and whatever
-//! moves in it, and `js/prefabs/character.js` is the body, the walk and the
-//! artwork, which are yours.
+//! **Only a Game has `js/shared/`.** The two games draw the document from the
+//! config — `canvas.js` loads it, places it, paints its fills and backdrops
+//! and generates its patterns — because the character walking it needs the
+//! whole document as data. Everything simpler shows none of the editor's own
+//! machinery: a PSD to Phaser project's `main.js` loads every PSD in a `Load`
+//! scene, the way psd-to-phaser's own demos do, and each scene file places
+//! artwork with `this.P2P.place` in `create` — written out line by line when
+//! the scene file is (see `scene_file_with`), and dragged in from the sidebar
+//! after that. A print project is a PSD to Phaser project, with
+//! `ExportForPrint()` served beside Phaser rather than written into the tree.
 //!
 //! `js/lib/` is the one directory that is not on disk in the store: Phaser and
 //! psd-to-phaser are 1.5 MB that would be identical in every project and are
 //! already in this binary, so `file_server` answers for them while a project is
-//! being played and `publish` writes them into the zip. A `Vanilla` project
-//! asks for neither and is shipped neither. Everything else is real files the
-//! code modal can open.
+//! being played and `publish` writes them into the zip. A `Phaser` project
+//! asks for Phaser alone, under `lib/` beside its page, and a `Vanilla` one
+//! for neither. A print project's `ExportForPrint()` is the third file served
+//! this way (`PRINT_RUNTIME`). Everything else is real files the code modal
+//! can open.
 //!
 //! **Every tree gets the same `assets/`.** The PSD pipeline runs on import and
 //! writes its output beside `game/` rather than inside it, so what a scaffold
@@ -66,9 +74,9 @@
 //! the file you were meant to work in was mostly somebody else's.
 //!
 //! So the machinery moved to `js/shared/` and a scene became a short file of
-//! its own — which is the same argument the two leaner scaffolds make one step
-//! further out. A file you are meant to work in should not be mostly somebody
-//! else's, and neither should a *project*.
+//! its own — which is the same argument the simpler scaffolds make one step
+//! further out, by having no `js/shared/` at all. A file you are meant to work
+//! in should not be mostly somebody else's, and neither should a *project*.
 //!
 //! ## One file per scene, named after it
 //!
@@ -78,8 +86,8 @@
 //! `scene_file`, written and renamed by `store::sync_scene_files` as scenes
 //! come and go in the sidebar. The class and the Phaser key are the filename,
 //! which is how `this.scene.start("Cave")` means what it looks like it means.
-//! A `Vanilla` project has no scenes to keep in step and gets none of this;
-//! the guard is in `sync_scene_files`.
+//! A `Phaser` or `Vanilla` project has no scenes to keep in step and gets
+//! none of this; the guard is in `sync_scene_files`.
 //!
 //! ## Options
 //!
@@ -90,8 +98,8 @@
 //! resolved once when the files were written, which is why Project Options
 //! could only report it. `shared/character.js` reads `config.character` and
 //! answers no instead, so the scaffold is the same either way and the switch is
-//! a switch — on the two scaffolds that have that file. On the other two there
-//! is nothing to switch, and the sheets do not offer it.
+//! a switch — on the two Game scaffolds, which have that file. On the rest
+//! there is nothing to switch, and the sheets do not offer it.
 
 use crate::project::{ProjectMeta, Scaffold};
 use serde_json::json;
@@ -104,7 +112,14 @@ const GRID_JS: &str = include_str!("../templates/common/js/shared/grid.js");
 const CANVAS_JS: &str = include_str!("../templates/common/js/shared/canvas.js");
 const MAIN_JS: &str = include_str!("../templates/common/js/main.js");
 const SCENE_JS: &str = include_str!("../templates/common/js/scenes/Scene.js");
+
+const P2P_MAIN_JS: &str = include_str!("../templates/p2p/js/main.js");
 const P2P_SCENE_JS: &str = include_str!("../templates/p2p/js/scenes/Scene.js");
+/// The scene a PSD to Phaser project was given before the scaffold stopped
+/// writing `js/shared/`: five calls into `canvas.js`. A project that still has
+/// that file gets this for a scene added to it, because its `main.js` has no
+/// `Load` scene and a scene that only placed would place nothing.
+const LEGACY_P2P_SCENE_JS: &str = include_str!("../templates/p2p/legacy/Scene.js");
 
 const NAVIGATION_JS: &str = include_str!("../templates/common/js/shared/navigation.js");
 const TOPDOWN_CHARACTER_JS: &str = include_str!("../templates/topdown/js/shared/character.js");
@@ -114,11 +129,25 @@ const PHYSICS_JS: &str = include_str!("../templates/platformer/js/shared/physics
 const PLATFORMER_CHARACTER_JS: &str = include_str!("../templates/platformer/js/shared/character.js");
 const PLATFORMER_PREFAB_JS: &str = include_str!("../templates/platformer/js/prefabs/character.js");
 
-const PRINT_JS: &str = include_str!("../templates/print/js/shared/print.js");
+const PRINT_JS: &str = include_str!("../templates/print/idlewild-print.js");
+
+const PHASER_HTML: &str = include_str!("../templates/phaser/index.html");
+const PHASER_CSS: &str = include_str!("../templates/phaser/style.css");
+const PHASER_JS: &str = include_str!("../templates/phaser/script.js");
 
 const VANILLA_HTML: &str = include_str!("../templates/vanilla/index.html");
 const VANILLA_CSS: &str = include_str!("../templates/vanilla/style.css");
 const VANILLA_JS: &str = include_str!("../templates/vanilla/script.js");
+
+/// `ExportForPrint()`, as a print project's page loads it: from the runtime
+/// directory, beside Phaser and psd-to-phaser, and like them answered by
+/// `file_server` and written by `publish` rather than kept on disk. It is the
+/// editor's code, and a print project's tree is the author's.
+pub const PRINT_RUNTIME: &str = "idlewild-print.js";
+
+/// The comment in a PSD to Phaser scene's `create` that placement lines are
+/// written under.
+const PLACE_ANCHOR: &str = "    // Place PSDs here.\n";
 
 /// Where the scaffold's files live now, and where they lived before.
 ///
@@ -208,10 +237,9 @@ pub fn starter_doc(meta: &ProjectMeta) -> String {
 /// **Each scaffold carries only what it runs.** A top-down project gets A\*
 /// and a platformer the body step, so what lands in `game/` is the program the
 /// project actually runs rather than a library of alternatives to read past.
-/// `P2p` takes that to its end: the document is drawn and nothing moves over
-/// it, so there is no `character.js`, no prefab and neither helper. `Vanilla`
-/// is three files and the generated config, and not one of them mentions
-/// Phaser.
+/// `P2p` has no `js/shared/` at all: its `main.js` loads the PSDs and its
+/// scenes place them. `Phaser` and `Vanilla` are three files and the generated
+/// config, and only the first of them mentions Phaser.
 ///
 /// The scene files are not here; see `scene_file`.
 pub fn template_files(meta: &ProjectMeta) -> Result<Vec<(&'static str, String)>, String> {
@@ -222,70 +250,69 @@ pub fn template_files(meta: &ProjectMeta) -> Result<Vec<(&'static str, String)>,
         serde_json::to_string_pretty(&crate::game_config::empty(meta))
             .map_err(|e| e.to_string())?,
     );
+    let page = |html: &str| html.replace("__PROJECT_NAME__", &meta.name);
 
-    if meta.genre == Scaffold::Vanilla {
-        return Ok(vec![
-            (
-                "index.html",
-                VANILLA_HTML.replace("__PROJECT_NAME__", &meta.name),
-            ),
-            ("style.css", VANILLA_CSS.to_string()),
-            ("script.js", VANILLA_JS.to_string()),
-            config,
-        ]);
+    match meta.genre {
+        Scaffold::Vanilla => {
+            return Ok(vec![
+                ("index.html", page(VANILLA_HTML)),
+                ("style.css", VANILLA_CSS.to_string()),
+                ("script.js", VANILLA_JS.to_string()),
+                config,
+            ])
+        }
+        Scaffold::Phaser => {
+            return Ok(vec![
+                ("index.html", page(PHASER_HTML)),
+                ("style.css", PHASER_CSS.to_string()),
+                ("script.js", PHASER_JS.to_string()),
+                config,
+            ])
+        }
+        Scaffold::P2p => {
+            let main_js = if meta.output.is_print() {
+                print_main(P2P_MAIN_JS)
+            } else {
+                P2P_MAIN_JS.to_string()
+            };
+            return Ok(vec![
+                ("index.html", page(INDEX_HTML)),
+                ("styles.css", STYLES_CSS.to_string()),
+                ("js/main.js", main_js),
+                config,
+            ]);
+        }
+        Scaffold::Topdown | Scaffold::Platformer => {}
     }
 
-    let main_js = if meta.output.is_print() {
-        print_main(MAIN_JS)
-    } else {
-        MAIN_JS.to_string()
-    };
     let mut files = vec![
-        (
-            "index.html",
-            INDEX_HTML.replace("__PROJECT_NAME__", &meta.name),
-        ),
+        ("index.html", page(INDEX_HTML)),
         ("styles.css", STYLES_CSS.to_string()),
-        ("js/main.js", main_js),
+        ("js/main.js", MAIN_JS.to_string()),
         ("js/shared/canvas.js", CANVAS_JS.to_string()),
         ("js/shared/grid.js", GRID_JS.to_string()),
     ];
 
-    // The three files a character needs, on the two scaffolds that have one.
-    // `js/prefabs/character.js` is always written where it is written at all,
-    // whether or not the project wants a character *today*: the switch is
-    // `config.character`, which `shared/character.js` reads — so a project
-    // that starts without one has a prefab waiting rather than a file to go
-    // and create when the box is ticked.
-    let character = match meta.genre {
-        Scaffold::Topdown => Some((
-            TOPDOWN_CHARACTER_JS,
-            TOPDOWN_PREFAB_JS,
-            ("js/shared/navigation.js", NAVIGATION_JS),
-        )),
-        Scaffold::Platformer => Some((
-            PLATFORMER_CHARACTER_JS,
-            PLATFORMER_PREFAB_JS,
-            ("js/shared/physics.js", PHYSICS_JS),
-        )),
-        Scaffold::P2p | Scaffold::Vanilla => None,
+    // The three files a character needs. `js/prefabs/character.js` is
+    // written whether or not the project wants a character *today*: the
+    // switch is `config.character`, which `shared/character.js` reads — so a
+    // project that starts without one has a prefab waiting rather than a file
+    // to go and create when the box is ticked.
+    let (character_js, prefab_js, helper) = if meta.genre == Scaffold::Platformer {
+        (PLATFORMER_CHARACTER_JS, PLATFORMER_PREFAB_JS, ("js/shared/physics.js", PHYSICS_JS))
+    } else {
+        (TOPDOWN_CHARACTER_JS, TOPDOWN_PREFAB_JS, ("js/shared/navigation.js", NAVIGATION_JS))
     };
-    if let Some((character_js, prefab_js, helper)) = character {
-        files.push(("js/shared/character.js", character_js.to_string()));
-        files.push((helper.0, helper.1.to_string()));
-        files.push(("js/prefabs/character.js", prefab_js.to_string()));
-    }
-
-    // `ExportForPrint()`, on the one kind of project that prints.
-    if meta.output.is_print() {
-        files.push(("js/shared/print.js", PRINT_JS.to_string()));
-    }
+    files.push(("js/shared/character.js", character_js.to_string()));
+    files.push((helper.0, helper.1.to_string()));
+    files.push(("js/prefabs/character.js", prefab_js.to_string()));
 
     files.push(config);
     Ok(files)
 }
 
-/// `js/shared/print.js` as this build writes it.
+/// `ExportForPrint()` as this build serves it — and as it refreshes the copy
+/// a print project made before it was served keeps in `js/shared/print.js`.
 pub(crate) fn print_js() -> &'static str {
     PRINT_JS
 }
@@ -301,8 +328,10 @@ pub(crate) fn print_js() -> &'static str {
 pub(crate) fn print_main(main_js: &str) -> String {
     let mut out = main_js.replacen(
         "import config from \"./game.config.json\" with { type: \"json\" };\n",
-        "import config from \"./game.config.json\" with { type: \"json\" };\n\
-         import { installPrint } from \"./shared/print.js\";\n",
+        &format!(
+            "import config from \"./game.config.json\" with {{ type: \"json\" }};\n\
+             import {{ installPrint }} from \"./lib/{PRINT_RUNTIME}\";\n"
+        ),
         1,
     );
     out = out.replacen(
@@ -314,8 +343,8 @@ pub(crate) fn print_main(main_js: &str) -> String {
     out = out.replacen("new Phaser.Game({", "const game = new Phaser.Game({", 1);
     out.push_str(
         "\n// The moment the page is printed: call `ExportForPrint()` from any scene\n\
-         // and the game stops, and the page as it stands becomes the PDF. See\n\
-         // `js/shared/print.js`.\n\
+         // and the game stops, and the page as it stands goes to Output. The\n\
+         // options are listed under ExportForPrint() in the manual's Printing page.\n\
          installPrint(game, config);\n",
     );
     out
@@ -325,44 +354,71 @@ pub(crate) fn print_main(main_js: &str) -> String {
 ///
 /// `class` is the scene's file name without the extension, which is also its
 /// class name and its Phaser key — see `scene_names::scene_file_name`. It is
-/// the only thing substituted: the file is the imports and the class, with no
-/// prose over it. Every scene in a project would otherwise open on the same
-/// page of explanation, and what it explained is in `js/shared/` where the
-/// code it is about is.
-///
-/// Two shapes, because a `P2p` scene has no character to spawn and no
-/// `shared/character.js` to import one from — a scene that called either would
-/// be a scene that will not load. `Vanilla` has no scenes at all and never
-/// asks; it answers with the `P2p` scene rather than panicking, because a
-/// wrong answer nobody reads is better than an unwrap somewhere else.
+/// the only thing substituted. A `Phaser` or `Vanilla` project has no scenes
+/// at all and never asks; it answers with the `P2p` scene rather than
+/// panicking, because a wrong answer nobody reads is better than an unwrap
+/// somewhere else.
 pub fn scene_file_for(class: &str, meta: &ProjectMeta) -> String {
-    let scene = scene_file(class, meta.genre);
+    scene_file_with(class, meta, "")
+}
+
+/// The same, with `placements` — lines of `this.P2P.place` and what follows
+/// each — written into `create`.
+///
+/// What the frontend sends when a project is switched onto PSD to Phaser and
+/// its scene files are written afresh: the document's placements as code, in
+/// the order they draw. The editor does not keep them in step afterwards.
+/// From then on the scene file is the author's, and Draw is where artwork is
+/// made rather than where the program is written. A Game scene draws the
+/// document from the config instead and takes none.
+pub fn scene_file_with(class: &str, meta: &ProjectMeta, placements: &str) -> String {
+    if meta.genre.has_character() {
+        return scene_file(class, meta.genre);
+    }
+    let mut lines = String::new();
+    if meta.options.default_zoom != 1.0 && !meta.output.is_print() {
+        lines.push_str(&format!(
+            "    this.cameras.main.setZoom({});\n",
+            meta.options.default_zoom
+        ));
+    }
+    lines.push_str(placements);
+    // The one line a print project needs that a game does not: where the
+    // page is printed. Written in rather than left commented out, so a new
+    // print project prints the moment it starts — which is what makes Output
+    // show a page the first time it is opened.
+    if meta.output.is_print() {
+        lines.push_str(
+            "\n    // Print the page: this stops the scenes and sends the page to Output.\n    \
+             // Every option is optional — see Printing in the manual.\n    \
+             ExportForPrint({ name: \"page\", formats: \"png\" });\n",
+        );
+    }
+    let anchored = format!("{PLACE_ANCHOR}{lines}");
+    scene_file(class, meta.genre).replacen(PLACE_ANCHOR, &anchored, 1)
+}
+
+/// A scene added to a PSD to Phaser project made before the scaffold stopped
+/// writing `js/shared/`: the five `canvas.js` calls it has always had, since
+/// that project's `main.js` has no `Load` scene to load anything for it.
+pub fn legacy_scene_file_for(class: &str, meta: &ProjectMeta) -> String {
+    let scene = LEGACY_P2P_SCENE_JS.replace("__SCENE_CLASS__", class);
     if !meta.output.is_print() {
         return scene;
     }
-    // The one line a print project needs that a game does not: where the page
-    // is printed. Written in rather than left commented out, so a new print
-    // project prints the moment its artwork has loaded — which is what makes
-    // Output show a page the first time it is opened. When to print is the
-    // author's to change from there.
-    // The P2P scene does not import the helper the hint uses; a line that
-    // cannot be uncommented would be a hint that does not work.
-    let scene = if scene.contains("whenPsdsReady,") {
-        scene
-    } else {
-        scene.replacen("  updateCanvas,\n} from", "  updateCanvas,\n  whenPsdsReady,\n} from", 1)
-    };
-    scene.replacen(
-        "    placePatterns(this);\n",
-        "    placePatterns(this);\n\n    \
-         // Wait for PSDs to load\n    \
-         whenPsdsReady(this, () => {\n      \
-           // This following line stops the script and prepares it for print output.\n      \
-           // Every option is optional — see js/shared/print.js.\n\n      \
-           ExportForPrint({ name: \"page\", formats: \"png\" });\n    \
-         });\n",
-        1,
-    )
+    scene
+        .replacen("  updateCanvas,\n} from", "  updateCanvas,\n  whenPsdsReady,\n} from", 1)
+        .replacen(
+            "    placePatterns(this);\n",
+            "    placePatterns(this);\n\n    \
+             // Wait for PSDs to load\n    \
+             whenPsdsReady(this, () => {\n      \
+               // This following line stops the script and prepares it for print output.\n      \
+               // Every option is optional — see js/shared/print.js.\n\n      \
+               ExportForPrint({ name: \"page\", formats: \"png\" });\n    \
+             });\n",
+            1,
+        )
 }
 
 pub fn scene_file(class: &str, scaffold: Scaffold) -> String {
@@ -372,6 +428,23 @@ pub fn scene_file(class: &str, scaffold: Scaffold) -> String {
         P2P_SCENE_JS
     };
     template.replace("__SCENE_CLASS__", class)
+}
+
+/// Files a scaffold wrote once and writes no longer, and what they were.
+///
+/// A PSD to Phaser project made before the scaffold stopped writing
+/// `js/shared/` still has those files and still runs them; their blocks keep
+/// a Reset because this is where its pristine text is found.
+fn legacy_file(rel: &str, meta: &ProjectMeta) -> Option<&'static str> {
+    if !meta.genre.uses_p2p() {
+        return None;
+    }
+    match rel {
+        "js/shared/canvas.js" => Some(CANVAS_JS),
+        "js/shared/grid.js" => Some(GRID_JS),
+        "js/shared/print.js" if meta.output.is_print() => Some(PRINT_JS),
+        _ => None,
+    }
 }
 
 /// One scaffolded file, as it was first written.
@@ -397,10 +470,15 @@ pub fn template_file(rel: &str, meta: &ProjectMeta) -> Result<String, String> {
         .map(|(_, new)| *new)
         .unwrap_or(rel);
 
-    template_files(meta)?
+    if let Some(found) = template_files(meta)?
         .into_iter()
         .find(|(path, _)| *path == wanted)
         .map(|(_, contents)| contents)
+    {
+        return Ok(found);
+    }
+    legacy_file(wanted, meta)
+        .map(str::to_string)
         .ok_or_else(|| format!("{rel} is not a file this scaffold writes"))
 }
 
@@ -422,7 +500,14 @@ pub fn scene_class_of(rel: &str) -> Option<String> {
 /// its starter document. A `Vanilla` project has none, and that same function
 /// is where it says so.
 pub fn scaffold_game(dir: &Path, meta: &ProjectMeta) -> Result<(), String> {
-    for (rel, contents) in template_files(meta)? {
+    let mut files = template_files(meta)?;
+    // An empty scene list, so `sync_scene_files` can tell a PSD to Phaser tree
+    // from one made before per-scene files — the test it uses is that this
+    // file or `js/shared/canvas.js` is there. The first save fills it in.
+    if meta.genre == Scaffold::P2p {
+        files.push((SCENE_INDEX_REL, crate::store::scene_index(&[])));
+    }
+    for (rel, contents) in files {
         let path = dir.join(rel);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;

@@ -42,13 +42,8 @@ pub fn create_project(
     };
     // The parameter is still called `genre` because the field on disk is —
     // see `Scaffold`. `None` is every project made before the choice existed.
-    let scaffold = match genre.as_deref() {
-        None | Some("topdown") => Scaffold::Topdown,
-        Some("platformer") => Scaffold::Platformer,
-        Some("p2p") => Scaffold::P2p,
-        Some("vanilla") => Scaffold::Vanilla,
-        Some(other) => return Err(format!("Unknown scaffold: {other}")),
-    };
+    let scaffold = Scaffold::parse(genre.as_deref())
+        .ok_or_else(|| format!("Unknown scaffold: {}", genre.unwrap_or_default()))?;
     // Gravity has no direction on a diamond grid seen from above, and there
     // is no scaffold that could honestly be written for the pair. The two that
     // scaffold no character have nothing to fall, so they pair with anything.
@@ -104,6 +99,21 @@ pub fn set_project_presentation(
     presentation: Presentation,
 ) -> Result<ProjectMeta, String> {
     store::set_presentation(&id, presentation)
+}
+
+/// Move a project onto another scaffold — Project Options' Scaffolding.
+///
+/// `placements` is each scene's placement code by scene id, which a PSD to
+/// Phaser scene is written with; see `scaffold_switch`, which backs up every
+/// file it overwrites or takes away before it does either.
+#[tauri::command]
+pub fn switch_scaffold(
+    id: String,
+    genre: String,
+    placements: Option<std::collections::HashMap<String, String>>,
+) -> Result<crate::scaffold_switch::SwitchReport, String> {
+    let to = Scaffold::parse(Some(&genre)).ok_or_else(|| format!("Unknown scaffold: {genre}"))?;
+    crate::scaffold_switch::switch_scaffold(&id, to, &placements.unwrap_or_default())
 }
 
 #[tauri::command]

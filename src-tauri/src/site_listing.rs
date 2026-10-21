@@ -69,9 +69,15 @@ pub fn site_files(id: &str) -> Result<Vec<SiteFile>, String> {
     // A folder somebody made and has not put a file in yet has no entry to be
     // derived from, and dropping it from the column would make New Folder
     // look as though it had done nothing.
+    //
+    // And the backups a scaffold switch made: left out of a publish, but
+    // listed here, because salvaging code from them is what they are for.
+    let backups = format!("{}/", crate::scaffold_switch::BACKUPS_DIR);
     for file in store::list_game_files(id)? {
         if file.is_dir {
             folders.insert(file.path);
+        } else if file.path.starts_with(&backups) {
+            out.push(SiteFile { editable: true, path: file.path, is_dir: false });
         }
     }
 

@@ -146,15 +146,21 @@ pub fn site_entries(project_id: &str) -> Result<(String, Vec<SiteEntry>), String
     // ships the exact builds the project was made against. They go where this
     // project's own page asks for them — see `runtime_dir`.
     //
-    // A vanilla project asks for neither: its `index.html` loads no Phaser and
-    // no psd-to-phaser, and 1.5 MB of JavaScript nothing on the page includes
-    // is 1.5 MB somebody has to work out they can delete.
+    // Each scaffold is shipped what its page loads and nothing more: a Phaser
+    // project Phaser alone, a vanilla one neither, because 1.5 MB of
+    // JavaScript nothing on the page includes is 1.5 MB somebody has to work
+    // out they can delete. A print project's `ExportForPrint()` goes the same
+    // way and to the same place, so a published page still runs its code.
     if meta.genre.is_phaser() {
         let runtime = runtime_dir(&game);
-        for (name, source) in [
-            ("psd-to-phaser.umd.js", crate::templates::P2P_UMD),
-            ("phaser.min.js", crate::templates::PHASER),
-        ] {
+        let mut runtimes = vec![("phaser.min.js", crate::templates::PHASER)];
+        if meta.genre.uses_p2p() {
+            runtimes.push(("psd-to-phaser.umd.js", crate::templates::P2P_UMD));
+        }
+        if meta.output.is_print() {
+            runtimes.push((crate::templates::PRINT_RUNTIME, crate::templates::print_js()));
+        }
+        for (name, source) in runtimes {
             entries.push(SiteEntry {
                 rel: format!("{runtime}{name}"),
                 source: SiteSource::Generated(source.as_bytes().to_vec()),
@@ -209,6 +215,11 @@ fn collect(
         for entry in std::fs::read_dir(&current).map_err(|e| e.to_string())?.flatten() {
             let path = entry.path();
             if path.is_dir() {
+                // What a scaffold switch saved is the author's to salvage
+                // from, not part of the site.
+                if path == dir.join(crate::scaffold_switch::BACKUPS_DIR) {
+                    continue;
+                }
                 stack.push(path);
                 continue;
             }

@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import printSource from "../../../src-tauri/templates/print/js/shared/print.js?raw";
+import printSource from "../../../src-tauri/templates/print/idlewild-print.js?raw";
 // Phaser's own sources, by path: its package exports nothing but the bundle,
 // and the bundle (like its Camera) wants a DOM to load. These two do not.
 // @ts-expect-error CommonJS with no types of its own.

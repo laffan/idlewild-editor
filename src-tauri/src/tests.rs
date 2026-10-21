@@ -42,6 +42,7 @@ mod search;
 mod server;
 mod sketching;
 mod stacking;
+mod switching;
 mod tiles;
 
 use crate::project::{GameOptions, Projection, Scaffold};

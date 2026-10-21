@@ -49,6 +49,7 @@ import { extractSelection } from "./extract-actions";
 import { selectionWiring } from "./selection-wiring";
 import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
+import { openScaffoldSwitch } from "./scaffold-switch";
 import { Minimap } from "./minimap";
 import { OverlaysPanel } from "./overlays-panel";
 import { addSweptZone } from "./zone-actions";
@@ -59,6 +60,8 @@ import { loadProjectFonts } from "../lib/project-fonts";
 
 export interface EditorCallbacks {
   onBack: () => Promise<void> | void;
+  /** Open the project again, as `meta` now says it is — after a scaffold switch. */
+  onReopen: (meta: ProjectMeta) => Promise<void> | void;
 }
 
 export async function mountEditor(
@@ -79,23 +82,22 @@ export async function mountEditor(
   let drawing: DrawingLayer | null = null;
   // Built once the scene is up; the header and the keyboard reach it later.
   let history: HistoryUi | null = null;
-  /**
-   * What a tool means to the pointer: declared here, built far below, and
-   * null until then because the panels read it before it exists. See
-   * `InspectWiringDeps.tools`, which holds the note.
-   */
+  // What a tool means to the pointer: null until built far below, because the
+  // panels read it before it exists. See `InspectWiringDeps.tools`.
   let tools: ToolRouting | null = null;
 
   const canvasWrap = h("div", { class: "editor-canvas-wrap" });
-  // Pixel art, whole-pixel drawing and the zoom a scene opens at: what boot is
-  // told, and what Project Options changes. `handle` is read through a closure
-  // because the sheet is opened long after the game is up, and `gameFrame` for
-  // the same reason — a game that is up restarts on the options just written,
-  // the way it restarts on code just saved.
+  // Pixel art, whole-pixel drawing and the zoom a scene opens at, read through
+  // closures because Project Options opens long after the game is up — which
+  // restarts on the options just written, as it does on code just saved.
   const render = createRenderSettings(meta, () => handle, () => {
     if (gameFrame.isRunning) gameFrame.reload();
     guide.refresh();
-  });
+  }, () => openScaffoldSwitch({
+    meta, store, scene: () => handle?.scene ?? null,
+    // The editor closes round a switch: it holds the document as it was.
+    reopen: async (run) => { await teardown(); await callbacks.onReopen(await run()); },
+  }));
 
   /**
    * A PSD on disk is not what it was: restart the game if one is running.
@@ -143,6 +145,7 @@ export async function mountEditor(
       ...{ backgrounds: () => backgrounds, tiles: () => tiles },
       renamePsd: (key, name) => void psdFile.rename(key, name),
       selectTool: () => tools?.apply("select", false),
+      codeDrag: { takesCode: meta.genre === "p2p", code: () => code, targets: () => [canvasWrap, code.root] },
     }),
     overlays.root,
   );

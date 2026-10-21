@@ -173,14 +173,14 @@ fn each_style_scaffolds_the_program_it_runs() {
     }
 }
 
-/// Blank PSD to Phaser: the plugin wired up, the document placed, and nothing
-/// above it.
+/// PSD to Phaser: the plugin wired up, every PSD loaded by `main.js`, and each
+/// scene placing its own artwork.
 ///
-/// What it is *not* carrying is the point of it. There is no
-/// `shared/character.js`, no prefab and neither helper, so a project that
-/// wants something to move in it has nothing to read past first — and the
-/// scene file has to match, because a scene importing a module the scaffold
-/// did not write is a scene that will not load.
+/// What it is *not* carrying is the point of it. There is no `js/shared/` at
+/// all — no `canvas.js`, no character, no prefab — so the only code in the
+/// project is code the author would have written, and the scene file has to
+/// match, because a scene importing a module the scaffold did not write is a
+/// scene that will not load.
 #[test]
 fn the_p2p_scaffold_wires_the_plugin_and_nothing_above_it() {
     let bare = store::create_project(
@@ -213,8 +213,6 @@ fn the_p2p_scaffold_wires_the_plugin_and_nothing_above_it() {
             "js/main.js",
             "js/scenes/Scene1.js",
             "js/scenes/index.js",
-            "js/shared/canvas.js",
-            "js/shared/grid.js",
             "js/game.config.json",
         ] {
             assert!(
@@ -222,32 +220,26 @@ fn the_p2p_scaffold_wires_the_plugin_and_nothing_above_it() {
                 "{expected} missing from {paths:?}"
             );
         }
-        for absent in [
-            "js/shared/character.js",
-            "js/shared/navigation.js",
-            "js/shared/physics.js",
-            "js/prefabs/character.js",
-        ] {
-            assert!(
-                !paths.iter().any(|p| p == absent),
-                "a P2P project should not ship {absent}: {paths:?}"
-            );
-        }
-
-        // The machinery is the same file. What a P2P project gives up is the
-        // character, not the way a document is drawn.
-        assert_eq!(
-            store::read_game_file(&bare.id, "js/shared/canvas.js").ok(),
-            store::read_game_file(&top.id, "js/shared/canvas.js").ok(),
-            "every Phaser scaffold draws a document the same way",
+        assert!(
+            !paths.iter().any(|p| p.starts_with("js/shared") || p.starts_with("js/prefabs")),
+            "a P2P project has none of the editor's own machinery: {paths:?}"
         );
+        assert!(
+            store::read_game_file(&top.id, "js/shared/canvas.js").is_ok(),
+            "a Game still does",
+        );
+
+        let main = store::read_game_file(&bare.id, "js/main.js").expect("main should read");
+        assert!(main.contains("class Load extends Phaser.Scene"));
+        assert!(main.contains("scene: [Load, ...scenes]"));
 
         let scene =
             store::read_game_file(&bare.id, "js/scenes/Scene1.js").expect("scene should read");
-        assert!(scene.contains("placeDocument"), "the document is still placed");
+        assert!(scene.contains("class Scene1 extends Phaser.Scene"));
+        assert!(scene.contains("super(\"Scene1\")"));
         assert!(
-            !scene.contains("character.js") && !scene.contains("spawnCharacter"),
-            "a P2P scene imports nothing the scaffold did not write: {scene}"
+            !scene.contains("import ") && !scene.contains("shared/"),
+            "a P2P scene imports nothing: {scene}"
         );
         assert!(
             !scene.contains("// idlewild:"),

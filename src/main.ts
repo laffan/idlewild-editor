@@ -31,6 +31,8 @@ async function showEditor(meta: ProjectMeta): Promise<void> {
   try {
     teardownEditor = await mountEditor(app!, meta, {
       onBack: () => showHome(),
+      // The editor has already torn itself down; open it again as it now is.
+      onReopen: (next) => ((teardownEditor = null), showEditor(next)),
     });
   } catch (err) {
     log.error("Could not open the project:", err);

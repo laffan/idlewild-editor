@@ -17,7 +17,7 @@
  */
 
 import type { Grid } from "../lib/grid";
-import { isPhaserScaffold, type EditorMode, type ProjectMeta } from "../lib/types";
+import { usesP2p, type EditorMode, type ProjectMeta } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import type { HeaderCallbacks } from "./header";
 import type { HistoryUi } from "./history";
@@ -84,8 +84,8 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
     // Only where there is a scaffolded page to describe. Those six settings
     // reach the browser through `js/main.js`, which reads them out of the
     // generated config and writes them onto the document as the custom
-    // properties `styles.css` consumes — and a vanilla project has neither
-    // file. Its `index.html` and `style.css` are the author's outright, so a
+    // properties `styles.css` consumes — and a Phaser or vanilla project has
+    // neither file. Its `index.html` and `style.css` are the author's outright, so a
     // sheet that wrote values nothing reads would be the editor claiming a
     // page it does not own. `undefined` takes the item off the menu.
     //
@@ -93,7 +93,7 @@ export function headerCallbacks(deps: HeaderWiringDeps): HeaderCallbacks {
     // Page Setup is the paper and its orientation — see `print-setup.ts`.
     ...(isPrint(meta)
       ? { onPageSetup: () => openPrintSetup(meta) }
-      : isPhaserScaffold(meta.genre)
+      : usesP2p(meta.genre)
         ? { onPageSetup: () => openPageSetup(meta, deps.reloadGame) }
         : {}),
     // A print project has Draw and Code: its game runs from Code's Run

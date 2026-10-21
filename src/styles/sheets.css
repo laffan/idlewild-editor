@@ -555,3 +555,21 @@
    options screens are meant to be built on. What used to be in
    this space were three classes describing a kind chip, an add row and a
    fingerprint line; all three are rows and sub-lines over there now. */
+
+/* Project Options' Change beside Scaffolding, and the sheet it opens — see
+   `editor/scaffold-switch.ts`. The value and its button share the row. */
+.sheet-row-value:has(.sheet-row-action) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.scaffold-switch-warning {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--chrome-row-hover);
+  font: 400 var(--text-md) var(--font-body);
+}
+.scaffold-switch-warning p { margin: 0; }
+.scaffold-switch-warning p + p { margin-top: 8px; opacity: 0.8; }

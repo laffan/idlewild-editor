@@ -1,0 +1,20 @@
+/* The page. Entirely yours — nothing in the editor writes a line of this file
+ * after it is scaffolded. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #2d2b2b;
+  overflow: hidden;
+}
+
+#game {
+  width: 100%;
+  height: 100%;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}

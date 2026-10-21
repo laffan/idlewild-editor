@@ -47,9 +47,16 @@ impl Projection {
 ///   psd-to-phaser registered, every PSD loaded and the document placed, and
 ///   no character, no navigation and no physics. What you drew, on screen,
 ///   waiting for a program.
+/// - `Phaser` is `Vanilla` with a Phaser 4 game running in it: the same three
+///   files, and Phaser on the page. No psd-to-phaser and no assets loaded.
 /// - `Vanilla` is not a Phaser project at all: an `index.html`, a `style.css`
 ///   and a `script.js` beside the exported `assets/`. Nothing is wired up,
 ///   because the point of it is that nothing is.
+///
+/// The New Project sheet offers them as four categories of progressive
+/// simplicity — Game (Top Down or Platformer), PSD to Phaser, Phaser and
+/// Vanilla — and Project Options can switch between them later; see
+/// `scaffold_switch`.
 ///
 /// `Default` is what makes this safe to add to a struct already on disk:
 /// every `meta.json` written before the choice existed deserialises as top
@@ -67,9 +74,11 @@ pub enum Scaffold {
     #[default]
     Topdown,
     Platformer,
-    /// "Blank PSD to Phaser" on the sheet. `p2p` on disk, because `blank` is
-    /// already a `Projection` and a project can be one and not the other.
+    /// "PSD to Phaser" on the sheet. `p2p` on disk, because it was "Blank
+    /// PSD to Phaser" when it was written, `blank` is already a `Projection`,
+    /// and a project can be one and not the other.
     P2p,
+    Phaser,
     Vanilla,
 }
 
@@ -79,24 +88,44 @@ impl Scaffold {
             Scaffold::Topdown => "topdown",
             Scaffold::Platformer => "platformer",
             Scaffold::P2p => "p2p",
+            Scaffold::Phaser => "phaser",
             Scaffold::Vanilla => "vanilla",
         }
     }
 
-    /// Whether the scaffold is a Phaser game: everything but `Vanilla`.
-    ///
-    /// What it gates is every part of the tree that only a Phaser project
-    /// has — `js/main.js`, `js/shared/`, the per-scene files, the two
-    /// vendored runtimes an export writes, and the page Page Setup describes.
+    /// The scaffold a stored name means, or None for one this build does not
+    /// know. `None` in — a project made before the choice existed — is top
+    /// down, which is what those projects have always been.
+    pub fn parse(name: Option<&str>) -> Option<Scaffold> {
+        Some(match name {
+            None | Some("topdown") => Scaffold::Topdown,
+            Some("platformer") => Scaffold::Platformer,
+            Some("p2p") => Scaffold::P2p,
+            Some("phaser") => Scaffold::Phaser,
+            Some("vanilla") => Scaffold::Vanilla,
+            Some(_) => return None,
+        })
+    }
+
+    /// Whether the scaffold puts Phaser on the page: everything but `Vanilla`.
+    /// What it gates is the Phaser runtime an export writes.
     pub fn is_phaser(&self) -> bool {
         !matches!(self, Scaffold::Vanilla)
+    }
+
+    /// Whether the scaffold loads the project's PSDs with psd-to-phaser — the
+    /// two games and PSD to Phaser. What it gates is the `js/` tree: `js/main.js`,
+    /// one file per scene, the generated scene list, the plugin's runtime in an
+    /// export, and the page Page Setup describes.
+    pub fn uses_p2p(&self) -> bool {
+        matches!(self, Scaffold::Topdown | Scaffold::Platformer | Scaffold::P2p)
     }
 
     /// Whether the scaffold writes a character controller.
     ///
     /// The `character` option is a switch for the two that do and a fact about
-    /// the files for the two that do not: there is no `shared/character.js` in
-    /// a `P2p` or a `Vanilla` project to read it.
+    /// the files for the rest: there is no `shared/character.js` outside a
+    /// Game project to read it.
     pub fn has_character(&self) -> bool {
         matches!(self, Scaffold::Topdown | Scaffold::Platformer)
     }

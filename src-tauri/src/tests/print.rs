@@ -53,20 +53,20 @@ fn the_scaffold_and_the_config_describe_the_sheet() {
 
         let game = store::game_dir(&meta.id).unwrap();
         let main = std::fs::read_to_string(game.join("js/main.js")).unwrap();
-        assert!(main.contains("import { installPrint } from \"./shared/print.js\";"));
+        assert!(main.contains("import { installPrint } from \"./lib/idlewild-print.js\";"));
         assert!(main.contains("const game = new Phaser.Game({"));
         assert!(main.contains("installPrint(game, config);"));
         assert!(main.contains("backgroundColor: \"#ffffff\""));
-        assert!(game.join("js/shared/print.js").exists());
+        // Served beside Phaser rather than written into the author's tree.
+        assert!(!game.join("js/shared").exists());
 
         let scene = std::fs::read_to_string(game.join("js/scenes/Scene1.js")).unwrap();
         assert!(scene.contains(
-            "\n    // Wait for PSDs to load\n    whenPsdsReady(this, () => {\n      // This following \
-             line stops the script and prepares it for print output.\n      // Every option is \
-             optional — see js/shared/print.js.\n\n      ExportForPrint({ name: \"page\", formats: \
-             \"png\" });\n    });\n"
+            "    // Place PSDs here.\n\n    // Print the page: this stops the scenes and sends \
+             the page to Output.\n    // Every option is optional — see Printing in the \
+             manual.\n    ExportForPrint({ name: \"page\", formats: \"png\" });\n"
         ));
-        assert!(scene.contains("  whenPsdsReady,\n} from"));
+        assert!(!scene.contains("import "));
 
         let config: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(game.join("js/game.config.json")).unwrap(),
@@ -149,11 +149,18 @@ fn a_code_project_has_no_sheet() {
 
 #[test]
 fn every_main_js_anchor_the_print_variant_needs_is_there() {
-    let main = include_str!("../../templates/common/js/main.js");
-    let printed = crate::templates::print_main(main);
-    assert_eq!(printed.matches("installPrint").count(), 2);
-    assert!(printed.contains("const game = new Phaser.Game({"));
-    assert!(!printed.contains("#d9e6ef"));
+    // A print project is a PSD to Phaser project, so its `main.js` is the one
+    // the anchors have to be in; the Game one keeps them too, for a project
+    // made while a print project could be either.
+    for main in [
+        include_str!("../../templates/p2p/js/main.js"),
+        include_str!("../../templates/common/js/main.js"),
+    ] {
+        let printed = crate::templates::print_main(main);
+        assert_eq!(printed.matches("installPrint").count(), 2);
+        assert!(printed.contains("const game = new Phaser.Game({"));
+        assert!(!printed.contains("#d9e6ef"));
+    }
 }
 
 #[test]

@@ -1,5 +1,6 @@
 /**
- * The four scaffolds, and the two questions the editor asks about one.
+ * The five scaffolds, the four categories they are offered under, and the
+ * questions the editor asks about one.
  *
  * `Scaffold` is the only choice on the New Project sheet that the editor does
  * *not* read while you draw — Template and Grid scale reach the canvas, and
@@ -19,28 +20,41 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  CATEGORIES,
+  categoryOf,
   hasCharacter,
   isPhaserScaffold,
   SCAFFOLDS,
   scaffoldLabel,
+  usesP2p,
   type Scaffold,
 } from "../types";
 import p2pScene from "../../../src-tauri/templates/p2p/js/scenes/Scene.js?raw";
+import p2pMain from "../../../src-tauri/templates/p2p/js/main.js?raw";
+import phaserHtml from "../../../src-tauri/templates/phaser/index.html?raw";
+import phaserScript from "../../../src-tauri/templates/phaser/script.js?raw";
 import commonScene from "../../../src-tauri/templates/common/js/scenes/Scene.js?raw";
 import vanillaHtml from "../../../src-tauri/templates/vanilla/index.html?raw";
 import vanillaScript from "../../../src-tauri/templates/vanilla/script.js?raw";
 import optionsCss from "../../styles/options.css?raw";
 import { ruleIn } from "../../styles/__tests__/rules";
 
-const ALL: Scaffold[] = ["topdown", "platformer", "p2p", "vanilla"];
+const ALL: Scaffold[] = ["topdown", "platformer", "p2p", "phaser", "vanilla"];
 
 describe("the scaffolds the sheet offers", () => {
-  it("offers all four, in the order they scaffold least last", () => {
+  it("offers all of them, in the order they scaffold least last", () => {
     expect(SCAFFOLDS.map((row) => row.value)).toEqual(ALL);
   });
 
-  it("names the two new ones the way the brief does", () => {
-    expect(scaffoldLabel("p2p")).toBe("Blank PSD to Phaser");
+  it("offers four categories, and a second tier only under Game", () => {
+    expect(CATEGORIES.map((c) => c.label)).toEqual(["Game", "PSD to Phaser", "Phaser", "Vanilla"]);
+    expect(CATEGORIES.filter((c) => c.scaffolds.length > 1).map((c) => c.value)).toEqual(["game"]);
+    expect(ALL.map(categoryOf)).toEqual(["game", "game", "p2p", "phaser", "vanilla"]);
+  });
+
+  it("names them the way the brief does", () => {
+    expect(scaffoldLabel("p2p")).toBe("PSD to Phaser");
+    expect(scaffoldLabel("phaser")).toBe("Phaser");
     expect(scaffoldLabel("vanilla")).toBe("Vanilla");
   });
 
@@ -64,7 +78,8 @@ describe("what the editor withholds, and from which scaffold", () => {
    * those would be a value nothing reads.
    */
   it("keeps Page Setup on every scaffold that writes the page it describes", () => {
-    expect(ALL.filter(isPhaserScaffold)).toEqual(["topdown", "platformer", "p2p"]);
+    expect(ALL.filter(usesP2p)).toEqual(["topdown", "platformer", "p2p"]);
+    expect(ALL.filter(isPhaserScaffold)).toEqual(["topdown", "platformer", "p2p", "phaser"]);
   });
 
   /**
@@ -87,28 +102,38 @@ describe("what the editor withholds, and from which scaffold", () => {
   });
 });
 
-describe("the Blank PSD to Phaser scene", () => {
-  it("places the document the way a whole game does", () => {
-    for (const call of ["loadDocument", "applyCamera", "placeDocument", "updateCanvas"]) {
-      expect(p2pScene).toContain(call);
-      expect(commonScene).toContain(call);
-    }
+describe("the PSD to Phaser scene", () => {
+  /**
+   * None of the editor's own machinery: the scene imports nothing at all, and
+   * `main.js` loads the PSDs in a `Load` scene before it starts — the way
+   * psd-to-phaser's own demos are laid out.
+   */
+  it("imports nothing, and places with psd-to-phaser in create", () => {
+    expect(commonScene).toContain("../shared/character.js");
+    expect(p2pScene).not.toContain("import ");
+    expect(p2pScene).not.toContain("shared/");
+    expect(p2pScene).toContain("this.P2P.place");
+    expect(p2pScene).toContain("// Place PSDs here.");
   });
 
-  /**
-   * The one that would be a boot failure rather than a missing feature: the
-   * scaffold writes no `js/shared/character.js` for a P2P project, so a scene
-   * importing one is a module resolution error before a frame is drawn.
-   */
-  it("imports nothing the P2P scaffold does not write", () => {
-    expect(commonScene).toContain("../shared/character.js");
-    expect(p2pScene).not.toContain("character.js");
-    expect(p2pScene).not.toContain("spawnCharacter");
-    expect(p2pScene).not.toContain("updateCharacter");
+  it("is started by a Load scene that loads every PSD first", () => {
+    expect(p2pMain).toContain("class Load extends Phaser.Scene");
+    expect(p2pMain).toContain("this.P2P.load.loadMultiple(this, psds)");
+    expect(p2pMain).toContain("scene: [Load, ...scenes]");
+    expect(p2pMain).not.toContain("shared/");
   });
 
   it("is the author's end to end, like every scene file", () => {
     expect(p2pScene).not.toContain("// idlewild:");
+  });
+});
+
+describe("the Phaser page", () => {
+  it("loads Phaser beside it, and no psd-to-phaser", () => {
+    expect(phaserHtml).toContain('<script src="lib/phaser.min.js"></script>');
+    expect(phaserHtml).not.toContain("psd-to-phaser.umd.js");
+    expect(phaserScript).toContain("new Phaser.Game(");
+    expect(phaserScript).not.toContain("P2P");
   });
 });
 

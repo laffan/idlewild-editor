@@ -33,24 +33,38 @@ Part of [the Idlewild manual](README.md).
   redraws as the template, the scale or the default zoom changes, so how
   dense 16 px is, or how few 256 px spaces fit across a window, is seen
   before the project exists
-- The second is **Scaffolding**: how much of a project is written for you.
-  **Top Down** and **Platformer** are whole games — a character that walks the
-  grid over A\*, or one that runs and jumps along it under gravity. **Blank PSD
-  to Phaser** is a Phaser 4 project with psd-to-phaser wired up, every PSD
-  loaded and the document placed, and nothing above that: no character, no
-  pathfinder, no physics, so what you get is exactly what you drew, on screen,
-  waiting for a program. **Vanilla** is not a Phaser project at all — an
-  `index.html`, a `style.css` and a `script.js` beside the exported assets,
-  with the document as data in `game.config.json` and nothing wired up
+- The second is **Scaffolding**: how much of a project is written for you, as
+  four categories from most to least. **Game** asks a second question, **Top
+  Down** or **Platformer** — whole games, a character that walks the grid over
+  A\*, or one that runs and jumps along it under gravity. **PSD to Phaser** is
+  a Phaser 4 project with psd-to-phaser wired up and none of the editor's own
+  code in it: `js/main.js` loads every PSD in a `Load` scene before anything
+  starts, the way psd-to-phaser's own demos do, and each scene places its
+  artwork with `this.P2P.place` in its own `create`. **Phaser** is Vanilla with
+  a Phaser game running in it and nothing loaded. **Vanilla** is not a Phaser
+  project at all — an `index.html`, a `style.css` and a `script.js` beside the
+  exported assets, with the document as data in `game.config.json` and nothing
+  wired up
+- **It can be changed later.** Project Options has a **Change…** beside
+  Scaffolding, which opens a sheet asking the same two questions and warning
+  what a switch does: it writes the new scaffold's files and takes away the
+  old one's, and a file of yours that shares a name with one of Idlewild's is
+  overwritten. **Every file it overwrites or takes away is copied into
+  `Backups/` first**, at the path it had, in a folder named for when and from
+  what — `Backups/2026-10-21-143005-topdown/` — so code can be salvaged from it
+  in the code panel. Backups are not published. Picking the scaffold a project
+  already has writes its files afresh the same way. Switching onto PSD to
+  Phaser writes each scene's placements into its `create` as code, once; see
+  [Code, Play and the page around the game](code-and-play.md)
 - **Nothing about drawing changes between them.** Same canvas, same tools,
   same selection, same fills, same PSD pipeline, same `assets/` at the end of
   it. This is the one choice on the sheet the editor itself does not read: it
   decides the code on the other side of an export rather than anything in
-  front of you, which is what the two leaner answers are for — you can use a
+  front of you, which is what the leaner answers are for — you can use a
   template without being bound to it
 - Platformer is the one answer a template can take away. Gravity has no
   direction on a diamond grid seen from above, so picking **Isometric** greys
-  it out and puts the scaffolding back to Top Down. The other three have
+  it out and puts the scaffolding back to Top Down. The other scaffolds have
   nothing that falls, so they pair with any template
 - **Both characters move in grid spaces rather than in pixels**, so a
   platformer on the 8px grid plays the way one on the 64px grid does instead
@@ -67,7 +81,7 @@ Part of [the Idlewild manual](README.md).
   tap as well as to a hover, because an iPad has no pointer to rest on anything.
   The one that changes with the template says the right thing either way, and
   the one on **Scaffolding** — which is beside the heading rather than beside a
-  row, because that card is a single row of buttons with no label of its own —
+  row, because that card's first row is buttons with no label of its own —
   says both what the choice is and what the answer you have picked writes.
   There is no *New Project* heading across the top: the button that opened it
   says so
@@ -91,7 +105,7 @@ Part of [the Idlewild manual](README.md).
   sheet and its orientation, or a custom size in inches or centimetres, or
   the size of the image on the clipboard —
   which Page Setup can change later, and takes away Scaffolding and Rendering: a print
-  project is always Blank PSD to Phaser, because `ExportForPrint()` reads the
+  project is always PSD to Phaser, because `ExportForPrint()` reads the
   page off a Phaser scene and a character or gravity is a game's, and a page is
   looked at one point to the pixel. See [Printing](printing.md)
 
@@ -106,8 +120,8 @@ Part of [the Idlewild manual](README.md).
   `js/shared/character.js` now, which is the editor's and is written either
   way, so it reads the answer out of the config and turning it on is a save
   rather than a file appearing in your project
-- The row is only there on **Top Down** and **Platformer**, on both sheets.
-  Blank PSD to Phaser and Vanilla write no `js/shared/character.js` and no
+- The row is only there on a **Game** — Top Down or Platformer — on both
+  sheets. The other scaffolds write no `js/shared/character.js` and no
   prefab, so there would be nothing for the switch to reach — and a settings
   row that changes a value no code reads is the one thing a settings page must
   not have

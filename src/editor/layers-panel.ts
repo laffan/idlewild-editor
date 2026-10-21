@@ -49,6 +49,7 @@ import { ScenesBar } from "./scenes-bar";
 import { renderDirectory } from "./layer-directory";
 import { StrokesTray } from "./strokes-tray";
 import type { ManifestLayer } from "../lib/manifest";
+import type { CodeSource } from "./code-drag";
 
 export interface LayersPanelCallbacks {
   onSelectLayer: (layerId: string) => void;
@@ -86,6 +87,8 @@ export interface LayersPanelCallbacks {
    * where they are drawn.
    */
   onImportTiled: (layerId: string) => void;
+  /** Make a directory row draggable onto the code — see `code-drag.ts`. */
+  dragToCode?: (row: HTMLElement, source: CodeSource, label: string) => void;
   /**
    * Rename a placed PSD's file. Here, beside the layer names, rather than in
    * the inspector's heading — the left sidebar is where things are named.
@@ -302,6 +305,7 @@ export class LayersPanel {
         isAnchored: this.callbacks.isAnchored,
         psdLayers: this.callbacks.psdLayers,
         isOpen: (id) => this.expanded.has(id),
+        dragToCode: this.callbacks.dragToCode,
         toggle: (id) => {
           if (this.expanded.has(id)) this.expanded.delete(id);
           else this.expanded.add(id);
