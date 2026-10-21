@@ -269,6 +269,10 @@ export const projects = {
       "switch_scaffold",
       { id, genre: scaffold, placements },
     ),
+  /** The scene-file blocks the editor answers for — see `code/code-links.ts`. */
+  codeLinks: (id: string) => invoke<string | null>("read_code_links", { id }),
+  setCodeLinks: (id: string, links: string | null) =>
+    invoke<void>("write_code_links", { id, links }),
   rename: (id: string, name: string) =>
     invoke<ProjectMeta>("rename_project", { id, name }),
   remove: (id: string) => invoke<void>("delete_project", { id }),

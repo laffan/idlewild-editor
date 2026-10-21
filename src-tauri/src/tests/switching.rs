@@ -88,6 +88,9 @@ fn switching_a_game_to_p2p_backs_up_what_it_replaces() {
         let edited = format!("{scene}\n// mine\n");
         store::write_game_file(&meta.id, "js/scenes/Scene1.js", &edited).expect("write");
 
+        // The links to the old scene files go with them.
+        let links = store::project_dir(&meta.id).expect("dir").join("code-links.json");
+        std::fs::write(&links, "{}").expect("write");
         let code = "    const tree = this.P2P.place(this, \"tree\", \"tree\");\n    \
                     tree.setPosition(1, 2);\n";
         let placements = HashMap::from([("scene-main".to_string(), code.to_string())]);
@@ -95,6 +98,7 @@ fn switching_a_game_to_p2p_backs_up_what_it_replaces() {
             switch_scaffold(&meta.id, Scaffold::P2p, &placements).expect("switch should run");
 
         assert_eq!(report.meta.genre, Scaffold::P2p);
+        assert!(!links.exists(), "a switch forgets the links to the files it rewrote");
         assert_eq!(report.meta.options.character, false);
         let backup = report.backup.expect("something was backed up");
         assert!(backup.starts_with(&format!("{BACKUPS_DIR}/")) && backup.ends_with("-topdown"));

@@ -38,6 +38,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
 
+/// Which scene-file blocks the editor still answers for, beside `doc.json` —
+/// see `src/code/code-links.ts`. A switch rewrites every scene file, so it
+/// forgets them, and the editor adopts the fresh blocks as it next opens.
+pub const CODE_LINKS: &str = "code-links.json";
+
 /// Where backups go, at the root of `game/`.
 pub const BACKUPS_DIR: &str = "Backups";
 
@@ -177,6 +182,7 @@ pub fn switch_scaffold(
     }
 
     write_meta(&meta)?;
+    let _ = fs::remove_file(crate::store::project_dir(id)?.join(CODE_LINKS));
     // The document carries the scaffold too, for the editor's own reading of
     // it — a platformer's layers sort differently — so it moves with the meta.
     if let Ok(mut doc) = serde_json::from_str::<Value>(&doc_text) {

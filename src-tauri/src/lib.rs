@@ -439,6 +439,8 @@ pub fn run() {
             projects::create_project,
             projects::set_project_options,
             projects::switch_scaffold,
+            projects::read_code_links,
+            projects::write_code_links,
             projects::set_project_presentation,
             projects::set_project_page,
             print_pdf::export_print_pdf,

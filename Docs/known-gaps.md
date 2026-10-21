@@ -16,10 +16,6 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   print project with several artboards is drawn per page rather than across
   the spread as the canvas draws it. A placement's `hiddenParts` on a PSD whose
   manifest had not loaded when its code was written is placed whole.
-- **Placement code is written, not kept.** Once a scene file has its lines,
-  moving the thing on the canvas does not move the line; that is the point of
-  Draw being an asset editor. The sidebar's reset covers position only —
-  a resize or a depth that has moved is not marked.
 - **A rename follows into the code where the code spells the name out.** A
   key built at runtime (`"tr" + "ee"`, a template with `${…}`), one read out
   of a config, or a name passed through a function before it reaches
@@ -28,11 +24,13 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   record of which name became which, the same reason placements on it are
   matched again rather than carried. A document layer's name appears in the
   scene file only as the comment over its lines, and is left as it was.
-- **Lines are matched to the canvas by file, layer and order**, with no id in
-  the code. Two placements of one file reordered on the canvas swap which line
-  each answers to; deleting one shifts the rest of that file's onto the line
-  before. Which placements have been written is remembered per session, so a
-  scene file emptied of every block by hand is filled again next session.
+- **A linked block is found again by its `const`.** Rename the variable and
+  the editor can no longer find the block it wrote, so it is released, as any
+  other edit would release it. A block adopted from before links were kept is
+  matched by file, layer and order, once: two placements of one file
+  reordered on the canvas before that first pass swap which block each takes.
+- **Any edit releases the whole block**, including one that only reformats it
+  or adds a comment inside it, since the test is the text the editor wrote.
 - **The sprite a `setPosition` drags is found by texture and nearness**, so
   two copies of one layer standing on the same point are one choice, and a
   sprite whose code puts it inside a container is dragged in the container's

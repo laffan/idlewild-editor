@@ -267,12 +267,16 @@ Part of [the Idlewild manual](README.md).
 
   `setDepth` is the draw order, counted back to front across the scene, so a
   file's layers and the files around it stack the way the canvas shows them.
-  **Anything you place in Draw is placed here too, once**: its lines are added
-  after the last ones in its scene's file as the document saves, and a scene
-  file with no placing lines at all is given every placement its scene has.
-  From then on the lines are yours — moving the thing on the canvas does not
-  move its line, and deleting the line does not bring it back. Where the two
-  disagree, the sidebar says so (below)
+  **Anything you place in Draw is placed here too, and follows Draw** until
+  you edit it: its lines are added after the last ones in its scene's file as
+  it is placed, and while they are exactly what the editor wrote, every change
+  in Draw — moving it, resizing it, restacking it, hiding it, or removing it —
+  is written into them as the document saves, whether or not the code has
+  been opened. **Edit any line of that block and it is yours**: Draw stops
+  moving it, and you can add, take away or change whatever you like in it.
+  Only the block the editor placed follows Draw — a second `place` of the same
+  layer, dragged in or typed, is yours from the start. Where a block of yours
+  no longer stands where Draw has it, the sidebar says so (below)
 - **The camera starts centred on the world's origin** —
   `this.cameras.main.centerOn(0, 0)` at the top of each scene's `create` — so
   what you laid out inside Draw's dashed screen boundary is what the game opens
@@ -342,15 +346,17 @@ Part of [the Idlewild manual](README.md).
 
 ## Where the code and the canvas disagree
 
-- A placed PSD, or a layer inside one, whose `setPosition` in the scene file
-  is not where it stands in Draw carries a **reset** (the circular arrow) at
-  the end of its row in Code's sidebar. Pressing it writes Draw's numbers into
-  the call and saves. A call whose arguments are not plain numbers —
-  `setPosition(x + 10, y)` — counts as disagreeing
-- Rows are matched to lines by file and layer, in order: the second
-  `place` of `tree` in the file is the second tree on the canvas, back to
-  front. Two of the same file swapped on the canvas swap which line each
-  answers to
+- A placed PSD, or a layer inside one, whose block you have edited and whose
+  position, scale, depth or visibility no longer matches Draw carries a
+  **reset** (the circular arrow) at the end of its row in Code's sidebar.
+  Pressing it writes Draw's values into those lines — any lines you added to
+  the block stay — saves, and **links the block to Draw again**, so it follows
+  Draw from then on until you next edit it
+- Which blocks follow Draw is remembered with the project, beside its
+  document rather than in the code, so the code reads as psd-to-phaser and
+  nothing else. Blocks written by an earlier version are taken on the first
+  time a project opens: one still made only of the lines the editor writes
+  follows Draw, and one with anything added to it is treated as yours
 
 ## Renaming a PSD or a layer renames it in the code
 

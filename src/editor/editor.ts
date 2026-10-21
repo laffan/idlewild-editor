@@ -223,7 +223,7 @@ export async function mountEditor(
     scene: () => handle?.scene ?? null,
     ...{ inspector, drawing: () => drawing },
     onPsdChanged: psdChanged,
-    onRenamed: (rename) => renameInCode({ projectId: meta.id, code, gameFrame }, rename),
+    onRenamed: (r) => codeSync?.renamed(r) ?? renameInCode({ projectId: meta.id, code, gameFrame }, r),
   });
 
   // The four ways something on the canvas becomes something else — a sketch

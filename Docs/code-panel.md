@@ -431,22 +431,44 @@ a scene file: a **block** is a `const name = this.P2P.place(this, "key",
 "path");` line and the run of `name.` lines under it, which is the shape
 `placement-code.ts` writes and the only one recognised.
 
-**Placed in Draw, placed in code — once.** The session remembers every
-placement id it has seen. When the document saves with one it has not, the
-piece's lines go after the last block of its scene's file (or under the
-scaffold's `// Place PSDs here.`, or at the top of `create`; a file with none
-of the three is left alone). The first time it runs, a scene file with no
-block at all in a scene that has placements is given all of them — which is
-what a project made before this, or a scene added afterwards, needs. Remembered
-per session rather than on disk, so a line deleted by hand is not written
-again until the file has no blocks left in it at all.
+**Linked blocks.** The editor answers for exactly the blocks it placed, and
+keeps a record of each — `code/code-links.ts` — by the piece it places (a
+placement and the layer path, or a backdrop), the scene, the `const` it
+declares, and the block's text as the editor last wrote it, with each line's
+indent taken off. The records live in `code-links.json` beside `doc.json`
+(`read_code_links` / `write_code_links`), not in the code and not in `game/`,
+so the file reads as psd-to-phaser and a published site carries none of it.
+A scaffold switch rewrites every scene file and deletes them.
 
-**Where they disagree.** Blocks are matched to the scene's pieces by file and
-layer, in order, and a block whose `setPosition` is not a pair of numbers
-equal (to two places) to the piece's position marks that piece and its unit.
-The directory draws a reset at the end of the row, and the reset rewrites the
-arguments with the canvas's numbers. Re-read on entering Code, on every
-document save, on a scene switch, and 150 ms after a key in the panel.
+`code/link-sync.ts` is the pass over one scene file, run for every scene on
+each document save and as Code is entered, and for the open scene 150 ms after
+a key in the panel:
+
+1. a linked block whose text is not the record's was edited by hand and is
+   **released** — for good, until a reset; so is one whose `const` cannot be
+   found;
+2. the first pass a project ever has (no `code-links.json` at all) **adopts**
+   the blocks already there, matched by file, layer and order: linked if they
+   are still nothing but the lines the editor writes, released if not; and a
+   scene file with no block at all is given every piece;
+3. a piece new this session gets a block after the last one, **linked**; one
+   whose linked block the editor took out comes back with an undo;
+4. every linked block **follows** its piece: its managed lines — `setPosition`,
+   `setScale`, `setDepth`, `setVisible`, a backdrop's fills, and the
+   declaration — are rewritten from Draw, and any other line in it is left
+   where it is;
+5. a linked block whose piece has left the document is **taken out**.
+
+What is left is the sidebar's: a released block whose managed lines would
+change if it were linked again is **diverged**, and its row and its unit's row
+carry a reset. The reset (`relink`) rewrites the managed lines from Draw, keeps
+the rest, and links the block again with its new text.
+
+A dropped or typed `place` has no record, so nothing above ever touches it.
+Renames run through the same queue (`CodeSync.renamed`): the code and the
+records' texts are renamed by the same function, and a layer rename moves the
+records' keys with the paths, so no pass in between reads a rename as a hand
+edit.
 
 **The caret picks a sprite up.** On `selectionchange` inside the panel the
 caret's block is found — in its `setPosition(…)` or its `setScale(…)`,

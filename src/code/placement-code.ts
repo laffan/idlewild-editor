@@ -199,43 +199,100 @@ export function piecesFor(pieces: readonly PlacedPiece[], source: CodeSource): P
  * added to, so two drags into one file never declare the same `const`.
  */
 export function placementCode(pieces: readonly PlacedPiece[], taken: Set<string>): string[] {
-  const lines: string[] = [];
-  for (const piece of pieces) {
-    const name = freeName(piece.path, piece.placement.psdKey, taken);
-    const key = JSON.stringify(piece.placement.psdKey);
-    lines.push(`const ${name} = this.P2P.place(this, ${key}, ${JSON.stringify(piece.path)});`);
-    lines.push(`${name}.setPosition(${num(piece.x)}, ${num(piece.y)});`);
-    if (piece.scaleX !== 1 || piece.scaleY !== 1) {
-      lines.push(
-        piece.scaleX === piece.scaleY
-          ? `${name}.setScale(${num(piece.scaleX)});`
-          : `${name}.setScale(${num(piece.scaleX)}, ${num(piece.scaleY)});`,
-      );
-    }
-    lines.push(`${name}.setDepth(${piece.depth});`);
-    if (piece.hidden) lines.push(`${name}.setVisible(false);`);
+  return pieces.flatMap((piece) => pieceLines(piece, freeName(piece.path, piece.placement.psdKey, taken)));
+}
+
+/** One piece's lines, under a name already chosen. */
+export function pieceLines(piece: PlacedPiece, name: string): string[] {
+  const key = JSON.stringify(piece.placement.psdKey);
+  const lines = [`const ${name} = this.P2P.place(this, ${key}, ${JSON.stringify(piece.path)});`];
+  lines.push(`${name}.setPosition(${num(piece.x)}, ${num(piece.y)});`);
+  if (piece.scaleX !== 1 || piece.scaleY !== 1) {
+    lines.push(
+      piece.scaleX === piece.scaleY
+        ? `${name}.setScale(${num(piece.scaleX)});`
+        : `${name}.setScale(${num(piece.scaleX)}, ${num(piece.scaleY)});`,
+    );
   }
+  lines.push(`${name}.setDepth(${piece.depth});`);
+  if (piece.hidden) lines.push(`${name}.setVisible(false);`);
   return lines;
 }
 
 /** The lines for some backdrops, unindented — see the note at the top. */
 export function backdropCode(backdrops: readonly BackdropPiece[], taken: Set<string>): string[] {
-  const lines: string[] = [];
-  for (const { background, depth } of backdrops) {
-    const name = freeName(background.name || "backdrop", "backdrop", taken);
-    lines.push(`const ${name} = this.add.graphics().setScrollFactor(0).setDepth(${depth});`);
-    if (background.kind === "gradient" && background.gradient) {
-      const { from, to, angle } = background.gradient;
-      const colors = gradientCorners(from, to, angle ?? 0).map(hex);
-      const alphas = gradientAlphas(from, to, angle ?? 0).map(num);
-      lines.push(`${name}.fillGradientStyle(${[...colors, ...alphas].join(", ")});`);
-    } else {
-      const color = background.color ?? "#2b3b4a";
-      lines.push(`${name}.fillStyle(${hex(hexToNumber(color))}, ${num(alphaOf(color))});`);
-    }
-    lines.push(`${name}.fillRect(0, 0, this.scale.width, this.scale.height);`);
+  return backdrops.flatMap((b) => backdropLines(b, freeName(b.background.name || "backdrop", "backdrop", taken)));
+}
+
+/** One backdrop's lines, under a name already chosen. */
+export function backdropLines({ background, depth }: BackdropPiece, name: string): string[] {
+  const lines = [`const ${name} = this.add.graphics().setScrollFactor(0).setDepth(${depth});`];
+  if (background.kind === "gradient" && background.gradient) {
+    const { from, to, angle } = background.gradient;
+    const colors = gradientCorners(from, to, angle ?? 0).map(hex);
+    const alphas = gradientAlphas(from, to, angle ?? 0).map(num);
+    lines.push(`${name}.fillGradientStyle(${[...colors, ...alphas].join(", ")});`);
+  } else {
+    const color = background.color ?? "#2b3b4a";
+    lines.push(`${name}.fillStyle(${hex(hexToNumber(color))}, ${num(alphaOf(color))});`);
   }
+  lines.push(`${name}.fillRect(0, 0, this.scale.width, this.scale.height);`);
   return lines;
+}
+
+/**
+ * Everything a scene's code is written from, as one list back to front: each
+ * piece and backdrop with the key a link is kept under (see
+ * `code/code-links.ts`), the name it would be given, and its lines under any
+ * name.
+ */
+export interface ScenePart {
+  key: string;
+  /** The placement or backdrop the part is of. */
+  id: string;
+  layerId: string;
+  depth: number;
+  /** Where a fresh name is made from: a layer path and its file, or a backdrop's name. */
+  naming: [string, string];
+  lines: (name: string) => string[];
+  piece?: PlacedPiece;
+}
+
+export function sceneParts(source: PlacementSource): ScenePart[] {
+  const { pieces, backdrops } = walk(source);
+  return [
+    ...pieces.map(
+      (piece): ScenePart => ({
+        key: pieceKey(piece),
+        id: piece.placement.id,
+        layerId: piece.layerId,
+        depth: piece.depth,
+        naming: [piece.path, piece.placement.psdKey],
+        lines: (name) => pieceLines(piece, name),
+        piece,
+      }),
+    ),
+    ...backdrops.map(
+      (b): ScenePart => ({
+        key: `bg:${b.background.id}`,
+        id: b.background.id,
+        layerId: b.layerId,
+        depth: b.depth,
+        naming: [b.background.name || "backdrop", "backdrop"],
+        lines: (name) => backdropLines(b, name),
+      }),
+    ),
+  ].sort((a, b) => a.depth - b.depth);
+}
+
+/** The key a piece's link is kept under: its placement, and the layer placed. */
+export function pieceKey(piece: Pick<PlacedPiece, "placement" | "path">): string {
+  return `${piece.placement.id}\u0000${piece.path}`;
+}
+
+/** A name for a part, free in `taken`, which it is added to. */
+export function partName(part: ScenePart, taken: Set<string>): string {
+  return freeName(part.naming[0], part.naming[1], taken);
 }
 
 /**

@@ -116,6 +116,29 @@ pub fn switch_scaffold(
     crate::scaffold_switch::switch_scaffold(&id, to, &placements.unwrap_or_default())
 }
 
+/// The scene-file blocks the editor still answers for — see
+/// `src/code/code-links.ts`. Kept beside `doc.json` rather than in `game/`,
+/// so it is neither the author's to edit nor part of a published site. None
+/// for a project that has never had any, which is what tells the editor to
+/// adopt the blocks a scene file already has.
+#[tauri::command]
+pub fn read_code_links(id: String) -> Result<Option<String>, String> {
+    Ok(std::fs::read_to_string(store::project_dir(&id)?.join(crate::scaffold_switch::CODE_LINKS)).ok())
+}
+
+/// Write them, or with None forget them.
+#[tauri::command]
+pub fn write_code_links(id: String, links: Option<String>) -> Result<(), String> {
+    let path = store::project_dir(&id)?.join(crate::scaffold_switch::CODE_LINKS);
+    match links {
+        Some(text) => std::fs::write(path, text).map_err(|e| e.to_string()),
+        None => {
+            let _ = std::fs::remove_file(path);
+            Ok(())
+        }
+    }
+}
+
 #[tauri::command]
 pub fn rename_project(id: String, name: String) -> Result<ProjectMeta, String> {
     store::rename_project(&id, &name)

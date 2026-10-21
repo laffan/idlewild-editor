@@ -3,60 +3,45 @@
  * without either one owning the other.
  *
  * Draw is where artwork is made and the scene file is where the program says
- * where it goes. They are allowed to disagree — that is what it means for the
- * code to be yours — and this is everything that bridges them:
+ * where it goes. This is everything that bridges them:
  *
- * - **Something placed in Draw is placed in the code, once** — a backdrop
- *   added to a background layer too, as Graphics. When the
- *   document is saved with a placement the session has not seen before, its
- *   lines are written after the last placing block of its scene's file — see
- *   `code/placement-code.ts` and `code/scene-code.ts`. A scene file with no
- *   placing block at all, opened in a project whose scene has placements, gets
- *   all of them. After that the lines are the author's: deleting them does not
- *   bring them back, and moving the thing on the canvas does not move them.
- * - **Where the two disagree, the sidebar says so.** A placed PSD, or a layer
- *   in one, whose `setPosition` is not where the canvas has it carries a reset
- *   in Code's directory, which writes the canvas's numbers into the call.
+ * - **The editor places, and keeps up, what it places.** Something placed in
+ *   Draw — a placement's layers, a backdrop — is written into its scene's
+ *   file as it is placed, and that block is **linked**: every save of the
+ *   document rewrites its position, scale, depth and visibility from Draw,
+ *   whether or not the code has ever been opened. Only that block: a second
+ *   `place` of the same layer, dragged in or typed, is the author's from the
+ *   start. See `code/code-links.ts` and `code/link-sync.ts`.
+ * - **Editing a block by hand releases it.** Its lines are the author's from
+ *   then on — to add to, take from or change — and Draw no longer moves it.
+ *   Where it then stands somewhere other than Draw has it, Code's sidebar
+ *   carries a reset, which writes Draw's values into the lines the editor
+ *   writes and links the block again.
  * - **The caret in a `setPosition` or a `setScale` picks the sprite up.** The
  *   running game is told which sprite the call places, and outlines it;
  *   dragging it moves it, or scales it from its top-left corner, writes the
- *   numbers into the call as it goes and saves on release. See
- *   `templates/play/drag-bridge.js` for the other half.
+ *   numbers into the call as it goes and saves on release — which, being an
+ *   edit, releases the block. See `templates/play/drag-bridge.js`.
  *
- * Every write is saved as it is made — through the code panel when the file
- * is open in it, so its undo history and its caret survive, and straight to
- * disk when it is not — and a save restarts a running game, so what was
- * changed is on screen.
+ * The links are kept beside `doc.json` (`read_code_links`), not in the code.
+ * Every write is saved as it is made, through `code-edit.ts`.
  */
 
-import { gameFiles } from "../lib/ipc";
+import { gameFiles, projects } from "../lib/ipc";
+import * as log from "../lib/log";
 import { textureKey } from "../lib/manifest";
 import { unitOf } from "../game/unit";
 import type { DocStore } from "../lib/doc-store";
 import type { Layer } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
-import {
-  declaredNames,
-  partsCode,
-  sceneBackdrops,
-  sceneLines,
-  scenePieces,
-  type BackdropPiece,
-  type PlacedPiece,
-  type PlacementSource,
-} from "../code/placement-code";
-import {
-  appendPoint,
-  matchBlocks,
-  parseBlocks,
-  callAtCaret,
-  samePosition,
-  withLines,
-  withPosition,
-  withScale,
-} from "../code/scene-code";
+import { sceneParts, type PlacementSource } from "../code/placement-code";
+import type { LinkRecords } from "../code/code-links";
+import { relink, syncScene } from "../code/link-sync";
+import { renameKeyInCode, renameLayersInCode } from "../code/rename-refs";
+import { parseBlocks, callAtCaret, withPosition, withScale } from "../code/scene-code";
 import type { CodePanel } from "./code-panel";
 import type { GameFrame } from "./game-frame";
+import { renameInCode, type CodeRename } from "./code-renames";
 import { createCodeEditor, replaceIn } from "./code-edit";
 
 export interface CodeSyncDeps {
@@ -72,12 +57,17 @@ export interface CodeSyncDeps {
 }
 
 export interface CodeSync {
-  /** Whether a placed PSD's unit, or one layer of it, stands elsewhere in code. */
+  /** Whether a placed PSD's unit, or one layer of it, was released and has moved off Draw. */
   diverged: (placementId: string, path?: string) => boolean;
-  /** Write the canvas's position into the code, for a unit or one layer. */
+  /** Write Draw's values into it, and link it again — a unit, or one layer. */
   reset: (placementId: string, path?: string) => void;
-  /** Read the open scene's file again — after anything that changed it. */
+  /** Bring the scene files into line — after anything that changed either side. */
   refresh: () => void;
+  /**
+   * A PSD or a layer was renamed: rename it in the code and in the links in
+   * one step, so no pass in between reads a renamed block as a hand edit.
+   */
+  renamed: (rename: CodeRename) => Promise<void>;
   destroy: () => void;
 }
 
@@ -86,12 +76,26 @@ const TARGET = "idlewild-drag-target";
 
 export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   const { store, code, gameFrame, projectId } = deps;
-  const known = new Set(allPlacementIds(store));
-  let started = false;
+  // What was in the document when the session began: anything else is new,
+  // and placed in the code as it arrives.
+  const known = new Set(allIds(store));
+  let records: LinkRecords = {};
+  let adopt = false;
+  let saved = "";
   let off = new Set<string>();
   let posted = "";
   let held: { name: string; kind: "position" | "scale" } | null = null;
   let refreshTimer = 0;
+  let runs: Promise<void> = projects
+    .codeLinks(projectId)
+    .then((text) => {
+      // None at all: a project from before links, whose blocks are adopted.
+      adopt = text === null;
+      records = text ? (JSON.parse(text) as LinkRecords) : {};
+      saved = text ?? "";
+    })
+    .catch((err) => log.error("Could not read which code the editor keeps:", err));
+  const { edit } = createCodeEditor({ projectId, code, gameFrame });
 
   const source = (layers: readonly Layer[]): PlacementSource => ({
     layers,
@@ -113,72 +117,50 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
     }
   }
 
-  async function read(path: string): Promise<string | null> {
-    const open = code.editing;
-    if (open?.path === path) return open.view.state.doc.toString();
-    return gameFiles.read(projectId, path).catch(() => null);
-  }
-
-  const { edit } = createCodeEditor({ projectId, code, gameFrame });
-
-  /** Lines for pieces, after the last placing block in a scene's file. */
-  async function place(sceneId: string, pieces: PlacedPiece[], backdrops: BackdropPiece[]): Promise<void> {
-    const path = await fileOf(sceneId);
-    if (!path || pieces.length + backdrops.length === 0) return;
-    await edit(path, (text) => {
-      const point = appendPoint(text, parseBlocks(text));
-      if (!point) return null;
-      return withLines(text, point, partsCode(pieces, backdrops, declaredNames(text)));
+  /** Bring scene files into line — every scene's, or only the open one's. */
+  function run(every: boolean): Promise<void> {
+    runs = runs.then(async () => {
+      const scenes = every ? store.scenes : [store.activeScene];
+      for (const scene of scenes) {
+        const path = await fileOf(scene.id);
+        if (!path) continue;
+        const parts = sceneParts(source(scene.layers));
+        let diverged = new Set<string>();
+        await edit(path, (text) => {
+          const result = syncScene({
+            sceneId: scene.id,
+            text,
+            parts,
+            records,
+            adopt,
+            fresh: (part) => !known.has(part.id),
+          });
+          diverged = result.diverged;
+          return result.text;
+        });
+        if (scene.id === store.activeScene.id) showDiverged(diverged);
+      }
+      for (const id of allIds(store)) known.add(id);
+      if (every) adopt = false;
+      await persist();
     });
+    return runs.catch((err) => log.error("Could not bring the code in line with Draw:", err));
   }
 
-  /** A scene file with nothing placed in it, in a scene with things placed. */
-  async function fillEmpty(): Promise<void> {
-    for (const scene of store.scenes) {
-      const path = await fileOf(scene.id);
-      const text = path && (await read(path));
-      if (!path || !text || parseBlocks(text).length > 0) continue;
-      const all = source(scene.layers);
-      if (scenePieces(all).length === 0 && sceneBackdrops(all).length === 0) continue;
-      // Written now, so not written again as new.
-      idsOf(scene.layers).forEach((id) => known.add(id));
-      await edit(path, (now) => {
-        const point = appendPoint(now, parseBlocks(now));
-        return point ? withLines(now, point, sceneLines(all, declaredNames(now))) : null;
-      });
-    }
+  async function persist(): Promise<void> {
+    const text = JSON.stringify(records, null, 2);
+    if (text === saved) return;
+    saved = text;
+    await projects.setCodeLinks(projectId, text);
   }
 
-  /** Placements the session has not seen, written into their scenes' files. */
-  async function placeNew(): Promise<void> {
-    if (!started) {
-      started = true;
-      await fillEmpty();
-    }
-    for (const scene of store.scenes) {
-      const fresh = new Set(idsOf(scene.layers).filter((id) => !known.has(id)));
-      if (fresh.size === 0) continue;
-      fresh.forEach((id) => known.add(id));
-      const all = source(scene.layers);
-      const pieces = scenePieces(all).filter((p) => fresh.has(p.placement.id));
-      const backdrops = sceneBackdrops(all).filter((b) => fresh.has(b.background.id));
-      await place(scene.id, pieces, backdrops);
-    }
-  }
-
-  /** Which pieces of the open scene stand somewhere else in its file. */
-  async function readStatus(): Promise<void> {
-    const path = await fileOf(store.activeScene.id);
-    const text = path ? await read(path) : null;
+  /** Which units and layers carry a reset in the sidebar. */
+  function showDiverged(keys: Set<string>): void {
     const next = new Set<string>();
-    if (text !== null) {
-      const pieces = scenePieces(source(store.layers));
-      matchBlocks(pieces, parseBlocks(text)).forEach((block, i) => {
-        const piece = pieces[i];
-        if (!block || samePosition(piece, block)) return;
-        next.add(`${piece.placement.id}\u0000${piece.path}`);
-        next.add(`unit:${unitOf(piece.placement)}`);
-      });
+    for (const part of sceneParts(source(store.layers))) {
+      if (!keys.has(part.key) || !part.piece) continue;
+      next.add(part.key);
+      next.add(`unit:${unitOf(part.piece.placement)}`);
     }
     const changed = next.size !== off.size || [...next].some((key) => !off.has(key));
     off = next;
@@ -188,7 +170,7 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   const refresh = (): void => {
     window.clearTimeout(refreshTimer);
     refreshTimer = window.setTimeout(() => {
-      void readStatus();
+      void run(false);
       aim();
     }, 150);
   };
@@ -261,7 +243,7 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   const onKey = (event: Event) => {
     if (code.contains(event.target as Node)) refresh();
   };
-  const onSaved = () => void placeNew().then(refresh);
+  const onSaved = () => void run(true);
   const onScene = () => refresh();
   document.addEventListener("selectionchange", onSelection);
   document.addEventListener("keyup", onKey, true);
@@ -275,34 +257,41 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
       return !!placement && off.has(`unit:${unitOf(placement)}`);
     },
     reset: (placementId, path) => {
-      void (async () => {
+      runs = runs.then(async () => {
         const file = await fileOf(store.activeScene.id);
         if (!file) return;
-        const pieces = scenePieces(source(store.layers));
-        const placement = pieces.find((p) => p.placement.id === placementId)?.placement;
+        const parts = sceneParts(source(store.layers));
+        const placement = parts.find((p) => p.id === placementId)?.piece?.placement;
         if (!placement) return;
-        await edit(file, (text) => {
-          const blocks = matchBlocks(pieces, parseBlocks(text));
-          // Back to front through the file, so each rewrite leaves the offsets
-          // of the ones before it where they were.
-          const work = pieces
-            .map((piece, i) => ({ piece, block: blocks[i] }))
-            .filter(({ piece, block }) =>
-              block?.position &&
-              unitOf(piece.placement) === unitOf(placement) &&
-              (path === undefined || piece.path === path),
-            )
-            .sort((a, b) => (b.block?.start ?? 0) - (a.block?.start ?? 0));
-          return work.reduce(
-            (now, { piece, block }) => (block ? withPosition(now, block, piece.x, piece.y) : now),
-            text,
-          );
-        });
-        refresh();
-      })();
+        const chosen = parts.filter(
+          (part) =>
+            part.piece &&
+            unitOf(part.piece.placement) === unitOf(placement) &&
+            (path === undefined || part.piece.path === path),
+        );
+        await edit(file, (text) => chosen.reduce((now, part) => relink(now, part, records), text));
+        await persist();
+      });
+      refresh();
     },
     refresh: () => {
-      void placeNew().then(refresh);
+      void run(true).then(refresh);
+    },
+    renamed: (rename) => {
+      runs = runs.then(async () => {
+        await renameInCode({ projectId, code, gameFrame }, rename);
+        const change = (text: string) =>
+          rename.kind === "psd"
+            ? renameKeyInCode(text, rename.from, rename.to, rename.layerNames)
+            : renameLayersInCode(text, rename.key, rename.names);
+        const next: LinkRecords = {};
+        for (const [key, record] of Object.entries(records)) {
+          next[rekey(key, rename)] = { ...record, text: change(record.text) };
+        }
+        records = next;
+        await persist();
+      });
+      return runs;
     },
     destroy: () => {
       window.clearTimeout(refreshTimer);
@@ -316,14 +305,23 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   };
 }
 
-/** Every placement and backdrop a scene's layers hold, by id. */
-function idsOf(layers: readonly Layer[]): string[] {
-  return layers.flatMap((l) => [
-    ...l.placements.map((p) => p.id),
-    ...(l.backgrounds ?? []).map((b) => b.id),
-  ]);
+/** A link's key after a rename: a layer's path moves with its name. */
+function rekey(key: string, rename: CodeRename): string {
+  if (rename.kind !== "layers") return key;
+  const [id, path] = key.split("\u0000");
+  if (path === undefined) return key;
+  return `${id}\u0000${path
+    .split("/")
+    .map((part) => rename.names.get(part) ?? part)
+    .join("/")}`;
 }
 
-function allPlacementIds(store: DocStore): string[] {
-  return store.scenes.flatMap((scene) => idsOf(scene.layers));
+/** Every placement and backdrop in the document, by id. */
+function allIds(store: DocStore): string[] {
+  return store.scenes.flatMap((scene) =>
+    scene.layers.flatMap((l) => [
+      ...l.placements.map((p) => p.id),
+      ...(l.backgrounds ?? []).map((b) => b.id),
+    ]),
+  );
 }
