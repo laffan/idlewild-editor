@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import {
   barePlacement,
+  codeFor,
   declaredNames,
   piecesFor,
   placementCode,
@@ -150,6 +151,42 @@ describe("a dragged row's lines", () => {
   it("names a layer that is not an identifier after its file", () => {
     expect(barePlacement("logo", "1 final", new Set())[0]).toBe(
       'const logo1Final = this.P2P.place(this, "logo", "1 final");',
+    );
+  });
+});
+
+describe("a backdrop, which is no PSD", () => {
+  const sky = layer("bg", "Sky", [placement("m", "mountain", "mountain")], {
+    kind: "background",
+    backgrounds: [
+      { id: "g", name: "Dusk", kind: "gradient", gradient: { from: "#000000", to: "#ffffff", angle: 0 } },
+      { id: "c", name: "Base", kind: "color", color: "#11223380" },
+    ],
+  } as Partial<Layer>);
+  const scene = source([layer("front", "Front", [placement("t", "tree", "tree")]), sky]);
+
+  it("is written as Graphics held to the camera, under its layer's artwork", () => {
+    const lines = codeFor(scene, { kind: "layer", layerId: "bg" }, new Set());
+    expect(lines).toEqual([
+      "const base = this.add.graphics().setScrollFactor(0).setDepth(1);",
+      "base.fillStyle(0x112233, 0.5);",
+      "base.fillRect(0, 0, this.scale.width, this.scale.height);",
+      "const dusk = this.add.graphics().setScrollFactor(0).setDepth(2);",
+      "dusk.fillGradientStyle(0x000000, 0x000000, 0xffffff, 0xffffff, 1, 1, 1, 1);",
+      "dusk.fillRect(0, 0, this.scale.width, this.scale.height);",
+      'const mountain = this.P2P.place(this, "mountain", "mountain");',
+      "mountain.setPosition(10, 20);",
+      "mountain.setDepth(3);",
+    ]);
+  });
+
+  it("counts in the same depths as the artwork above it", () => {
+    expect(scenePieces(scene).map((p) => [p.path, p.depth])).toEqual([
+      ["mountain", 3],
+      ["tree", 4],
+    ]);
+    expect(codeFor(scene, { kind: "backdrop", layerId: "bg", backgroundId: "g" }, new Set())[0]).toBe(
+      "const dusk = this.add.graphics().setScrollFactor(0).setDepth(2);",
     );
   });
 });

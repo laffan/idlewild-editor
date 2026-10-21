@@ -397,6 +397,13 @@ a running game restarts with the lines in it.
 
 ### The scene files against the canvas
 
+A backdrop row — a background layer's colour or gradient — drags too, and
+writes Graphics rather than a `place`: neither is a PSD, so psd-to-phaser has
+nothing to place for one. See `backdropCode` in `placement-code.ts`. Its
+`const name = this.add.graphics()` is a block for `scene-code.ts` as well,
+with no file behind it, so new lines go after it and a scene holding only
+backdrops is not taken for an empty one.
+
 `editor/code-sync.ts` is everything else that bridges a PSD to Phaser
 project's scene files and its canvas, and `code/scene-code.ts` is how it reads
 a scene file: a **block** is a `const name = this.P2P.place(this, "key",
@@ -421,8 +428,13 @@ arguments with the canvas's numbers. Re-read on entering Code, on every
 document save, on a scene switch, and 150 ms after a key in the panel.
 
 **The caret picks a sprite up.** On `selectionchange` inside the panel the
-caret's block is found, and the game frame is posted its texture —
-`<psdKey>_<layer>`, `manifest.textureKey` — and the call's numbers.
+caret's block is found — in its `setPosition(…)` or its `setScale(…)`,
+`scene-code.callAtCaret` — and the game frame is posted its texture —
+`<psdKey>_<layer>`, `manifest.textureKey` — where its `setPosition` stands it,
+and which of the two calls it is. A scale is taken about the sprite's origin,
+the top-left corner psd-to-phaser places by: one ratio along the line from it
+for `setScale(s)`, one per axis for `setScale(x, y)`, and an axis pressed
+within a few pixels of the origin stays as it was rather than leaping.
 `templates/play/drag-bridge.js` is the other half: injected by `file_server`
 at the end of `<head>` for the same `?idlewild=console` request as the
 console bridge — after the page's Phaser, which it needs, and before its

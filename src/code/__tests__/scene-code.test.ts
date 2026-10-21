@@ -6,12 +6,14 @@
 import { describe, expect, it } from "vitest";
 import {
   appendPoint,
+  callAtCaret,
   matchBlocks,
   parseBlocks,
   positionAtCaret,
   samePosition,
   withLines,
   withPosition,
+  withScale,
 } from "../scene-code";
 import type { PlacedPiece } from "../placement-code";
 import type { Placement } from "../../lib/types";
@@ -87,5 +89,41 @@ describe("a scene's placing blocks", () => {
     expect(samePosition(pieces[1], matched[1]!)).toBe(true);
     // An expression is not a number the canvas can agree with.
     expect(samePosition(pieces[0], matched[0]!)).toBe(false);
+  });
+});
+
+describe("a setScale, and a backdrop's block", () => {
+  const text = `  create() {
+    const sky = this.add.graphics().setScrollFactor(0).setDepth(1);
+    sky.fillRect(0, 0, 10, 10);
+    const tree = this.P2P.place(this, "tree", "tree");
+    tree.setPosition(1, 2);
+    tree.setScale(0.5);
+    const rock = this.P2P.place(this, "rock", "rock");
+    rock.setScale(1, 2);
+  }
+`;
+  const blocks = parseBlocks(text);
+
+  it("reads one argument as both axes, and two as one each", () => {
+    expect(blocks.map((b) => b.name)).toEqual(["sky", "tree", "rock"]);
+    expect(blocks[1].scale).toMatchObject({ x: 0.5, y: 0.5, uniform: true });
+    expect(blocks[2].scale).toMatchObject({ x: 1, y: 2, uniform: false });
+  });
+
+  it("knows a setScale from a setPosition at the caret", () => {
+    expect(callAtCaret(blocks, text.indexOf("0.5"))).toMatchObject({ kind: "scale" });
+    expect(callAtCaret(blocks, text.indexOf("1, 2)"))?.kind).toBe("position");
+  });
+
+  it("writes back as many arguments as it had", () => {
+    expect(withScale(text, blocks[1], 0.756, 9)).toContain("tree.setScale(0.76);");
+    expect(withScale(text, blocks[2], 3, 4)).toContain("rock.setScale(3, 4);");
+  });
+
+  it("puts new lines after a backdrop too", () => {
+    const onlySky = "  create() {\n    const sky = this.add.graphics();\n    sky.fillRect(0, 0, 1, 1);\n  }\n";
+    const point = appendPoint(onlySky, parseBlocks(onlySky));
+    expect(withLines(onlySky, point!, ["a();"])).toContain("sky.fillRect(0, 0, 1, 1);\n    a();");
   });
 });

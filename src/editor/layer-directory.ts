@@ -167,7 +167,12 @@ function fillLayer(
     // a fill, a point, a boundary, a backdrop — is a fact about the document
     // and has no stack inside it to open.
     if (item.selection.kind !== "placement" || !item.psdKey) {
-      group.appendChild(staticItem(item.path, item.label, item.detail, item.swatch));
+      const row = group.appendChild(staticItem(item.path, item.label, item.detail, item.swatch));
+      // A backdrop is no PSD, and is written as Graphics — see `placement-code.ts`.
+      if (item.selection.kind === "background") {
+        const at = { kind: "backdrop" as const, layerId: layer.id, backgroundId: item.selection.backgroundId };
+        ctx.dragToCode?.(row, at, item.label);
+      }
       continue;
     }
     group.appendChild(psdRow(layer.id, item.selection.placementId, item, ctx));

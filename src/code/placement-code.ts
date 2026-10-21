@@ -28,14 +28,32 @@
  * unless something says otherwise. The number is the piece's rank in the whole
  * scene, back to front, which is what the editor draws — so dragging a single
  * row in gives it the depth it would have had among the rest.
+ *
+ * **A backdrop is not a PSD**, so psd-to-phaser has nothing to place for one.
+ * A colour or gradient on a background layer is a record in the document,
+ * drawn by the editor over whatever the camera can see — so it is written as
+ * Phaser's own Graphics, held still against the camera with
+ * `setScrollFactor(0)` and filled to the size of the screen:
+ *
+ * ```js
+ * const sky = this.add.graphics().setScrollFactor(0).setDepth(1);
+ * sky.fillGradientStyle(0x87ceeb, 0x87ceeb, 0xffffff, 0xffffff, 1, 1, 1, 1);
+ * sky.fillRect(0, 0, this.scale.width, this.scale.height);
+ * ```
+ *
+ * It takes its rank in the same count as the artwork, under the placements
+ * on its own layer, as the canvas draws it. A backdrop painted as an image is
+ * a PSD placed on the layer, and is written as one.
  */
 
 import { drawOrder } from "../game/draw-order";
+import { gradientAlphas, gradientCorners } from "../game/background-render";
+import { alphaOf, hexToNumber } from "../lib/color";
 import { unitOf } from "../game/unit";
 import { layerKind } from "../lib/layer-kinds";
 import type { ManifestLayer } from "../lib/manifest";
 import { ordersByHand } from "../lib/units";
-import type { Collider, Layer, Placement } from "../lib/types";
+import type { Background, Collider, Layer, Placement } from "../lib/types";
 
 /** What the code is written from. */
 export interface PlacementSource {
@@ -61,6 +79,13 @@ export interface PlacedPiece {
   depth: number;
 }
 
+/** A colour or gradient on a background layer, at its rank in the scene. */
+export interface BackdropPiece {
+  layerId: string;
+  background: Background;
+  depth: number;
+}
+
 /**
  * Every piece in a scene, back to front.
  *
@@ -70,10 +95,25 @@ export interface PlacedPiece {
  * leaves it out of Play.
  */
 export function scenePieces(source: PlacementSource): PlacedPiece[] {
+  return walk(source).pieces;
+}
+
+/** Every backdrop in a scene, back to front, counted with the pieces. */
+export function sceneBackdrops(source: PlacementSource): BackdropPiece[] {
+  return walk(source).backdrops;
+}
+
+function walk(source: PlacementSource): { pieces: PlacedPiece[]; backdrops: BackdropPiece[] } {
   const pieces: PlacedPiece[] = [];
+  const backdrops: BackdropPiece[] = [];
+  let depth = 0;
   for (const layer of [...source.layers].reverse()) {
     const kind = layerKind(layer);
     if (!layer.visible || kind === "pattern" || kind === "tile") continue;
+    // Stored top-first, like the layers; under the layer's own placements.
+    for (const background of [...(layer.backgrounds ?? [])].reverse()) {
+      backdrops.push({ layerId: layer.id, background, depth: ++depth });
+    }
     const order = drawOrder(
       layer.placements,
       !ordersByHand(layer, source.isometric),
@@ -81,11 +121,11 @@ export function scenePieces(source: PlacementSource): PlacedPiece[] {
     );
     for (const placement of order) {
       for (const piece of piecesOf(placement, source.psdLayers(placement.psdKey))) {
-        pieces.push({ ...piece, layerId: layer.id, depth: pieces.length + 1 });
+        pieces.push({ ...piece, layerId: layer.id, depth: ++depth });
       }
     }
   }
-  return pieces;
+  return { pieces, backdrops };
 }
 
 /** A placement's artwork: itself, or every drawn layer inside its group. */
@@ -137,10 +177,12 @@ function piecesOf(
 export type CodeSource =
   | { kind: "layer"; layerId: string }
   | { kind: "placed"; layerId: string; placementId: string }
-  | { kind: "psd-layer"; layerId: string; placementId: string; psdKey: string; path: string };
+  | { kind: "psd-layer"; layerId: string; placementId: string; psdKey: string; path: string }
+  | { kind: "backdrop"; layerId: string; backgroundId: string };
 
 export function piecesFor(pieces: readonly PlacedPiece[], source: CodeSource): PlacedPiece[] {
   if (source.kind === "layer") return pieces.filter((p) => p.layerId === source.layerId);
+  if (source.kind === "backdrop") return [];
   const held = pieces.find((p) => p.placement.id === source.placementId);
   if (!held) return [];
   const unit = pieces.filter(
@@ -176,6 +218,56 @@ export function placementCode(pieces: readonly PlacedPiece[], taken: Set<string>
   return lines;
 }
 
+/** The lines for some backdrops, unindented — see the note at the top. */
+export function backdropCode(backdrops: readonly BackdropPiece[], taken: Set<string>): string[] {
+  const lines: string[] = [];
+  for (const { background, depth } of backdrops) {
+    const name = freeName(background.name || "backdrop", "backdrop", taken);
+    lines.push(`const ${name} = this.add.graphics().setScrollFactor(0).setDepth(${depth});`);
+    if (background.kind === "gradient" && background.gradient) {
+      const { from, to, angle } = background.gradient;
+      const colors = gradientCorners(from, to, angle ?? 0).map(hex);
+      const alphas = gradientAlphas(from, to, angle ?? 0).map(num);
+      lines.push(`${name}.fillGradientStyle(${[...colors, ...alphas].join(", ")});`);
+    } else {
+      const color = background.color ?? "#2b3b4a";
+      lines.push(`${name}.fillStyle(${hex(hexToNumber(color))}, ${num(alphaOf(color))});`);
+    }
+    lines.push(`${name}.fillRect(0, 0, this.scale.width, this.scale.height);`);
+  }
+  return lines;
+}
+
+/**
+ * The lines for some pieces and backdrops of a scene together, back to
+ * front — a backdrop under the artwork on its layer.
+ */
+export function partsCode(
+  pieces: readonly PlacedPiece[],
+  backdrops: readonly BackdropPiece[],
+  taken: Set<string>,
+): string[] {
+  const parts = [
+    ...backdrops.map((b) => ({ depth: b.depth, lines: () => backdropCode([b], taken) })),
+    ...pieces.map((p) => ({ depth: p.depth, lines: () => placementCode([p], taken) })),
+  ].sort((a, b) => a.depth - b.depth);
+  return parts.flatMap((part) => part.lines());
+}
+
+/** What a dragged row writes, or nothing when nothing on it draws. */
+export function codeFor(source: PlacementSource, row: CodeSource, taken: Set<string>): string[] {
+  const { pieces, backdrops } = walk(source);
+  const held = piecesFor(pieces, row);
+  const behind =
+    row.kind === "layer"
+      ? backdrops.filter((b) => b.layerId === row.layerId)
+      : row.kind === "backdrop"
+        ? backdrops.filter((b) => b.background.id === row.backgroundId)
+        : [];
+  if (held.length > 0 || behind.length > 0) return partsCode(held, behind, taken);
+  return row.kind === "psd-layer" ? barePlacement(row.psdKey, row.path, taken) : [];
+}
+
 /** A layer that is in a PSD but placed nowhere: where the file puts it. */
 export function barePlacement(psdKey: string, path: string, taken: Set<string>): string[] {
   const name = freeName(path, psdKey, taken);
@@ -187,26 +279,23 @@ export function barePlacement(psdKey: string, path: string, taken: Set<string>):
  * a comment naming each layer — what a scene file is written with.
  */
 export function sceneCode(source: PlacementSource): string {
-  const lines = sceneLines(scenePieces(source), source.layers, new Set());
+  const lines = sceneLines(source, new Set());
   return lines.map((line) => (line ? `    ${line}\n` : "\n")).join("");
 }
 
-/** The same lines, unindented, for some pieces of a scene, over `taken`. */
-export function sceneLines(
-  pieces: readonly PlacedPiece[],
-  layers: readonly Layer[],
-  taken: Set<string>,
-): string[] {
-  const names = new Map(layers.map((l) => [l.id, l.name]));
+/** The same lines, unindented, over `taken`. */
+export function sceneLines(source: PlacementSource, taken: Set<string>): string[] {
+  const { pieces, backdrops } = walk(source);
   const out: string[] = [];
-  let current: string | null = null;
-  for (const piece of pieces) {
-    if (piece.layerId !== current) {
-      if (current !== null) out.push("");
-      current = piece.layerId;
-      out.push(`// ${names.get(current) ?? "Layer"}`);
-    }
-    out.push(...placementCode([piece], taken));
+  for (const layer of [...source.layers].reverse()) {
+    const lines = partsCode(
+      pieces.filter((p) => p.layerId === layer.id),
+      backdrops.filter((b) => b.layerId === layer.id),
+      taken,
+    );
+    if (lines.length === 0) continue;
+    if (out.length > 0) out.push("");
+    out.push(`// ${layer.name}`, ...lines);
   }
   return out;
 }
@@ -244,6 +333,11 @@ function camel(text: string): string {
   return words
     .map((w, i) => (i === 0 ? w[0].toLowerCase() + w.slice(1) : w[0].toUpperCase() + w.slice(1)))
     .join("");
+}
+
+/** A packed colour as code: `0x87ceeb`. */
+function hex(value: number): string {
+  return `0x${(value & 0xffffff).toString(16).padStart(6, "0")}`;
 }
 
 /** A coordinate as code: two decimals at most, and no trailing zeros. */

@@ -375,13 +375,26 @@ pub fn scene_file_with(class: &str, meta: &ProjectMeta, placements: &str) -> Str
     if meta.genre.has_character() {
         return scene_file(class, meta.genre);
     }
-    let mut lines = String::new();
-    if meta.options.default_zoom != 1.0 && !meta.output.is_print() {
-        lines.push_str(&format!(
-            "    this.cameras.main.setZoom({});\n",
-            meta.options.default_zoom
-        ));
+    // The camera, before the placements: the world's origin in the middle of
+    // the screen, which is where Draw's dashed screen boundary is drawn. A
+    // fresh Phaser camera has the origin at its top-left instead, so artwork
+    // laid out inside that boundary starts half off the screen. A print
+    // project's camera is put on its page by `ExportForPrint()`'s runtime.
+    let mut camera = String::new();
+    if !meta.output.is_print() {
+        camera.push_str(
+            "    // The world's origin in the middle of the screen, where Draw's dashed\n    \
+             // screen boundary is centred.\n    \
+             this.cameras.main.centerOn(0, 0);\n",
+        );
+        if meta.options.default_zoom != 1.0 {
+            camera.push_str(&format!(
+                "    this.cameras.main.setZoom({});\n",
+                meta.options.default_zoom
+            ));
+        }
     }
+    let mut lines = String::new();
     lines.push_str(placements);
     // The one line a print project needs that a game does not: where the
     // page is printed. Written in rather than left commented out, so a new
@@ -394,7 +407,7 @@ pub fn scene_file_with(class: &str, meta: &ProjectMeta, placements: &str) -> Str
              ExportForPrint({ name: \"page\", formats: \"png\" });\n",
         );
     }
-    let anchored = format!("{PLACE_ANCHOR}{lines}");
+    let anchored = format!("{camera}{PLACE_ANCHOR}{lines}");
     scene_file(class, meta.genre).replacen(PLACE_ANCHOR, &anchored, 1)
 }
 

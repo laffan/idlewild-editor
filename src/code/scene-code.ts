@@ -34,6 +34,8 @@ export interface PlaceBlock {
   indent: string;
   /** The block's `setPosition`, if it has one. */
   position: PositionCall | null;
+  /** Its `setScale`, if it has one. */
+  scale: ScaleCall | null;
 }
 
 export interface PositionCall {
@@ -48,6 +50,11 @@ export interface PositionCall {
   y: number | null;
 }
 
+/** A `setScale(…)`: one argument for both axes, or one each. */
+export interface ScaleCall extends PositionCall {
+  uniform: boolean;
+}
+
 const STRING = String.raw`("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')`;
 const DECLARATION = new RegExp(
   String.raw`(^[ \t]*)(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*this\.P2P\.place\(\s*this\s*,\s*` +
@@ -57,25 +64,38 @@ const DECLARATION = new RegExp(
   "gm",
 );
 
-/** Every placing block in a file, in the order they are written. */
+/** A backdrop's block, `const sky = this.add.graphics()…` — see `backdropCode`. */
+const GRAPHICS = new RegExp(
+  String.raw`(^[ \t]*)(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*this\.add\.graphics\(`,
+  "gm",
+);
+
+/**
+ * Every placing block in a file, in the order they are written — a backdrop's
+ * Graphics among them, with no file or layer, so new lines go after it and a
+ * scene holding only backdrops is not taken for one holding nothing.
+ */
 export function parseBlocks(text: string): PlaceBlock[] {
   const blocks: PlaceBlock[] = [];
-  for (const match of text.matchAll(DECLARATION)) {
+  const add = (match: RegExpMatchArray, psdKey: string, path: string) => {
     const indent = match[1];
     const name = match[2];
     const start = (match.index ?? 0) + indent.length;
     const end = blockEnd(text, start, name);
     blocks.push({
       name,
-      psdKey: unquote(match[3]),
-      path: unquote(match[4]),
+      psdKey,
+      path,
       start,
       end,
       indent,
-      position: positionIn(text, name, start, end),
+      position: positionOf(callIn(text, name, "setPosition", start, end)),
+      scale: scaleIn(text, name, start, end),
     });
-  }
-  return blocks;
+  };
+  for (const match of text.matchAll(DECLARATION)) add(match, unquote(match[3]), unquote(match[4]));
+  for (const match of text.matchAll(GRAPHICS)) add(match, "", "");
+  return blocks.sort((a, b) => a.start - b.start);
 }
 
 /** The end of the declaration's line and of every `name.` line under it. */
@@ -89,8 +109,14 @@ function blockEnd(text: string, start: number, name: string): number {
   return end;
 }
 
-function positionIn(text: string, name: string, start: number, end: number): PositionCall | null {
-  const call = new RegExp(String.raw`\b${escape(name)}\.setPosition\(([^()]*)\)`, "g");
+function callIn(
+  text: string,
+  name: string,
+  method: string,
+  start: number,
+  end: number,
+): (PositionCall & { count: number }) | null {
+  const call = new RegExp(String.raw`\b${escape(name)}\.${method}\(([^()]*)\)`, "g");
   call.lastIndex = start;
   const match = call.exec(text);
   if (!match || match.index >= end) return null;
@@ -105,9 +131,51 @@ function positionIn(text: string, name: string, start: number, end: number): Pos
     to: match.index + match[0].length,
     argsFrom,
     argsTo: argsFrom + match[1].length,
-    x: parts.length === 2 ? read(parts[0]) : null,
-    y: parts.length === 2 ? read(parts[1]) : null,
+    x: read(parts[0]),
+    y: parts.length === 2 ? read(parts[1]) : parts.length === 1 ? read(parts[0]) : null,
+    count: parts.length,
   };
+}
+
+/** A `setPosition` is two numbers; any other count is not a position. */
+function positionOf(call: (PositionCall & { count: number }) | null): PositionCall | null {
+  if (!call) return null;
+  const { count, ...rest } = call;
+  return count === 2 ? rest : { ...rest, x: null, y: null };
+}
+
+function scaleIn(text: string, name: string, start: number, end: number): ScaleCall | null {
+  const call = callIn(text, name, "setScale", start, end);
+  if (!call) return null;
+  const { count, ...rest } = call;
+  return { ...rest, uniform: count === 1 };
+}
+
+/**
+ * The call the caret is inside — a block's `setPosition(…)` or its
+ * `setScale(…)` — if any.
+ */
+export function callAtCaret(
+  blocks: readonly PlaceBlock[],
+  caret: number,
+): { block: PlaceBlock; kind: "position" | "scale" } | null {
+  for (const block of blocks) {
+    if (block.position && caret >= block.position.from && caret <= block.position.to) {
+      return { block, kind: "position" };
+    }
+    if (block.scale && caret >= block.scale.from && caret <= block.scale.to) {
+      return { block, kind: "scale" };
+    }
+  }
+  return null;
+}
+
+/** The file with a block's `setScale` arguments replaced, one or two as it had. */
+export function withScale(text: string, block: PlaceBlock, x: number, y: number): string {
+  const call = block.scale;
+  if (!call) return text;
+  const args = call.uniform ? num(x) : `${num(x)}, ${num(y)}`;
+  return text.slice(0, call.argsFrom) + args + text.slice(call.argsTo);
 }
 
 /** The block whose `setPosition(…)` the caret is inside, if any. */

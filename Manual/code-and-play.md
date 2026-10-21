@@ -272,8 +272,28 @@ Part of [the Idlewild manual](README.md).
   file with no placing lines at all is given every placement its scene has.
   From then on the lines are yours — moving the thing on the canvas does not
   move its line, and deleting the line does not bring it back. Where the two
-  disagree, the sidebar says so (below). Fills, backdrops and pattern layers
-  are not drawn by this scaffold; a Game draws them
+  disagree, the sidebar says so (below)
+- **The camera starts centred on the world's origin** —
+  `this.cameras.main.centerOn(0, 0)` at the top of each scene's `create` — so
+  what you laid out inside Draw's dashed screen boundary is what the game opens
+  on, at a fixed Page Setup size as much as at the window's. A scene file
+  written before that line existed has the origin at the screen's top-left
+  instead: add the line, or rewrite the scene with Project Options' Change…
+  (its old version goes to `Backups/`)
+- **A background layer's colours and gradients are written as Phaser's own
+  Graphics**, since they are not PSDs and psd-to-phaser has nothing to place:
+
+  ```js
+  const sky = this.add.graphics().setScrollFactor(0).setDepth(1);
+  sky.fillGradientStyle(0x87ceeb, 0x87ceeb, 0xffffff, 0xffffff, 1, 1, 1, 1);
+  sky.fillRect(0, 0, this.scale.width, this.scale.height);
+  ```
+
+  Held still against the camera and the size of the screen, under the
+  artwork on their layer — the way Draw draws them. They are written in as
+  they are added, like placements, and drag in from the sidebar the same way.
+  An image backdrop is a PSD placed on the layer and is written as one. Fills
+  and pattern layers are not drawn by this scaffold; a Game draws them
 
 - **Phaser** is Vanilla with Phaser on the page: `index.html`, `style.css`,
   `script.js` with a running game in it, and `game.config.json`. No
@@ -332,8 +352,13 @@ Part of [the Idlewild manual](README.md).
   front. Two of the same file swapped on the canvas swap which line each
   answers to
 
-## Dragging a sprite by its `setPosition`
+## Dragging a sprite by its `setPosition` or `setScale`
 
+- **With the caret inside a `setScale(…)`** the same sprite is outlined with a
+  handle on its far corner, and dragging it scales it about its top-left
+  corner — the point psd-to-phaser places a sprite by. `setScale(s)` scales
+  both ways by how far the pointer moves from that corner; `setScale(x, y)`
+  takes each axis on its own. The call keeps the number of arguments it had
 - **Put the caret inside a `setPosition(…)`** and the sprite that call places
   is outlined in the running game. Drag it there: the numbers in the call
   follow it as it moves, and letting go saves the file. Move the caret out of

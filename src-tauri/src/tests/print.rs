@@ -67,6 +67,8 @@ fn the_scaffold_and_the_config_describe_the_sheet() {
              manual.\n    ExportForPrint({ name: \"page\", formats: \"png\" });\n"
         ));
         assert!(!scene.contains("import "));
+        // The runtime puts a print project's camera on its page instead.
+        assert!(!scene.contains("centerOn"));
 
         let config: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(game.join("js/game.config.json")).unwrap(),

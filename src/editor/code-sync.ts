@@ -6,7 +6,8 @@
  * where it goes. They are allowed to disagree — that is what it means for the
  * code to be yours — and this is everything that bridges them:
  *
- * - **Something placed in Draw is placed in the code, once.** When the
+ * - **Something placed in Draw is placed in the code, once** — a backdrop
+ *   added to a background layer too, as Graphics. When the
  *   document is saved with a placement the session has not seen before, its
  *   lines are written after the last placing block of its scene's file — see
  *   `code/placement-code.ts` and `code/scene-code.ts`. A scene file with no
@@ -16,9 +17,10 @@
  * - **Where the two disagree, the sidebar says so.** A placed PSD, or a layer
  *   in one, whose `setPosition` is not where the canvas has it carries a reset
  *   in Code's directory, which writes the canvas's numbers into the call.
- * - **The caret in a `setPosition` picks the sprite up.** The running game is
- *   told which sprite the call places, and outlines it; dragging it writes the
- *   numbers into the call as it moves and saves on release. See
+ * - **The caret in a `setPosition` or a `setScale` picks the sprite up.** The
+ *   running game is told which sprite the call places, and outlines it;
+ *   dragging it moves it, or scales it from its top-left corner, writes the
+ *   numbers into the call as it goes and saves on release. See
  *   `templates/play/drag-bridge.js` for the other half.
  *
  * Every write is saved as it is made — through the code panel when the file
@@ -36,9 +38,11 @@ import type { Layer } from "../lib/types";
 import type { WorldScene } from "../game/world-scene";
 import {
   declaredNames,
-  placementCode,
+  partsCode,
+  sceneBackdrops,
   sceneLines,
   scenePieces,
+  type BackdropPiece,
   type PlacedPiece,
   type PlacementSource,
 } from "../code/placement-code";
@@ -46,10 +50,11 @@ import {
   appendPoint,
   matchBlocks,
   parseBlocks,
-  positionAtCaret,
+  callAtCaret,
   samePosition,
   withLines,
   withPosition,
+  withScale,
 } from "../code/scene-code";
 import type { CodePanel } from "./code-panel";
 import type { GameFrame } from "./game-frame";
@@ -85,7 +90,7 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   let started = false;
   let off = new Set<string>();
   let posted = "";
-  let held: string | null = null;
+  let held: { name: string; kind: "position" | "scale" } | null = null;
   let queue: Promise<void> = Promise.resolve();
   let refreshTimer = 0;
 
@@ -137,13 +142,13 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   }
 
   /** Lines for pieces, after the last placing block in a scene's file. */
-  async function place(sceneId: string, pieces: PlacedPiece[]): Promise<void> {
+  async function place(sceneId: string, pieces: PlacedPiece[], backdrops: BackdropPiece[]): Promise<void> {
     const path = await fileOf(sceneId);
-    if (!path || pieces.length === 0) return;
+    if (!path || pieces.length + backdrops.length === 0) return;
     await edit(path, (text) => {
       const point = appendPoint(text, parseBlocks(text));
       if (!point) return null;
-      return withLines(text, point, placementCode(pieces, declaredNames(text)));
+      return withLines(text, point, partsCode(pieces, backdrops, declaredNames(text)));
     });
   }
 
@@ -153,13 +158,13 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
       const path = await fileOf(scene.id);
       const text = path && (await read(path));
       if (!path || !text || parseBlocks(text).length > 0) continue;
-      const pieces = scenePieces(source(scene.layers));
-      if (pieces.length === 0) continue;
+      const all = source(scene.layers);
+      if (scenePieces(all).length === 0 && sceneBackdrops(all).length === 0) continue;
       // Written now, so not written again as new.
-      for (const layer of scene.layers) for (const p of layer.placements) known.add(p.id);
+      idsOf(scene.layers).forEach((id) => known.add(id));
       await edit(path, (now) => {
         const point = appendPoint(now, parseBlocks(now));
-        return point ? withLines(now, point, sceneLines(pieces, scene.layers, declaredNames(now))) : null;
+        return point ? withLines(now, point, sceneLines(all, declaredNames(now))) : null;
       });
     }
   }
@@ -171,14 +176,13 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
       await fillEmpty();
     }
     for (const scene of store.scenes) {
-      const fresh = new Set<string>();
-      for (const layer of scene.layers) {
-        for (const p of layer.placements) if (!known.has(p.id)) fresh.add(p.id);
-      }
+      const fresh = new Set(idsOf(scene.layers).filter((id) => !known.has(id)));
       if (fresh.size === 0) continue;
       fresh.forEach((id) => known.add(id));
-      const pieces = scenePieces(source(scene.layers)).filter((p) => fresh.has(p.placement.id));
-      await place(scene.id, pieces);
+      const all = source(scene.layers);
+      const pieces = scenePieces(all).filter((p) => fresh.has(p.placement.id));
+      const backdrops = sceneBackdrops(all).filter((b) => fresh.has(b.background.id));
+      await place(scene.id, pieces, backdrops);
     }
   }
 
@@ -214,15 +218,30 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   /** Tell the game which sprite the caret's `setPosition` places, if any. */
   function aim(): void {
     const open = deps.inCode() ? code.editing : null;
-    const block = open?.path.startsWith("js/scenes/")
-      ? positionAtCaret(parseBlocks(open.view.state.doc.toString()), open.view.state.selection.main.head)
+    const at = open?.path.startsWith("js/scenes/")
+      ? callAtCaret(parseBlocks(open.view.state.doc.toString()), open.view.state.selection.main.head)
       : null;
-    const call = block?.position;
+    // A backdrop's Graphics has no file behind it, so nothing to pick up.
+    const block = at?.block.psdKey ? at.block : null;
+    const where = block?.position;
+    const scale = block?.scale;
+    const ready =
+      at?.kind === "scale"
+        ? scale && scale.x !== null && scale.y !== null
+        : where && where.x !== null && where.y !== null;
+    // Found by where the block puts it; a scale is dragged from that corner.
     const message =
-      block && call && call.x !== null && call.y !== null
-        ? { source: TARGET, texture: textureKey(block.psdKey, block.path), x: call.x, y: call.y }
+      block && ready
+        ? {
+            source: TARGET,
+            texture: textureKey(block.psdKey, block.path),
+            mode: at?.kind,
+            x: where?.x ?? null,
+            y: where?.y ?? null,
+            uniform: scale?.uniform ?? true,
+          }
         : { source: TARGET, texture: null };
-    held = block?.name ?? null;
+    held = block && ready && at ? { name: block.name, kind: at.kind } : null;
     const key = JSON.stringify(message);
     if (key === posted) return;
     posted = key;
@@ -237,13 +256,17 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
       return;
     }
     const open = code.editing;
-    const x = Number(data.x);
-    const y = Number(data.y);
+    const scaling = held?.kind === "scale";
+    const x = Number(scaling ? data.sx : data.x);
+    const y = Number(scaling ? data.sy : data.y);
     if (!open || !held || !Number.isFinite(x) || !Number.isFinite(y)) return;
     const text = open.view.state.doc.toString();
-    const block = parseBlocks(text).find((b) => b.name === held && b.position);
-    if (!block?.position) return;
-    replaceIn(open.view, withPosition(text, block, x, y), block.position.argsFrom);
+    const name = held.name;
+    const block = parseBlocks(text).find((b) => b.name === name);
+    const call = scaling ? block?.scale : block?.position;
+    if (!block || !call) return;
+    const next = scaling ? withScale(text, block, x, y) : withPosition(text, block, x, y);
+    replaceIn(open.view, next, call.argsFrom);
     if (data.phase === "end") void code.save().then(refresh);
   };
 
@@ -313,8 +336,16 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   };
 }
 
+/** Every placement and backdrop a scene's layers hold, by id. */
+function idsOf(layers: readonly Layer[]): string[] {
+  return layers.flatMap((l) => [
+    ...l.placements.map((p) => p.id),
+    ...(l.backgrounds ?? []).map((b) => b.id),
+  ]);
+}
+
 function allPlacementIds(store: DocStore): string[] {
-  return store.scenes.flatMap((scene) => scene.layers.flatMap((l) => l.placements.map((p) => p.id)));
+  return store.scenes.flatMap((scene) => idsOf(scene.layers));
 }
 
 /**

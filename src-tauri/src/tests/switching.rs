@@ -122,6 +122,8 @@ fn switching_a_game_to_p2p_backs_up_what_it_replaces() {
             .any(|p| p.starts_with("js/shared") || p.starts_with("js/prefabs")));
         let scene = store::read_game_file(&meta.id, "js/scenes/Scene1.js").expect("scene");
         assert!(scene.contains("    // Place PSDs here.\n    const tree = this.P2P.place"));
+        // Centred on the origin, as Draw's screen boundary is.
+        assert!(scene.contains("    this.cameras.main.centerOn(0, 0);\n    // Place PSDs here.\n"));
         assert!(!scene.contains("import "));
 
         // The document and the config follow the meta.

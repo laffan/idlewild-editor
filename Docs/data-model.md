@@ -138,7 +138,9 @@ is switched onto the scaffold), and dragged in a row at a time from the
 sidebar after that; from then on they are the author's, and Code's sidebar
 marks where they and the canvas disagree. See
 [The scene files against the canvas](code-panel.md#the-scene-files-against-the-canvas).
-Fills, backdrops and pattern layers are not drawn by it.
+A background layer's colours and gradients are written as Phaser Graphics
+held to the camera (`backdropCode`); fills and pattern layers are not drawn by
+it.
 
 A fill marked not-walkable, a boundary marked blocking and a placed PSD's
 collider are what a top-down character routes *around* and what a side-on

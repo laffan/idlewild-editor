@@ -7,14 +7,15 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
 
 ---
 
-- **A PSD to Phaser scene draws placements and nothing else.** Fills,
-  backdrops and pattern layers are the document's rather than PSDs, and the
+- **A PSD to Phaser scene draws placements and backdrops, and nothing else.**
+  Fills and pattern layers are the document's rather than PSDs, and the
   scaffold that writes placement code has no line for them — a Game's
-  `canvas.js` draws them, and a print project made after the scaffold dropped
-  `js/shared/` prints no backdrop. Writing them out as Graphics calls is the
-  same job as placements, and was left for after placements had been lived
-  with. The same goes for a placement's `hiddenParts` on a PSD whose manifest
-  had not loaded when its code was written: it is placed whole.
+  `canvas.js` draws them. Backdrops are written as Graphics filled to the
+  screen and held to the camera, which is right at a zoom of 1 or more; zoomed
+  out past 1 they no longer reach the screen's edges, and a gradient on a
+  print project with several artboards is drawn per page rather than across
+  the spread as the canvas draws it. A placement's `hiddenParts` on a PSD whose
+  manifest had not loaded when its code was written is placed whole.
 - **Placement code is written, not kept.** Once a scene file has its lines,
   moving the thing on the canvas does not move the line; that is the point of
   Draw being an asset editor. The sidebar's reset covers position only —

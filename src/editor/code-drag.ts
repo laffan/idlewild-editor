@@ -2,7 +2,8 @@
  * Dragging a row of Code mode's sidebar onto the code, for the lines that
  * place it.
  *
- * A layer, a placed PSD, or one layer inside a placed PSD: pick its row up,
+ * A layer, a placed PSD, one layer inside a placed PSD, or a backdrop — a
+ * background layer's colour or gradient, written as Graphics: pick its row up,
  * let go anywhere over the canvas area or the code panel, and the
  * `this.P2P.place` lines for it are written into the open file **at the
  * caret** — see `code/insert-snippet.ts` for why the caret and not the drop
@@ -23,11 +24,8 @@
 import { h } from "../lib/dom";
 import * as log from "../lib/log";
 import {
-  barePlacement,
+  codeFor,
   declaredNames,
-  piecesFor,
-  placementCode,
-  scenePieces,
   type CodeSource,
   type PlacementSource,
 } from "../code/placement-code";
@@ -115,14 +113,7 @@ function drop(source: CodeSource, deps: CodeDragDeps): void {
     log.warn("Open a scene file and put the caret where the lines should go, then drop it there.");
     return;
   }
-  const taken = declaredNames(editing.view.state.doc.toString());
-  const pieces = piecesFor(scenePieces(deps.source()), source);
-  const lines =
-    pieces.length > 0
-      ? placementCode(pieces, taken)
-      : source.kind === "psd-layer"
-        ? barePlacement(source.psdKey, source.path, taken)
-        : [];
+  const lines = codeFor(deps.source(), source, declaredNames(editing.view.state.doc.toString()));
   if (lines.length === 0) {
     log.warn("Nothing on that row draws, so there is nothing to place.");
     return;
