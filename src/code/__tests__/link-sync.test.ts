@@ -133,3 +133,24 @@ describe("blocks from before links", () => {
     expect(result.diverged.size).toBe(1);
   });
 });
+
+describe("a pass that cannot see a group's layers yet", () => {
+  it("leaves the blocks of a placement it can still see alone", () => {
+    const records: LinkRecords = {
+      "a\u0000house/roof": {
+        sceneId: "s",
+        name: "roof",
+        text: 'const roof = this.P2P.place(this, "tree", "house/roof");\nroof.setPosition(1, 2);\nroof.setDepth(1);',
+        linked: true,
+      },
+    };
+    const text = empty.replace(
+      "    // Place PSDs here.\n",
+      '    // Place PSDs here.\n    const roof = this.P2P.place(this, "tree", "house/roof");\n    roof.setPosition(1, 2);\n    roof.setDepth(1);\n',
+    );
+    // The file has not loaded, so the placement is one part, under "house".
+    const after = pass(text, sourceWith([{ id: "a", layerPath: "house" }]), records);
+    expect(after.text).toBe(text);
+    expect(records["a\u0000house/roof"].removed).toBeUndefined();
+  });
+});

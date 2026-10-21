@@ -213,6 +213,8 @@ export const ICONS = {
   /* An arrow curving back on itself, and its mirror. Undo and redo: the same
      glyph pair the two header buttons carry, drawn so the difference between
      them is legible at 17px — the hook is on opposite sides. */
+  /** A link with a break in it: code that no longer follows Draw. */
+  unlink: ["M9 17H7A5 5 0 0 1 7 7", "M15 7h2a5 5 0 0 1 4 8", "M8 12h3", "m2 2 20 20"],
   undo: ["M9 14 4 9l5-5", "M4 9h10a6 6 0 0 1 0 12h-3"],
   redo: ["m15 14 5-5-5-5", "M20 9H10a6 6 0 0 0 0 12h3"],
   /* An open book, for the reference along the bottom of the code modal. */

@@ -352,6 +352,10 @@ Part of [the Idlewild manual](README.md).
   Pressing it writes Draw's values into those lines — any lines you added to
   the block stay — saves, and **links the block to Draw again**, so it follows
   Draw from then on until you next edit it
+- **Draw shows them too.** A placed PSD whose block is yours and no longer
+  matches Draw carries a **broken link** at the right-hand end of its row in
+  the layer list, after its size, and beside its top right-hand corner on the
+  canvas. Pressing either opens Code at the line that places it
 - Which blocks follow Draw is remembered with the project, beside its
   document rather than in the code, so the code reads as psd-to-phaser and
   nothing else. Blocks written by an earlier version are taken on the first

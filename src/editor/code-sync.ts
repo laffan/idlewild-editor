@@ -43,6 +43,8 @@ import type { CodePanel } from "./code-panel";
 import type { GameFrame } from "./game-frame";
 import { renameInCode, type CodeRename } from "./code-renames";
 import { createCodeEditor, replaceIn } from "./code-edit";
+import { CodeMarks } from "./code-marks";
+import type { Viewport } from "../drawing/viewport";
 
 export interface CodeSyncDeps {
   projectId: string;
@@ -54,6 +56,10 @@ export interface CodeSyncDeps {
   redraw: () => void;
   /** Whether the editor is in Code, where the caret and the sidebar matter. */
   inCode: () => boolean;
+  /** The canvas, which carries a mark beside each piece that has gone its own way. */
+  canvas: HTMLElement;
+  /** Open the code at a line — Code, with the file at it. */
+  openCode: (path: string, line: number) => void;
 }
 
 export interface CodeSync {
@@ -63,6 +69,10 @@ export interface CodeSync {
   reset: (placementId: string, path?: string) => void;
   /** Bring the scene files into line — after anything that changed either side. */
   refresh: () => void;
+  /** Open the code where a placed PSD's unit, or one layer of it, is placed. */
+  reveal: (placementId: string, path?: string) => void;
+  /** The camera moved: the canvas's marks move with it. */
+  sync: (view: Viewport) => void;
   /**
    * A PSD or a layer was renamed: rename it in the code and in the links in
    * one step, so no pass in between reads a renamed block as a hand edit.
@@ -96,6 +106,7 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
     })
     .catch((err) => log.error("Could not read which code the editor keeps:", err));
   const { edit } = createCodeEditor({ projectId, code, gameFrame });
+  const marks = new CodeMarks(deps.canvas, (placementId) => reveal(placementId));
 
   const source = (layers: readonly Layer[]): PlacementSource => ({
     layers,
@@ -165,6 +176,57 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
     const changed = next.size !== off.size || [...next].some((key) => !off.has(key));
     off = next;
     if (changed) deps.redraw();
+    placeMarks();
+  }
+
+  /** A mark beside every unit of the open scene that has gone its own way. */
+  function placeMarks(): void {
+    const units = new Map<string, Array<{ id: string; x: number; y: number; width: number; height: number }>>();
+    for (const layer of store.layers) {
+      for (const p of layer.placements) {
+        const unit = unitOf(p);
+        if (!off.has(`unit:${unit}`)) continue;
+        const held = units.get(unit) ?? [];
+        held.push(p);
+        units.set(unit, held);
+      }
+    }
+    marks.set(
+      [...units.values()].map((members) => {
+        const left = Math.min(...members.map((p) => p.x));
+        const top = Math.min(...members.map((p) => p.y));
+        const right = Math.max(...members.map((p) => p.x + p.width));
+        const bottom = Math.max(...members.map((p) => p.y + p.height));
+        return {
+          placementId: members[0].id,
+          rect: { x: left, y: top, width: right - left, height: bottom - top },
+        };
+      }),
+    );
+  }
+
+  /** The editor's block for a unit, or one layer of it: its file and line. */
+  async function reveal(placementId: string, path?: string): Promise<void> {
+    await runs;
+    const parts = sceneParts(source(store.layers));
+    const placement = parts.find((p) => p.id === placementId)?.piece?.placement;
+    if (!placement) return;
+    const part = parts.find(
+      (p) =>
+        p.piece &&
+        records[p.key] &&
+        unitOf(p.piece.placement) === unitOf(placement) &&
+        (path === undefined || p.piece.path === path),
+    );
+    const record = part && records[part.key];
+    const file = record && (await fileOf(record.sceneId));
+    if (!record || !file) return;
+    const open = code.editing;
+    const text =
+      open?.path === file ? open.view.state.doc.toString() : await gameFiles.read(projectId, file);
+    const block = parseBlocks(text).find((b) => b.name === record.name);
+    if (!block) return;
+    deps.openCode(file, text.slice(0, block.start).split("\n").length);
   }
 
   const refresh = (): void => {
@@ -245,6 +307,8 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
   };
   const onSaved = () => void run(true);
   const onScene = () => refresh();
+  const onChange = () => placeMarks();
+  store.addEventListener("change", onChange);
   document.addEventListener("selectionchange", onSelection);
   document.addEventListener("keyup", onKey, true);
   store.addEventListener("saved", onSaved);
@@ -277,6 +341,8 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
     refresh: () => {
       void run(true).then(refresh);
     },
+    reveal: (placementId, path) => void reveal(placementId, path),
+    sync: (view) => marks.sync(view),
     renamed: (rename) => {
       runs = runs.then(async () => {
         await renameInCode({ projectId, code, gameFrame }, rename);
@@ -300,6 +366,8 @@ export function createCodeSync(deps: CodeSyncDeps): CodeSync {
       document.removeEventListener("keyup", onKey, true);
       store.removeEventListener("saved", onSaved);
       store.removeEventListener("scene", onScene);
+      store.removeEventListener("change", onChange);
+      marks.destroy();
       gameFrame.onDragMessage = null;
     },
   };

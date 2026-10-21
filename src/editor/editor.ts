@@ -107,11 +107,8 @@ export async function mountEditor(
   function psdChanged(): void {
     if (gameFrame.isRunning) gameFrame.reload();
   }
-  // The console's level chip links to a file the code modal can open; `code`
-  // is built further down, and this only runs when something is clicked.
+  // The console's level chip opens its file in Code; `code` is built below.
   const terminal = new Terminal((site) => {
-    // A line in the drawer knows which file it was written in, and the shortest
-    // way to say so is to show it — which means being in Code.
     setMode("code");
     code.openAt(site.path, site.line);
   });
@@ -484,6 +481,7 @@ export async function mountEditor(
         drawing?.sync(view);
         minimap.setViewport(view);
         guides.sync(view);
+        codeSync?.sync(view);
         zoomBadge.setZoom(view.zoom);
         // The shape is in world units and the bar is chrome, so the bar has to
         // be moved every time the camera does.
@@ -580,6 +578,7 @@ export async function mountEditor(
   function refreshPanels(): void {
     layers.render();
     inspector.render();
+    codeSync?.refresh(); // the files are in, so every layer of a group can be seen
   }
 
   function setActiveLayer(layerId: string): void {
@@ -659,6 +658,7 @@ export async function mountEditor(
   const codeSync = meta.genre !== "p2p" ? null : createCodeSync({
     projectId: meta.id, store, code, gameFrame, scene: () => handle?.scene ?? null,
     redraw: () => layers.render(), inCode: () => modeSwitch.mode() === "code",
+    canvas: canvasWrap, openCode: (path, line) => (setMode("code"), code.openAt(path, line)),
   });
 
   async function leave(): Promise<void> {

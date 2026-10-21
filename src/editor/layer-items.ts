@@ -301,6 +301,8 @@ export function renderLayerItem(
   onSelect: (selection: Selection, event: MouseEvent) => void,
   onGrip?: (event: PointerEvent) => void,
   onRename?: (name: string) => void,
+  /** At the right-hand end, after the dimensions — see `unlinkMark`. */
+  mark?: HTMLElement | null,
 ): HTMLElement {
   const classes = ["layer-item"];
   if (active) classes.push("active");
@@ -364,6 +366,7 @@ export function renderLayerItem(
           h("span", { text: item.warning }),
         )
       : h("span", { class: "layer-item-detail m", text: item.detail }),
+    mark ?? null,
   );
 
   if (onGrip) {

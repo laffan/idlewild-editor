@@ -50,7 +50,7 @@ import { renderDirectory } from "./layer-directory";
 import { StrokesTray } from "./strokes-tray";
 import type { ManifestLayer } from "../lib/manifest";
 import type { CodeSource } from "./code-drag";
-import type { CodeStatus } from "./layer-directory";
+import { unlinkMark, type CodeStatus } from "./layer-directory";
 
 export interface LayersPanelCallbacks {
   onSelectLayer: (layerId: string) => void;
@@ -391,6 +391,9 @@ export class LayersPanel {
             item.psdKey && this.callbacks.onRenamePsd
               ? (name) => this.callbacks.onRenamePsd?.(item.psdKey ?? "", name)
               : undefined,
+            item.selection.kind === "placement"
+              ? unlinkMark(this.callbacks.codeStatus?.() ?? null, item.selection.placementId)
+              : null,
           ),
         );
       }

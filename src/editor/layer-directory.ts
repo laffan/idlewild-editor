@@ -64,6 +64,33 @@ export interface DirectoryContext {
 export interface CodeStatus {
   diverged: (placementId: string, path?: string) => boolean;
   reset: (placementId: string, path?: string) => void;
+  /** Open the code where it is placed. */
+  reveal: (placementId: string, path?: string) => void;
+}
+
+/**
+ * Draw's mark on a placed PSD's row whose code has gone its own way — the
+ * same pieces Code's directory carries a reset for. A broken link, at the
+ * row's right-hand end, which opens the code where it is placed. A span
+ * rather than a button, because the row may be a button already.
+ */
+export function unlinkMark(status: CodeStatus | null, placementId: string): HTMLElement | null {
+  if (!status?.diverged(placementId)) return null;
+  return h(
+    "span",
+    {
+      class: "code-unlink",
+      role: "button",
+      tabindex: "0",
+      title: "Edited by hand in the code — open it where it is placed",
+      onPointerDown: (event: Event) => event.stopPropagation(),
+      onClick: (event: Event) => {
+        event.stopPropagation();
+        status.reveal(placementId);
+      },
+    },
+    icon(ICONS.unlink, 12),
+  );
 }
 
 /**

@@ -108,13 +108,19 @@ export function syncScene(input: SceneSyncInput): SceneSync {
     records[part.key] = { sceneId, name, text: normalize(lines.join("\n")), linked: true };
   }
 
-  // 4. Followed, and 5. taken out.
+  // 4. Followed, and 5. taken out — but only once the piece's placement has
+  // gone. A group whose file has not loaded yet is one part under its own
+  // path rather than one per layer inside it, so a key can be missing for a
+  // placement that is still there; that block waits for a pass that can see
+  // it.
+  const present = new Set(parts.map((part) => part.id));
   for (const [key, record] of mine()) {
     if (!record.linked || record.removed) continue;
     const block = find(record.name);
     if (!block) continue;
     const part = byKey.get(key);
     if (!part) {
+      if (present.has(idOf(key))) continue;
       text = withoutBlock(text, block);
       record.removed = true;
       continue;
@@ -133,6 +139,11 @@ export function syncScene(input: SceneSyncInput): SceneSync {
     if (part && block && syncBlock(text, block, part.lines(record.name)) !== text) diverged.add(key);
   }
   return { text, diverged };
+}
+
+/** The placement or backdrop a link's key names. */
+function idOf(key: string): string {
+  return key.startsWith("bg:") ? key.slice(3) : key.split("\u0000")[0];
 }
 
 /** Link one released block again, with Draw's values written into it. */
