@@ -17,8 +17,17 @@ Part of [Idlewild's technical documentation](../README-TECHNICAL.md).
   had not loaded when its code was written: it is placed whole.
 - **Placement code is written, not kept.** Once a scene file has its lines,
   moving the thing on the canvas does not move the line; that is the point of
-  Draw being an asset editor, and it is also the gap. Dragging the row in
-  again writes the new numbers beside the old.
+  Draw being an asset editor. The sidebar's reset covers position only —
+  a resize or a depth that has moved is not marked.
+- **Lines are matched to the canvas by file, layer and order**, with no id in
+  the code. Two placements of one file reordered on the canvas swap which line
+  each answers to; deleting one shifts the rest of that file's onto the line
+  before. Which placements have been written is remembered per session, so a
+  scene file emptied of every block by hand is filled again next session.
+- **The sprite a `setPosition` drags is found by texture and nearness**, so
+  two copies of one layer standing on the same point are one choice, and a
+  sprite whose code puts it inside a container is dragged in the container's
+  coordinates as though they were the world's.
 - **Nothing in a scaffolded project draws a tile layer yet.** The data reaches
   the exported game — `game.config.json` carries `tiles` per layer and
   `tilesets` beside them, in the shape every Phaser tilemap helper already

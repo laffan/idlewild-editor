@@ -16,7 +16,8 @@
  * Switching onto PSD to Phaser writes each scene's placements into its
  * `create` as code — `code/placement-code.ts` — which is the one time the
  * editor writes a scene's placements out whole. From then on the scene file
- * is yours, and the sidebar's rows drag in whatever is placed after.
+ * is yours; what is placed afterwards is written in as it is placed, and the
+ * sidebar's rows drag in whatever else is wanted — see `code-sync.ts`.
  *
  * The editor is closed and opened again around the switch, because the open
  * one holds the document with the old scaffold in it and would write it back.

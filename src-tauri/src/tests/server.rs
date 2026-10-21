@@ -189,6 +189,13 @@ fn the_game_tree_is_served_the_way_an_export_is_laid_out() {
             "the bridge has to be in place before the first module runs",
         );
         assert!(played.body.contains("js/main.js"), "the page itself survives");
+        // The drag bridge, after the page's own Phaser and before its code:
+        // it wraps `Phaser.Game.prototype.boot`, so it needs the first and
+        // has to be in place before the second constructs a game.
+        let drag = played.body.find("idlewild-drag-target").expect("the drag bridge");
+        assert!(played.body.find("phaser.min.js").is_some_and(|at| at < drag));
+        assert!(drag < played.body.find("</head>").expect("a head"));
+        assert!(!page.body.contains("idlewild-drag-target"));
 
         // The runtimes an export carries, answered from this binary — at the
         // path the scaffold uses now, and at the one projects made before the

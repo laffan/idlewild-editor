@@ -52,6 +52,15 @@ export class GameFrame {
    * canvas as it stands. Set by the mode switch, which holds the store.
    */
   beforeRun: () => Promise<void> = async () => {};
+  /**
+   * A message from the drag bridge in the running game — `idlewild-drag…` —
+   * and the way to answer it. See `templates/play/drag-bridge.js` and
+   * `code-sync.ts`, which is the one listener.
+   */
+  onDragMessage: ((data: { source: string; [key: string]: unknown }) => void) | null = null;
+  post(message: unknown): void {
+    this.frame?.contentWindow?.postMessage(message, "*");
+  }
   /** Told whenever the game starts or stops — the code bar's Run button. */
   onRunningChange: ((running: boolean) => void) | null = null;
 
@@ -237,6 +246,13 @@ export class GameFrame {
    * `log-value.ts` describes.
    */
   private readonly onMessage = (event: MessageEvent): void => {
+    const drag = event.data as { source?: unknown } | null;
+    if (typeof drag?.source === "string" && drag.source.startsWith("idlewild-drag")) {
+      if (event.source === this.frame?.contentWindow) {
+        this.onDragMessage?.(drag as { source: string });
+      }
+      return;
+    }
     // A page from `ExportForPrint()` — only from the game this frame started.
     if (this.exporter && isPrintPage(event.data)) {
       if (event.source !== this.frame?.contentWindow) return;

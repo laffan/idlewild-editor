@@ -11,12 +11,12 @@
  * tree.setDepth(3);
  * ```
  *
- * This is where those lines come from, twice over: a whole scene's worth when
- * a project is switched onto PSD to Phaser (see `editor/scaffold-switch.ts`),
- * and one row's worth when a layer, a placed PSD or a layer inside one is
- * dragged out of the sidebar onto the code (see `editor/code-drag.ts`). Both
- * ask the same function, so a dragged line is the line the whole scene would
- * have had.
+ * This is where those lines come from: a whole scene's worth when a project
+ * is switched onto PSD to Phaser (see `editor/scaffold-switch.ts`), one
+ * placement's when it is first placed in Draw (`editor/code-sync.ts`), and one
+ * row's worth when a layer, a placed PSD or a layer inside one is dragged out
+ * of the sidebar onto the code (`editor/code-drag.ts`). All ask the same
+ * function, so a line is the line the whole scene would have had.
  *
  * **One `place` per piece of artwork.** psd-to-phaser's `setPosition` on a
  * group puts every child on the same point, so a placement standing on a
@@ -187,17 +187,26 @@ export function barePlacement(psdKey: string, path: string, taken: Set<string>):
  * a comment naming each layer — what a scene file is written with.
  */
 export function sceneCode(source: PlacementSource): string {
-  const pieces = scenePieces(source);
-  const taken = new Set<string>();
-  const names = new Map(source.layers.map((l) => [l.id, l.name]));
-  let out = "";
+  const lines = sceneLines(scenePieces(source), source.layers, new Set());
+  return lines.map((line) => (line ? `    ${line}\n` : "\n")).join("");
+}
+
+/** The same lines, unindented, for some pieces of a scene, over `taken`. */
+export function sceneLines(
+  pieces: readonly PlacedPiece[],
+  layers: readonly Layer[],
+  taken: Set<string>,
+): string[] {
+  const names = new Map(layers.map((l) => [l.id, l.name]));
+  const out: string[] = [];
   let current: string | null = null;
   for (const piece of pieces) {
     if (piece.layerId !== current) {
+      if (current !== null) out.push("");
       current = piece.layerId;
-      out += `${out ? "\n" : ""}    // ${names.get(current) ?? "Layer"}\n`;
+      out.push(`// ${names.get(current) ?? "Layer"}`);
     }
-    for (const line of placementCode([piece], taken)) out += `    ${line}\n`;
+    out.push(...placementCode([piece], taken));
   }
   return out;
 }

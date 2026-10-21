@@ -28,7 +28,9 @@
  * And in a PSD to Phaser project a row can be **dragged onto the code**: a
  * layer, a placed PSD or a layer inside one, let go over the canvas area or
  * the code panel, writes the `this.P2P.place` lines for it at the caret. See
- * `code-drag.ts`.
+ * `code-drag.ts`. A placed PSD or a layer in one whose code puts it somewhere
+ * other than the canvas does carries a **reset** at the end of its row, which
+ * writes the canvas's position into the code — see `code-sync.ts`.
  */
 
 import { h, ICONS, icon } from "../lib/dom";
@@ -55,6 +57,37 @@ export interface DirectoryContext {
   toggle: (id: string) => void;
   /** Make a row draggable onto the code, where the project takes it. */
   dragToCode?: (row: HTMLElement, source: CodeSource, label: string) => void;
+  /** Where the code and the canvas disagree about a position, and the fix. */
+  codeStatus?: CodeStatus | null;
+}
+
+export interface CodeStatus {
+  diverged: (placementId: string, path?: string) => boolean;
+  reset: (placementId: string, path?: string) => void;
+}
+
+/**
+ * The reset at the end of a row whose code stands it somewhere else. A span
+ * rather than a button, because a placed PSD's row is a button already.
+ */
+function resetMark(ctx: DirectoryContext, placementId: string, path?: string): HTMLElement | null {
+  const status = ctx.codeStatus;
+  if (!status?.diverged(placementId, path)) return null;
+  const mark = h(
+    "span",
+    {
+      class: "code-reset",
+      role: "button",
+      tabindex: "0",
+      title: "The code puts this somewhere else — reset it to where it is in Draw",
+      onClick: (event: Event) => {
+        event.stopPropagation();
+        status.reset(placementId, path);
+      },
+    },
+    icon(ICONS.restart, 12),
+  );
+  return mark;
 }
 
 /**
@@ -179,6 +212,7 @@ function psdRow(
       class: "layer-item-detail m",
       text: item.warning ?? item.detail,
     }),
+    resetMark(ctx, placementId),
   );
   ctx.dragToCode?.(row, { kind: "placed", layerId, placementId }, item.label);
   return row;
@@ -228,6 +262,7 @@ function fillPsd(
         psdLayerThumbBox(key, (thumbs) => thumbsByPath(thumbs).get(layer.path), layerGlyph(layer)),
         h("span", { class: "psd-layer-name", text: layer.name }),
         h("span", { class: "psd-layer-kind m", text: layer.category }),
+        resetMark(ctx, at.placementId, layer.path),
       ),
     );
     ctx.dragToCode?.(row, { kind: "psd-layer", ...at, psdKey: key, path: layer.path }, layer.name);

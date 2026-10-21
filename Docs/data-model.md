@@ -132,9 +132,12 @@ generates pattern layers, because the character walking it needs the whole
 document as data. Everything simpler keeps the editor's own machinery out of
 the tree: the user should not be reading the code that makes the editor run.
 In a PSD to Phaser project the canvas is an asset editor — what is placed
-there reaches the game when a line of the scene file places it, written out
-whole when a project is switched onto the scaffold or dragged in a row at a
-time from the sidebar (see [Dragging rows onto the code](code-panel.md#dragging-rows-onto-the-code)).
+there reaches the game when a line of the scene file places it. Those lines
+are written once, as the thing is placed (or for a whole scene, when a project
+is switched onto the scaffold), and dragged in a row at a time from the
+sidebar after that; from then on they are the author's, and Code's sidebar
+marks where they and the canvas disagree. See
+[The scene files against the canvas](code-panel.md#the-scene-files-against-the-canvas).
 Fills, backdrops and pattern layers are not drawn by it.
 
 A fill marked not-walkable, a boundary marked blocking and a placed PSD's

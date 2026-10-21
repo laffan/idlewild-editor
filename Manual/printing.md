@@ -136,8 +136,9 @@ Part of [the Idlewild manual](README.md).
   }
   ```
 
-  Placing artwork is code too: drag a layer or a PSD out of Code's sidebar to
-  write its `this.P2P.place` lines at the caret — see
+  Placing artwork is code too: what you put on the page in Draw is written
+  into the scene as you place it, and a layer or a PSD dragged out of Code's
+  sidebar writes its `this.P2P.place` lines at the caret — see
   [Dragging placement code](code-and-play.md#dragging-placement-code-out-of-the-sidebar).
   A print project made before this has its `ExportForPrint()` in
   `js/shared/print.js` and keeps it; a new one is served it beside Phaser, so

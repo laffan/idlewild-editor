@@ -392,7 +392,50 @@ click that ends a drag is swallowed so the row does not also open.
 
 Only PSD to Phaser takes it. A Game scene draws the document from the config
 already and runs `create` before the PSDs have loaded, and Phaser and Vanilla
-load no psd-to-phaser.
+load no psd-to-phaser. **A drop is saved** through the panel's own `save`, so
+a running game restarts with the lines in it.
+
+### The scene files against the canvas
+
+`editor/code-sync.ts` is everything else that bridges a PSD to Phaser
+project's scene files and its canvas, and `code/scene-code.ts` is how it reads
+a scene file: a **block** is a `const name = this.P2P.place(this, "key",
+"path");` line and the run of `name.` lines under it, which is the shape
+`placement-code.ts` writes and the only one recognised.
+
+**Placed in Draw, placed in code — once.** The session remembers every
+placement id it has seen. When the document saves with one it has not, the
+piece's lines go after the last block of its scene's file (or under the
+scaffold's `// Place PSDs here.`, or at the top of `create`; a file with none
+of the three is left alone). The first time it runs, a scene file with no
+block at all in a scene that has placements is given all of them — which is
+what a project made before this, or a scene added afterwards, needs. Remembered
+per session rather than on disk, so a line deleted by hand is not written
+again until the file has no blocks left in it at all.
+
+**Where they disagree.** Blocks are matched to the scene's pieces by file and
+layer, in order, and a block whose `setPosition` is not a pair of numbers
+equal (to two places) to the piece's position marks that piece and its unit.
+The directory draws a reset at the end of the row, and the reset rewrites the
+arguments with the canvas's numbers. Re-read on entering Code, on every
+document save, on a scene switch, and 150 ms after a key in the panel.
+
+**The caret picks a sprite up.** On `selectionchange` inside the panel the
+caret's block is found, and the game frame is posted its texture —
+`<psdKey>_<layer>`, `manifest.textureKey` — and the call's numbers.
+`templates/play/drag-bridge.js` is the other half: injected by `file_server`
+at the end of `<head>` for the same `?idlewild=console` request as the
+console bridge — after the page's Phaser, which it needs, and before its
+module, which constructs the game it wraps `Phaser.Game.prototype.boot` to
+find. It outlines the nearest sprite with that texture and drags it on the
+window's own pointer events in the capture phase, so the sprite need not be
+interactive and the game's input does not see the press. Each move is posted
+back and written into the call; release saves, and the restart that follows
+finds the sprite again from the bridge's `ready`.
+
+**Every write is a save.** Through the panel when it has the file open —
+one minimal change, so the history and the caret survive — and to disk
+otherwise, with a running game restarted. Writes go one at a time.
 
 ## The reference along the bottom of the code modal
 

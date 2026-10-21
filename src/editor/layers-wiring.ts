@@ -23,6 +23,7 @@ import type { DocStore } from "../lib/doc-store";
 import { Grid } from "../lib/grid";
 import { selectionCentre } from "./selection-focus";
 import { attachCodeDrag, type CodeDragDeps } from "./code-drag";
+import type { CodeStatus } from "./layer-directory";
 
 export interface LayersWiringDeps {
   /** The live scene, or null before it has booted. */
@@ -43,6 +44,8 @@ export interface LayersWiringDeps {
   selectTool: () => void;
   /** Where Code mode's rows are dragged onto the code, if the project takes it. */
   codeDrag?: Omit<CodeDragDeps, "source">;
+  /** The scene files' positions against the canvas's — see `code-sync.ts`. */
+  codeStatus?: () => CodeStatus | null;
 }
 
 export function layersPanelCallbacks(
@@ -93,6 +96,7 @@ export function layersPanelCallbacks(
       openNewBackground(anchor, layerId, deps.backgrounds()),
     onImportTiled: (layerId) => void importTiledMap(deps.tiles(), layerId),
     onRenamePsd: deps.renamePsd,
+    codeStatus: deps.codeStatus,
     dragToCode: (row, source, label) => {
       const drag = deps.codeDrag;
       if (!drag) return;

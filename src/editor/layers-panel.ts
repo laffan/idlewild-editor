@@ -50,6 +50,7 @@ import { renderDirectory } from "./layer-directory";
 import { StrokesTray } from "./strokes-tray";
 import type { ManifestLayer } from "../lib/manifest";
 import type { CodeSource } from "./code-drag";
+import type { CodeStatus } from "./layer-directory";
 
 export interface LayersPanelCallbacks {
   onSelectLayer: (layerId: string) => void;
@@ -89,6 +90,8 @@ export interface LayersPanelCallbacks {
   onImportTiled: (layerId: string) => void;
   /** Make a directory row draggable onto the code — see `code-drag.ts`. */
   dragToCode?: (row: HTMLElement, source: CodeSource, label: string) => void;
+  /** Where Code's rows stand somewhere else in code — see `code-sync.ts`. */
+  codeStatus?: () => CodeStatus | null;
   /**
    * Rename a placed PSD's file. Here, beside the layer names, rather than in
    * the inspector's heading — the left sidebar is where things are named.
@@ -306,6 +309,7 @@ export class LayersPanel {
         psdLayers: this.callbacks.psdLayers,
         isOpen: (id) => this.expanded.has(id),
         dragToCode: this.callbacks.dragToCode,
+        codeStatus: this.callbacks.codeStatus?.() ?? null,
         toggle: (id) => {
           if (this.expanded.has(id)) this.expanded.delete(id);
           else this.expanded.add(id);

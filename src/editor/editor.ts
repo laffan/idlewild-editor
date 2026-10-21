@@ -50,6 +50,7 @@ import { selectionWiring } from "./selection-wiring";
 import { headerCallbacks } from "./header-wiring";
 import { createRenderSettings } from "./render-settings";
 import { openScaffoldSwitch } from "./scaffold-switch";
+import { createCodeSync } from "./code-sync";
 import { Minimap } from "./minimap";
 import { OverlaysPanel } from "./overlays-panel";
 import { addSweptZone } from "./zone-actions";
@@ -99,19 +100,9 @@ export async function mountEditor(
     reopen: async (run) => { await teardown(); await callbacks.onReopen(await run()); },
   }));
 
-  /**
-   * A PSD on disk is not what it was: restart the game if one is running.
-   *
-   * The same promise saving a code file makes — what is in front of you is
-   * what is on disk — for the other half of a project. In Code the game runs
-   * beside the canvas, and it holds the textures it loaded when it started;
-   * ink applied in PSD Edit mode, a layer renamed or turned off, a re-parse, a
-   * file replaced by a drop all leave it drawing the version before. The
-   * canvas re-places from the new manifest either way, so without this the
-   * two halves of the same window disagree about the same file.
-   *
-   * Cheap when nothing is running, which is every one of these in Draw.
-   */
+  // A PSD on disk is not what it was: restart a running game, which holds the
+  // textures it loaded when it started — the promise a code save makes, for
+  // the other half of a project. Cheap in Draw, where nothing is running.
   function psdChanged(): void {
     if (gameFrame.isRunning) gameFrame.reload();
   }
@@ -145,7 +136,8 @@ export async function mountEditor(
       ...{ backgrounds: () => backgrounds, tiles: () => tiles },
       renamePsd: (key, name) => void psdFile.rename(key, name),
       selectTool: () => tools?.apply("select", false),
-      codeDrag: { takesCode: meta.genre === "p2p", code: () => code, targets: () => [canvasWrap, code.root] },
+      codeDrag: { takesCode: meta.genre === "p2p", code: () => code, targets: () => [canvasWrap, code.root], afterDrop: () => codeSync?.refresh() },
+      codeStatus: () => codeSync,
     }),
     overlays.root,
   );
@@ -659,8 +651,14 @@ export async function mountEditor(
     code,
     gameFrame,
     scene: () => handle?.scene ?? null,
+    onCode: () => codeSync?.refresh(),
   });
   const setMode = modeSwitch.setMode;
+  // A PSD to Phaser project's scene files and its canvas — `code-sync.ts`.
+  const codeSync = meta.genre !== "p2p" ? null : createCodeSync({
+    projectId: meta.id, store, code, gameFrame, scene: () => handle?.scene ?? null,
+    redraw: () => layers.render(), inCode: () => modeSwitch.mode() === "code",
+  });
 
   async function leave(): Promise<void> {
     await teardown();
@@ -669,6 +667,7 @@ export async function mountEditor(
 
   async function teardown(): Promise<void> {
     stopShortcuts();
+    codeSync?.destroy();
     lends.destroy();
     history?.destroy();
     history = null;

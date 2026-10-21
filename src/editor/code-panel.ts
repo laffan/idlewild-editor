@@ -206,6 +206,11 @@ export class CodePanel {
     return this.modal?.root ?? null;
   }
 
+  /** Write the open file if it has changed — what a drop or a drag ends in. */
+  save(): Promise<void> {
+    return this.modal?.save() ?? Promise.resolve();
+  }
+
   /** The open file and its editor, or null with the panel down or empty. */
   get editing(): CodeModal["editing"] {
     return this.modal?.editing ?? null;

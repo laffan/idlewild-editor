@@ -167,6 +167,12 @@ pub(crate) fn port_of(server: &tiny_http::Server) -> Option<u16> {
 /// `templates/play/console-bridge.js`.
 const CONSOLE_BRIDGE: &str = include_str!("../templates/play/console-bridge.js");
 
+/// The script that makes the sprite a `setPosition` places draggable while
+/// the caret is in that call — see `templates/play/drag-bridge.js`. Injected
+/// with the console bridge, but at the end of `<head>`, where the page's own
+/// Phaser has loaded.
+const DRAG_BRIDGE: &str = include_str!("../templates/play/drag-bridge.js");
+
 /// The query that asks for the console bridge. Spelled out at the request
 /// rather than assumed, so a published page and a played one differ by a URL
 /// and nothing else.
@@ -202,7 +208,7 @@ fn respond(request: tiny_http::Request) -> std::io::Result<()> {
     let mime = mime_for(&path);
     let asked = query.split('&').any(|part| part == CONSOLE_QUERY);
     let bytes = if asked && mime.starts_with("text/html") {
-        inject(&bytes, CONSOLE_BRIDGE)
+        inject_late(&inject(&bytes, CONSOLE_BRIDGE), DRAG_BRIDGE)
     } else {
         bytes
     };
@@ -272,6 +278,17 @@ fn inject(page: &[u8], script: &str) -> Vec<u8> {
             format!("{}{tag}{}", &text[..cut], &text[cut..]).into_bytes()
         }
         None => format!("{tag}{text}").into_bytes(),
+    }
+}
+
+/// Put a script at the end of a page's `<head>`, after the scripts there —
+/// or, with no `</head>`, at the end of the page.
+fn inject_late(page: &[u8], script: &str) -> Vec<u8> {
+    let text = String::from_utf8_lossy(page).into_owned();
+    let tag = format!("<script>\n{script}\n</script>");
+    match text.find("</head>") {
+        Some(at) => format!("{}{tag}{}", &text[..at], &text[at..]).into_bytes(),
+        None => format!("{text}{tag}").into_bytes(),
     }
 }
 

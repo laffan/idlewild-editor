@@ -43,6 +43,8 @@ export interface ModeSwitchDeps {
   gameFrame: GameFrame;
   /** The canvas, or null before it has booted. */
   scene: () => WorldScene | null;
+  /** Told as Code is entered — the scene files are read against the canvas. */
+  onCode?: () => void;
 }
 
 export interface ModeSwitch {
@@ -90,8 +92,10 @@ export function createModeSwitch(deps: ModeSwitchDeps): ModeSwitch {
       // and the layers inside each file. See `editor/layer-directory.ts`.
       deps.layers.setBrowsing(next === "code");
 
-      if (next === "code") deps.code.show();
-      else deps.code.hide();
+      if (next === "code") {
+        deps.code.show();
+        deps.onCode?.();
+      } else deps.code.hide();
 
       if (next === "draw") {
         deps.gameFrame.stop();

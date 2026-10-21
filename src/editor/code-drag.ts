@@ -6,7 +6,7 @@
  * let go anywhere over the canvas area or the code panel, and the
  * `this.P2P.place` lines for it are written into the open file **at the
  * caret** — see `code/insert-snippet.ts` for why the caret and not the drop
- * point. The lines are `code/placement-code.ts`'s, so a dragged row reads the
+ * point — and the file is saved, so a running game restarts with them. The lines are `code/placement-code.ts`'s, so a dragged row reads the
  * same as the scene it came from would if written out whole.
  *
  * Only a PSD to Phaser project takes them. Its scenes place their own artwork
@@ -41,6 +41,8 @@ export interface CodeDragDeps {
   takesCode: boolean;
   source: () => PlacementSource;
   code: () => CodePanel | null;
+  /** Told once a drop has been written and saved. */
+  afterDrop?: () => void;
   /** Where a drop counts: the canvas area, and the code panel itself. */
   targets: () => ReadonlyArray<Element | null>;
 }
@@ -126,4 +128,6 @@ function drop(source: CodeSource, deps: CodeDragDeps): void {
     return;
   }
   insertAtCaret(editing.view, lines);
+  // Saved at once, so the game beside it restarts with the lines in it.
+  void deps.code()?.save().then(() => deps.afterDrop?.());
 }

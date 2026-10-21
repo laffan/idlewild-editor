@@ -267,11 +267,13 @@ Part of [the Idlewild manual](README.md).
 
   `setDepth` is the draw order, counted back to front across the scene, so a
   file's layers and the files around it stack the way the canvas shows them.
-  What Draw makes is the artwork, not the program: placing something on the
-  canvas does not write a line here. Lines get here two ways — **dragged in**
-  from the sidebar (below), or written out for every scene at once when a
-  project is switched onto PSD to Phaser in Project Options. Fills, backdrops
-  and pattern layers are not drawn by this scaffold; a Game draws them
+  **Anything you place in Draw is placed here too, once**: its lines are added
+  after the last ones in its scene's file as the document saves, and a scene
+  file with no placing lines at all is given every placement its scene has.
+  From then on the lines are yours — moving the thing on the canvas does not
+  move its line, and deleting the line does not bring it back. Where the two
+  disagree, the sidebar says so (below). Fills, backdrops and pattern layers
+  are not drawn by this scaffold; a Game draws them
 
 - **Phaser** is Vanilla with Phaser on the page: `index.html`, `style.css`,
   `script.js` with a running game in it, and `game.config.json`. No
@@ -315,6 +317,27 @@ Part of [the Idlewild manual](README.md).
   already declares — a second tree is `tree2`. The depth is the one it would
   have among everything else in the scene, so a dragged layer stacks where
   the canvas draws it
+- **A drop saves the file**, so the game beside it restarts with the new lines
+  in it straight away
+
+## Where the code and the canvas disagree
+
+- A placed PSD, or a layer inside one, whose `setPosition` in the scene file
+  is not where it stands in Draw carries a **reset** (the circular arrow) at
+  the end of its row in Code's sidebar. Pressing it writes Draw's numbers into
+  the call and saves. A call whose arguments are not plain numbers —
+  `setPosition(x + 10, y)` — counts as disagreeing
+- Rows are matched to lines by file and layer, in order: the second
+  `place` of `tree` in the file is the second tree on the canvas, back to
+  front. Two of the same file swapped on the canvas swap which line each
+  answers to
+
+## Dragging a sprite by its `setPosition`
+
+- **Put the caret inside a `setPosition(…)`** and the sprite that call places
+  is outlined in the running game. Drag it there: the numbers in the call
+  follow it as it moves, and letting go saves the file. Move the caret out of
+  the call and the sprite is let go
 
 ## Page Setup
 

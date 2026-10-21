@@ -97,3 +97,19 @@ body.code-dragging, body.code-dragging * { cursor: grabbing !important; user-sel
   font: 500 12px var(--font-mono, monospace);
   white-space: nowrap;
 }
+
+/* The reset on a row whose code stands it somewhere other than the canvas
+   does — see `editor/code-sync.ts`. */
+.code-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-left: 4px;
+  border-radius: 4px;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.code-reset:hover { background: var(--chrome-row-hover); }
