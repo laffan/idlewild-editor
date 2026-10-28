@@ -15,6 +15,7 @@
 import { h, ICONS, icon } from "../lib/dom";
 import { blockLength } from "./psd-layer-tree";
 import { psdLayerThumbBox } from "./psd-thumb-box";
+import { renameOnDoubleTap } from "./name-tap";
 import type { OwnedLayer } from "./psd-layer-owner";
 import type { PsdLayerInfo, PsdLayerList } from "../lib/ipc";
 
@@ -110,18 +111,7 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
     h(
       "div",
       { class: "psd-layer-main" },
-      h("input", {
-        class: "psd-layer-name",
-        value: row.name,
-        readonly: writable && !owner ? null : "true",
-        title: owner?.reason ?? null,
-        onInput: (event: Event) => {
-          ctx.onRename(row, (event.target as HTMLInputElement).value);
-        },
-        onKeyDown: (event: KeyboardEvent) => {
-          if (event.key === "Enter") (event.target as HTMLInputElement).blur();
-        },
-      }),
+      nameInput(row, ctx, writable && !owner, owner?.reason ?? null),
       group
         ? foldEl(row, ctx)
         : h("div", {
@@ -168,6 +158,33 @@ export function psdLayerRow(row: Row, ctx: RowContext): HTMLElement {
  * nowhere, which is exactly what a row that leads somewhere should not be.
  * `inside` is the group enclosing the row, or null at the top level.
  */
+/**
+ * The row's name. A name that can be written takes a double tap to start
+ * typing — see `name-tap.ts` — and one that cannot, because the file is not
+ * ours to rewrite or the app owns the name, is read-only for good.
+ */
+function nameInput(
+  row: Row,
+  ctx: RowContext,
+  renamable: boolean,
+  title: string | null,
+): HTMLInputElement {
+  const input = h("input", {
+    class: "psd-layer-name",
+    value: row.name,
+    title,
+    onInput: (event: Event) => {
+      ctx.onRename(row, (event.target as HTMLInputElement).value);
+    },
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+    },
+  }) as HTMLInputElement;
+  if (renamable) renameOnDoubleTap(input, `psd-layer:${ctx.stack.key}:${row.source.index}`);
+  else input.readOnly = true;
+  return input;
+}
+
 export function paintable(
   layer: PsdLayerInfo,
   owner: OwnedLayer | null,

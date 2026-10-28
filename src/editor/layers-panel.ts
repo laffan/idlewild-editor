@@ -48,6 +48,7 @@ import { pickMode, pickUnit } from "../lib/unit-select";
 import { ScenesBar } from "./scenes-bar";
 import { renderDirectory } from "./layer-directory";
 import { StrokesTray } from "./strokes-tray";
+import { renameOnDoubleTap } from "./name-tap";
 import type { ManifestLayer } from "../lib/manifest";
 import type { CodeSource } from "./code-drag";
 import { unlinkMark, type CodeStatus } from "./layer-directory";
@@ -589,7 +590,6 @@ export class LayersPanel {
     const name = h("input", {
       class: "layer-name",
       value: layer.name,
-      readonly: layer.locked ? "true" : null,
       onChange: (event: Event) => {
         const value = (event.target as HTMLInputElement).value.trim();
         if (value) this.store.renameLayer(layer.id, value);
@@ -597,12 +597,15 @@ export class LayersPanel {
       onKeyDown: (event: KeyboardEvent) => {
         if (event.key === "Enter") (event.target as HTMLInputElement).blur();
       },
-      // A tap on the name selects the layer; editing needs a deliberate focus.
+      // A tap on the name selects the layer; a second one renames it.
       onClick: (event: Event) => {
         event.stopPropagation();
         this.callbacks.onSelectLayer(layer.id);
       },
-    });
+    }) as HTMLInputElement;
+    // A locked layer's name is not offered at all, so it stays read-only.
+    if (!layer.locked) renameOnDoubleTap(name, `layer:${layer.id}`);
+    else name.readOnly = true;
 
     return h(
       "div",

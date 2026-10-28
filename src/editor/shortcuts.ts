@@ -246,7 +246,11 @@ export function isTyping(target: EventTarget | null): boolean {
   return (
     // A switch or a swatch that was just pressed still has the focus, and
     // Delete over it is meant for the canvas, not for it.
-    (target instanceof HTMLInputElement && !NOT_TYPED.has(target.type)) ||
+    // Nor does a read-only name still waiting on its double tap — see
+    // `name-tap.ts`.
+    (target instanceof HTMLInputElement &&
+      !NOT_TYPED.has(target.type) &&
+      !(target.readOnly && target.classList.contains("tap-name"))) ||
     target instanceof HTMLTextAreaElement ||
     (target instanceof HTMLElement && target.isContentEditable)
   );

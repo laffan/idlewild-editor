@@ -94,7 +94,9 @@
 /* Offset by nothing: the rows are tight enough that a ring outside the field
    struck through the line of type under it. */
 .psd-layer-name:focus { outline: 1px solid var(--color-accent); outline-offset: 0; border-radius: var(--radius-sm); }
-.psd-layer-name[readonly] { color: var(--chrome-dim); }
+/* Dim for a name that cannot be written; one waiting on its double tap is
+   read-only too, and reads as an ordinary name. See editor/name-tap.ts. */
+.psd-layer-name[readonly]:not(.tap-name) { color: var(--chrome-dim); }
 .psd-layer-meta { font-size: var(--text-xs); color: var(--chrome-faint); }
 
 /* A layer the app owns the name of. The field reads as a fact rather than a

@@ -16,6 +16,7 @@
  */
 
 import { h, ICONS, icon } from "../lib/dom";
+import { renameOnDoubleTap } from "./name-tap";
 import { groupOfUnit, liveGroups } from "../lib/groups";
 import { textsOf } from "../lib/text-items";
 import { plainText } from "../lib/text-markdown";
@@ -394,9 +395,9 @@ export function renderLayerItem(
 
 /**
  * A placed PSD's name, typed in place the way a layer's is: the file's key in
- * a field. A tap selects the row as well as putting the caret
- * in; the name is written on Enter or when the field is left, and Escape puts
- * it back. Rust has the last word on the key — see `PsdFileActions.rename`.
+ * a field. A tap selects the row, and a second one puts the caret in — see
+ * `name-tap.ts`; the name is written on Enter or when the field is left, and
+ * Escape puts it back. Rust has the last word on the key — see `PsdFileActions.rename`.
  */
 function nameField(
   key: string,
@@ -425,7 +426,8 @@ function nameField(
       const value = (event.target as HTMLInputElement).value.trim();
       if (value && value !== key) onRename(value);
     },
-  });
+  }) as HTMLInputElement;
+  renameOnDoubleTap(input, `psd:${key}`);
   return h("span", { class: "layer-item-label naming" }, input);
 }
 
