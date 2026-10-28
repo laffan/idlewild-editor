@@ -211,7 +211,7 @@ pub fn starter_doc(meta: &ProjectMeta) -> String {
                 "layers": [
                     {
                         "id": "layer-terrain",
-                        "name": "Terrain",
+                        "name": "Objects",
                         "locked": false,
                         "visible": true,
                         "fills": [],

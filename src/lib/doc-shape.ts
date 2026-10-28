@@ -61,7 +61,7 @@ export function withScenes(doc: StoredDoc): GameDoc {
           {
             id: makeId("scene"),
             name: "Main",
-            layers: legacyLayers ?? [emptyLayer("Terrain")],
+            layers: legacyLayers ?? [emptyLayer("Objects")],
             ...(legacyCamera ? { camera: legacyCamera } : {}),
           },
         ];

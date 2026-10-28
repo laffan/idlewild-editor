@@ -126,7 +126,7 @@ describe("scenes", () => {
   it("writes a layer edit into the scene it was made in", () => {
     const cave = store.addScene("Cave");
     store.addLayer("Walls");
-    expect(store.layers.map((l) => l.name)).toEqual(["Walls", "Terrain"]);
+    expect(store.layers.map((l) => l.name)).toEqual(["Walls", "Objects"]);
 
     store.setActiveScene(store.scenes[0].id);
     expect(store.layers.map((l) => l.id)).toEqual(["l1", "l2"]);
