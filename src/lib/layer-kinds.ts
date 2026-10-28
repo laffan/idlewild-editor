@@ -20,7 +20,7 @@
 
 import type { DocStore } from "./doc-store";
 import { makeId } from "./doc-shape";
-import { cellsInPolygon, type Grid } from "./grid";
+import { cellsInPolygon, Grid } from "./grid";
 import { tileLayersAllowed } from "./tile-layers";
 import type {
   Background,
@@ -174,15 +174,17 @@ export function setPatternType(
   layerId: string,
   type: PatternType,
 ): void {
-  editPattern(store, layerId, (spec) =>
-    spec.type === type
-      ? spec
-      : {
-          ...spec,
-          type,
-          ...(isDefaultRepeat(spec) ? PATTERN_DEFAULTS[type] : {}),
-        },
-  );
+  editPattern(store, layerId, (spec) => {
+    if (spec.type === type) return spec;
+    const turned = { ...spec, type };
+    // A spacing worked out from the elements is worked out again for the new
+    // type, which spaces the same count differently — see `fitPattern`.
+    if (spec.fitted) {
+      const grid = new Grid(store.projection, store.gridSize);
+      return { ...turned, ...fittedSpacing(type, store.layer(layerId)!, grid) };
+    }
+    return { ...turned, ...(isDefaultRepeat(spec) ? PATTERN_DEFAULTS[type] : {}) };
+  });
 }
 
 export function setPatternDensity(
@@ -194,7 +196,7 @@ export function setPatternDensity(
   // is what stops a typed zero too many from asking the canvas for ten
   // thousand objects before anybody can retype it.
   const held = Math.round(clamp(density, 1, 200));
-  editPattern(store, layerId, (spec) => ({ ...spec, density: held }));
+  editPattern(store, layerId, (spec) => ({ ...byHand(spec), density: held }));
 }
 
 export function setPatternRepeat(
@@ -204,7 +206,7 @@ export function setPatternRepeat(
   rows: number,
 ): void {
   editPattern(store, layerId, (spec) => ({
-    ...spec,
+    ...byHand(spec),
     repeat: {
       cols: Math.round(clamp(cols, 1, 500)),
       rows: Math.round(clamp(rows, 1, 500)),
@@ -336,6 +338,12 @@ export function removePatternShape(
  * had one writes the defaults out in full rather than a document holding one
  * field of a rule.
  */
+/** A spec somebody has now set by hand: it stops following its elements. */
+function byHand(spec: PatternSpec): PatternSpec {
+  const { fitted: _fitted, ...rest } = spec;
+  return rest;
+}
+
 function editPattern(
   store: DocStore,
   layerId: string,
@@ -345,6 +353,118 @@ function editPattern(
     ...layer,
     pattern: update(patternSpec(layer)),
   }));
+}
+
+// ── pattern spacing ─────────────────────────────────────────────────────────
+
+/**
+ * A pattern's spacing, worked out from what it is a pattern of.
+ *
+ * The repeat tile is counted in grid spaces, so one default tile is a
+ * different size in every project: twenty spaces is 320 pixels on a 16 px
+ * pixel-art grid and 2,560 on a 128 px one, and a blank project's space is a
+ * single pixel. The same eight elements came out crammed together in one and
+ * scattered out of sight of each other in the next, and how big the elements
+ * themselves were had no say at all.
+ *
+ * So a pattern layer that has not been set by hand sizes its tile from the
+ * elements on it and the grid under it, aiming for about `PATTERN_GAP` world
+ * pixels of clear ground between neighbouring copies. It is written into the
+ * document like any other spec — the exported game reads the spec and knows
+ * nothing of this — and marked `fitted`, so that another element added later
+ * works it out again. Typing a density or a repeat is the hand setting it, and
+ * the mark goes (`byHand`).
+ */
+
+/** Roughly how much clear ground to leave between two copies, in world px. */
+export const PATTERN_GAP = 100;
+
+/** The largest repeat the inspector will accept, on either side. */
+const MAX_REPEAT = 500;
+
+/**
+ * The layer with its pattern spaced for what is on it, or the layer as it was
+ * when there is nothing to do: not a pattern layer, nothing on it yet, or a
+ * spec somebody has set by hand.
+ *
+ * Called by the store wherever a placement lands on a layer, so every route
+ * onto a pattern layer — placing, pasting, carrying a file across from the
+ * layer list — goes through it.
+ */
+export function fitPattern(
+  layer: Layer,
+  project: { projection: Projection; gridSize: number },
+): Layer {
+  if (layerKind(layer) !== "pattern" || layer.placements.length === 0) return layer;
+  if (layer.pattern && !layer.pattern.fitted) return layer;
+  const spec = patternSpec(layer);
+  const grid = new Grid(project.projection, project.gridSize);
+  return { ...layer, pattern: { ...spec, ...fittedSpacing(spec.type, layer, grid), fitted: true } };
+}
+
+/**
+ * The repeat and density that leave about `PATTERN_GAP` between copies of
+ * the largest element on the layer.
+ *
+ * Measured from centre to centre — the element's longer side plus the gap —
+ * against the grid's own two axes, which on an isometric grid are the
+ * diamond's edges rather than the screen's.
+ */
+export function fittedSpacing(
+  type: PatternType,
+  layer: Layer,
+  grid: Grid,
+): Pick<PatternSpec, "repeat" | "density"> {
+  const size = Math.max(1, ...layer.placements.map((p) => Math.max(p.width, p.height)));
+  const pitch = size + PATTERN_GAP;
+  const o = grid.cellToWorld({ cx: 0, cy: 0 });
+  const a = grid.cellToWorld({ cx: 1, cy: 0 });
+  const b = grid.cellToWorld({ cx: 0, cy: 1 });
+  const across = Math.hypot(a.x - o.x, a.y - o.y) || 1;
+  const down = Math.hypot(b.x - o.x, b.y - o.y) || 1;
+  const base = PATTERN_DEFAULTS[type].density;
+
+  if (type === "grid") {
+    // `tileInstances` lays `density` out on a lattice `side` across, so the
+    // copies stand `cols / side` spaces apart. One to a tile when a lattice of
+    // the default count would not fit in the largest tile there is.
+    let side = Math.ceil(Math.sqrt(base));
+    let rowsOf = Math.ceil(base / side);
+    let density = base;
+    if ((pitch * side) / across > MAX_REPEAT || (pitch * rowsOf) / down > MAX_REPEAT) {
+      side = rowsOf = density = 1;
+    }
+    return {
+      density,
+      repeat: {
+        cols: clamp(Math.round((pitch * side) / across), side, MAX_REPEAT),
+        rows: clamp(Math.round((pitch * rowsOf) / down), rowsOf, MAX_REPEAT),
+      },
+    };
+  }
+
+  // A scatter lands where it lands, so no spacing holds between every pair —
+  // what can be aimed is the typical copy. Scattered at random, the copies'
+  // distances to their nearest neighbours have a median of
+  // √(ln 2 / π) ≈ 0.47 times the side of the ground each one gets; so each
+  // gets a square `pitch / 0.47` across, and half of them have no neighbour
+  // nearer than `pitch`. The tile is as many of those as the density,
+  // measured in the grid's spaces.
+  const ground = pitch * Math.sqrt(Math.PI / Math.LN2);
+  const cellArea = Math.abs((a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)) || 1;
+  let side = Math.round(ground * Math.sqrt(base / cellArea));
+  let density = base;
+  if (side > MAX_REPEAT) {
+    // A blank project's space is a pixel, and a large element wants more
+    // pixels than a repeat may have: keep the tile and thin the scatter.
+    side = MAX_REPEAT;
+    density = Math.max(1, Math.round((side * side * cellArea) / (ground * ground)));
+  }
+  // Never fewer spaces than twice the copies: a space is the finest a scatter
+  // can go, and spaces larger than the spacing would otherwise pile several
+  // copies onto one.
+  side = Math.max(side, Math.ceil(Math.sqrt(density * 2)));
+  return { density, repeat: { cols: side, rows: side } };
 }
 
 // ── backgrounds ─────────────────────────────────────────────────────────────

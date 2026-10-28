@@ -19,6 +19,7 @@ import type { DocStore } from "../lib/doc-store";
 import {
   patternSpec,
   PATTERN_DEFAULTS,
+  PATTERN_GAP,
   removePatternShape,
   setPatternDensity,
   setPatternRepeat,
@@ -119,11 +120,16 @@ export function patternSection(
       "div",
       { class: "inspect-section" },
       sectionTitle("Repeat boundary", {
-        hint:
-          `Spaces. ${PATTERN_DEFAULTS[spec.type].repeat.cols} × ` +
-          `${PATTERN_DEFAULTS[spec.type].repeat.rows} is the default for a ` +
-          `${spec.type} pattern — the arrangement repeats every one of ` +
-          "these, which is what makes it infinite.",
+        hint: spec.fitted
+          ? `Spaces, worked out from the size of what is on this layer so ` +
+            `copies stand about ${PATTERN_GAP} px apart — and worked out ` +
+            "again when something is added, until either number here is " +
+            "changed. The arrangement repeats every one of these, which is " +
+            "what makes it infinite."
+          : `Spaces. ${PATTERN_DEFAULTS[spec.type].repeat.cols} × ` +
+            `${PATTERN_DEFAULTS[spec.type].repeat.rows} is the default for a ` +
+            `${spec.type} pattern — the arrangement repeats every one of ` +
+            "these, which is what makes it infinite.",
       }),
       h(
         "div",

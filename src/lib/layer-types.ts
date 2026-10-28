@@ -103,6 +103,13 @@ export interface PatternSpec {
    */
   seed: number;
   shapes: PatternShape[];
+  /**
+   * The density and repeat were worked out from the elements on the layer
+   * rather than set by hand, and are worked out again when another one is
+   * added — see `fitPattern` in `lib/layer-kinds.ts`. Absent once either is
+   * typed.
+   */
+  fitted?: true;
 }
 
 /**

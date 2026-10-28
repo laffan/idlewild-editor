@@ -48,7 +48,7 @@ import {
   nextSceneName,
   withScenes,
 } from "./doc-shape";
-import { nextLayerName } from "./layer-kinds";
+import { fitPattern, nextLayerName } from "./layer-kinds";
 import { UndoHistory } from "./history";
 import * as log from "./log";
 
@@ -151,7 +151,7 @@ export class DocStore extends EventTarget {
     const scene: Scene = {
       id: makeId("scene"),
       name: name ?? nextSceneName(this.state.scenes),
-      layers: [emptyLayer("Terrain")],
+      layers: [emptyLayer("Objects")],
     };
     this.commit({
       ...this.state,
@@ -380,10 +380,9 @@ export class DocStore extends EventTarget {
 
   addPlacement(layerId: string, placement: Omit<Placement, "id">): Placement {
     const created: Placement = { ...placement, id: makeId("place") };
-    this.editLayer(layerId, (l) => ({
-      ...l,
-      placements: [...l.placements, created],
-    }));
+    this.editLayer(layerId, (l) =>
+      fitPattern({ ...l, placements: [...l.placements, created] }, this),
+    );
     return created;
   }
 
@@ -432,7 +431,7 @@ export class DocStore extends EventTarget {
           return { ...l, placements: l.placements.filter((p) => !carried.has(p.id)) };
         }
         if (l.id === toLayerId) {
-          return { ...l, placements: [...l.placements, ...moving] };
+          return fitPattern({ ...l, placements: [...l.placements, ...moving] }, this);
         }
         return l;
       }),
