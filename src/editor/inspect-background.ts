@@ -21,6 +21,12 @@ import type { PanelSurface } from "./inspect-panels";
 
 export interface BackgroundActions {
   onDeleteSelection: () => void;
+  /**
+   * Show a backdrop as though `patch` were written, or as the document has it
+   * again for null. What a picker does while it is being dragged: the drag
+   * previews and the release writes — see `BackgroundRender.preview`.
+   */
+  onPreviewBackground: (backgroundId: string, patch: Partial<Background> | null) => void;
 }
 
 /** The angles a gradient is offered at, and what each one is for. */
@@ -56,8 +62,8 @@ export function renderBackground(
 
   panel.body.append(
     ...(background.kind === "gradient"
-      ? gradientControls(store, layerId, background)
-      : colourControls(store, layerId, background)),
+      ? gradientControls(store, layerId, background, actions)
+      : colourControls(store, layerId, background, actions)),
   );
 
   panel.body.appendChild(
@@ -73,15 +79,33 @@ export function renderBackground(
   );
 }
 
+/**
+ * Write a backdrop once its picker settles, having previewed it until then.
+ *
+ * The preview is dropped *after* the write, so no frame draws the old colour
+ * between the two.
+ */
+function settle(
+  store: DocStore,
+  layerId: string,
+  background: Background,
+  actions: BackgroundActions,
+  patch: Partial<Background>,
+): void {
+  updateBackground(store, layerId, background.id, patch);
+  actions.onPreviewBackground(background.id, null);
+}
+
 function colourControls(
   store: DocStore,
   layerId: string,
   background: Background,
+  actions: BackgroundActions,
 ): HTMLElement[] {
   const picker = createColorPicker({
     value: background.color ?? "#2b3b4a",
-    onChange: (hex) =>
-      updateBackground(store, layerId, background.id, { color: hex }),
+    onChange: (hex) => actions.onPreviewBackground(background.id, { color: hex }),
+    onCommit: (hex) => settle(store, layerId, background, actions, { color: hex }),
   });
   return [
     h(
@@ -106,20 +130,27 @@ function gradientControls(
   store: DocStore,
   layerId: string,
   background: Background,
+  actions: BackgroundActions,
 ): HTMLElement[] {
   const held = background.gradient ?? { from: "#6ea8d8", to: "#dfe9f2", angle: 0 };
   const write = (patch: Partial<typeof held>) =>
     updateBackground(store, layerId, background.id, {
       gradient: { ...held, ...patch },
     });
+  const preview = (patch: Partial<typeof held>) =>
+    actions.onPreviewBackground(background.id, { gradient: { ...held, ...patch } });
+  const commit = (patch: Partial<typeof held>) =>
+    settle(store, layerId, background, actions, { gradient: { ...held, ...patch } });
 
   const from = createColorPicker({
     value: held.from,
-    onChange: (hex) => write({ from: hex }),
+    onChange: (hex) => preview({ from: hex }),
+    onCommit: (hex) => commit({ from: hex }),
   });
   const to = createColorPicker({
     value: held.to,
-    onChange: (hex) => write({ to: hex }),
+    onChange: (hex) => preview({ to: hex }),
+    onCommit: (hex) => commit({ to: hex }),
   });
 
   // Three sections rather than three headings inside one: a section is the

@@ -58,8 +58,8 @@ export class WorldScene extends Phaser.Scene {
   /** The camera, its clamp and its place in the document — `scene-camera.ts`. */
   private cam!: SceneCamera;
   private gridRenderer!: GridRenderer;
-  /** Colours and gradients behind everything — `background-render.ts`. */
-  private backgrounds!: BackgroundRender;
+  /** Backdrops — `background-render.ts`. Public: the picker previews through it. */
+  backgrounds!: BackgroundRender;
   /** A pattern layer, worked out from the camera — `pattern-render.ts`. */
   private patterns!: PatternRender;
   /** Tile layers: what is drawn, what a gesture does, where palettes come

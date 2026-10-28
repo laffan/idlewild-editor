@@ -103,6 +103,7 @@ export function inspectorCallbacks(deps: InspectWiringDeps): InspectorCallbacks 
     // them through one at a time would be four lines saying so twice.
     ...deps.tiles(),
     onFillPaint: (paint) => applyFillPaint(store, deps.scene(), paint),
+    onPreviewBackground: (id, patch) => deps.scene()?.backgrounds.preview(id, patch),
     onToggleWalkable: (walkable) => {
       const selection = deps.scene()?.getSelection();
       if (selection?.kind !== "fill") return;

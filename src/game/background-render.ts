@@ -23,7 +23,7 @@ import type Phaser from "phaser";
 import type { DocStore } from "../lib/doc-store";
 import { alphaOf, hexToNumber } from "../lib/color";
 import { backgroundsOf, layerKind } from "../lib/layer-kinds";
-import type { Background } from "../lib/types";
+import type { Background, Layer } from "../lib/types";
 import { currentArtboards } from "../lib/print";
 import { gradientAt, gradientCells, mix, spanOf, type Box } from "./gradient-span";
 
@@ -61,6 +61,11 @@ export class BackgroundRender {
   private signature = "";
   /** The front-most backdrop drawn, or null while there is none. */
   private front: number | null = null;
+  /**
+   * A colour still under the picker's thumb, drawn over what the document
+   * says — see `preview`.
+   */
+  private previewing: { id: string; patch: Partial<Background> } | null = null;
 
   constructor(scene: Phaser.Scene, store: DocStore) {
     this.scene = scene;
@@ -91,6 +96,23 @@ export class BackgroundRender {
   }
 
   /**
+   * Draw one backdrop as though `patch` were written, without writing it; null
+   * goes back to what the document says.
+   *
+   * The picker's drag. Writing the document on every pointer move made each
+   * tick of it a commit — the inspector rebuilt round the picker being dragged,
+   * the layer list and the minimap redrawn, every placement and pattern on the
+   * canvas refreshed, an undo step — and on an iPad, where a Pencil reports at
+   * 120 Hz, the backdrop trailed the thumb by seconds. Now the drag changes
+   * this and nothing else, and the release writes once. `update` runs every
+   * frame and the preview is part of what it compares, so there is nothing to
+   * invalidate.
+   */
+  preview(backgroundId: string, patch: Partial<Background> | null): void {
+    this.previewing = patch ? { id: backgroundId, patch } : null;
+  }
+
+  /**
    * The depth of the front-most backdrop on screen, or null for none.
    *
    * What the lattice floats over. Read rather than computed twice because a
@@ -112,7 +134,7 @@ export class BackgroundRender {
     const parts: string[] = [];
     this.store.layers.forEach((layer, index) => {
       if (layerKind(layer) !== "background" || !layer.visible) return;
-      for (const background of backgroundsOf(layer)) {
+      for (const background of this.backgroundsOf(layer)) {
         parts.push(
           `${layer.id}:${index}:${background.kind}:${background.color ?? ""}:` +
             `${background.gradient?.from ?? ""}:${background.gradient?.to ?? ""}:` +
@@ -130,7 +152,7 @@ export class BackgroundRender {
 
     layers.forEach((layer, index) => {
       if (layerKind(layer) !== "background" || !layer.visible) return;
-      const backgrounds = backgroundsOf(layer);
+      const backgrounds = this.backgroundsOf(layer);
       if (backgrounds.length === 0) return;
       seen.add(layer.id);
 
@@ -155,6 +177,14 @@ export class BackgroundRender {
     }
   }
 
+  /** A layer's backdrops, with the one being previewed as it is previewed. */
+  private backgroundsOf(layer: Layer): readonly Background[] {
+    const held = backgroundsOf(layer);
+    const previewing = this.previewing;
+    if (!previewing) return held;
+    return held.map((b) => (b.id === previewing.id ? { ...b, ...previewing.patch } : b));
+  }
+
   private surface(layerId: string): Phaser.GameObjects.Graphics {
     const held = this.surfaces.get(layerId);
     if (held) return held;
@@ -167,6 +197,7 @@ export class BackgroundRender {
   clear(): void {
     for (const g of this.surfaces.values()) g.destroy();
     this.surfaces.clear();
+    this.previewing = null;
     this.signature = "";
     this.front = null;
   }

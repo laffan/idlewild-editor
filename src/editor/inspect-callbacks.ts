@@ -14,6 +14,7 @@
  */
 
 import type { StrokeStyle, FillMode } from "../drawing";
+import type { BackgroundActions } from "./inspect-background";
 import type { PatternActions } from "./inspect-pattern";
 import type { PanelActions } from "./inspect-panels";
 import type { PlacementActions } from "./inspect-placement";
@@ -25,6 +26,7 @@ import type { ToolId } from "../lib/types";
 
 export interface InspectorCallbacks
   extends PatternActions,
+    BackgroundActions,
     PanelActions,
     PlacementActions,
     TextActions,
