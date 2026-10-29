@@ -20,7 +20,9 @@ Part of [the Idlewild manual](README.md).
 - Drag a file onto the canvas and it lands where you let go of it, imported
   exactly as a paste is. Drag it over an image already there and that image
   lights up: dropping on it offers to put the new file behind it instead,
-  which changes every placement of that PSD at once
+  which changes every placement of that PSD at once. In plan mode a dropped
+  picture is not imported at all: it stays a blue picture on the plan, to
+  trace over — see [Drawing](drawing.md#plan-mode)
 
 ## What a paste is
 

@@ -8,6 +8,7 @@
  * in what the game is sent and not on any page that prints. It lives on the
  * scene (`Scene.plan`), one list per scene, and is written through the
  * document like any other edit, so it saves with the project and undoes.
+ * Pictures dropped on it sit beside the strokes, in `Scene.planImages`.
  */
 
 import type { DocStore } from "./doc-store";
@@ -36,9 +37,56 @@ export function planOf(scene: Scene | undefined): readonly Stroke[] {
   return scene?.plan ?? NONE;
 }
 
+/**
+ * A picture dropped on the plan: reference to trace over, not artwork.
+ *
+ * It is not made into a PSD the way a picture dropped on the canvas is,
+ * because it is not going anywhere — it is on no layer and in no export, like
+ * the strokes beside it. So it is kept as it will be shown: baked once, when
+ * it lands, to the plan's blue (`editor/plan-images.ts`), and held in the
+ * document as a JPEG data URL. That is a few hundred kilobytes in the saved
+ * file, and the price of a picture that saves, undoes and travels in an
+ * `.idlewild` with the scene and needs nothing on disk beside it.
+ *
+ * Where it stands is world pixels, top-left, and how big it is shown.
+ */
+export interface PlanImage {
+  id: string;
+  /** The baked picture: desaturated, tinted blue, as a `data:image/jpeg` URL. */
+  src: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const NO_IMAGES: readonly PlanImage[] = Object.freeze([]);
+
+/** A scene's plan pictures, back to front. */
+export function planImagesOf(scene: Scene | undefined): readonly PlanImage[] {
+  return scene?.planImages ?? NO_IMAGES;
+}
+
 /** Whether a scene has anything planned on it. */
 export function hasPlan(scene: Scene | undefined): boolean {
-  return planOf(scene).length > 0;
+  return planOf(scene).length > 0 || planImagesOf(scene).length > 0;
+}
+
+/** Replace one scene's plan pictures, as one undoable edit. */
+export function writePlanImages(
+  store: DocStore,
+  sceneId: string,
+  images: readonly PlanImage[],
+): void {
+  store.editDoc((doc) => ({
+    ...doc,
+    scenes: doc.scenes.map((scene) => {
+      if (scene.id !== sceneId) return scene;
+      if (images.length > 0) return { ...scene, planImages: [...images] };
+      const { planImages: _gone, ...rest } = scene;
+      return rest;
+    }),
+  }));
 }
 
 /** A scene with its plan replaced — and without the field once it is empty. */

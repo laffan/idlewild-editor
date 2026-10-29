@@ -779,6 +779,36 @@ writes as it changes, as a fill's picker does. Entering clears the canvas select
 so Delete has nothing on the scene to reach. Overlays' Plan row exists only
 while the open scene has a plan (`OverlaysPanel.showPlanSwitch`).
 
+**A picture dropped in plan mode stays a picture** (`editor/plan-images.ts`).
+`drop.ts` sees the canvas column wearing `.planning` and, rather than
+importing, dispatches `plan-drop` on it with the file; plan mode takes it from
+there. It is not made a PSD because it is not going anywhere — it is
+reference, on no layer and in no export, like the strokes. So it is kept as
+it is shown: baked once on the way in, scaled to at most 1600 px on its long
+side, its tones run from white to `PLAN_COLOR` by Rec. 709 lightness, as a
+JPEG data URL in `Scene.planImages` beside `Scene.plan`. That puts a few
+hundred kilobytes in the document per picture, which buys a picture that
+saves, undoes and travels in an `.idlewild` with no file beside it. Baking
+rather than CSS filters, because a filter chain over a large picture is paid
+on every camera move on an iPad.
+
+The multiply is CSS: the pictures' layer is a sibling just after the plan's
+sheet, `mix-blend-mode: multiply` on the layer as a whole. On each picture,
+or inside the sheet (which is `z-index: 4`, a stacking context), the blend
+would reach only an empty backdrop of its own. Over the sheet, the plan's ink
+shows through a picture rather than being hidden by it, and out of the mode
+the pictures multiply onto the scene at the Plan row's opacity. One transform
+on an inner layer follows the camera; the pictures sit in world pixels.
+
+Pointer handling is a capture listener on the plan's drawing surface, so a
+press on a picture is settled before the drawing layer starts a stroke or a
+pan. The canvas's rule: a press on a picture under the Lasso (picked or
+borrowed) selects it, a *selected* picture follows a pen, mouse or finger
+under any tool — so one just dropped, which lands selected, can be put in
+place at once — and a pen press anywhere else is the tool's and lets go of
+the picture. The drag writes once, on release. A picture and a stroke
+selection exclude each other, each with its own Delete.
+
 ### What is still ink
 
 Ink that is never converted is never exported, and it is easy to lose: a

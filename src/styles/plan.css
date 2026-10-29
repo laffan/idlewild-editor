@@ -67,3 +67,31 @@
 .scene-plan:hover { background: var(--chrome-bg); color: var(--chrome-text); }
 .scene-plan.on,
 .scene-plan.on:hover { background: #0a84ff; color: #fff; }
+
+/* Pictures dropped on the plan — see editor/plan-images.ts. A sibling just
+   after the sheet rather than inside it, and multiplied as a whole: inside the
+   sheet, or on each picture, the blend would only reach an empty backdrop of
+   its own rather than the wash and the scene under it. One transform on the
+   inner layer follows the camera; the pictures sit in world pixels. */
+.plan-images {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+.plan-images-world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+.plan-image {
+  position: absolute;
+  display: block;
+  max-width: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.plan-image.selected { outline: var(--plan-image-line, 2px) solid #0a84ff; }

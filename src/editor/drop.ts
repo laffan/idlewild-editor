@@ -29,6 +29,22 @@ import type { PlacedTarget } from "../game/drop-target";
 import { imageFrom, pasteName } from "./paste";
 import { importPasted, type PasteTarget } from "./paste-actions";
 
+/**
+ * The event a drop becomes while plan mode is up, dispatched on the canvas
+ * column with `{ file, clientX, clientY }` — see `editor/plan-images.ts`.
+ *
+ * An event rather than a callback on the host, because plan mode is built
+ * well away from where this is wired and the canvas column is the one thing
+ * both already hold.
+ */
+export const PLAN_DROP = "plan-drop";
+
+export interface PlanDropDetail {
+  file: File;
+  clientX: number;
+  clientY: number;
+}
+
 /** What the editor lends this: the canvas, and what is on it. */
 export interface DropHost {
   /** Whether a drop should be taken at all — false in play mode. */
@@ -71,7 +87,8 @@ export function listenForDrop(
   const track = (clientX: number, clientY: number): void => {
     if (!host.enabled() || !inside(canvas, clientX, clientY)) return clear();
     canvas.classList.add("drop-active");
-    const target = host.placedAt(clientX, clientY);
+    // Nothing on the plan is replaced by a drop, so nothing is outlined.
+    const target = planning(canvas) ? null : host.placedAt(clientX, clientY);
     // Redrawn only when the answer changes: a drag reports every pixel it
     // crosses, and the outline is the same outline for most of them.
     const id = target?.placementId ?? null;
@@ -94,6 +111,15 @@ export function listenForDrop(
   ): void => {
     clear();
     if (!host.enabled() || !inside(canvas, clientX, clientY)) return;
+    // On the plan a picture is reference to trace over, kept as it is rather
+    // than made into a PSD — plan mode takes it from here.
+    if (planning(canvas)) {
+      void incoming.file().then((file) => {
+        const detail: PlanDropDetail = { file, clientX, clientY };
+        canvas.dispatchEvent(new CustomEvent(PLAN_DROP, { detail }));
+      });
+      return;
+    }
     void receive(projectId, host, incoming, clientX, clientY);
   };
 
@@ -306,6 +332,11 @@ async function listenToShell(handlers: {
 function refuse(names: readonly string[]): void {
   if (names.length === 0) return;
   log.info(`Nothing to import in ${names.join(", ")} — PSD, PNG, JPEG, TIFF or GIF`);
+}
+
+/** Whether plan mode is up on this canvas column — `plan-mode.ts` says so. */
+function planning(canvas: HTMLElement): boolean {
+  return canvas.classList.contains("planning");
 }
 
 /** Whether a drag is carrying files rather than dragging something in-page. */

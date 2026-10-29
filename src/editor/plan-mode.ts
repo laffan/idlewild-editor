@@ -44,6 +44,8 @@ import { brushSection } from "./inspect-brush";
 import type { Inspector } from "./inspector";
 import { isTyping } from "./shortcuts";
 import { onPencilDoubleTap } from "../lib/pencil";
+import { PLAN_DROP, type PlanDropDetail } from "./drop";
+import { PlanImages } from "./plan-images";
 
 /** What the plan's pencil starts as: Charcoal, thin, unsmoothed, only ever blue. */
 const PENCIL = { brushId: 2, size: 4, smoothing: 0 };
@@ -83,6 +85,8 @@ export class PlanMode {
   readonly toggle: HTMLButtonElement;
   private readonly deps: PlanModeDeps;
   private readonly layer: DrawingLayer;
+  /** Pictures dropped on the plan — `plan-images.ts`. */
+  private readonly images: PlanImages;
   /** The tint and the sheet, together just over the scene's own ink. */
   private readonly sheet: HTMLElement;
   /** The wash over the scene while planning. */
@@ -124,14 +128,16 @@ export class PlanMode {
         onZoom: (factor, x, y) => deps.camera()?.zoomAt(factor, x, y),
         onSelect: (ids) => {
           this.selected = ids;
+          // Strokes or a picture, not both: each has its own Delete.
+          if (ids.length > 0) this.images.select(null);
           // The panel offers Convert to PSD for what was caught.
-          if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.inHand()));
+          this.override();
         },
         onZone: () => {},
         onFillPoints: () => {},
         onBorrow: (tool) => {
           this.borrowing = tool === "lasso";
-          if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.inHand()));
+          this.override();
           this.paint();
         },
       },
@@ -140,6 +146,19 @@ export class PlanMode {
     this.layer.root.classList.add("plan-surface");
     this.tint = h("div", { class: "plan-tint" });
     this.sheet = h("div", { class: "plan-sheet" }, this.tint, this.layer.root);
+    this.images = new PlanImages({
+      store,
+      surface: this.layer.root,
+      active: () => this.activeValue,
+      lassoing: () => this.inHand() === "lasso",
+      onSelect: (id) => {
+        if (id && this.selected.length > 0) {
+          this.layer.select([]);
+          this.selected = [];
+        }
+        this.override();
+      },
+    });
 
     this.toggle = h(
       "button",
@@ -167,10 +186,17 @@ export class PlanMode {
         onClick: () => this.setActive(false),
       }),
     );
-    deps.wrap.append(this.sheet, this.bar);
+    deps.wrap.append(this.sheet, this.images.root, this.bar);
+    // A picture dropped while planning stays a picture — see `drop.ts`.
+    const onDrop = (event: Event) => {
+      const { file, clientX, clientY } = (event as CustomEvent<PlanDropDetail>).detail;
+      if (this.activeValue) void this.images.add(file, clientX, clientY);
+    };
+    deps.wrap.addEventListener(PLAN_DROP, onDrop);
 
     this.hadPlan = hasPlan(store.activeScene);
     const changed = () => {
+      this.images.render();
       const now = hasPlan(store.activeScene);
       if (now !== this.hadPlan) {
         this.hadPlan = now;
@@ -186,6 +212,10 @@ export class PlanMode {
     const onKey = (event: KeyboardEvent) => {
       if (!this.activeValue || isTyping(event.target)) return;
       if (event.key === "Escape") this.setActive(false);
+      if ((event.key === "Delete" || event.key === "Backspace") && this.images.selected) {
+        event.preventDefault();
+        this.images.removeSelected();
+      }
       if ((event.key === "Delete" || event.key === "Backspace") && this.selected.length > 0) {
         event.preventDefault();
         this.layer.removeStrokes(this.selected);
@@ -205,6 +235,7 @@ export class PlanMode {
       () => store.removeEventListener("change", changed),
       () => store.removeEventListener("scene", switched),
       () => document.removeEventListener("keydown", onKey),
+      () => deps.wrap.removeEventListener(PLAN_DROP, onDrop),
     );
     this.paint();
   }
@@ -228,6 +259,7 @@ export class PlanMode {
       this.layer.select([]);
       this.selected = [];
       this.borrowing = false;
+      this.images.select(null);
     }
     this.useTool(on ? this.tool : null);
     this.paint();
@@ -252,13 +284,18 @@ export class PlanMode {
   sync(view: Viewport): void {
     const ink = this.deps.wrap.querySelector<HTMLElement>(":scope > .draw-surface");
     if (ink && ink.nextElementSibling !== this.sheet) ink.after(this.sheet);
+    // The pictures just over the plan's sheet — see `plan-images.ts` for why
+    // beside it rather than in it.
+    if (this.sheet.nextElementSibling !== this.images.root) this.sheet.after(this.images.root);
     this.layer.sync(view);
+    this.images.sync(view);
   }
 
   destroy(): void {
     for (const stop of this.stop) stop();
     if (this.activeValue) this.deps.inspector.setToolOverride(null);
     this.layer.destroy();
+    this.images.destroy();
     this.sheet.remove();
     this.bar.remove();
     this.deps.wrap.classList.remove("planning");
@@ -294,7 +331,7 @@ export class PlanMode {
   }
 
   private useTool(tool: PlanTool | null): void {
-    this.deps.inspector.setToolOverride(tool ? this.panel(tool) : null);
+    this.deps.inspector.setToolOverride(tool ? this.panelFor(tool) : null);
     if (!tool) {
       this.layer.setTool(null);
       return;
@@ -337,7 +374,7 @@ export class PlanMode {
     if (!done) return;
     this.layer.select([]);
     this.selected = [];
-    if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.inHand()));
+    this.override();
   }
 
   /**
@@ -353,6 +390,37 @@ export class PlanMode {
       mode: "ink",
       erase: tool === "eraser",
       paint: { kind: "color" },
+    };
+  }
+
+  /** Put the TOOL zone right for what is in hand and what is picked. */
+  private override(): void {
+    if (this.activeValue) this.deps.inspector.setToolOverride(this.panelFor(this.inHand()));
+  }
+
+  /** The tool's panel — or a picked picture's, which outranks it. */
+  private panelFor(tool: PlanTool) {
+    if (!this.images.selected) return this.panel(tool);
+    return {
+      subject: "Plan picture",
+      hint: "A picture dropped on the plan: drag it to move it.",
+      rows: () => [
+        h(
+          "div",
+          { class: "inspect-section" },
+          h("div", {
+            class: "inspect-empty",
+            text:
+              "Reference to trace over, in the plan's blue. It is not a PSD and " +
+              "goes nowhere the plan does not — drag it into place, draw over it.",
+          }),
+          h("button", {
+            class: "panel-btn",
+            text: "Remove picture",
+            onClick: () => this.images.removeSelected(),
+          }),
+        ),
+      ],
     };
   }
 
@@ -404,7 +472,9 @@ export class PlanMode {
       button.setAttribute("aria-pressed", String(tool === this.inHand()));
     }
     this.sheet.classList.toggle("hidden", !on && !this.shown);
+    this.images.root.classList.toggle("hidden", !on && !this.shown);
     this.layer.root.style.opacity = on ? "" : String(this.opacity);
+    this.images.root.style.opacity = on ? "" : String(this.opacity);
     this.tint.classList.toggle("hidden", !this.tintShown);
     this.tint.style.opacity = String(this.tintOpacity);
   }

@@ -259,6 +259,14 @@ Part of [the Idlewild manual](README.md).
   overlay**, the same pair for the white wash, which starts at half and is
   remembered. Fingers pan and pinch in plan mode as they do everywhere else,
   and holding the tip or a finger still lassos there too
+- **Drop a picture on the plan** and it stays a picture rather than becoming
+  a PSD: grey, tinted the plan's blue and multiplied over the scene, so white
+  disappears and the dark parts read like plan ink — something to trace over.
+  It lands selected, so drag it into place straight away; later, tap it with
+  the Lasso to pick it up again. With the Pencil in hand you draw over it.
+  **Delete** (or Remove picture in the right sidebar) takes it off. It is
+  saved and undone with the plan, and, like the rest of the plan, is in no
+  layer and goes nowhere the game does. PNG, JPEG and GIF
 
 ## Loose strokes
 

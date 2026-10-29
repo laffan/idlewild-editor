@@ -12,12 +12,8 @@ export * from "./project-types";
 export * from "./layer-types";
 
 import type { Projection, Scaffold } from "./project-types";
-import type {
-  Background,
-  LayerKind,
-  PatternSpec,
-  TileLayerData,
-} from "./layer-types";
+import type { Background, LayerKind, PatternSpec, TileLayerData } from "./layer-types";
+import type { PlanImage } from "./plan";
 import type { TiledTileset } from "./tiled/types";
 import type { PaintSpec } from "./paint";
 import type { TextItem } from "./text-items";
@@ -470,6 +466,8 @@ export interface Scene {
   startPointId?: string;
   /** Plan mode's blue strokes: on no layer, never exported — `lib/plan.ts`. */
   plan?: Stroke[];
+  /** And the pictures dropped on it, blue and multiplied — the same file. */
+  planImages?: PlanImage[];
 }
 
 /** The saved body of a project. */
