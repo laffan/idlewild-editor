@@ -1,5 +1,7 @@
 /**
- * The colour a picture dropped on the plan is baked to — `plan-images.ts`.
+ * The colour a picture dropped on the plan is baked to — `plan-image-bake.ts`
+ * — and the four numbers and an angle it is read back into after its box has
+ * moved, scaled or turned it — `plan-images.ts`.
  *
  * The claim worth pinning is the one the multiply depends on: white stays
  * white, so it vanishes over whatever is under it, black comes out the plan's
@@ -7,7 +9,15 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { tint } from "../plan-images";
+import { tint } from "../plan-image-bake";
+import { frameOf, transformed } from "../plan-images";
+import {
+  compose,
+  invert,
+  rotationAbout,
+  scalingAbout,
+  translation,
+} from "../../drawing/transform";
 import { PLAN_COLOR } from "../../lib/plan";
 
 function one(r: number, g: number, b: number): number[] {
@@ -37,5 +47,43 @@ describe("a picture's tones on the plan", () => {
       expect(tg).toBeGreaterThanOrEqual(0x84);
       expect(tb).toBe(255);
     }
+  });
+});
+
+describe("a plan picture moved, scaled and turned through its box", () => {
+  const image = { id: "p", src: "", x: 0, y: 0, width: 200, height: 100 };
+
+  it("turns about its middle and keeps its size", () => {
+    const turned = transformed(image, rotationAbout(100, 50, Math.PI / 2));
+    expect(turned.rotation).toBeCloseTo(Math.PI / 2);
+    expect(turned.width).toBeCloseTo(200);
+    expect(turned.height).toBeCloseTo(100);
+    // The unturned rectangle keeps its middle, so it keeps its top-left too.
+    expect(turned.x).toBeCloseTo(0);
+    expect(turned.y).toBeCloseTo(0);
+  });
+
+  it("scales along its own sides once it is turned", () => {
+    const turned = transformed(image, rotationAbout(100, 50, Math.PI / 2));
+    // Doubling along the picture's own width, about its middle, as a corner
+    // handle does through the frame.
+    const frame = frameOf(turned);
+    const local = compose(compose(invert(frame), scalingAbout(100, 50, 2, 1)), frame);
+    const scaled = transformed(turned, local);
+    expect(scaled.width).toBeCloseTo(400);
+    expect(scaled.height).toBeCloseTo(100);
+    expect(scaled.rotation).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("drops the angle once it is turned back square", () => {
+    const turned = transformed(image, rotationAbout(100, 50, 0.4));
+    const back = transformed(turned, rotationAbout(100, 50, -0.4));
+    expect(back.rotation).toBeUndefined();
+    expect(back.x).toBeCloseTo(0);
+  });
+
+  it("moves without changing anything else", () => {
+    const moved = transformed(image, translation(30, -20));
+    expect([moved.x, moved.y, moved.width, moved.height]).toEqual([30, -20, 200, 100]);
   });
 });

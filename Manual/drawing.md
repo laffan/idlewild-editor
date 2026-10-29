@@ -240,7 +240,8 @@ Part of [the Idlewild manual](README.md).
 
 - **The pencil beside the scene's name** opens plan mode: tracing paper over
   the scene. The canvas goes under a white wash, artboards and all, and the
-  toolbars give way to **Pencil**, **Eraser**, **Lasso** and **Done**. The
+  toolbars give way to **Select**, **Pencil**, **Eraser**, **Lasso** and
+  **Done**. The
   pencil only draws in bright blue; the eraser takes plan ink out. The right
   sidebar's TOOL zone has the pencil's and the eraser's brush, size and
   smoothing — everything but the color — and each remembers its own. The
@@ -262,11 +263,15 @@ Part of [the Idlewild manual](README.md).
 - **Drop a picture on the plan** and it stays a picture rather than becoming
   a PSD: grey, tinted the plan's blue and multiplied over the scene, so white
   disappears and the dark parts read like plan ink — something to trace over.
-  It lands selected, so drag it into place straight away; later, tap it with
-  the Lasso to pick it up again. With the Pencil in hand you draw over it.
-  **Delete** (or Remove picture in the right sidebar) takes it off. It is
-  saved and undone with the plan, and, like the rest of the plan, is in no
-  layer and goes nowhere the game does. PNG, JPEG and GIF
+  It lands selected, in a box like a lassoed sketch's: drag inside to move
+  it, a corner to scale it (Shift to stretch), the round knob to turn it
+  (Shift for 15° steps), and the **×** off its lower right corner — or
+  **Delete** on a keyboard — takes it off. **Select**, at the top of the
+  plan's toolbar, is for working with pictures: press one to pick it up and
+  move it in the same movement, and drag anywhere else to pan. The Lasso
+  picks a picture up the same way. With the Pencil in hand you draw over it.
+  It is saved and undone with the plan, and, like the rest of the plan, is in
+  no layer and goes nowhere the game does. PNG, JPEG and GIF
 
 ## Loose strokes
 

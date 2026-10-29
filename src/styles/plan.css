@@ -72,7 +72,8 @@
    after the sheet rather than inside it, and multiplied as a whole: inside the
    sheet, or on each picture, the blend would only reach an empty backdrop of
    its own rather than the wash and the scene under it. One transform on the
-   inner layer follows the camera; the pictures sit in world pixels. */
+   inner layer follows the camera; the pictures sit in world pixels, turned
+   about their middles. */
 .plan-images {
   position: absolute;
   inset: 0;
@@ -94,4 +95,17 @@
   -webkit-user-select: none;
   user-select: none;
 }
-.plan-image.selected { outline: var(--plan-image-line, 2px) solid #0a84ff; }
+
+/* The selected picture's box, over the pictures and out of their multiply so
+   its handles keep their colours. It takes the pointer only on itself — see
+   stroke-transform.css. */
+.plan-image-box {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Select is a pointer, not a tip. */
+.editor-canvas-wrap.plan-selecting .plan-surface { cursor: default; }

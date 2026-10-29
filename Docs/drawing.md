@@ -800,14 +800,30 @@ shows through a picture rather than being hidden by it, and out of the mode
 the pictures multiply onto the scene at the Plan row's opacity. One transform
 on an inner layer follows the camera; the pictures sit in world pixels.
 
+A selected picture wears the strokes' `TransformBox`, which learned two
+things for it. A box can stand at an angle: the host's `frame()` is where
+`bounds` stands in the world, a corner scales along the frame's own sides
+(the pointer into the frame, `scaleFrom` there, the result back out), and
+what is handed back is still a world matrix, so the strokes' host — with no
+frame — is unchanged. A picture keeps its angle (`PlanImage.rotation`, about
+its middle) where strokes are re-measured square after every turn, and
+`transformed` reads a matrix back into the four numbers and the angle:
+where the top edge points, how far each side stretched, where the middle
+went. And a host with `remove()` gets a × off whichever corner is lowest and
+furthest right on screen. The box lives in a layer of its own just after the
+pictures, out of their multiply, so its handles keep their colours.
+
 Pointer handling is a capture listener on the plan's drawing surface, so a
 press on a picture is settled before the drawing layer starts a stroke or a
-pan. The canvas's rule: a press on a picture under the Lasso (picked or
-borrowed) selects it, a *selected* picture follows a pen, mouse or finger
-under any tool — so one just dropped, which lands selected, can be put in
-place at once — and a pen press anywhere else is the tool's and lets go of
-the picture. The drag writes once, on release. A picture and a stroke
-selection exclude each other, each with its own Delete.
+pan. A press on a picture under **Select** or the Lasso (picked or borrowed)
+selects it and carries it in the same movement — the box follows through
+`showThrough` — and once selected, the box's own outline is the move target
+under any tool. Under Select a pen or mouse press on bare plan pans the
+camera and lets go; the drawing layer is given the Lasso meanwhile, so the
+surface stays the pointer's and a finger held still still lassos strokes.
+Under the Pencil and the Eraser a press is the tool's. Each gesture writes
+once, on release. A picture and a stroke selection exclude each other, each
+with its own Delete.
 
 ### What is still ink
 

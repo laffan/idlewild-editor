@@ -52,10 +52,18 @@ const PENCIL = { brushId: 2, size: 4, smoothing: 0 };
 /** And its eraser: what the pencil would draw, wide, taken out. */
 const ERASER = { size: 28, smoothing: 0 };
 
-type PlanTool = "pencil" | "eraser" | "lasso";
+type PlanTool = "select" | "pencil" | "eraser" | "lasso";
 
-const TOOL_NAMES: Record<PlanTool, string> = { pencil: "Pencil", eraser: "Eraser", lasso: "Lasso" };
+const TOOL_NAMES: Record<PlanTool, string> = {
+  select: "Select",
+  pencil: "Pencil",
+  eraser: "Eraser",
+  lasso: "Lasso",
+};
 const TOOL_HINTS: Record<PlanTool, string> = {
+  select:
+    "Press a picture dropped on the plan to pick it up and move it; its box " +
+    "scales and turns it, and × or Delete takes it off. Drag anywhere else to pan.",
   pencil:
     "Draws the plan, in its blue, on no layer. Hold the tip still to lasso " +
     "instead, and double-tap the Pencil for the eraser.",
@@ -150,7 +158,9 @@ export class PlanMode {
       store,
       surface: this.layer.root,
       active: () => this.activeValue,
-      lassoing: () => this.inHand() === "lasso",
+      picks: () => this.inHand() === "select" || this.inHand() === "lasso",
+      selecting: () => this.inHand() === "select",
+      pan: (dx, dy) => deps.camera()?.panScreen(dx, dy),
       onSelect: (id) => {
         if (id && this.selected.length > 0) {
           this.layer.select([]);
@@ -176,6 +186,7 @@ export class PlanMode {
       "div",
       { class: "tool-rail plan-bar" },
       h("div", { class: "plan-bar-head m", text: "Plan" }),
+      this.toolButton("select", ICONS.select),
       this.toolButton("pencil", ICONS.pencil),
       this.toolButton("eraser", ICONS.pencil),
       this.toolButton("lasso", ICONS.lasso),
@@ -186,7 +197,7 @@ export class PlanMode {
         onClick: () => this.setActive(false),
       }),
     );
-    deps.wrap.append(this.sheet, this.images.root, this.bar);
+    deps.wrap.append(this.sheet, this.images.root, this.images.chrome, this.bar);
     // A picture dropped while planning stays a picture — see `drop.ts`.
     const onDrop = (event: Event) => {
       const { file, clientX, clientY } = (event as CustomEvent<PlanDropDetail>).detail;
@@ -286,7 +297,9 @@ export class PlanMode {
     if (ink && ink.nextElementSibling !== this.sheet) ink.after(this.sheet);
     // The pictures just over the plan's sheet — see `plan-images.ts` for why
     // beside it rather than in it.
-    if (this.sheet.nextElementSibling !== this.images.root) this.sheet.after(this.images.root);
+    if (this.sheet.nextElementSibling !== this.images.root) {
+      this.sheet.after(this.images.root, this.images.chrome);
+    }
     this.layer.sync(view);
     this.images.sync(view);
   }
@@ -336,7 +349,10 @@ export class PlanMode {
       this.layer.setTool(null);
       return;
     }
-    if (tool === "lasso") {
+    // Select is the pictures' tool, and the drawing layer's Lasso under it:
+    // a pen on bare plan pans before the layer hears it (`plan-images.ts`),
+    // and a finger held still still lassos strokes.
+    if (tool === "lasso" || tool === "select") {
       this.layer.setTool("lasso");
       return;
     }
@@ -432,7 +448,10 @@ export class PlanMode {
       rows: () => {
         // Nothing to set, so the zone says what the tool does instead — and,
         // once something is caught, what can be done with it.
-        if (tool === "lasso") {
+        if (tool === "select" && this.selected.length === 0) {
+          return [h("div", { class: "inspect-empty", text: TOOL_HINTS.select })];
+        }
+        if (tool === "lasso" || tool === "select") {
           if (this.selected.length === 0) {
             return [h("div", { class: "inspect-empty", text: TOOL_HINTS.lasso })];
           }
@@ -466,6 +485,7 @@ export class PlanMode {
   private paint(): void {
     const on = this.activeValue;
     this.deps.wrap.classList.toggle("planning", on);
+    this.deps.wrap.classList.toggle("plan-selecting", on && this.inHand() === "select");
     this.toggle.setAttribute("aria-pressed", String(on));
     this.toggle.classList.toggle("on", on);
     for (const [tool, button] of this.buttons) {
@@ -473,6 +493,7 @@ export class PlanMode {
     }
     this.sheet.classList.toggle("hidden", !on && !this.shown);
     this.images.root.classList.toggle("hidden", !on && !this.shown);
+    this.images.chrome.classList.toggle("hidden", !on);
     this.layer.root.style.opacity = on ? "" : String(this.opacity);
     this.images.root.style.opacity = on ? "" : String(this.opacity);
     this.tint.classList.toggle("hidden", !this.tintShown);

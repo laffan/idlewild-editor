@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyPoint,
   compose,
+  IDENTITY,
+  invert,
   rotationAbout,
   scalingAbout,
   transformSome,
@@ -82,6 +84,18 @@ describe("scaleFrom", () => {
     expect(near(applyPoint(free, 0, 0))).toEqual({ x: 50, y: -50 });
     const flipped = scaleFrom(box, "se", { x: -500, y: -500 }, false);
     expect(applyPoint(flipped, 100, 50).x).toBeGreaterThan(0);
+  });
+});
+
+describe("invert", () => {
+  it("undoes a turn, a scale and a move together", () => {
+    const m = compose(compose(rotationAbout(10, 20, 0.7), scalingAbout(0, 0, 2, 3)), translation(5, -8));
+    const back = compose(m, invert(m));
+    back.forEach((v, i) => expect(v).toBeCloseTo(IDENTITY[i]));
+  });
+
+  it("gives the identity for a matrix with no area, rather than infinities", () => {
+    expect(invert([0, 0, 0, 0, 3, 4])).toEqual(IDENTITY);
   });
 });
 

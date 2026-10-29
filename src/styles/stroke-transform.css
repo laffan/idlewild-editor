@@ -49,8 +49,32 @@
   .stroke-transform-knob { left: -11px; top: -11px; width: 22px; height: 22px; }
 }
 
+/* The × off the lower right corner, where the host can delete what the box
+   holds — a picture on the plan. Centred on its point, like the handles. */
+.stroke-transform-remove {
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: #fff;
+  font: 600 15px/22px var(--font-body);
+  text-align: center;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: pointer;
+}
+@media (pointer: coarse) {
+  .stroke-transform-remove { left: -14px; top: -14px; width: 28px; height: 28px; line-height: 28px; }
+}
+
 /* On the plan, in the plan's blue. */
 .plan-surface .stroke-transform-outline { fill: rgb(10 132 255 / 0.05); stroke: #0a84ff; }
 .plan-surface .stroke-transform-stem { stroke: #0a84ff; }
 .plan-surface .stroke-transform-handle,
 .plan-surface .stroke-transform-knob { border-color: #0a84ff; }
+.plan-surface .stroke-transform-remove { background: #0a84ff; }

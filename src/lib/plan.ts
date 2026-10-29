@@ -48,7 +48,8 @@ export function planOf(scene: Scene | undefined): readonly Stroke[] {
  * file, and the price of a picture that saves, undoes and travels in an
  * `.idlewild` with the scene and needs nothing on disk beside it.
  *
- * Where it stands is world pixels, top-left, and how big it is shown.
+ * Where it stands is world pixels, top-left, and how big it is shown — of
+ * the rectangle before it is turned, so the four numbers stay a rectangle.
  */
 export interface PlanImage {
   id: string;
@@ -58,6 +59,8 @@ export interface PlanImage {
   y: number;
   width: number;
   height: number;
+  /** Turned about its middle, in radians, clockwise on screen. Absent is square. */
+  rotation?: number;
 }
 
 const NO_IMAGES: readonly PlanImage[] = Object.freeze([]);

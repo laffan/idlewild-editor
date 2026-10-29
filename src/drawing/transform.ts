@@ -27,6 +27,14 @@ export function compose(first: Affine, then: Affine): Affine {
   return [A * a + C * b, B * a + D * b, A * c + C * d, B * c + D * d, A * e + C * f + E, B * e + D * f + F];
 }
 
+/** The matrix that undoes `m`. A matrix with no area undoes to the identity. */
+export function invert(m: Affine): Affine {
+  const [a, b, c, d, e, f] = m;
+  const det = a * d - b * c;
+  if (Math.abs(det) < 1e-12) return IDENTITY;
+  return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+}
+
 export function translation(dx: number, dy: number): Affine {
   return [1, 0, 0, 1, dx, dy];
 }
