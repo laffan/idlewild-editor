@@ -87,3 +87,18 @@ describe("a plan picture moved, scaled and turned through its box", () => {
     expect([moved.x, moved.y, moved.width, moved.height]).toEqual([30, -20, 200, 100]);
   });
 });
+
+describe("a plan picture going into a PSD", () => {
+  it("loses its white and keeps its blue, as strong as it was dark", async () => {
+    const { toBlue } = await import("../plan-image-bake");
+    const px = new Uint8ClampedArray([...one(255, 255, 255), ...one(0, 0, 0), ...one(128, 128, 128)]);
+    toBlue(px);
+    // White is gone; black is the full blue, opaque.
+    expect(px[3]).toBe(0);
+    expect([...px.slice(4, 8)]).toEqual([0x0a, 0x84, 0xff, 255]);
+    // A mid grey is the blue at about half.
+    expect(px[8]).toBe(0x0a);
+    expect(px[11]).toBeGreaterThan(100);
+    expect(px[11]).toBeLessThan(160);
+  });
+});

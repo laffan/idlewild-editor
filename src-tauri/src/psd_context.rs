@@ -21,6 +21,14 @@
 //! name is one an artist might use. So a layer is the editor's only if it is
 //! at the root, called `context`, *and* at the half opacity this writes; an
 //! artist's own `context` at any other opacity is never taken out.
+//!
+//! **Include plan** is the same sync with a different picture and a different
+//! place: the scene's plan — Plan mode's blue strokes and pictures — cut to the
+//! PSD's box, written as a layer called `plan` at the *top* of the stack, at
+//! three-quarters opacity, so the artist draws under the tracing they made.
+//! Under a palette strip if the file has one, which stays topmost. Told apart
+//! from an artist's own `plan` by its opacity, the way `context` is. See
+//! `Overlay`.
 
 use crate::psd_layers::{self, unwritable_because, Item, LayerEdit};
 use crate::psd_pipeline;
@@ -35,9 +43,25 @@ pub const LAYER_NAME: &str = "context";
 /// Half opacity, as the fork stores it.
 pub const HALF: u8 = 128;
 
-/// How far from half an opacity may be and still be ours — Photoshop rounds
-/// 50% to 127 or 128 depending on how it was typed.
+/// How far from its opacity a layer may be and still be ours — Photoshop
+/// rounds 50% to 127 or 128 depending on how it was typed.
 const SLACK: u8 = 3;
+
+/// One of the two layers this writes: what it is called, at what opacity —
+/// which is also how it is told apart from an artist's layer of the same name
+/// — and whether it goes on top of the stack or under it.
+#[derive(Clone, Copy)]
+pub struct Overlay {
+    pub name: &'static str,
+    pub opacity: u8,
+    pub on_top: bool,
+}
+
+/// Include context's layer: under everything, at half.
+pub const CONTEXT: Overlay = Overlay { name: LAYER_NAME, opacity: HALF, on_top: false };
+
+/// Include plan's layer: over everything but a palette strip, at 75%.
+pub const PLAN: Overlay = Overlay { name: "plan", opacity: 191, on_top: true };
 
 /// The picture the editor rendered: any size, scaled onto the canvas here.
 pub struct ContextImage {
@@ -56,13 +80,23 @@ pub struct ContextSync {
 }
 
 /// Whether a root layer is the one this writes.
-fn is_ours(name: &str, opacity: u8) -> bool {
-    name.trim().eq_ignore_ascii_case(LAYER_NAME) && opacity.abs_diff(HALF) <= SLACK
+fn is_ours(overlay: Overlay, name: &str, opacity: u8) -> bool {
+    name.trim().eq_ignore_ascii_case(overlay.name) && opacity.abs_diff(overlay.opacity) <= SLACK
 }
 
 /// Bring `<key>.psd`'s context layer into line: replaced with `image`, or
 /// taken out when it is `None`.
 pub fn sync(project_id: &str, key: &str, image: Option<ContextImage>) -> Result<ContextSync, String> {
+    sync_overlay(project_id, key, image, CONTEXT)
+}
+
+/// The same for either layer — see `Overlay`.
+pub fn sync_overlay(
+    project_id: &str,
+    key: &str,
+    image: Option<ContextImage>,
+    overlay: Overlay,
+) -> Result<ContextSync, String> {
     let _job = psd_pipeline::exclusive();
     let path = psd_pipeline::psd_path(project_id, key)?;
     let bytes = std::fs::read(&path).map_err(|e| format!("Cannot read {key}.psd: {e}"))?;
@@ -75,7 +109,7 @@ pub fn sync(project_id: &str, key: &str, image: Option<ContextImage>) -> Result<
         .filter(|(_, row)| match row.item {
             Item::Layer(at) if row.depth == 0 => {
                 let layer = doc.layer_by_idx(at);
-                is_ours(layer.name(), layer.opacity())
+                is_ours(overlay, layer.name(), layer.opacity())
             }
             _ => false,
         })
@@ -103,15 +137,14 @@ pub fn sync(project_id: &str, key: &str, image: Option<ContextImage>) -> Result<
     if edits.is_empty() {
         return Ok(ContextSync {
             changed: false,
-            skipped: Some(format!("{key}.psd has no layers besides the context")),
+            skipped: Some(format!("{key}.psd has no layers besides the {}", overlay.name)),
         });
     }
     if let Some(image) = image {
         let rgba = fitted(image, doc.width(), doc.height())?;
-        // Last in the list is the bottom of the stack: under everything.
-        edits.push(LayerEdit {
+        let layer = LayerEdit {
             index: None,
-            name: LAYER_NAME.to_string(),
+            name: overlay.name.to_string(),
             depth: 0,
             visible: Some(true),
             paint: Some(crate::psd_paint::Paint {
@@ -122,8 +155,19 @@ pub fn sync(project_id: &str, key: &str, image: Option<ContextImage>) -> Result<
                 rgba,
                 erase: None,
             }),
-            opacity: Some(HALF),
-        });
+            opacity: Some(overlay.opacity),
+        };
+        if overlay.on_top {
+            // First in the list is the top of the stack — under a palette
+            // strip, which `psd_palette.rs` keeps topmost.
+            let strip = edits.first().is_some_and(|edit| {
+                edit.depth == 0 && edit.name.trim().eq_ignore_ascii_case(crate::psd_palette::LAYER_NAME)
+            });
+            edits.insert(usize::from(strip), layer);
+        } else {
+            // Last in the list is the bottom of the stack: under everything.
+            edits.push(layer);
+        }
     }
 
     std::fs::write(&path, rebuild(&doc, &edits)?)
@@ -167,6 +211,22 @@ pub fn sync_psd_context(request: tauri::ipc::Request<'_>) -> Result<ContextSync,
     sync(&packed.args.id, &packed.args.key, image)
 }
 
+/// Include plan, from the same control: the plan inside the file's box, or
+/// nothing, to take the layer out.
+#[tauri::command]
+pub fn sync_psd_plan(request: tauri::ipc::Request<'_>) -> Result<ContextSync, String> {
+    let mut packed = crate::ipc_bytes::unpack::<ContextArgs>(&request)?;
+    let image = match packed.args.image.take() {
+        Some(wire) => Some(ContextImage {
+            width: wire.width,
+            height: wire.height,
+            rgba: packed.take(wire.rgba)?,
+        }),
+        None => None,
+    };
+    sync_overlay(&packed.args.id, &packed.args.key, image, PLAN)
+}
+
 #[derive(serde::Deserialize)]
 struct ContextArgs {
     id: String,
@@ -188,10 +248,18 @@ mod tests {
 
     #[test]
     fn only_a_half_opacity_context_at_the_root_is_ours() {
-        assert!(is_ours("context", 128));
-        assert!(is_ours(" Context ", 127));
-        assert!(!is_ours("context", 255));
-        assert!(!is_ours("context copy", 128));
+        assert!(is_ours(CONTEXT, "context", 128));
+        assert!(is_ours(CONTEXT, " Context ", 127));
+        assert!(!is_ours(CONTEXT, "context", 255));
+        assert!(!is_ours(CONTEXT, "context copy", 128));
+    }
+
+    #[test]
+    fn only_a_three_quarter_plan_is_ours() {
+        assert!(is_ours(PLAN, "plan", 191));
+        assert!(is_ours(PLAN, "Plan", 192));
+        assert!(!is_ours(PLAN, "plan", 255));
+        assert!(!is_ours(PLAN, "context", 191));
     }
 
     #[test]

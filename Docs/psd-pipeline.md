@@ -663,14 +663,14 @@ one lock; it refuses a file the rebuild would lose masks or clipping from
 project only. Rename and duplicate carry the setting on both sides of the IPC,
 and a `.idlewild` carries the map.
 
-### Include palette and Include context
+### Include palette, Include context and Include plan
 
 The Open / Share PSD control (`openControl` in `editor/psd-layer-actions.ts`)
-carries two ticks, kept per key in `ProjectMeta.psdSend` by `psd_send.rs`
+carries three ticks, kept per key in `ProjectMeta.psdSend` by `psd_send.rs`
 (carried by rename, duplicate and `.idlewild` like `pixelScale`). Both are off
 until ticked — there used to be an app-wide *Attach palette to PSDs* switch
 under the colour picker that an absent `palette` followed, and it was taken
-out as a second control for the same strip. `openPsdExternally` syncs both before the bytes leave, and
+out as a second control for the same strip. `openPsdExternally` syncs all three before the bytes leave, and
 `setInclude` syncs the one that changed at once, so unticking takes its layer
 out without waiting for a send.
 
@@ -689,6 +689,21 @@ scaled to the canvas if the device's texture limit made it smaller. Like the
 palette it is named outside the pipe convention, so no re-parse follows. A
 root `context` layer counts as the editor's only at half opacity, so an
 artist's own is never removed.
+
+**Plan** is the scene's plan — Plan mode's strokes and the pictures dropped
+on it — inside the same box at the same density (`psdBox`, shared by
+`editor/psd-context.ts` and `editor/psd-plan.ts`), on transparency rather
+than over a picture of the canvas. A plan picture is multiplied on the canvas
+and the fork writes normal layers, so each is turned back from its baked
+white-to-blue tones into the blue at the strength its darkness had
+(`toBlue`, beside `tint` in `plan-image-bake.ts`) — white goes, and over the
+artwork it reads as the multiply did. The strokes go on a sheet of their own
+over the pictures, since the plan's eraser cuts plan ink and nothing else.
+`psd_context.rs` writes it through the same sync as the context, generalised
+to an `Overlay` — a name, the opacity that marks it as ours, and which end of
+the stack: `plan` at the **top** at 191 (75%), under a palette strip if the
+file has one, so the strip stays topmost. A box with no plan in it takes an
+old `plan` layer out rather than writing a clear one.
 
 ## Editing a PSD, and getting it back
 

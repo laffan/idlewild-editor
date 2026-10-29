@@ -502,8 +502,21 @@ export const psd = {
     key: string,
     image: { width: number; height: number; rgba: PixelBytes } | null,
   ) => invokeBytes<PsdPaletteSync>("sync_psd_context", { id, key, image }),
-  /** Include palette / Include context for one file — see `psd_send.rs`. */
-  setSend: (id: string, key: string, patch: { palette?: boolean; context?: boolean }) =>
+  /**
+   * Include plan: the scene's plan inside a PSD's box, as a `plan` layer on
+   * top, or that layer taken out (`null`). The same route as the context.
+   */
+  syncPlan: (
+    id: string,
+    key: string,
+    image: { width: number; height: number; rgba: PixelBytes } | null,
+  ) => invokeBytes<PsdPaletteSync>("sync_psd_plan", { id, key, image }),
+  /** Include palette, context and plan for one file — see `psd_send.rs`. */
+  setSend: (
+    id: string,
+    key: string,
+    patch: { palette?: boolean; context?: boolean; plan?: boolean },
+  ) =>
     invoke<ProjectMeta>("set_psd_send", { id, key, ...patch }),
   /** The PSD's own bytes, base64 — what the iPadOS share sheet needs. */
   bytes: (id: string, key: string) =>

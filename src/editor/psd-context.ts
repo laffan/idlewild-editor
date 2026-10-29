@@ -57,8 +57,20 @@ function placementOf(store: DocStore, scene: WorldScene, key: string): Placement
   return first;
 }
 
-/** The picture, or null when the file is not placed or nothing could be drawn. */
-export async function contextPicture(deps: ContextDeps, key: string): Promise<ContextPicture | null> {
+/** Where a file's whole canvas stands in the world, and its pixels' size. */
+export interface PsdBox {
+  scene: WorldScene;
+  placement: Placement;
+  box: Box;
+  width: number;
+  height: number;
+}
+
+/**
+ * The file's box — shared with Include plan (`psd-plan.ts`), which cuts the
+ * plan to the same rectangle at the same density. Null when it is not placed.
+ */
+export async function psdBox(deps: ContextDeps, key: string): Promise<PsdBox | null> {
   const scene = deps.scene();
   if (!scene) return null;
   const placement = placementOf(deps.store, scene, key);
@@ -72,6 +84,14 @@ export async function contextPicture(deps: ContextDeps, key: string): Promise<Co
   const per = sourceScale() / EXPORT_SCALE / pixelScaleOf(key);
   const width = Math.max(1, Math.round(manifest.width * per));
   const height = Math.max(1, Math.round(manifest.height * per));
+  return { scene, placement, box, width, height };
+}
+
+/** The picture, or null when the file is not placed or nothing could be drawn. */
+export async function contextPicture(deps: ContextDeps, key: string): Promise<ContextPicture | null> {
+  const at = await psdBox(deps, key);
+  if (!at) return null;
+  const { scene, placement, box, width, height } = at;
 
   // The file itself is what is being drawn *on*, so it stays out of its own
   // context. Put back once the picture is read, whatever happened.

@@ -78,7 +78,7 @@ Part of [the Idlewild manual](README.md).
 
 ## And out again
 
-- **Open PSD** (Share PSD on an iPad) is one box with two ticks under the
+- **Open PSD** (Share PSD on an iPad) is one box with three ticks under the
   button, and they decide what goes out with the file:
   - **Include palette** writes your palette in as a strip of swatches on the
     top layer. It is off until you tick it, and each file keeps its own
@@ -89,10 +89,17 @@ Part of [the Idlewild manual](README.md).
     opacity, under the artwork, so the wall a door goes in is there to draw
     against. The editor's own marks (the grid, selection outlines) are left
     out, and so are camera-locked backdrops
+  - **Include plan** writes the part of the scene's plan that falls inside the
+    PSD's canvas — Plan mode's blue strokes and the pictures dropped on it —
+    into it as a layer called `plan` at 75% opacity, **on top** of the
+    artwork, so you can trace over it in the other app. A plan picture's white
+    is left out, as it is on the canvas. With no plan inside the PSD there is
+    no layer
   - Ticking writes the layer straight away and every open or share writes it
     fresh, so it always shows the canvas as it is now. **Unticking takes the
-    layer out of the file.** Neither layer reaches the game. A `context` layer
-    of your own at any opacity but 50% is never touched
+    layer out of the file.** None of these layers reaches the game. A
+    `context` layer of your own at any opacity but 50%, or a `plan` layer at
+    any but 75%, is never touched
 
 - Edit a placed PSD outside the app and bring it back: Open PSD hands the file
   to the system editor on macOS and to the share sheet on iPadOS, and

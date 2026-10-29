@@ -25,6 +25,7 @@ import { layerName } from "../lib/manifest";
 import { carryDownsampleKept, openDownsample } from "./psd-downsample";
 import type { Placement } from "../lib/types";
 import { contextPicture, type ContextDeps } from "./psd-context";
+import { planPicture } from "./psd-plan";
 import { carrySendChoice, sendChoiceOf, setSendChoice, type SendChoice } from "./psd-send";
 import type { DrawingLayer } from "../drawing";
 import type { DocStore } from "../lib/doc-store";
@@ -105,6 +106,7 @@ export async function openPsdExternally(
   const choice = sendChoiceOf(key);
   await attachPalette(projectId, key, gridSize, choice.palette);
   await attachContext(projectId, key, choice.context ? context ?? null : null, choice.context);
+  await attachPlan(projectId, key, choice.plan ? context ?? null : null, choice.plan);
 
   if (!isMobile(os)) {
     await psd.openExternally(projectId, key);
@@ -213,6 +215,34 @@ async function attachContext(
     else if (result.changed) log.info(`Took the context layer out of ${key}.psd`);
   } catch (err) {
     log.warn(`The context did not go into ${key}.psd:`, err);
+  }
+}
+
+/**
+ * Bring the file's `plan` layer into line with Include plan, the way
+ * `attachContext` does the context: the plan inside the file's box when
+ * ticked, the layer taken out when not — or when the box holds no plan.
+ */
+async function attachPlan(
+  projectId: string,
+  key: string,
+  deps: ContextDeps | null,
+  wanted: boolean,
+): Promise<void> {
+  try {
+    const found = deps ? await planPicture(deps, key) : null;
+    if (wanted && !found) {
+      log.warn(`Could not picture the plan over ${key}.psd; its plan layer is unchanged`);
+      return;
+    }
+    const picture = found === "empty" ? null : found;
+    if (wanted && !picture) log.info(`There is no plan inside ${key}.psd's box to put into it`);
+    const result = await psd.syncPlan(projectId, key, picture);
+    if (result.skipped) log.warn(`The plan did not go into ${key}.psd: ${result.skipped}`);
+    else if (result.changed && picture) log.info(`Put the plan over ${key}.psd into it as "plan"`);
+    else if (result.changed) log.info(`Took the plan layer out of ${key}.psd`);
+  } catch (err) {
+    log.warn(`The plan did not go into ${key}.psd:`, err);
   }
 }
 
@@ -334,7 +364,7 @@ export interface PsdFileActions {
   /** Give one placement a copy of the file, by id. */
   detach: (layerId: string, placementId: string, key: string) => Promise<void>;
   /**
-   * Tick or untick Include palette / Include context. The layer it controls
+   * Tick or untick Include palette, context or plan. The layer it controls
    * is written or taken out at once, not only on the next send.
    */
   setInclude: (key: string, patch: Partial<SendChoice>) => Promise<void>;
@@ -454,10 +484,11 @@ export function createPsdFileActions(
   async function setInclude(key: string, patch: Partial<SendChoice>): Promise<void> {
     await setSendChoice(projectId, key, patch);
     if (patch.palette !== undefined) await attachPalette(projectId, key, store.gridSize, patch.palette);
+    const deps = { projectId, store, scene, drawing: options.drawing };
     if (patch.context !== undefined) {
-      const deps = { projectId, store, scene, drawing: options.drawing };
       await attachContext(projectId, key, patch.context ? deps : null, patch.context);
     }
+    if (patch.plan !== undefined) await attachPlan(projectId, key, patch.plan ? deps : null, patch.plan);
     inspector.reloadPsdLayers(key);
   }
 

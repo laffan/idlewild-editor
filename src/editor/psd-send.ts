@@ -10,6 +10,8 @@
  * is off.
  * **Include context** puts the canvas around the file into it — see
  * `psd-context.ts` — and is off until ticked.
+ * **Include plan** puts the scene's plan inside the file's box into it, on
+ * top — see `psd-plan.ts` — and is off until ticked.
  *
  * Kept in `meta.json` by `psd_send.rs`, beside Pixel art upscale's factors,
  * and read here off the open project for the reason `pixelScaleOf` is.
@@ -22,14 +24,16 @@ import { openProject } from "../lib/print";
 export interface SendChoice {
   palette: boolean;
   context: boolean;
+  plan: boolean;
 }
 
-/** One file's two answers, defaults filled in. */
+/** One file's three answers, defaults filled in. */
 export function sendChoiceOf(key: string): SendChoice {
   const held = openProject()?.psdSend?.[key];
   return {
     palette: held?.palette === true,
     context: held?.context === true,
+    plan: held?.plan === true,
   };
 }
 

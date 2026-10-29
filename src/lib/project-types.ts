@@ -300,7 +300,7 @@ export interface ProjectMeta {
   gridAlign?: Record<string, import("./grid-align").GridAlign>;
   /** What goes into each PSD when it is opened or shared, by key — see
    *  `editor/psd-send.ts`. Absent for files that follow the defaults. */
-  psdSend?: Record<string, { palette?: boolean; context?: boolean }>;
+  psdSend?: Record<string, { palette?: boolean; context?: boolean; plan?: boolean }>;
   /** The PSDs already downsampled with Maintain canvas size, which a file can
    *  only do once — see `editor/psd-downsample.ts`. */
   downsampleKept?: string[];

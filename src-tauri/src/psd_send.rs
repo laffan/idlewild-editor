@@ -6,6 +6,8 @@
 //! to follow any more.
 //! **Include context** writes the canvas around the file into it — see
 //! `psd_context.rs` — and is off until it is ticked.
+//! **Include plan** writes the scene's plan inside the file's box into it, on
+//! top — the same file — and is off until it is ticked.
 //!
 //! The editor does the work when the file is sent; this only remembers.
 
@@ -14,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::psd_pipeline::safe_key;
 use crate::store;
 
-/// One file's two answers.
+/// One file's three answers.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PsdSend {
@@ -23,11 +25,13 @@ pub struct PsdSend {
     pub palette: Option<bool>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub context: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub plan: bool,
 }
 
 impl PsdSend {
     fn is_default(&self) -> bool {
-        self.palette.is_none() && !self.context
+        self.palette.is_none() && !self.context && !self.plan
     }
 }
 
@@ -37,6 +41,7 @@ pub fn set(
     key: &str,
     palette: Option<bool>,
     context: Option<bool>,
+    plan: Option<bool>,
 ) -> Result<crate::project::ProjectMeta, String> {
     let key = safe_key(key)?;
     let mut meta = store::read_meta(id)?;
@@ -46,6 +51,9 @@ pub fn set(
     }
     if let Some(context) = context {
         entry.context = context;
+    }
+    if let Some(plan) = plan {
+        entry.plan = plan;
     }
     if entry.is_default() {
         meta.psd_send.remove(key);
@@ -73,6 +81,7 @@ pub fn set_psd_send(
     key: String,
     palette: Option<bool>,
     context: Option<bool>,
+    plan: Option<bool>,
 ) -> Result<crate::project::ProjectMeta, String> {
-    set(&id, &key, palette, context)
+    set(&id, &key, palette, context, plan)
 }

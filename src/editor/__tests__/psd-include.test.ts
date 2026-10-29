@@ -32,12 +32,15 @@ describe("what goes into a PSD", () => {
   });
 
   it("is off until the file has its own answer", () => {
-    setOpenProject(meta({ door: { palette: false, context: true }, roof: { palette: true } }));
-    expect(sendChoiceOf("tree")).toEqual({ palette: false, context: false });
-    expect(sendChoiceOf("roof")).toEqual({ palette: true, context: false });
-    expect(sendChoiceOf("door")).toEqual({ palette: false, context: true });
+    setOpenProject(
+      meta({ door: { palette: false, context: true }, roof: { palette: true }, wall: { plan: true } }),
+    );
+    expect(sendChoiceOf("tree")).toEqual({ palette: false, context: false, plan: false });
+    expect(sendChoiceOf("roof")).toEqual({ palette: true, context: false, plan: false });
+    expect(sendChoiceOf("door")).toEqual({ palette: false, context: true, plan: false });
+    expect(sendChoiceOf("wall")).toEqual({ palette: false, context: false, plan: true });
     carrySendChoice("door", "gate", true);
-    expect(sendChoiceOf("gate")).toEqual({ palette: false, context: true });
+    expect(sendChoiceOf("gate")).toEqual({ palette: false, context: true, plan: false });
     expect(sendChoiceOf("door").context).toBe(false);
     setOpenProject(null);
   });

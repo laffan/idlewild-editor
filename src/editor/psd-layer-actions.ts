@@ -59,10 +59,10 @@ export interface PsdHeadCallbacks {
  * button. See `psd-send.ts`.
  */
 export interface PsdIncludeCallbacks {
-  /** The file's two answers as they stand. */
-  include?: () => { palette: boolean; context: boolean };
+  /** The file's three answers as they stand. */
+  include?: () => { palette: boolean; context: boolean; plan: boolean };
   /** Tick or untick one — the layer it controls follows at once. */
-  onInclude?: (patch: { palette?: boolean; context?: boolean }) => void;
+  onInclude?: (patch: { palette?: boolean; context?: boolean; plan?: boolean }) => void;
 }
 
 /**
@@ -89,9 +89,10 @@ export function psdHeadRow(
 /**
  * Open PSD (or Share PSD), with what goes out with it in its own dropdown.
  *
- * **Include palette** puts the palette strip in the file and **Include
- * context** a picture of the canvas around it, each written fresh every time
- * the file goes out; unticking one takes its layer out. They are about *this*
+ * **Include palette** puts the palette strip in the file, **Include
+ * context** a picture of the canvas around it and **Include plan** the
+ * scene's plan over it, each written fresh every time the file goes out;
+ * unticking one takes its layer out. They are about *this*
  * send, so they are the button's options rather than two checkboxes laid out
  * under it — see `lib/with-options-button.ts`, which also puts a mark beside
  * the options glyph for each one that is on.
@@ -133,6 +134,17 @@ function openControl(
           "called context at 50% opacity under the artwork — refreshed each " +
           "time it goes out. Untick to take it out.",
         onChange: (on) => onInclude({ context: on }),
+      },
+      {
+        label: "Include plan",
+        glyph: ICONS.pencil,
+        on: choice.plan,
+        title:
+          "Put the plan — Plan mode's blue strokes and pictures — that falls " +
+          "inside this PSD into it, as a layer called plan on top of the " +
+          "artwork, to trace over. Refreshed each time it goes out. Untick to " +
+          "take it out.",
+        onChange: (on) => onInclude({ plan: on }),
       },
     ],
   });

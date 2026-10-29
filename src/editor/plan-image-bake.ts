@@ -52,3 +52,22 @@ export function tint(pixels: Uint8ClampedArray, hex: string): void {
     pixels[i + 3] = 255;
   }
 }
+
+/**
+ * Baked plan tones back to the plan's blue on transparency, as strong as each
+ * tone was dark: white goes entirely and the full blue stays. What a picture
+ * becomes in a PSD, where nothing multiplies — see `psd-plan.ts`. The tones
+ * run from white to the blue by darkness (`tint`), so the darkness is read
+ * straight back off the red channel.
+ */
+export function toBlue(pixels: Uint8ClampedArray): void {
+  const n = parseInt(PLAN_COLOR.slice(1, 7), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  for (let i = 0; i < pixels.length; i += 4) {
+    const dark = Math.max(0, Math.min(1, (255 - pixels[i]) / (255 - r)));
+    pixels[i + 3] = Math.round(pixels[i + 3] * dark);
+    pixels[i] = r;
+    pixels[i + 1] = g;
+    pixels[i + 2] = b;
+  }
+}

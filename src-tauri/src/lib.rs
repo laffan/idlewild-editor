@@ -499,6 +499,7 @@ pub fn run() {
             read_psd_bytes,
             sync_psd_palette,
             psd_context::sync_psd_context,
+            psd_context::sync_psd_plan,
             psd_send::set_psd_send,
             psd_stack::read_psd_layers,
             psd_stack::write_psd_layers,

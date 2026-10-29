@@ -716,11 +716,12 @@ export async function invoke(
     case "list_project_fonts": return (window as any).__fonts ?? [];
     case "set_psd_send": {
       const w = window as any;
-      const { key, palette, context } = args as any;
-      w.__psdSend = { ...(w.__psdSend ?? {}), [key]: { ...(w.__psdSend?.[key] ?? {}), ...(palette === undefined ? {} : { palette }), ...(context === undefined ? {} : { context }) } };
+      const { key, palette, context, plan } = args as any;
+      w.__psdSend = { ...(w.__psdSend ?? {}), [key]: { ...(w.__psdSend?.[key] ?? {}), ...(palette === undefined ? {} : { palette }), ...(context === undefined ? {} : { context }), ...(plan === undefined ? {} : { plan }) } };
       return { id: "demo", psdSend: w.__psdSend };
     }
     case "sync_psd_context": return { changed: true };
+    case "sync_psd_plan": return { changed: true };
     case "is_psd_processed": return true;
     case "downsample_psd_pixels":
     case "set_psd_pixel_scale":
