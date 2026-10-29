@@ -68,6 +68,12 @@ const ACCENT = "#ec3013";
 export interface ToolSession {
   move(worldX: number, worldY: number, pressure: number): void;
   end(): void;
+  /**
+   * Leave without writing anything, and take back whatever was painted. Only
+   * the sessions a held pen can turn into a lasso have one — see
+   * `drawing/hold-lasso.ts`.
+   */
+  cancel?(): void;
 }
 
 /** The box a run of points covers, grown by `pad` on every side. */
@@ -265,6 +271,15 @@ export function beginDraw(
       if (cut) surface.adoptAppend(add, () => store.strokes);
       else add();
     },
+    cancel() {
+      disarm();
+      frame.cancel();
+      surface.clearLive();
+      surface.endErase();
+      // An eraser drawn a frame at a time has already cut what settled into
+      // the baked canvas, and only a re-lay puts it back.
+      if (live?.abandon() || style.erase) surface.repaint(store.strokes);
+    },
   };
 }
 
@@ -366,6 +381,13 @@ export function beginErase(
       surface.clearLive();
       working(null);
       if (changed) store.replace(strokes);
+    },
+    cancel() {
+      frame.cancel();
+      surface.clearLive();
+      working(null);
+      // The cuts were only ever on screen; the document still has the strokes.
+      if (changed) surface.repaint(store.strokes);
     },
   };
 }

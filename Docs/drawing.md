@@ -549,6 +549,33 @@ Pointer routing is all-or-nothing — a drawing tool suspends the camera rig
 and the surface takes pointer events; select and pan leave both alone — so
 there is exactly one arbiter at a time.
 
+The one thing a finger does besides navigate is **hold still**: after
+`FINGER_HOLD_MS` without straying `FINGER_SLOP_PX` it stops panning and sweeps
+a lasso from where it went down. The pen tip does the same after
+`PEN_HOLD_MS` at the very start of a Pencil, Pattern or Slice stroke — the
+session's `cancel` takes back what it had begun, and the same contact carries
+on as the lasso. Both are Hush's, and both are in `hold-lasso.ts`. The Lasso
+is *borrowed*: the layer remembers the tool it came from and gives it back on
+the next pen-down away from the transform box (which then draws, as in Hush),
+on a finger tap, or at once when the loop caught nothing. Two details made it
+work in this shell. `setTool` with the tool the Lasso was borrowed from is a
+no-op, because the editor re-picks its tool whenever the selection moves and
+the lasso's own catch is such a move; and `endSession` lets go of the session
+*before* ending it, because that same re-pick reached `setTool`, which ends
+whatever session is held — the lasso that was ending, again, without end. PSD
+Edit mode spends a still hold on straightening a stroke, so a layer with
+`straightenHoldMs` set does neither. `onBorrow` tells the plan's bar, which
+lights its Lasso meanwhile; the main rail keeps showing the brush, since the
+borrow is not a tool somebody picked.
+
+**A double tap on the Pencil's barrel** is not a pointer event at all. The
+iPad plugin attaches a `UIPencilInteraction` to the web view and emits
+`pencil-double-tap` (`tauri-plugin-ipad-chrome/ios/Sources/PencilTap.swift`),
+and `lib/pencil.ts` fans the one plugin listener out to the two that act on
+it: `tool-routing.ts` turns the rail's tool round with `setErasing`, the way
+holding its button does, and plan mode swaps its pencil and eraser. Outside
+an iPad nothing is registered; the harness calls `window.__pencilDoubleTap`.
+
 Pressure is read the way Hush reads it: a pen reporting a real value is
 scaled up a little, because few people press through the digitiser's full
 range, and anything reporting the 0.5 default is left there rather than made

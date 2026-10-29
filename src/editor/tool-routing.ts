@@ -36,7 +36,9 @@ import {
 } from "../lib/tile-tools";
 import type { WorldScene } from "../game/world-scene";
 import type { Inspector } from "./inspector";
+import { onPencilDoubleTap } from "../lib/pencil";
 import {
+  TOOLBARS_DOWN,
   canErase,
   tileVerbOf,
   toolName,
@@ -210,6 +212,18 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
   let shape: TileShape = "rect";
   /** Whether a drag under Select snaps. See `ToolRouting.snapToGrid`. */
   let snap = true;
+
+  // A double tap on the Pencil's barrel turns the tool in hand round, the way
+  // holding its button does — Hush's draw / erase toggle, for every tool that
+  // can be an eraser. Plan mode has a bar of its own and hears it there; the
+  // modes that own every gesture hear nothing. A routing outlives nothing but
+  // its editor, so a tap after the editor has gone lets go — see `lib/pencil.ts`.
+  const stopTap = onPencilDoubleTap(() => {
+    if (!host.canvas.isConnected) return void stopTap();
+    if (host.canvas.closest(TOOLBARS_DOWN)) return;
+    const tool = host.rail.tool;
+    if (canErase(tool)) setErasing(tool, !erasing.has(tool));
+  });
 
   /**
    * The stroke mode and the paint a tool draws with.

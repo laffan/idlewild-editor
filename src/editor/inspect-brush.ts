@@ -98,7 +98,9 @@ export const TOOL_HINTS: Partial<Record<ToolId, string>> = {
     "Drag to pan, hold still to ask for a patch of grid, and hold ⇧ or ⌘ " +
     "while dragging to box round placed images — on a tile layer a plain " +
     "drag boxes tiles. Arrow keys nudge whatever is picked by a single pixel.",
-  pencil: "Lays ink down along the path, at the tip and size set below.",
+  pencil:
+    "Lays ink down along the path, at the tip and size set below. Hold the " +
+    "tip still to lasso, and double-tap the Pencil to turn it into an eraser.",
   pattern:
     "Sweep to reveal the pattern. It is pinned to the world rather than to " +
     "the stroke, so two passes line up exactly.",

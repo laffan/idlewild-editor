@@ -34,7 +34,6 @@ import {
   beginFill,
   beginLasso,
   beginZone,
-  drawEraserCursor,
   type ToolSession,
 } from "./tools";
 import { PointFill } from "./fill-points";
@@ -42,9 +41,18 @@ import { AxisLock } from "./axis-lock";
 import { strokesBox } from "./geometry";
 import { TransformBox } from "./transform-box";
 import { transformSome, type Affine } from "./transform";
-import { drawToolCursor, hasToolCursor } from "./cursor";
-import { onFrame } from "./frame";
+import { HoverCursor, previews } from "./hover-cursor";
 import { setInking } from "./inking";
+import { TouchNav } from "./touch-nav";
+import {
+  FINGER_HOLD_MS,
+  FINGER_SLOP_PX,
+  Hold,
+  PEN_HOLD_MS,
+  PEN_HOLD_TOOLS,
+  PEN_SLOP_PX,
+  TAP_MS,
+} from "./hold-lasso";
 import { beginShapeStamp, freeStampBox, type StampBox, type StampBoxAt } from "./tools-stamp";
 import {
   DEFAULT_STYLE,
@@ -85,6 +93,12 @@ export interface DrawingCallbacks {
    * back to a lattice of its own stamp size.
    */
   stampBoxAt?: StampBoxAt;
+  /**
+   * A held pen or finger has borrowed the Lasso (`"lasso"`), or the tool it
+   * was borrowed from is back (null) — see `hold-lasso.ts`. For a bar that
+   * shows which tool is in hand; the layer gives the tool back on its own.
+   */
+  onBorrow?: (tool: DrawingTool | null) => void;
 }
 
 export class DrawingLayer {
@@ -145,21 +159,15 @@ export class DrawingLayer {
   private selection: ReadonlySet<string> = new Set();
   private readonly transform: TransformBox;
 
-  /**
-   * Where the pointer is hovering, and the frame that paints the tool there.
-   *
-   * Batched through `onFrame` for the reason a stroke is — a 120 Hz pointer
-   * against a 60 Hz frame means every paint but the last is thrown away
-   * unlooked at — and it matters more here than for the eraser's plain disc,
-   * because a pattern preview fills every lattice cell under the tip.
-   */
-  private hoverAt: { x: number; y: number } | null = null;
-  private readonly cursorFrame = onFrame(() => this.paintCursor());
+  /** The tool painted where the pointer hovers — see `hover-cursor.ts`. */
+  private readonly hover: HoverCursor;
 
-  private readonly pointers = new Map<number, { x: number; y: number }>();
-  private pinchSpread = 0;
-  private lastPanX = 0;
-  private lastPanY = 0;
+  private readonly nav: TouchNav;
+  /** What a held pen or finger lent the Lasso from — see `hold-lasso.ts`. */
+  private borrowed: DrawingTool | null = null;
+  private readonly hold = new Hold();
+  /** A lone finger, while it might still be a tap: one gives the tool back. */
+  private fingerDown: { id: number; at: number; x: number; y: number } | null = null;
 
   /**
    * `source` draws somewhere other than a layer — the scene's plan, see
@@ -176,6 +184,15 @@ export class DrawingLayer {
     this.store = new StrokeStore(doc, layerId, source);
     this.surface = new Surface(this.atlas);
     this.root = this.surface.root;
+    this.nav = new TouchNav(this.root, callbacks);
+    this.hover = new HoverCursor({
+      surface: this.surface,
+      atlas: this.atlas,
+      tool: () => this.tool,
+      style: () => this.style,
+      busy: () => this.session !== null,
+      stampBox: (wx, wy) => this.stampBox(wx, wy),
+    });
     this.pointFill = new PointFill(this.surface, this.store, () =>
       this.callbacks.onFillPoints(this.pointFill.count),
     );
@@ -230,7 +247,7 @@ export class DrawingLayer {
    * the flicker it looked like.
    */
   private onLeave = (): void => {
-    this.dropCursor();
+    this.hover.drop();
     if (this.session) return;
     if (this.showsPointFill() && this.pointFill.count > 0) {
       this.pointFill.repaint(this.style);
@@ -259,6 +276,10 @@ export class DrawingLayer {
    * the surface stops taking pointer events and the grid tools resume.
    */
   setTool(tool: DrawingTool | null): void {
+    // The shell re-picks its tool whenever the selection moves, as the lasso's
+    // catch does; only a different tool replaces a borrowed Lasso.
+    if (this.borrowed && tool === this.borrowed) return;
+    this.borrowed = null;
     if (tool === this.tool) return;
     this.endSession();
     this.tool = tool;
@@ -276,7 +297,7 @@ export class DrawingLayer {
     // instead.
     this.root.classList.toggle(
       "paints-cursor",
-      tool !== null && this.previews(tool),
+      tool !== null && previews(tool),
     );
     // A shape half tapped out survives a change of tool but stops being
     // *drawn*, which is not the same thing. It has to survive because holding
@@ -442,34 +463,91 @@ export class DrawingLayer {
   }
 
   private onDown = (event: PointerEvent): void => {
-    this.pointers.set(event.pointerId, {
-      x: event.clientX,
-      y: event.clientY,
-    });
+    this.nav.down(event);
 
     if (event.pointerType === "touch") {
       // A second finger always wins: whatever the first was doing, this is
       // now navigation.
-      if (this.pointers.size === 2) {
+      if (this.nav.count === 2) {
+        this.hold.disarm();
+        this.fingerDown = null;
         this.endSession();
-        this.pinchSpread = this.spread();
-      } else if (this.pointers.size === 1) {
-        this.lastPanX = event.clientX;
-        this.lastPanY = event.clientY;
+      } else if (this.nav.count === 1) {
+        const { pointerId: id, timeStamp: at, clientX: x, clientY: y } = event;
+        this.fingerDown = { id, at, x, y };
+        if (this.tool && !this.session && this.holdsLasso()) {
+          this.hold.arm(event, FINGER_HOLD_MS, FINGER_SLOP_PX, () => this.lassoFrom(event));
+        }
       }
       return;
     }
 
     if (!this.tool || this.session) return;
-    this.dropCursor();
+    // The pen is back on the page, away from the box — it draws with what it
+    // had before the hold lent the Lasso, and what was caught is let go.
+    if (this.borrowed) {
+      this.select([]);
+      this.callbacks.onSelect([]);
+      this.giveBack();
+    }
+    this.hover.drop();
     this.root.setPointerCapture(event.pointerId);
     this.sessionPointer = event.pointerId;
     const { x, y } = this.local(event);
     this.lock = LOCKS.has(this.tool) ? new AxisLock(x, y) : null;
     this.session = this.open(this.tool, x, y, this.pressure(event));
     setInking(this, true);
+    if (event.pointerType === "pen" && PEN_HOLD_TOOLS.has(this.tool) && this.holdsLasso()) {
+      this.hold.arm(event, PEN_HOLD_MS, PEN_SLOP_PX, () => this.lassoFrom(event));
+    }
     event.preventDefault();
   };
+
+  /** Whether a still hold lassos here, rather than meaning something else. */
+  private holdsLasso(): boolean {
+    return this.straightenHoldMs === 0;
+  }
+
+  /**
+   * A hold has fired: throw away what the pen began, or stop the finger
+   * panning, and sweep a lasso from where it went down with the same contact.
+   */
+  private lassoFrom(down: PointerEvent): void {
+    if (down.pointerType === "touch") {
+      this.nav.forget(down.pointerId);
+      this.fingerDown = null;
+      this.root.setPointerCapture(down.pointerId);
+    } else {
+      this.session?.cancel?.();
+      this.session = null;
+    }
+    if (this.tool !== "lasso") {
+      this.borrowed = this.tool;
+      this.enter("lasso");
+      this.callbacks.onBorrow?.("lasso");
+    }
+    const { x, y } = this.local(down);
+    this.lock = null;
+    this.sessionPointer = down.pointerId;
+    this.session = this.open("lasso", x, y, 0.5);
+    setInking(this, true);
+  }
+
+  /** Hand back the tool a hold borrowed the Lasso from, if one did. */
+  private giveBack(): void {
+    const tool = this.borrowed;
+    if (!tool) return;
+    this.borrowed = null;
+    this.enter(tool);
+    this.callbacks.onBorrow?.(null);
+  }
+
+  /** The tool in hand changes under a gesture rather than from the bar. */
+  private enter(tool: DrawingTool): void {
+    this.tool = tool;
+    this.root.classList.toggle("paints-cursor", previews(tool));
+    this.transform.refresh();
+  }
 
   private open(
     tool: DrawingTool,
@@ -525,6 +603,8 @@ export class DrawingLayer {
     return beginLasso(this.store, this.surface, (ids) => {
       this.select(ids);
       this.callbacks.onSelect(ids);
+      // A borrowed Lasso that caught nothing has nothing to stay for.
+      if (ids.length === 0) this.giveBack();
     }, x, y);
   }
 
@@ -544,21 +624,23 @@ export class DrawingLayer {
   }
 
   private onMove = (event: PointerEvent): void => {
+    this.hold.move(event);
     if (event.pointerType === "touch") {
-      if (!this.pointers.has(event.pointerId)) return;
-      this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-      this.navigate();
-      return;
+      const tap = this.fingerDown;
+      if (tap && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > FINGER_SLOP_PX) {
+        this.fingerDown = null;
+      }
+      // A held finger is sweeping a lasso rather than panning.
+      if (!(this.session && event.pointerId === this.sessionPointer)) {
+        this.nav.move(event);
+        return;
+      }
     }
 
     if (!this.session || event.pointerId !== this.sessionPointer) {
-      // What the tool would lay down, where it would land — the eraser's disc
-      // and every brush's own tip, both painted while merely hovering. See
-      // `cursor.ts`; the eraser's is a plain ring because what it takes out is
-      // not a mark it could show you.
-      if (!this.session && this.tool && this.previews(this.tool)) {
-        this.hoverAt = this.local(event);
-        this.cursorFrame.request();
+      // What the tool would lay down, where it would land — `hover-cursor.ts`.
+      if (!this.session && this.tool && previews(this.tool)) {
+        this.hover.show(this.local(event));
       }
       return;
     }
@@ -575,53 +657,20 @@ export class DrawingLayer {
     event.preventDefault();
   };
 
-  /** Whether this tool draws something under the pointer while hovering. */
-  private previews(tool: DrawingTool): boolean {
-    return tool === "eraser" || hasToolCursor(tool);
-  }
-
-  private paintCursor(): void {
-    const at = this.hoverAt;
-    if (!at || this.session || !this.tool) return;
-    if (this.tool === "eraser") {
-      drawEraserCursor(this.surface, at.x, at.y);
-      return;
-    }
-    drawToolCursor(
-      this.surface,
-      this.atlas,
-      this.tool,
-      this.style,
-      at.x,
-      at.y,
-      (wx, wy) => this.stampBox(wx, wy),
-    );
-  }
-
-  /**
-   * Take the preview away.
-   *
-   * The live canvas is about to be somebody else's — a session's first stamp
-   * clears what the preview reported and paints over it — so this is only
-   * about the *queued* frame: one that fired after a press would paint the
-   * cursor over the stroke and leave its rectangle behind as the next clear.
-   */
-  private dropCursor(): void {
-    this.cursorFrame.cancel();
-    this.hoverAt = null;
-  }
-
   private onUp = (event: PointerEvent): void => {
-    this.pointers.delete(event.pointerId);
+    this.nav.up(event);
+    if (this.hold.waiting(event.pointerId)) this.hold.disarm();
 
-    if (event.pointerType === "touch") {
-      if (this.pointers.size === 1) {
-        // Keep panning with whichever finger is left rather than stalling.
-        const [remaining] = [...this.pointers.values()];
-        this.lastPanX = remaining.x;
-        this.lastPanY = remaining.y;
+    if (event.pointerType === "touch" && event.pointerId !== this.sessionPointer) {
+      const tap = this.fingerDown;
+      this.fingerDown = null;
+      // A finger tapped on the surface lets go of what a hold caught, and
+      // gives back the tool the Lasso was borrowed from.
+      if (tap?.id === event.pointerId && event.timeStamp - tap.at < TAP_MS && this.borrowed) {
+        this.select([]);
+        this.callbacks.onSelect([]);
+        this.giveBack();
       }
-      this.pinchSpread = 0;
       return;
     }
 
@@ -632,64 +681,20 @@ export class DrawingLayer {
     this.endSession();
   };
 
-  private endSession(): void {
-    setInking(this, false);
-    this.session?.end();
-    this.session = null;
-    this.sessionPointer = null;
-    this.working = null;
-  }
-
-  private navigate(): void {
-    if (this.pointers.size >= 2) {
-      const spread = this.spread();
-      const centre = this.centre();
-      if (this.pinchSpread > 0 && spread > 0) {
-        // From the sheet's corner, as the wheel's is: the camera zooms about
-        // a point on the canvas, and `centre` is on the page.
-        const rect = this.root.getBoundingClientRect();
-        this.callbacks.onZoom(spread / this.pinchSpread, centre.x - rect.left, centre.y - rect.top);
-      }
-      this.pinchSpread = spread;
-      // The midpoint carries the pan while two fingers are down, so a
-      // two-finger drag moves the camera as well as scaling it.
-      this.callbacks.onPan(centre.x - this.lastPanX, centre.y - this.lastPanY);
-      this.lastPanX = centre.x;
-      this.lastPanY = centre.y;
-      return;
-    }
-
-    const [only] = [...this.pointers.values()];
-    if (!only) return;
-    this.callbacks.onPan(only.x - this.lastPanX, only.y - this.lastPanY);
-    this.lastPanX = only.x;
-    this.lastPanY = only.y;
-  }
-
   private onWheel = (event: WheelEvent): void => {
-    event.preventDefault();
     // A scroll moves the camera, so the canvas under the ink has to draw again.
     if (this.session) setInking(this, false);
-    const rect = this.root.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    // WebKit reports a trackpad pinch as a ctrl-wheel; a plain wheel scrolls.
-    if (event.ctrlKey || event.metaKey) {
-      this.callbacks.onZoom(Math.exp(-event.deltaY / 220), x, y);
-    } else {
-      this.callbacks.onPan(-event.deltaX, -event.deltaY);
-    }
+    this.nav.wheel(event);
   };
 
-  private spread(): number {
-    const [a, b] = [...this.pointers.values()];
-    if (!a || !b) return 0;
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-
-  private centre(): { x: number; y: number } {
-    const [a, b] = [...this.pointers.values()];
-    if (!a || !b) return { x: this.lastPanX, y: this.lastPanY };
-    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  private endSession(): void {
+    this.hold.disarm();
+    setInking(this, false);
+    // Let go first: what an end reports can reach `setTool`, which ends this.
+    const session = this.session;
+    this.session = null;
+    this.sessionPointer = null;
+    session?.end();
+    this.working = null;
   }
 }

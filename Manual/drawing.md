@@ -208,6 +208,19 @@ Part of [the Idlewild manual](README.md).
   an `.idlewild`, and head the font menu marked *project*, named after the
   file: `Recoleta-Bold.otf` is *Recoleta-Bold*. The cross on a font's chip
   takes it out of the project
+- **Hold the Pencil's tip still** where a stroke begins and, after half a
+  second, the stroke is let go and the tip becomes a lasso: keep it down and
+  draw round what you want. A finger held still does the same a little
+  sooner, and a finger that moves first pans. The Lasso is only borrowed: the
+  next time the Pencil touches the canvas away from the selection's box it
+  draws with what you had, a finger tap lets go of the selection, and a loop
+  that caught nothing gives the brush straight back. Under the Pencil,
+  Pattern and Slice for the tip; under any drawing tool for a finger. Not in
+  PSD Edit mode, where holding still straightens the stroke instead
+- **Double-tap the Pencil's barrel** (an Apple Pencil 2 or Pencil Pro) to turn
+  the tool in hand into its eraser, and again to turn it back — the same as
+  holding its button on the toolbar. In plan mode it swaps the plan's pencil
+  and eraser
 
 ## Moving, scaling and turning a sketch
 
@@ -244,7 +257,8 @@ Part of [the Idlewild manual](README.md).
   While the open scene has a plan, Overlays has a **Plan** row with its own
   switch and an opacity slider; while plan mode is up it also has **Plan
   overlay**, the same pair for the white wash, which starts at half and is
-  remembered. Fingers pan and pinch in plan mode as they do everywhere else
+  remembered. Fingers pan and pinch in plan mode as they do everywhere else,
+  and holding the tip or a finger still lassos there too
 
 ## Loose strokes
 

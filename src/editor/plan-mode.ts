@@ -8,9 +8,12 @@
  * catches plan strokes to move, scale and turn in the box they then wear
  * (`drawing/transform-box.ts`), to Delete, or to Convert to PSD — which
  * hands them, as a placed PSD, to the top object layer in the stack and takes
- * them off the plan, the way a sketch converted on its own layer leaves it. The pencil and the eraser have
- * every brush control in the inspector's TOOL zone but the colour — a plan is
- * blue — and each keeps its own. Done, the pencil again, or Escape puts the
+ * them off the plan, the way a sketch converted on its own layer leaves it.
+ * Holding the pen tip or a finger still borrows the Lasso from the tool in
+ * hand (`drawing/hold-lasso.ts`), and a double tap on the Pencil's barrel
+ * swaps the pencil and the eraser (`lib/pencil.ts`). The pencil and the
+ * eraser have every brush control in the inspector's TOOL zone but the
+ * colour — a plan is blue — and each keeps its own. Done, the pencil again, or Escape puts the
  * mode away.
  *
  * Out of the mode the plan stays on the canvas as an overlay: the strokes
@@ -40,6 +43,7 @@ import { convertStrokesToPsd } from "./stroke-actions";
 import { brushSection } from "./inspect-brush";
 import type { Inspector } from "./inspector";
 import { isTyping } from "./shortcuts";
+import { onPencilDoubleTap } from "../lib/pencil";
 
 /** What the plan's pencil starts as: Charcoal, thin, unsmoothed, only ever blue. */
 const PENCIL = { brushId: 2, size: 4, smoothing: 0 };
@@ -50,8 +54,10 @@ type PlanTool = "pencil" | "eraser" | "lasso";
 
 const TOOL_NAMES: Record<PlanTool, string> = { pencil: "Pencil", eraser: "Eraser", lasso: "Lasso" };
 const TOOL_HINTS: Record<PlanTool, string> = {
-  pencil: "Draws the plan, in its blue, on no layer.",
-  eraser: "Takes plan ink out.",
+  pencil:
+    "Draws the plan, in its blue, on no layer. Hold the tip still to lasso " +
+    "instead, and double-tap the Pencil for the eraser.",
+  eraser: "Takes plan ink out. Double-tap the Pencil for the pencil again.",
   lasso:
     "Draw around plan strokes to catch them. Drag inside the box to move them, " +
     "a corner to scale, the knob to turn; Delete removes them.",
@@ -85,6 +91,12 @@ export class PlanMode {
   private readonly buttons = new Map<PlanTool, HTMLButtonElement>();
   private activeValue = false;
   private tool: PlanTool = "pencil";
+  /**
+   * Whether a held pen or finger has lent the plan's Lasso from `tool` — see
+   * `drawing/hold-lasso.ts`. The bar and the panel show the Lasso meanwhile;
+   * `tool` stays what it was, which is what comes back.
+   */
+  private borrowing = false;
   /** The pencil's and the eraser's own styles, kept apart. */
   private readonly styles: Record<"pencil" | "eraser", Partial<StrokeStyle>> = {
     pencil: { ...PENCIL },
@@ -113,10 +125,15 @@ export class PlanMode {
         onSelect: (ids) => {
           this.selected = ids;
           // The panel offers Convert to PSD for what was caught.
-          if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.tool));
+          if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.inHand()));
         },
         onZone: () => {},
         onFillPoints: () => {},
+        onBorrow: (tool) => {
+          this.borrowing = tool === "lasso";
+          if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.inHand()));
+          this.paint();
+        },
       },
       planSource(store),
     );
@@ -176,8 +193,15 @@ export class PlanMode {
         this.selected = [];
       }
     };
+    // The Pencil's double tap swaps the pencil and the eraser, as in Hush; from
+    // the Lasso it goes back to the pencil. See `lib/pencil.ts`.
+    const stopTap = onPencilDoubleTap(() => {
+      if (!this.activeValue) return;
+      this.pick(this.tool === "pencil" && !this.borrowing ? "eraser" : "pencil");
+    });
     document.addEventListener("keydown", onKey);
     this.stop.push(
+      stopTap,
       () => store.removeEventListener("change", changed),
       () => store.removeEventListener("scene", switched),
       () => document.removeEventListener("keydown", onKey),
@@ -203,6 +227,7 @@ export class PlanMode {
     if (!on) {
       this.layer.select([]);
       this.selected = [];
+      this.borrowing = false;
     }
     this.useTool(on ? this.tool : null);
     this.paint();
@@ -247,16 +272,25 @@ export class PlanMode {
         class: tool === "eraser" ? "tool-btn erasing" : "tool-btn",
         title: name,
         "aria-label": name,
-        onClick: () => {
-          this.tool = tool;
-          this.useTool(tool);
-          this.paint();
-        },
+        onClick: () => this.pick(tool),
       },
       icon(path, 21),
     ) as HTMLButtonElement;
     this.buttons.set(tool, button);
     return button;
+  }
+
+  /** Put a tool in hand, from the bar or the Pencil's double tap. */
+  private pick(tool: PlanTool): void {
+    this.tool = tool;
+    this.borrowing = false;
+    this.useTool(tool);
+    this.paint();
+  }
+
+  /** The tool the bar and the panel show: a borrowed Lasso, or the one in hand. */
+  private inHand(): PlanTool {
+    return this.borrowing ? "lasso" : this.tool;
   }
 
   private useTool(tool: PlanTool | null): void {
@@ -303,7 +337,7 @@ export class PlanMode {
     if (!done) return;
     this.layer.select([]);
     this.selected = [];
-    if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.tool));
+    if (this.activeValue) this.deps.inspector.setToolOverride(this.panel(this.inHand()));
   }
 
   /**
@@ -367,7 +401,7 @@ export class PlanMode {
     this.toggle.setAttribute("aria-pressed", String(on));
     this.toggle.classList.toggle("on", on);
     for (const [tool, button] of this.buttons) {
-      button.setAttribute("aria-pressed", String(tool === this.tool));
+      button.setAttribute("aria-pressed", String(tool === this.inHand()));
     }
     this.sheet.classList.toggle("hidden", !on && !this.shown);
     this.layer.root.style.opacity = on ? "" : String(this.opacity);
