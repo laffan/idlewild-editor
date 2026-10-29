@@ -45,7 +45,7 @@ import type { Inspector } from "./inspector";
 import { isTyping } from "./shortcuts";
 import { onPencilDoubleTap } from "../lib/pencil";
 import { PLAN_DROP, type PlanDropDetail } from "./drop";
-import { PlanImages } from "./plan-images";
+import { PlanImages, pictureRows } from "./plan-images";
 
 /** What the plan's pencil starts as: Charcoal, thin, unsmoothed, only ever blue. */
 const PENCIL = { brushId: 2, size: 4, smoothing: 0 };
@@ -63,7 +63,8 @@ const TOOL_NAMES: Record<PlanTool, string> = {
 const TOOL_HINTS: Record<PlanTool, string> = {
   select:
     "Press a picture dropped on the plan to pick it up and move it; its box " +
-    "scales and turns it, and × or Delete takes it off. Drag anywhere else to pan.",
+    "scales and turns it, and Delete takes it off. Drag anywhere else to pan, " +
+    "and tap to let go.",
   pencil:
     "Draws the plan, in its blue, on no layer. Hold the tip still to lasso " +
     "instead, and double-tap the Pencil for the eraser.",
@@ -419,24 +420,10 @@ export class PlanMode {
     if (!this.images.selected) return this.panel(tool);
     return {
       subject: "Plan picture",
-      hint: "A picture dropped on the plan: drag it to move it.",
-      rows: () => [
-        h(
-          "div",
-          { class: "inspect-section" },
-          h("div", {
-            class: "inspect-empty",
-            text:
-              "Reference to trace over, in the plan's blue. It is not a PSD and " +
-              "goes nowhere the plan does not — drag it into place, draw over it.",
-          }),
-          h("button", {
-            class: "panel-btn",
-            text: "Remove picture",
-            onClick: () => this.images.removeSelected(),
-          }),
-        ),
-      ],
+      hint:
+        "Reference to trace over, in the plan's blue — not a PSD. Drag it, or " +
+        "its box's corners and knob, to move, scale and turn it.",
+      rows: () => pictureRows(this.images),
     };
   }
 

@@ -61,6 +61,8 @@ export interface PlanImage {
   height: number;
   /** Turned about its middle, in radians, clockwise on screen. Absent is square. */
   rotation?: number;
+  /** How much of it shows, 0–1, before the multiply. Absent is all of it. */
+  opacity?: number;
 }
 
 const NO_IMAGES: readonly PlanImage[] = Object.freeze([]);

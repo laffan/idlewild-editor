@@ -109,3 +109,6 @@
 
 /* Select is a pointer, not a tip. */
 .editor-canvas-wrap.plan-selecting .plan-surface { cursor: default; }
+
+/* The selected picture's Reset, beside its angle rather than across the row. */
+.field-row .panel-btn.plan-picture-reset { flex: none; width: auto; margin-top: 0; padding: 0 14px; }

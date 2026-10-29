@@ -17,16 +17,18 @@
  * at the Plan row's opacity, like the strokes.
  *
  * **Selected, it wears the strokes' box** (`drawing/transform-box.ts`): drag
- * inside to move it, a corner to scale it, the knob to turn it, the × off the
- * lower right corner — or Delete — to take it off. The box stands at the
+ * inside to move it, a corner to scale it, the knob to turn it, and Delete
+ * takes it off. The right sidebar has the rest — the angle in degrees and its
+ * reset, the opacity, and Remove — see `pictureRows`. The box stands at the
  * picture's own angle, which the picture keeps (`PlanImage.rotation`), and
  * sits in a layer of its own over the pictures, out of the multiply, so the
  * handles keep their colours. Every gesture writes the document once.
  *
  * **Picking one up** is the plan's Select tool, or its Lasso: a press on a
- * picture selects it and carries it in the same movement. Under Select a
- * press anywhere else lets go, and a pen or mouse drag there pans, as it does
- * on the canvas. Under the Pencil and the Eraser a press is the tool's, as it
+ * picture selects it and carries it in the same movement. Under either, a
+ * press or a tap anywhere else lets go — a finger's tap included, though a
+ * finger's drag is a pan and keeps hold — and under Select a pen or mouse
+ * drag there pans, as it does on the canvas. Under the Pencil and the Eraser a press is the tool's, as it
  * always was — drawing over a picture is the point of it.
  */
 
@@ -50,6 +52,8 @@ import { bake } from "./plan-image-bake";
 const LANDING_SHARE = 0.6;
 /** How far a press may stray and still be a tap, in screen px. */
 const TAP_SLOP = 6;
+/** And how long a finger may stay down. */
+const TAP_MS = 300;
 
 export interface PlanImagesDeps {
   store: DocStore;
@@ -89,6 +93,8 @@ export class PlanImages {
   private view: Viewport = { originX: 0, originY: 0, zoom: 1, width: 0, height: 0 };
   private selectedId: string | null = null;
   private press: Press | null = null;
+  /** A finger down on bare plan, while it might still be a tap that lets go. */
+  private fingerTap: { pointer: number; x: number; y: number; at: number } | null = null;
 
   constructor(deps: PlanImagesDeps) {
     this.deps = deps;
@@ -115,7 +121,6 @@ export class PlanImages {
         if (image && el) place(el, m ? transformed(image, m) : image);
       },
       commit: (m) => this.write((image) => (image.id === this.selectedId ? transformed(image, m) : image)),
-      remove: () => this.removeSelected(),
     });
     this.chrome = h("div", { class: "plan-image-box plan-surface" }, this.box.root);
     // Capture, so a press on a picture is settled before the drawing layer
@@ -216,7 +221,7 @@ export class PlanImages {
     const { store } = this.deps;
     writePlanImages(store, store.activeSceneId, [...this.images(), image]);
     this.select(image.id);
-    log.info(`${file.name} is on the plan — drag it into place; × or Delete takes it off`);
+    log.info(`${file.name} is on the plan — drag it into place; Delete takes it off`);
   }
 
   destroy(): void {
@@ -243,8 +248,14 @@ export class PlanImages {
       return;
     }
     // A finger pans and pinches on the drawing layer whatever is in hand, and
-    // panning is not a reason to let go of anything.
-    if (touch) return;
+    // panning is not a reason to let go of anything — but a tap is.
+    if (touch) {
+      const tapping = this.deps.picks() && this.selectedId !== null;
+      this.fingerTap = tapping
+        ? { pointer: event.pointerId, x: event.clientX, y: event.clientY, at: event.timeStamp }
+        : null;
+      return;
+    }
     this.select(null);
     if (!this.deps.selecting()) return;
     this.claim(event);
@@ -252,6 +263,10 @@ export class PlanImages {
   };
 
   private onMove = (event: PointerEvent): void => {
+    const tap = this.fingerTap;
+    if (tap?.pointer === event.pointerId && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) > TAP_SLOP) {
+      this.fingerTap = null;
+    }
     const press = this.press;
     if (!press || event.pointerId !== press.pointer) return;
     event.stopImmediatePropagation();
@@ -270,6 +285,11 @@ export class PlanImages {
   };
 
   private onUp = (event: PointerEvent): void => {
+    const tap = this.fingerTap;
+    if (tap?.pointer === event.pointerId) {
+      this.fingerTap = null;
+      if (event.type === "pointerup" && event.timeStamp - tap.at < TAP_MS) this.select(null);
+    }
     const press = this.press;
     if (!press || event.pointerId !== press.pointer) return;
     event.stopImmediatePropagation();
@@ -308,7 +328,34 @@ export class PlanImages {
     return planImagesOf(this.deps.store.activeScene);
   }
 
-  private selectedImage(): PlanImage | null {
+  /**
+   * Change the selected picture: its angle, its opacity. One undoable edit;
+   * nothing happens with nothing selected.
+   */
+  update(patch: { rotation?: number | null; opacity?: number }): void {
+    if (!this.selectedId) return;
+    this.write((image) => {
+      if (image.id !== this.selectedId) return image;
+      const { rotation: _r, opacity: _o, ...rest } = image;
+      const rotation = patch.rotation === undefined ? image.rotation : patch.rotation;
+      const opacity = patch.opacity ?? image.opacity;
+      return {
+        ...rest,
+        // Square and opaque are absent rather than written down.
+        ...(rotation ? { rotation } : {}),
+        ...(opacity !== undefined && opacity < 1 ? { opacity } : {}),
+      };
+    });
+  }
+
+  /** Show the selected picture at this opacity without writing it — a slider's drag. */
+  previewOpacity(opacity: number): void {
+    const el = this.selectedId ? this.shown.get(this.selectedId) : undefined;
+    if (el) el.style.opacity = String(opacity);
+  }
+
+  /** The selected picture, as the document has it. */
+  selectedImage(): PlanImage | null {
     return this.images().find((i) => i.id === this.selectedId) ?? null;
   }
 
@@ -382,4 +429,100 @@ function place(el: HTMLImageElement, image: PlanImage): void {
   el.style.width = `${image.width}px`;
   el.style.height = `${image.height}px`;
   el.style.transform = image.rotation ? `rotate(${image.rotation}rad)` : "";
+  el.style.opacity = image.opacity === undefined ? "" : String(image.opacity);
+}
+
+/**
+ * The right sidebar's rows for the selected picture: its angle, in degrees,
+ * with a reset; its opacity; and Remove.
+ *
+ * The angle is typed and written on change rather than per keystroke, and the
+ * opacity slider previews as it is dragged and writes when let go — the panel
+ * is rebuilt on every document change, and a field or a slider rebuilt under
+ * the hand using it loses the caret or the drag.
+ */
+export function pictureRows(images: PlanImages): HTMLElement[] {
+  const image = images.selectedImage();
+  if (!image) return [];
+  const degrees = Math.round(((image.rotation ?? 0) * 180) / Math.PI);
+  const opacity = Math.round((image.opacity ?? 1) * 100);
+
+  const angle = h("input", {
+    class: "input field-num",
+    type: "text",
+    inputmode: "numeric",
+    value: String(degrees),
+    "aria-label": "Rotation in degrees",
+  }) as HTMLInputElement;
+  angle.addEventListener("change", () => {
+    const typed = Number(angle.value.trim());
+    if (!Number.isFinite(typed)) {
+      angle.value = String(degrees);
+      return;
+    }
+    // Into −180 to 180, so 270 and −90 are the same answer said one way.
+    const wrapped = ((((typed + 180) % 360) + 360) % 360) - 180;
+    images.update({ rotation: (wrapped * Math.PI) / 180 });
+  });
+  angle.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") angle.blur();
+  });
+
+  const readout = h("div", { class: "inspect-value", text: `${opacity}%` });
+  const slider = h("input", {
+    class: "brush-size",
+    type: "range",
+    min: "5",
+    max: "100",
+    step: "1",
+    value: String(opacity),
+    "aria-label": "Opacity",
+  }) as HTMLInputElement;
+  slider.addEventListener("input", () => {
+    readout.textContent = `${slider.value}%`;
+    images.previewOpacity(Number(slider.value) / 100);
+  });
+  slider.addEventListener("change", () => images.update({ opacity: Number(slider.value) / 100 }));
+
+  return [
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Rotation" }),
+      h(
+        "div",
+        { class: "field-row" },
+        h("span", { class: "inspect-key m", text: "Degrees" }),
+        angle,
+        h("button", {
+          class: "panel-btn plan-picture-reset",
+          text: "Reset",
+          title: "Square again",
+          disabled: degrees === 0 ? "true" : null,
+          onClick: () => images.update({ rotation: null }),
+        }),
+      ),
+    ),
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("div", { class: "inspect-section-title m", text: "Opacity" }),
+      h(
+        "div",
+        { class: "inspect-row brush-row-size" },
+        slider,
+        readout,
+      ),
+    ),
+    h(
+      "div",
+      { class: "inspect-section" },
+      h("button", {
+        class: "panel-btn",
+        text: "Remove picture",
+        title: "Take it off the plan (Delete)",
+        onClick: () => images.removeSelected(),
+      }),
+    ),
+  ];
 }

@@ -265,11 +265,12 @@ Part of [the Idlewild manual](README.md).
   disappears and the dark parts read like plan ink — something to trace over.
   It lands selected, in a box like a lassoed sketch's: drag inside to move
   it, a corner to scale it (Shift to stretch), the round knob to turn it
-  (Shift for 15° steps), and the **×** off its lower right corner — or
-  **Delete** on a keyboard — takes it off. **Select**, at the top of the
+  (Shift for 15° steps). The right sidebar has the rest: **Rotation** in
+  degrees, with **Reset** to square it again; **Opacity**; and **Remove
+  picture** — or **Delete** on a keyboard. **Select**, at the top of the
   plan's toolbar, is for working with pictures: press one to pick it up and
-  move it in the same movement, and drag anywhere else to pan. The Lasso
-  picks a picture up the same way. With the Pencil in hand you draw over it.
+  move it in the same movement, drag anywhere else to pan, and tap anywhere
+  else to let go of it. The Lasso picks a picture up the same way. With the Pencil in hand you draw over it.
   It is saved and undone with the plan, and, like the rest of the plan, is in
   no layer and goes nowhere the game does. PNG, JPEG and GIF
 

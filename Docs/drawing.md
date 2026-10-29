@@ -809,8 +809,12 @@ frame — is unchanged. A picture keeps its angle (`PlanImage.rotation`, about
 its middle) where strokes are re-measured square after every turn, and
 `transformed` reads a matrix back into the four numbers and the angle:
 where the top edge points, how far each side stretched, where the middle
-went. And a host with `remove()` gets a × off whichever corner is lowest and
-furthest right on screen. The box lives in a layer of its own just after the
+went. The rest of what can be done to a picture is in the TOOL zone the
+plan lends the inspector (`pictureRows`): the angle in degrees, typed and
+written on change and wrapped into −180–180, with a reset; the opacity
+(`PlanImage.opacity`, absent when opaque), previewed on the element while
+the slider moves and written when it is let go, because the panel is rebuilt
+on every document change; and Remove. The box lives in a layer of its own just after the
 pictures, out of their multiply, so its handles keep their colours.
 
 Pointer handling is a capture listener on the plan's drawing surface, so a
@@ -819,7 +823,8 @@ pan. A press on a picture under **Select** or the Lasso (picked or borrowed)
 selects it and carries it in the same movement — the box follows through
 `showThrough` — and once selected, the box's own outline is the move target
 under any tool. Under Select a pen or mouse press on bare plan pans the
-camera and lets go; the drawing layer is given the Lasso meanwhile, so the
+camera and lets go, and so does a finger's tap there (its drag is a pan, and
+keeps hold); the drawing layer is given the Lasso meanwhile, so the
 surface stays the pointer's and a finger held still still lassos strokes.
 Under the Pencil and the Eraser a press is the tool's. Each gesture writes
 once, on release. A picture and a stroke selection exclude each other, each
