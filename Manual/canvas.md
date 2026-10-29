@@ -36,10 +36,13 @@ Part of [the Idlewild manual](README.md).
   whatever the camera is doing: a line one *screen* pixel wide, so a project
   drawn on 8px spaces and opened at 4× gets the same thin grid as one on 64px
   spaces at 1× rather than four-pixel rules over it. The selection outlines and
-  the lines an extrusion bakes into its PSD follow the same weight. Select drags a plain rectangle
-  around things to pick up several images at once; press and hold instead and
-  it asks for a patch of grid, in the grid's own shape, taking the ground
-  rather than whatever is standing on it. Pan drags the camera, and holding
+  the lines an extrusion bakes into its PSD follow the same weight. Under Select a
+  drag moves the camera, as one finger does everywhere else; press and hold
+  first and it asks for a patch of grid, in the grid's own shape, taking the
+  ground rather than whatever is standing on it. Hold ⇧ or ⌘ while dragging to
+  draw a plain rectangle around things and pick up several images at once — on
+  a tile layer a plain drag draws it, since that is how tiles are picked up.
+  Pan drags the camera too, and holding
   space borrows it from wherever you are
 - Press and hold to ask for a patch of grid, and get Fill, Add Image,
   Generate PSD and Extrude over it

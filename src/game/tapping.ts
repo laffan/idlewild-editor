@@ -29,7 +29,7 @@ import type { PickResult } from "./picking";
 import type { TextStyle } from "./text-style";
 
 /** Which tool is in hand, as the tap cares about it. */
-export type TapMode = "select" | "pan" | "point" | "text" | "tile";
+export type TapMode = "select" | "box" | "pan" | "point" | "text" | "tile";
 
 export interface TappingHost {
   store: DocStore;

@@ -175,7 +175,7 @@ const DRAWN: Partial<Record<ToolId, DrawingTool>> = {
 
 /** What each of them says in the console when it is picked up. */
 const ANNOUNCE: Partial<Record<ToolId, string>> = {
-  select: "Select — drag a box around what you want",
+  select: "Select — drag pans, hold to select grid spaces, ⇧-drag a box around images",
   pan: "Pan tool: drag to move the camera",
   point: "Point — tap to put one down; drag still pans",
   zone: "Boundary — sweep an outline and it becomes a blocking zone",
@@ -306,7 +306,11 @@ export function createToolRouting(host: ToolRoutingHost): ToolRouting {
             ? "point"
             : tool === "text"
               ? "text"
-              : "select",
+              : // A plain drag pans under Select, except over tiles, where the
+                // box is the only way to pick a run up — see `RigMode`.
+                !editing && host.layerKind() === "tile"
+                ? "box"
+                : "select",
     );
     // A hand over the canvas, whether Pan was picked from the rail or
     // borrowed with the space bar. The class carries it rather than an inline

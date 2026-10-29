@@ -16,7 +16,8 @@ shortest of them means is `src/game/tapping.ts`. The spec's contract:
 | Input | Result |
 |---|---|
 | One finger down on the current selection | Drag it, snapped to the grid unless Select says otherwise |
-| One finger, moved, under **Select** | Rubber-band a selection from where it went down |
+| One finger, moved, under **Select** | Pan — or, with ⇧ or ⌘ held at the press, rubber-band a selection from where it went down |
+| One finger, moved, under **Select** on a tile layer | Rubber-band, without a modifier: it is how tiles are picked up |
 | One finger, moved, under **Pan** or **Point** | Pan |
 | One finger, down or moved, with a **tile** in hand | Lay the run picked in the palette, or pour it |
 | One finger, moved, under **Boundary** | Sweep an outline; on release it becomes a blocking zone |
@@ -39,10 +40,17 @@ space safe over anything: the camera tool picks nothing up.
 
 **The tool in hand decides what a drag means**, through `rig.setMode`. It used
 to decide nothing: a drag always panned and only a hold started a selection,
-which made Select and Pan the same tool with a delay between them and left no
-way to rubber-band over several things at once. The mode takes effect on the
-next pointer-down rather than immediately, so a pan never turns into a
-marquee halfway across the canvas.
+which left no way to rubber-band over several things at once. Then a plain
+drag under Select became the rubber band, and that was wrong the other way: a
+Pencil laid on the canvas to move it drew a marquee, and the canvas was the
+one surface where a single finger did not pan — the plan and the ink under a
+drawing tool both pan with it, and hold to select. So a plain drag under
+Select pans again, the hold still asks for grid, and the rubber band is a
+drag with ⇧ or ⌘ held at the press. The exception is a **tile layer**, where
+the band is the only way to pick a run of tiles up and an iPad has no ⇧:
+there Select is the rig's `box` mode, the old reading, with a plain drag
+drawing the band. The mode takes effect on the next pointer-down rather than
+immediately, so a pan never turns into a marquee halfway across the canvas.
 
 Under Pan — picked from the rail or borrowed with space — the canvas shows a
 hand, closed while the drag is under way. A class on the canvas wrapper
@@ -174,7 +182,7 @@ reason to hold, and handing back the building instead would make the gesture
 unusable exactly where it is most wanted. The floating action bar appears over
 it, every time.
 
-**A drag asks what is in here.** The things it catches are images sitting at
+**A ⇧- or ⌘-drag asks what is in here** (a plain one, on a tile layer). The things it catches are images sitting at
 world coordinates that owe the grid nothing, so a drag is a plain rectangle —
 the one that was dragged, pixel for pixel, with no lattice to round to. What
 it catches *is* the answer: a `placements` selection, which drags and deletes

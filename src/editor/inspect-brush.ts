@@ -95,8 +95,9 @@ export const TOOL_TITLES: Partial<Record<ToolId, string>> = {
  */
 export const TOOL_HINTS: Partial<Record<ToolId, string>> = {
   select:
-    "Drag a box round what you want, or hold still to ask for a patch of " +
-    "grid. Arrow keys nudge whatever is picked by a single pixel.",
+    "Drag to pan, hold still to ask for a patch of grid, and hold ⇧ or ⌘ " +
+    "while dragging to box round placed images — on a tile layer a plain " +
+    "drag boxes tiles. Arrow keys nudge whatever is picked by a single pixel.",
   pencil: "Lays ink down along the path, at the tip and size set below.",
   pattern:
     "Sweep to reveal the pattern. It is pinned to the world rather than to " +
