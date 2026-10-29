@@ -39,6 +39,17 @@ bar comes back, drawn over the page rather than pushing it down
 of the peek) — into the strip the page keeps clear for the menu bar, below. A windowed scene keeps its bar. On a Mac the window simply opens
 in native full screen (`lib.rs`'s setup).
 
+### The Pencil's double tap
+
+The same plugin carries it, because it is the one native half the app has. A
+double tap on an Apple Pencil 2's barrel (a squeeze on a Pencil Pro reads the
+same way) reaches only a `UIPencilInteraction`, so `PencilTap.swift` attaches
+one to the web view — not to its scroll view, where hush found a recognizer
+broke touch delivery — and emits `pencil-double-tap`. The page listens through
+`addPluginListener`, which is why the plugin's permissions now allow
+`registerListener` and the capability grants `ipad-chrome:default`. What a
+tap does is the drawing layer's business: see [The drawing layer](drawing.md).
+
 ### Room for the menu bar, while a pointer is attached
 
 A full-screen window shows no status bar and no window controls, but from

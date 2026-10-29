@@ -1,7 +1,7 @@
 [package]
 name = "tauri-plugin-ipad-chrome"
 version = "0.1.0"
-description = "Hide the iPad status bar while Idlewild's window fills the screen"
+description = "Hide the iPad status bar while Idlewild's window fills the screen, and report the Apple Pencil's double tap"
 edition = "2021"
 rust-version = "1.77"
 links = "tauri-plugin-ipad-chrome"

@@ -1,10 +1,12 @@
-//! The iPad's status bar, hidden while the window fills the screen.
+//! The iPad's status bar, hidden while the window fills the screen, and the
+//! Apple Pencil's double tap, reported to the page.
 //!
-//! Pure registration: there are no commands. The Swift half
-//! (`ios/Sources/ChromeControl.swift`) does the work as it loads, and keeps
-//! doing it as a window moves between full screen and windowed. A no-op on
-//! every other target, so registering it unconditionally is safe. Ported
-//! from hush's pencil plugin, where the same thing is a setting.
+//! Pure registration: there are no commands. The Swift half does the work as
+//! it loads — `ios/Sources/ChromeControl.swift` keeps the bar hidden as a
+//! window moves between full screen and windowed, and `PencilTap.swift` emits
+//! a `pencil-double-tap` event the page listens for (`src/lib/pencil.ts`). A
+//! no-op on every other target, so registering it unconditionally is safe.
+//! Ported from hush's pencil plugin, which does both.
 
 use tauri::{
     plugin::{Builder, TauriPlugin},

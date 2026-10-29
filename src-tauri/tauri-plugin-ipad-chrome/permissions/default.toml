@@ -1,5 +1,21 @@
 "$schema" = "schemas/schema.json"
 
+# The page listens for the Apple Pencil's double tap — `pencil-double-tap`,
+# see ios/Sources/PencilTap.swift and src/lib/pencil.ts. A plugin event is
+# subscribed to through the plugin's own registerListener / removeListener,
+# so those two are all the page is allowed. The status bar needs nothing: the
+# plugin hides it on its own at startup.
+
+[[permission]]
+identifier = "allow-register-listener"
+description = "Allow the page to listen for the plugin's events with addPluginListener()."
+commands.allow = ["registerListener"]
+
+[[permission]]
+identifier = "allow-remove-listener"
+description = "Allow the page to stop listening for the plugin's events."
+commands.allow = ["removeListener"]
+
 [default]
-description = "No JS-facing surface: the plugin hides the iPad's status bar on its own at startup."
-permissions = []
+description = "Listen for the Apple Pencil's double tap."
+permissions = ["allow-register-listener", "allow-remove-listener"]
